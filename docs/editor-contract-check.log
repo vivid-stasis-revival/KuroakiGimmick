@@ -1,0 +1,53 @@
+PASS editor source modules exist
+PASS demo.sgv.json: referenced Chart exists
+PASS demo.sgv.json: referenced Gimmick exists
+PASS demo.sgv.json: referenced WindowMotion exists
+PASS demo.sgv.json: referenced Audio exists
+PASS demo.sgv.json: complete NewWindowDance schema at event 0
+PASS demo.sgv.json: complete WindowResize schema at event 1
+PASS demo.sgv.json: complete HideWindow schema at event 2
+PASS demo.sgv.json: complete HideWindow schema at event 3
+PASS demo.sgv.json: complete NewWindowDance schema at event 4
+PASS demo.sgv.json: complete NewWindowDance schema at event 5
+PASS demo.sgv.json: complete WindowResize schema at event 6
+PASS demo.sgv.json: complete WindowResize schema at event 7
+PASS demo.sgv.json: complete NewWindowDance schema at event 8
+PASS demo.sgv.json: complete NewWindowDance schema at event 9
+PASS demo.sgv.json: complete NewWindowDance schema at event 10
+PASS demo.sgv.json: complete ReorderWindows schema at event 11
+PASS demo.sgv.json: complete SetWindowContent schema at event 12
+PASS demo.sgv.json: complete NewWindowDance schema at event 13
+PASS demo.sgv.json: complete WindowResize schema at event 14
+PASS demo.sgv.json: complete HideWindow schema at event 15
+PASS demo.sgv.json: complete HideWindow schema at event 16
+PASS demo.sgv.json: complete NewWindowDance schema at event 17
+PASS demo.sgv.json: complete WindowResize schema at event 18
+PASS demo exercises all five window event operations
+PASS demo exercises all five window dance presets
+PASS proxy.sgv.json: referenced Chart exists
+PASS proxy.sgv.json: referenced Gimmick exists
+PASS proxy.sgv.json: referenced WindowMotion exists
+PASS proxy.sgv.json: referenced Audio exists
+PASS bash syntax: Try_Editor_Mac.command
+PASS bash syntax: scripts/publish-common.sh
+PASS bundled extension file hashes match recorded original inventory
+PASS no Finder metadata or Python cache in package
+PASS baseline contains one project root
+PASS all 156 imported assets remain byte-identical
+PASS dependency lock is unchanged
+PASS protected renderer source unchanged: src/Graphics/Primitives/Rect.cs
+PASS protected renderer source unchanged: src/Graphics/Primitives/Color.cs
+PASS protected renderer source unchanged: src/Graphics/Primitives/BlendFactor.cs
+PASS protected renderer source unchanged: src/Graphics/SdlGpu/Canvas.Geometry.cs
+PASS protected renderer source unchanged: src/Graphics/SdlGpu/ShaderCompiler.Translation.cs
+PASS protected renderer source unchanged: src/Graphics/SdlGpu/ShaderCompiler.Toolchain.cs
+PASS protected renderer source unchanged: src/Graphics/SdlGpu/Shader.cs
+PASS protected renderer source unchanged: src/Graphics/SdlGpu/Canvas.Readback.cs
+PASS protected renderer source unchanged: src/Graphics/SdlGpu/Canvas.cs
+PASS protected renderer source unchanged: src/Graphics/SdlGpu/ShaderCompiler.cs
+PASS protected renderer source unchanged: src/Graphics/SdlGpu/Texture.cs
+PASS no non-Finder file from input package was removed
+PASS extension has one expected source root
+PASS extension inventory has all original non-Finder files
+PASS bundled extension source/native binaries match actual uploaded ZIP bytes
+52 offline checks passed. Compilation and native execution NOT performed.

@@ -1,0 +1,31 @@
+r15 compact bumper crop validation
+Date: 2026-09-09
+
+Input compact dump: /mnt/data/新dumpnote.zip
+Manifest format: vividstasis-default-notes-v1
+sp_note_bumper_normal: 107x7 origin (53,3)
+sp_note_bumper_timing_normal: 107x7 origin (53,3)
+sp_note_bumper_mine_normal: 45x7 origin (22,3)
+
+Resolved compact-v1 draw geometry:
+- bumper/timing texture remains 107x7 for file-size validation
+- UV crop x = 31/107, y = 0, w = 45/107, h = 1
+- logical draw size = 45x7
+- local origin = (-22,-3)
+
+Pixel evidence:
+- center crop [31,76) of current bumper_L.png == old 271x43 raw source resized nearest to 45x7: exact
+- center crop [31,76) of current bumper_M.png == old 271x43 raw source resized nearest to 45x7: exact
+- center crop [31,76) of current bumper_R.png == old 271x43 raw source resized nearest to 45x7: exact
+
+Static validation performed here:
+- bash -n on every scripts/*.sh: pass
+- modified C# delimiter scan: pass
+- compact geometry/crop assertions: pass
+- normal L/M/R pixel comparison: pass
+
+This environment has no dotnet/csc, so C# build was not executed here.
+Run on the target Mac:
+  dotnet build -c Release
+  dotnet run -c Release -- --self-test
+  ./scripts/publish-mac.sh

@@ -1,0 +1,569 @@
+{
+  "version": 1,
+  "objectName": "obj_scarletdeath_gimmick",
+  "roomPreset": "scarletdeath",
+  "extraMods": [
+    "uialpha",
+    "cover1",
+    "cover2",
+    "cover3",
+    "wflash",
+    "rainbow",
+    "sides",
+    "notealp",
+    "video",
+    "noteoverlayalp",
+    "shadermode",
+    "scorealph",
+    "bgalph",
+    "gray",
+    "barrel",
+    "barrel2",
+    "hdistort",
+    "fish",
+    "vig",
+    "abx",
+    "aby",
+    "aberamp",
+    "glitchamp",
+    "glitchoffset",
+    "uhnoise",
+    "abberationxamp",
+    "abberationyamp",
+    "fish",
+    "static",
+    "fx_hue_hue",
+    "fx_hue_saturation",
+    "fx_edge",
+    "fx_posterize",
+    "fx_twirl",
+    "fx_posterize_vis",
+    "fx_underwater",
+    "bloom",
+    "angelstar_checker_alpha",
+    "angelstar_checker_set",
+    "fx_zoom",
+    "fx_red",
+    "heartattack1",
+    "heartattack2",
+    "heartattack3",
+    "heartattack4",
+    "heartattack5",
+    "heartattack6"
+  ],
+  "defaults": {
+    "uialpha": 0,
+    "bgalph": 0,
+    "cosp": 1
+  },
+  "ambientParticles": true,
+  "burstAfterJacket": true,
+  "checkerboard": true,
+  "checkerMode": 1,
+  "perFrameFunctions": [
+    "aberControl"
+  ],
+  "sprites": {
+    "sp_sd_heartattack1": {
+      "width": 40,
+      "height": 17,
+      "originX": 20,
+      "originY": 8,
+      "frames": [
+        "sprites/sp_sd_heartattack1/0000.png"
+      ]
+    },
+    "sp_sd_heartattack2": {
+      "width": 38,
+      "height": 13,
+      "originX": 19,
+      "originY": 6,
+      "frames": [
+        "sprites/sp_sd_heartattack2/0000.png"
+      ]
+    },
+    "sp_sd_heartattack3": {
+      "width": 73,
+      "height": 22,
+      "originX": 36,
+      "originY": 11,
+      "frames": [
+        "sprites/sp_sd_heartattack3/0000.png"
+      ]
+    },
+    "sp_sd_heartattack4": {
+      "width": 17,
+      "height": 13,
+      "originX": 8,
+      "originY": 6,
+      "frames": [
+        "sprites/sp_sd_heartattack4/0000.png"
+      ]
+    },
+    "sp_sd_heartattack5": {
+      "width": 59,
+      "height": 18,
+      "originX": 29,
+      "originY": 9,
+      "frames": [
+        "sprites/sp_sd_heartattack5/0000.png"
+      ]
+    },
+    "sp_sd_heartattack6": {
+      "width": 69,
+      "height": 18,
+      "originX": 34,
+      "originY": 9,
+      "frames": [
+        "sprites/sp_sd_heartattack6/0000.png"
+      ]
+    },
+    "sp_cover4": {
+      "width": 1280,
+      "height": 720,
+      "originX": 0,
+      "originY": 0,
+      "frames": [
+        "sprites/sp_cover4/0000.png"
+      ]
+    },
+    "sp_noise2": {
+      "width": 512,
+      "height": 512,
+      "originX": 0,
+      "originY": 0,
+      "frames": [
+        "sprites/sp_noise2/0000.png"
+      ]
+    }
+  },
+  "shaders": {
+    "shader_unraveling_main": "shaders/shader_unraveling_main.frag",
+    "shader_supernova_main": "shaders/shader_supernova_main.frag",
+    "shader_ram_main": "shaders/shader_ram_main.frag",
+    "_filter_posterise_shader": "shaders/_filter_posterise_shader.frag"
+  },
+  "callbacks": {
+    "heartattack1": [
+      {
+        "sprite": "sp_sd_heartattack1",
+        "x": 31,
+        "y": 94,
+        "depth": -5000,
+        "lifetime": 0.9,
+        "tweens": [
+          {
+            "property": "scaleY",
+            "delay": 0,
+            "duration": 0.3333333333333333,
+            "from": 1.25,
+            "to": 1,
+            "ease": "outExpo"
+          },
+          {
+            "property": "alpha",
+            "delay": 0.4,
+            "duration": 0.5,
+            "from": 1,
+            "to": 0,
+            "ease": "linear"
+          }
+        ]
+      }
+    ],
+    "heartattack2": [
+      {
+        "sprite": "sp_sd_heartattack2",
+        "x": 72,
+        "y": 92,
+        "depth": -5000,
+        "lifetime": 0.9,
+        "tweens": [
+          {
+            "property": "scaleY",
+            "delay": 0,
+            "duration": 0.3333333333333333,
+            "from": 1.25,
+            "to": 1,
+            "ease": "outExpo"
+          },
+          {
+            "property": "alpha",
+            "delay": 0.4,
+            "duration": 0.5,
+            "from": 1,
+            "to": 0,
+            "ease": "linear"
+          }
+        ]
+      }
+    ],
+    "heartattack3": [
+      {
+        "sprite": "sp_sd_heartattack3",
+        "x": 127,
+        "y": 92,
+        "depth": -5000,
+        "lifetime": 0.9,
+        "tweens": [
+          {
+            "property": "scaleY",
+            "delay": 0,
+            "duration": 0.3333333333333333,
+            "from": 1.25,
+            "to": 1,
+            "ease": "outExpo"
+          },
+          {
+            "property": "alpha",
+            "delay": 0.4,
+            "duration": 0.5,
+            "from": 1,
+            "to": 0,
+            "ease": "linear"
+          }
+        ]
+      }
+    ],
+    "heartattack4": [
+      {
+        "sprite": "sp_sd_heartattack4",
+        "x": 172,
+        "y": 92,
+        "depth": -5000,
+        "lifetime": 0.9,
+        "tweens": [
+          {
+            "property": "scaleY",
+            "delay": 0,
+            "duration": 0.3333333333333333,
+            "from": 1.25,
+            "to": 1,
+            "ease": "outExpo"
+          },
+          {
+            "property": "alpha",
+            "delay": 0.4,
+            "duration": 0.5,
+            "from": 1,
+            "to": 0,
+            "ease": "linear"
+          }
+        ]
+      }
+    ],
+    "heartattack5": [
+      {
+        "sprite": "sp_sd_heartattack5",
+        "x": 210,
+        "y": 90,
+        "depth": -5000,
+        "lifetime": 0.9,
+        "tweens": [
+          {
+            "property": "scaleY",
+            "delay": 0,
+            "duration": 0.3333333333333333,
+            "from": 1.25,
+            "to": 1,
+            "ease": "outExpo"
+          },
+          {
+            "property": "alpha",
+            "delay": 0.4,
+            "duration": 0.5,
+            "from": 1,
+            "to": 0,
+            "ease": "linear"
+          }
+        ]
+      }
+    ],
+    "heartattack6": [
+      {
+        "sprite": "sp_sd_heartattack6",
+        "x": 274,
+        "y": 91,
+        "depth": -5000,
+        "lifetime": 0.9,
+        "tweens": [
+          {
+            "property": "scaleY",
+            "delay": 0,
+            "duration": 0.3333333333333333,
+            "from": 1.25,
+            "to": 1,
+            "ease": "outExpo"
+          },
+          {
+            "property": "alpha",
+            "delay": 0.4,
+            "duration": 0.5,
+            "from": 1,
+            "to": 0,
+            "ease": "linear"
+          }
+        ]
+      }
+    ]
+  },
+  "overlays": [
+    {
+      "sprite": "sp_cover4",
+      "alphaMod": "cover2",
+      "scaleX": 0.25,
+      "scaleY": 0.25,
+      "depth": 0
+    }
+  ],
+  "postModeMod": "shadermode",
+  "postModes": {
+    "0": {
+      "shader": "shader_unraveling_main",
+      "uniforms": {
+        "time": [
+          {
+            "timeScale": 1
+          }
+        ],
+        "uGrayAmp": [
+          {
+            "mods": [
+              "gray"
+            ],
+            "scale": 1
+          }
+        ],
+        "uBarrelAmp": [
+          {
+            "mods": [
+              "barrel",
+              "barrel2"
+            ]
+          }
+        ],
+        "uHDistortAmp": [
+          {
+            "mods": [
+              "hdistort"
+            ],
+            "scale": 1
+          }
+        ],
+        "uFishAmp": [
+          {
+            "mods": [
+              "fish"
+            ],
+            "scale": 1
+          }
+        ],
+        "uVigAmp": [
+          {
+            "mods": [
+              "vig"
+            ],
+            "scale": 1
+          }
+        ],
+        "aberrationx": [
+          {
+            "mods": [
+              "abx"
+            ],
+            "scale": 1
+          }
+        ],
+        "aberrationy": [
+          {
+            "mods": [
+              "aby"
+            ],
+            "scale": 1
+          }
+        ],
+        "bloom": [
+          {
+            "mods": [
+              "bloom"
+            ],
+            "scale": 1
+          }
+        ]
+      }
+    },
+    "1": {
+      "shader": "shader_supernova_main",
+      "uniforms": {
+        "time": [
+          {
+            "timeScale": 1
+          }
+        ],
+        "stime": [
+          {
+            "mods": [
+              "glitchoffset"
+            ],
+            "scale": 1
+          }
+        ],
+        "uHnoise": [
+          {
+            "mods": [
+              "uhnoise"
+            ],
+            "scale": 1
+          }
+        ],
+        "glitchAmp": [
+          {
+            "mods": [
+              "glitchamp"
+            ],
+            "scale": 1
+          }
+        ],
+        "move": [
+          {
+            "mods": [
+              "posx"
+            ],
+            "scale": 1
+          },
+          {
+            "mods": [
+              "posy"
+            ],
+            "scale": 1
+          }
+        ],
+        "sinm": [
+          {
+            "mods": [
+              "sina"
+            ],
+            "scale": 1
+          },
+          {
+            "mods": [
+              "sinp"
+            ],
+            "scale": 1
+          },
+          {
+            "mods": [
+              "sino"
+            ],
+            "scale": 1
+          }
+        ],
+        "cosm": [
+          {
+            "mods": [
+              "cosa"
+            ],
+            "scale": 1
+          },
+          {
+            "mods": [
+              "cosp"
+            ],
+            "scale": 1
+          },
+          {
+            "mods": [
+              "coso"
+            ],
+            "scale": 1
+          }
+        ],
+        "tanm": [
+          {
+            "mods": [
+              "tana"
+            ],
+            "scale": 1
+          },
+          {
+            "mods": [
+              "tanp"
+            ],
+            "scale": 1
+          },
+          {
+            "mods": [
+              "tano"
+            ],
+            "scale": 1
+          }
+        ],
+        "fish": [
+          {
+            "mods": [
+              "fish"
+            ],
+            "scale": 0.8
+          }
+        ],
+        "aberrationx": [
+          {
+            "timeScale": 3.141592653589793,
+            "wave": "sin",
+            "multiplyMod": "abberationxamp"
+          }
+        ],
+        "aberrationy": [
+          {
+            "timeScale": 3.141592653589793,
+            "wave": "cos",
+            "multiplyMod": "abberationyamp"
+          }
+        ]
+      },
+      "samplers": {
+        "samplerRandom": "sp_noise2"
+      }
+    },
+    "2": {
+      "shader": "shader_ram_main",
+      "uniforms": {
+        "time": [
+          {
+            "timeScale": 1
+          }
+        ],
+        "stime": [
+          {
+            "mods": [
+              "glitchoffset"
+            ],
+            "scale": 1
+          }
+        ],
+        "bloom": [
+          {
+            "mods": [
+              "bloom"
+            ],
+            "scale": 1
+          }
+        ]
+      },
+      "samplers": {
+        "samplerRandom": "sp_noise2"
+      }
+    }
+  },
+  "sourceRoom": "scene_gameplay_scarletdeath",
+  "referenceObjects": [
+    "o_sd_heartattack",
+    "o_angelstar_checker",
+    "o_songgameplay_particlesystem",
+    "o_pt_diamonddust_songgameplay"
+  ],
+  "referenceCode": [
+    "gml_GlobalScript_Particle_Spawners",
+    "gml_Object_cc_Step_1"
+  ]
+}

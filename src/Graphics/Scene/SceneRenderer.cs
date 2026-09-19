@@ -1,0 +1,269 @@
+using System.Numerics;
+using KuroakiGimmick.Core;
+
+namespace KuroakiGimmick.Graphics;
+
+/// <summary>
+/// 场景合成协调器。对象背景、资源图层、轨道、固定 HUD 与后处理按显式边界组织；预览和视频导出共用此入口。
+/// </summary>
+public sealed partial class SceneRenderer : IDisposable
+{
+    readonly Canvas canvas;
+    readonly NoteSkin noteSkin;
+    readonly Texture laneTexture, holdOverlay;
+    /// <summary>dustTextures 是 pt_diamonddust 的四帧，gimmick 粒子与命中钻尘共用；noteParticles 是 sp_noteparticle 的五帧，下标即判定档位。</summary>
+    readonly Texture[] dustTextures, noteParticles;
+    readonly SceneFont sceneFont;
+    readonly GameUiRenderer gameUi;
+    readonly CheckerboardRenderer checker;
+    readonly CustomEffects customEffects;
+    readonly CustomGimmickRenderer customGimmicks;
+    readonly NativeSequenceRenderer nativeSequence;
+    readonly NativeGimmickRenderer nativeGimmick;
+    /// <summary>proxyShader 施加 proxy 的位移/缩放/旋转/剪切；fieldComposite 把透明目标里的预乘 RGB 还原为直通 alpha。两者职责不可互换。</summary>
+    readonly Shader proxyShader, fieldComposite;
+    /// <summary>游玩轨道底边，320×180 逻辑空间的 y=165。音符在此裁剪，footer 位于其下方。</summary>
+    const float TrackBottom = 165;
+    /// <summary>scene 是不透明的合成底；field 是透明的轨道层，必须经 fieldComposite 反预乘后才能贴回 scene。</summary>
+    readonly Target scene, field;
+    /// <summary>后处理输出，同时是窗口 proxy 的主源。尺寸随 RenderWidth 变化，逻辑空间仍固定 320×180。</summary>
+    public Target Final { get; }
+    int RenderWidth => Final.Texture.Width;
+    int RenderHeight => Final.Texture.Height;
+    CustomImages? loadedImages;
+    /// <summary>按路径缓存的图片纹理；textureLru 记录淘汰顺序，failedTextures 记录只报一次的失败路径，textureBytes 计量 128 MiB 预算。装载与淘汰见 SceneRenderer.Resources.cs。</summary>
+    readonly Dictionary<string, Texture> customTextures = [];
+    readonly LinkedList<string> textureLru = [];
+    readonly HashSet<string> failedTextures = [];
+    long textureBytes;
+    // 复用的逐帧音符求值缓存。避免每帧重新分配 lane 数组。
+    readonly double[] noteScrollCache = new double[8];
+    readonly double[] noteAlphaCache = new double[8];
+    Texture? jacketTexture;
+    string? jacketPath;
+    public SceneRenderer(Canvas c)
+    {
+        canvas = c;
+        var g = c.Gpu;
+        noteSkin = new(c);
+        sceneFont = new(c.Gpu);
+        gameUi = new(c);
+        checker = new(c);
+        Texture Common(string name) => Texture.Load(g, Path.Combine(Paths.Assets, "GameCommon", name + ".png"));
+        laneTexture = Common("sp_laneOverlay");
+        holdOverlay = Common("sp_holdnote_overlay");
+        dustTextures = Enumerable.Range(0, 4).Select(i => Common("pt_diamonddust_" + i)).ToArray();
+        noteParticles = Enumerable.Range(0, 5).Select(i => Common("sp_noteparticle_" + i)).ToArray();
+        proxyShader = new(g, Canvas.VertexSource, Shader.AdaptGml(File.ReadAllText(Path.Combine(Paths.Assets, "Shaders", "proxy.frag"))));
+        // 绘制进透明离屏目标存下的是预乘 RGB。在常规 source-alpha 混合之前先还原回直通 alpha，
+        // 使 lane/音符的 alpha 只被乘一次。把它折进 Basic、或当成冗余删掉，都会让 alpha 被乘两次。
+        fieldComposite = new(g, Canvas.VertexSource,
+            "#version 330 core\nin vec2 v_vTexcoord;in vec4 v_vColour;uniform sampler2D gm_BaseTexture;out vec4 fragColor;void main(){vec4 c=texture(gm_BaseTexture,v_vTexcoord);if(c.a>0.)c.rgb/=c.a;fragColor=c*v_vColour;}");
+        scene = new(g, 320, 180);
+        field = new(g, 320, 180);
+        Final = new(g, 320, 180);
+        customEffects = new(canvas);
+        customGimmicks = new(canvas);
+        nativeGimmick = new(canvas);
+        nativeSequence = new(canvas, nativeGimmick, customEffects);
+    }
+
+    /// <summary>
+    /// 每帧只从给定 time 求值。逻辑空间固定 320×180，RenderWidth 仅改变离屏分辨率。
+    /// 本方法内的书写顺序就是权威的合成顺序：BeforeRails、BeforePlayfield、FixedJudgment、Gui 四个阶段边界，
+    /// 以及穿插其间的 DrawImages(min,max) 优先级窗口都是契约。新歌曲复用已有阶段，不增加曲名阶段；
+    /// 也不要为了“顺便统一”把某个 pass 挪到别处。分辨率变化时先 Flush 再整批缩放全部目标，不允许只缩放其中一个。
+    /// </summary>
+    public void Render(Session session, double time, bool notes = true, bool effects = true)
+    {
+        int width = ViewerSettings.ValidWidth(session.Project.RenderWidth), height = width * 9 / 16;
+        if (RenderWidth != width)
+        {
+            canvas.Flush();
+            scene.Resize(width, height);
+            field.Resize(width, height);
+            Final.Resize(width, height);
+            customEffects.Resize(width, height);
+            nativeGimmick.Resize(width, height);
+        }
+        BeginWindowCapture(session);
+        PrepareImages(session);
+        var timeline = session.Timeline;
+        double M(string n, int p = -1) => timeline.Get(n, time, p);
+        canvas.Begin(scene, RenderWidth, RenderHeight, 320, 180, new Color(0, 0, 0));
+        nativeGimmick.DrawBackground(scene, session, time, effects);
+        nativeSequence.Backgrounds(scene, session, time, effects);
+        nativeGimmick.DrawParticles(session, time);
+        // 深度 801：白色底衬使深度 700 处以乘算绘制的 jacket 可见。
+        if (session.DistortBgEnabled && M("ditortedBG_alp") > 0)
+        {
+            canvas.Fill(new(0, 0, 320, 180), Color.White.Alpha(M("ditortedBG_alp")));
+        }
+        checker.Draw(session, time, 0, scene, RenderWidth, RenderHeight);
+        customGimmicks.DrawStars(session, time, true);
+        DrawParticles(session, time);
+        DrawJacket(session, time);
+        if (session.NativeGimmick.Data?.BurstAfterJacket == true)
+        {
+            DrawParticles(session, time, burstsOnly: true);
+        }
+        if (effects && session.DistortBgEnabled)
+        {
+            customEffects.RenderBackground(scene, session, time);
+        }
+        canvas.Begin(scene, RenderWidth, RenderHeight, 320, 180);
+        double previousPriority = double.NegativeInfinity;
+        // 背景 FX 层按深度反号成图片优先级，并夹在 -301 之内；相邻两次 DrawImages 的区间首尾相接，
+        // 不能留空隙也不能重叠，否则同一批图片会漏画或画两遍。
+        foreach (var layer in session.Fx.Layers.Where(l => l.Name is "Effect_1" or "glow").OrderByDescending(l => l.Depth))
+        {
+            double priority = Math.Min(-301, -layer.Depth);
+            DrawImages(session, time, previousPriority, priority);
+            if (effects)
+            {
+                customEffects.RenderBackdrop(scene, session, time, layer.Name);
+            }
+            previousPriority = priority;
+        }
+        DrawImages(session, time, previousPriority, -301);
+        checker.Draw(session, time, 1, scene, RenderWidth, RenderHeight);
+        DrawImages(session, time, -301, -300);
+        nativeGimmick.DrawStage(session, time, GimmickStages.BeforeRails, notes);
+        DrawImages(session, time, -300, -260);
+        customGimmicks.DrawUnravelSides(session, time);
+        nativeSequence.Slashes(session, time);
+        nativeGimmick.DrawStage(session, time, GimmickStages.BeforePlayfield, notes);
+        DrawImages(session, time, -260, -255);
+        DrawSlashes(session, time);
+        DrawImages(session, time, -255, -250);
+        customGimmicks.DrawDf(session, time);
+        DrawImages(session, time, -250, -200);
+        canvas.Flush();
+        // 只要谱面声明过任一 proxy，整帧就走 proxy 合成路径：轨道被拆成可动区与固定边条。
+        bool proxyMode = session.Chart.Mods.Any(e => e.Proxy >= 0);
+        DrawNotes(session, time, notes);
+        CompositeField(session, time, proxyMode, clearFooter: session.NativeGimmick.Data?.ClearProxyFooter ?? true);
+        // 固定的游戏 HUD 位于已变换的游玩轨道之上。
+        // 整组画在自己的一遍里，使 hom 只对 HUD 淡出一次，且不会把 PAUSE/标题像素
+        // 复制进移动的 proxy；全局后处理仍然作用于它。
+        canvas.Begin(field, RenderWidth, RenderHeight, 320, 180, new(0, 0, 0, 0));
+        gameUi.Draw(session, time);
+        DrawComboParticles(session, time);
+        nativeSequence.Hud(session, time);
+        canvas.Flush();
+        canvas.Begin(scene, RenderWidth, RenderHeight, 320, 180);
+        canvas.Quad(field.Texture, new(0, 0, 320, 180), Color.White.Alpha(proxyMode ? 1 - M("hom") : 1), shader : fieldComposite);
+        canvas.Flush();
+        // 优先级 >= 1000 的图片可以同时盖住音符与固定 HUD。
+        // 它们仍然走原本的 proxy 变换，不要把谱面美术（包括伪造的 PAUSE/标题图片）
+        // 变成固定在屏幕上的覆盖层。
+        if (session.Images.Items.Any(item => item.LayerPriority >= 1000))
+        {
+            canvas.Begin(field, RenderWidth, RenderHeight, 320, 180, new(0, 0, 0, 0));
+            DrawImages(session, time, 1000, double.PositiveInfinity, field);
+            canvas.Flush();
+            CompositeField(session, time, proxyMode, clearFooter: false);
+        }
+        canvas.Begin(scene, RenderWidth, RenderHeight, 320, 180);
+        canvas.Flush();
+        sceneFont.Draw(canvas, session, time);
+        canvas.Flush();
+        // 后处理的回退优先级：关闭 effects 时只做一次 Basic 复制；对象有 post mode 时由对象链负责，
+        // 并按 UseCommonPostProcessing 决定是否再套一层公共链；两者都没有时同样退回 Basic 复制。
+        // 任何一条分支都必须把 scene 写进 Final，不能让 Final 留着上一帧内容。
+        bool commonPost = session.NativeGimmick.Data?.UseCommonPostProcessing ?? true;
+        if (!effects)
+        {
+            canvas.Pass(Final, scene.Texture, canvas.Basic);
+        }
+        else if (session.NativeGimmick.Data?.PostModes.Count > 0)
+        {
+            if (commonPost)
+            {
+                customEffects.Render(Final, scene.Texture, session, time, (output, input) => nativeGimmick.RenderPost(output, input, session, time));
+            }
+            else
+            {
+                nativeGimmick.RenderPost(Final, scene.Texture, session, time);
+            }
+        }
+        else if (commonPost)
+        {
+            customEffects.Render(Final, scene.Texture, session, time);
+        }
+        else
+        {
+            canvas.Pass(Final, scene.Texture, canvas.Basic);
+        }
+        canvas.Begin(Final, RenderWidth, RenderHeight, 320, 180);
+        if (session.NativeGimmick.Data != null)
+        {
+            nativeGimmick.DrawGui(session, time, notes);
+            nativeSequence.Gui(session, time);
+            gameUi.DrawSequenceStory(session, time);
+            nativeSequence.EndFade(session, time);
+        }
+        if (M("wflash") > 0)
+        {
+            canvas.Fill(new(0, 0, 320, 180), Color.White.Alpha(M("wflash")));
+        }
+        canvas.Flush();
+    }
+
+    /// <summary>结果与除数同号的取模；负时间或负角度不会落到负区间。</summary>
+    static double Mod(double n, double d) => (n % d + d) % d;
+    /// <summary>二分定位第一个 key 不小于 time 的元素。依赖列表已按时间升序，这里不排序也不校验。</summary>
+    static int LowerBound<T>(List<T> list, double time, Func<T, double> key)
+    {
+        int lo = 0, hi = list.Count;
+        while (lo < hi)
+        {
+            int m = (lo + hi) / 2;
+            if (key(list[m]) < time)
+            {
+                lo = m + 1;
+            }
+            else
+            {
+                hi = m;
+            }
+        }
+        return lo;
+    }
+
+    /// <summary>
+    /// 音符盖住哪几条 chip 轨（闭区间行号 0-3）。编辑器时间轴按这个把只读音符画成真实宽窄，
+    /// 于是轨道里的音符和时间轴里的音符对同一个 type/lane 永远给出同一个宽度，不会各画各的。
+    /// </summary>
+    public (int First, int Last)? NoteLanes(int type, int lane) => noteSkin.Lanes(type, lane);
+
+    /// <summary>按与构造相反的次序释放：子渲染器和纹理先于目标与 shader。调用前应确保引用这些资源的批次已经提交。</summary>
+    public void Dispose()
+    {
+        jacketTexture?.Dispose();
+        customEffects.Dispose();
+        customGimmicks.Dispose();
+        nativeSequence.Dispose();
+        nativeGimmick.Dispose();
+        checker.Dispose();
+        gameUi.Dispose();
+        sceneFont.Dispose();
+        noteSkin.Dispose();
+        laneTexture.Dispose();
+        holdOverlay.Dispose();
+        foreach (var texture in dustTextures.Concat(noteParticles))
+        {
+            texture.Dispose();
+        }
+        foreach (var texture in customTextures.Values)
+        {
+            texture.Dispose();
+        }
+        scene.Dispose();
+        field.Dispose();
+        Final.Dispose();
+        windowField?.Dispose();
+        proxyShader.Dispose();
+        fieldComposite.Dispose();
+    }
+}

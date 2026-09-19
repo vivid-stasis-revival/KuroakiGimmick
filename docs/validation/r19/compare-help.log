@@ -1,0 +1,29 @@
+$ python3 scripts/compare-scenes.py --help
+
+usage: compare-scenes.py [-h] --times TIMES [TIMES ...] --out OUT
+                         [--dotnet DOTNET] [--max-error MAX_ERROR]
+                         [--mean-error MEAN_ERROR]
+                         baseline candidate chart
+
+Render identical chart times with two actual application builds. Writes paired
+PPMs, amplified difference images, candidate diagnostics and a machine-
+readable summary into a NEW output directory. Never edits the chart. The
+baseline may be the user's pre-refactor SDL_GPU build or an older reference.
+Requires a supported local GPU. A saved screenshot alone is not a passing
+test.
+
+positional arguments:
+  baseline
+  candidate
+  chart
+
+options:
+  -h, --help            show this help message and exit
+  --times TIMES [TIMES ...]
+  --out OUT
+  --dotnet DOTNET
+  --max-error MAX_ERROR
+  --mean-error MEAN_ERROR
+
+
+exit_code=0

@@ -1,0 +1,46 @@
+# Local game resources and derived exports are private.
+/Assets/
+/GameUI_*/
+/GimmickExtras_*/
+/RoomFX_*/
+/FXExports/
+/NoteExports/
+
+# Verbatim decompiled game code kept locally as a reference; not redistributable.
+/docs/reference/
+
+# Game-side mod and sample chart data: this repository is the editor source only.
+/Integrations/
+/Samples/
+
+# Build outputs and local archives may contain private Assets.
+/bin/
+/obj/
+/dist/
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+
+# Editor and operating-system files.
+.DS_Store
+._*
+__MACOSX/
+.idea/
+.vs/
+*.user
+*.suo
+__pycache__/
+*.py[cod]
+
+# Editor and operating-system files.
+.DS_Store
+._*
+__MACOSX/
+.idea/
+.vs/
+*.user
+*.suo
+__pycache__/
+*.py[cod]

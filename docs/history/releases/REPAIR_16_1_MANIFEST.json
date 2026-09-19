@@ -1,0 +1,26 @@
+{
+  "version": "0.1.2",
+  "build": "16.1",
+  "hotfix": 2,
+  "files": {
+    "APPLY_16_1_REPAIR.command": "df16b4875f67871cf27cca5a381c7905e2228e22ff27699f3747d27705107a11",
+    "REPAIR_16_1_HOTFIX2.md": "48982c846907239972d772c1272a2660194b59b036e096f64e88276dea46725e",
+    "scripts/check-ui-presentation.py": "eb7569d87fe2ae0a736dc3ed655178b5f3f8f9656387ef5ece4812d4f5185977",
+    "scripts/check-vsm-reference.py": "61b55b09c21dc78a4e8ca31a26fd83aecf6d90a8827d7fdc50e6292fba65a5b5",
+    "src/Core/Editing/GimmickAuthoring.cs": "d060cf5221d22dc9de8de491cdc93a6cfa7482e0110f946460d71c7eb42938b0",
+    "src/Core/Editing/TimelineMarker.cs": "832660a45955476776426f2eb217c42b3f1960205d9982de2f113d7ea44bb7e7",
+    "src/Core/Editing/VsmDocument.cs": "8934b6ed056657c181298e45a5b246d3f43a1569daf311c5bb682814443f3e46",
+    "src/Core/Export/ChartExportKind.cs": "bcf64f4597a7a284e875151949e520332d6dba4fffcdd09e0db30b43f76f1a95",
+    "src/Core/Export/ChartExportPlan.cs": "bd1e62e1c3b6c977a25a20680b3cf5118a2894d58834a17ccbe9911f7bd48b4b",
+    "src/Core/Projects/Session.Report.cs": "1d61da38bb2e04c3583f78b8b8b43e595018db0be15ee90604a190db2c88b4f3",
+    "src/Native/Sdl.Editor.cs": "f6cb3688b4d72250042a18e3d97da3fded145b6f1bead52257d55151d61fb004",
+    "src/UI/Editor/Viewer.Editor.Help.cs": "532f5c6983eaa96f4863916f1c57eeea4473ef116eab5fd983ad70965e9a1141",
+    "src/UI/Editor/Viewer.Editor.Markers.cs": "1ba5ed2cb2c615cae9c5eb26c62930ebd6bb5021d5af92bfb9af48afa1cfa3cb",
+    "src/UI/Editor/Viewer.Editor.Reference.Add.cs": "3117393a087cb2a9f832b3ff00f07cea62aabf8096085dd3a198511b79f9e9e8",
+    "src/UI/Editor/Viewer.Editor.Reference.Drawing.cs": "3efd94916c99ce9a9279644b0fcc9c4cca31427b68ee3de0957c0c0c6d2d968e",
+    "src/UI/Editor/Viewer.Editor.Reference.cs": "af6de46abc967fb8cd1eabc45cb9e0ab07ed018902e5030049639cfddbb8c396",
+    "src/UI/Editor/Viewer.Editor.Workflow.cs": "79d6faa0f79f7e21cca4f0a57365f30be89689457661d413dcc0566b6ce96f60",
+    "tests/SelfTests/AuthoringSelfTest.cs": "478930ad8f19b80d25384e682aa47b56c98c9ca617758f7e625fe02502228e91",
+    "tests/SelfTests/EditorSelfTest.cs": "9d7ecebc61640a95d16f3a0f23246a62b898b9f3a0adacf81b585269f423900b"
+  }
+}

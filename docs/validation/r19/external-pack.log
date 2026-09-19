@@ -1,0 +1,20 @@
+$ python3 scripts/check-external-pack.py Assets/Gimmicks/obj_astellion_gimmick/manifest.json /mnt/data/files/ASTELLION_Test_Chart_Pack.zip
+
+{
+  "status": "passed",
+  "scope": "external archive metadata only",
+  "pack": "ASTELLION_Test_Chart_Pack.zip",
+  "packSha256": "0258cb74e696ea0dba22a2461ade12064325c83ecf0c412d212490acef0de997",
+  "spriteGroups": 7,
+  "pngFrames": 15,
+  "shaderFiles": 2,
+  "uniformComponents": 38,
+  "textures": {
+    "underwater-noise": "/mnt/data/work/refactor/Assets/GameFX/_filter_underwater_noise_sprite.png"
+  },
+  "csharpLoaderExecuted": false,
+  "gpuExecuted": false
+}
+
+
+exit_code=0

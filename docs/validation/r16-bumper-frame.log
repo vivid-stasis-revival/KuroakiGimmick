@@ -1,0 +1,23 @@
+r16 complete bumper-frame validation
+
+Current compact dump manifest:
+- sp_note_bumper_normal: 107x7, origin (53,3), 3 frames
+- sp_note_bumper_timing_normal: 107x7, origin (53,3), 3 frames
+- sp_note_bumper_mine_normal: 45x7, origin (22,3), 3 frames
+
+Decompiled obj_note_rendering Draw_0:
+- normal bumper: draw_sprite_ext(lane_sprites[i][0], i - 4, ...)
+- timing bumper: draw_sprite_ext(lane_sprites[i][1], i - 4, ...)
+- mine bumper: draw_sprite_ext(lane_sprites[i][2], i - 4, ...)
+No source-rect crop is applied by gameplay code.
+
+bumper_L.png alpha components in compact dump:
+- central component: x=31..75, 315 nontransparent pixels
+- L side marker: x=24..26, 7 nontransparent pixels
+The r15 crop x=31..75 therefore deleted the L marker by construction.
+
+r16 compact-v1 geometry:
+- normal/timing bumper draw: 107x7
+- local origin: (-53,-3)
+- UV: (0,0,1,1)
+- bumper_mine remains 45x7 with its own origin

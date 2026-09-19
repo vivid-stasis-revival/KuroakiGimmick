@@ -1,0 +1,7 @@
+PASS zero intensity preserves pixels through the source final UV clamp
+PASS glow / 1 passes / radius 9 / gamma 0: original 36 samples and MAX composition (max error 0.0, mean 0.0000)
+PASS glow / 5 passes / radius 256 / gamma 0: original 36 samples and MAX composition (max error 0.0, mean 0.0000)
+PASS FX_glow / 5 passes / radius 141 / gamma 0: original 36 samples and MAX composition (max error 0.0, mean 0.0000)
+PASS glow / 3 passes / radius 48 / gamma 3: original 36 samples and MAX composition (max error 0.0, mean 0.0000)
+PASS background glow visibly affects surrounding pixels
+6 original glow GPU/CPU checks passed.

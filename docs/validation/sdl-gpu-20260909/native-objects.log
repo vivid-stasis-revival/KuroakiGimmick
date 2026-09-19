@@ -1,0 +1,15 @@
+PASS new object and callback names work without C# branches or song metadata
+PASS callback uses declared sprite origin and appears above the overlay/post pass
+PASS GUI overlay binds an arbitrary alpha mod
+PASS generic delayed tween fades the callback over lower GUI content
+PASS callback expires at its declared lifetime
+PASS callback state reproduces after backward seeking
+PASS shader bindings evaluate arbitrary mod names and scale factors
+PASS VSB extra mod IDs use the object definition registration order
+PASS ambient particles and checker can be enabled by another object definition
+PASS unrelated unsupported mods remain visible in reports
+PASS object resource traversal is rejected
+PASS missing callback artwork is reported instead of faking support
+PASS sprite dimensions are validated
+PASS shared room posterise uses original channel rounding at its layer depth
+14 reusable native-object checks passed.

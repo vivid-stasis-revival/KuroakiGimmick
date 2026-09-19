@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Version>0.1.3</Version>
+    <AssemblyVersion>0.1.3.0</AssemblyVersion>
+    <FileVersion>0.1.3.170</FileVersion>
+    <InformationalVersion>0.1.3+17.0</InformationalVersion>
+    <AssemblyName>KuroakiGimmick</AssemblyName>
+    <RootNamespace>KuroakiGimmick</RootNamespace>
+    <ApplicationIcon>Assets/App/Kuroaki.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <DefaultItemExcludes>$(DefaultItemExcludes);dist/**</DefaultItemExcludes>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="src/**/*.cs;tests/SelfTests/**/*.cs" />
+    <!-- Embed the SAME editable definitions, so an older external Assets directory
+         cannot remove the extension-ID table from a newer executable. -->
+    <EmbeddedResource Include="Assets/Gimmicks/*/manifest.json" />
+    <EmbeddedResource Include="Assets/Documentation/vsm-reference.json" LogicalName="KuroakiGimmick.VsmReference.json" />
+    <EmbeddedResource Include="tests/Fixtures/r15-scarlet-definition.json" LogicalName="KuroakiGimmick.Tests.LegacyScarletDefinition.json" />
+    <EmbeddedResource Include="Assets/Catalog/legacy-per-frame-bindings.json" LogicalName="KuroakiGimmick.LegacyPerFrameBindings.json" />
+    <EmbeddedResource Include="Assets/Catalog/jackets.json" LogicalName="KuroakiGimmick.JacketCatalog.json" />
+    <EmbeddedResource Include="Assets/Catalog/room-associations.json" LogicalName="KuroakiGimmick.RoomAssociations.json" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="SDL3-CS.Linux" Version="3.4.16" />
+    <PackageReference Include="SDL3-CS.MacOS" Version="3.4.16" />
+    <PackageReference Include="SDL3-CS.Windows" Version="3.4.16" />
+    <PackageReference Include="Silk.NET.Shaderc.Native" Version="2.23.0" />
+    <PackageReference Include="Silk.NET.SPIRV.Cross.Native" Version="2.23.0" />
+    <PackageReference Include="StbImageSharp" Version="2.30.16" />
+    <PackageReference Include="NVorbis" Version="0.10.5" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Assets/**/*;Samples/**/*;Integrations/**/*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <None Update="Assets/Gimmicks/*/manifest.json;Assets/Catalog/*.json" CopyToOutputDirectory="Always" CopyToPublishDirectory="Always" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="docs\media\" />
+  </ItemGroup>
+</Project>
