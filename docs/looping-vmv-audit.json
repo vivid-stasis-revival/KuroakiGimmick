@@ -1,0 +1,56 @@
+{
+  "source": "looping.vmv",
+  "sha256": "853c1813ee5c0b72f65b0271b1f2fcb86f36fb55288dfcd8b1e3fe77bd71fb32",
+  "kind": "mod statistics cache, not a playable chart",
+  "events": 2155,
+  "expanded_for_analysis_only": true,
+  "checks": {
+    "df_whitebg": {
+      "events": 1011,
+      "from_to_counts": {
+        "(0.0, 0.0)": 1011
+      }
+    },
+    "plaudite_jacket": {
+      "events": 64,
+      "from_to_counts": {
+        "(0.0, 1.0)": 8,
+        "(0.0, 2.0)": 8,
+        "(0.0, 3.0)": 8,
+        "(0.0, 10.0)": 8,
+        "(0.0, 4.0)": 8,
+        "(0.0, 5.0)": 8,
+        "(0.0, 6.0)": 8,
+        "(0.0, 7.0)": 7,
+        "(0.0, 11.0)": 1
+      }
+    },
+    "pburstspeed": {
+      "events": 1,
+      "from_to_counts": {
+        "(1.0, 25.0)": 1
+      }
+    },
+    "plaudite_pburst": {
+      "events": 63,
+      "from_to_counts": {
+        "(0.0, 25.0)": 63
+      }
+    },
+    "changeskin": {
+      "events": 61,
+      "from_to_counts": {
+        "(1.0, 1.0)": 21,
+        "(3.0, 3.0)": 20,
+        "(0.0, 0.0)": 20
+      }
+    },
+    "fx_red": {
+      "events": 29,
+      "from_to_counts": {
+        "(0.0, 1.0)": 15,
+        "(1.0, 0.0)": 14
+      }
+    }
+  }
+}

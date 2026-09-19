@@ -1,0 +1,10 @@
+$ python3 scripts/check-source.py
+
+PASS 113 C# files: lexical structure, type layout, compile roots and runtime decoupling
+PASS 51 JSON files parsed
+PASS 9 object definitions: IDs, declared references, bundled shaders and sprite dimensions
+PASS 17 Python scripts and 9 Bash scripts parse
+PASS 11388 low-level structural assertions. C#/GLSL compilation and runtime behavior NOT tested.
+
+
+exit_code=0

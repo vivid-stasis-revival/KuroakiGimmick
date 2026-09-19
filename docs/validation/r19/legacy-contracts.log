@@ -1,0 +1,36 @@
+$ python3 scripts/check-legacy-contracts.py /mnt/data/work/baseline
+
+PASS reference extension table is present in actual baseline source
+PASS all 24 extension IDs match r15 in order, without deduplication
+PASS fixed BPM matches r15
+PASS original resource-pack relative path is preserved
+PASS both first-callback room fades retain nine seconds
+PASS original fade easing is preserved
+PASS hold overlay alpha alias is preserved
+PASS bar callback index remains an integer in 1..4
+PASS original isolated whole-scene postprocessing is retained
+PASS proxy footer and fixed judgment decoration capabilities remain intact
+PASS callback timeline tail preserves the original .4-second lifetime
+PASS bar callbacks have explicit per-lane composition order
+PASS CPU regression embeds the actual r15 Scarlet definition, not a reconstructed substitute
+PASS the missing-vs-false schema difference is present in the real input files
+PASS both revisions use v1; backward compatibility cannot be gated by different version numbers
+PASS all legacy function names have declarative compatibility templates
+PASS legacy template uses exactly the current scalar expressions
+PASS legacy expression coefficients match the r15 formulas
+PASS Scarlet declaration unchanged: extraMods
+PASS Scarlet declaration unchanged: defaults
+PASS Scarlet declaration unchanged: sprites
+PASS Scarlet declaration unchanged: shaders
+PASS Scarlet declaration unchanged: callbacks
+PASS Scarlet declaration unchanged: overlays
+PASS Scarlet declaration unchanged: postModes
+PASS original room filter values and layer ordering remain byte-identical
+PASS 113 original images/fonts/shaders/audio files preserved byte-for-byte
+PASS MSBuild embeds the same object-definition JSON sources
+PASS legacy expression templates are embedded, not dependent on a new loose file
+PASS definition metadata cannot stay stale under timestamp-only build copying
+30 source/data contract checks passed. C# execution and GPU output NOT tested.
+
+
+exit_code=0

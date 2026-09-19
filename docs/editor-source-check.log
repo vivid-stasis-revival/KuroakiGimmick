@@ -1,0 +1,5 @@
+PASS 127 C# files: lexical structure, type layout, compile roots and runtime decoupling
+PASS 59 JSON files parsed
+PASS 9 object definitions: IDs, declared references, bundled shaders and sprite dimensions
+PASS 18 Python scripts and 9 Bash scripts parse
+PASS 14504 low-level structural assertions. C#/GLSL compilation and runtime behavior NOT tested.

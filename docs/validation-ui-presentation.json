@@ -1,0 +1,25 @@
+{
+  "revision": "editor-preview.9",
+  "scope": "offline source/data/asset/layout-mirror checks",
+  "compiled": false,
+  "csharpTestsExecuted": false,
+  "nativeExecuted": false,
+  "pythonLayoutCases": 903,
+  "checks": [
+    "301 browsable entries retain 205 parameter rows",
+    "no injected note pages or full-source navigation entries",
+    "native docs does not render raw source or expose full-source copy",
+    "open and closing overlays gate editor input",
+    "compact outline masks clicks on underlying article cells and code buttons",
+    "navigation and article hit testing use displayed scroll positions",
+    "vertical list scroll is animated; playhead still comes from exact song time",
+    "track help is composited after grips and its visibility is not fed back into its hover source",
+    "track help latches the source across the popup and short pointer gap",
+    "motion engine has no playback/evaluation dependencies",
+    "motion implementation contains interruptible finite tweens and stale-key eviction",
+    "animation preference is enabled by default and exposed in Settings",
+    "single-frame snapshots capture settled layouts",
+    "actual C# motion and layout CPU tests are included (not executed by this script)",
+    "independent Python layout mirror: all 301 pages at three widths are non-overlapping and table/code lines fit"
+  ]
+}

@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net8.0": {
+      "NVorbis": {
+        "type": "Direct",
+        "requested": "[0.10.5, )",
+        "resolved": "0.10.5",
+        "contentHash": "o+IptCG4Avze39HrGeztC+xIp6fOOwGVAwkoa1J++4Ji1WmZ+KIKlFl5wsgxsXqBkmdpfs/vFSUproiLKYa2bw==",
+        "dependencies": {
+          "System.Memory": "4.5.3",
+          "System.ValueTuple": "4.5.0"
+        }
+      },
+      "SDL3-CS.Linux": {
+        "type": "Direct",
+        "requested": "[3.4.16, )",
+        "resolved": "3.4.16",
+        "contentHash": "jC1+e5CVbeNCsF7mdZaCqgD2rPY8RCsGdMxzokxjj+ZNNu3Nzc9esl+z6tFCGuHd2kg2565t8zIVI5Up0GoQmg=="
+      },
+      "SDL3-CS.MacOS": {
+        "type": "Direct",
+        "requested": "[3.4.16, )",
+        "resolved": "3.4.16",
+        "contentHash": "l+Mg9TGhMzZeCBui24WOL7+9YF/PEdN9FVGpBuqmUxCr9LrLMAIHsXD2j2uN5NYdiQmGhNpZ59fGP2BWqPTeHA=="
+      },
+      "SDL3-CS.Windows": {
+        "type": "Direct",
+        "requested": "[3.4.16, )",
+        "resolved": "3.4.16",
+        "contentHash": "fz7LopbxaH/VI2XgrxTKPSK6oPN/su/OdubKa7aCmu/dP7IWhHrqGEirGmoPy5XgRf6GZyNJaBsNi7S5NKkuZw=="
+      },
+      "Silk.NET.Shaderc.Native": {
+        "type": "Direct",
+        "requested": "[2.23.0, )",
+        "resolved": "2.23.0",
+        "contentHash": "H6OMLIWdh2HITvkmj+ALs8LTIdQvQ2/JTtkDXinVbJ3xxrQIBXhVmc9jnuTQ67YDybGlENSMrgthzhLwK0rjnQ=="
+      },
+      "Silk.NET.SPIRV.Cross.Native": {
+        "type": "Direct",
+        "requested": "[2.23.0, )",
+        "resolved": "2.23.0",
+        "contentHash": "pY4LmIE8nYXkfCgExxksYlnYZZ4D3/AW13XNcpyp0jJDTkCpDsXL0nLOX7CM7tPS6xvkiERRd+Do2zegbl7Xtw=="
+      },
+      "StbImageSharp": {
+        "type": "Direct",
+        "requested": "[2.30.16, )",
+        "resolved": "2.30.16",
+        "contentHash": "qg1i+NHihXVKLKYacGKrauhSQIGL31eBWcTC4Vc7jnGmBFj87LkRuCdXB5aDZisWMRnB6x2mcfwYXQxMWEG/lw=="
+      },
+      "System.Memory": {
+        "type": "Transitive",
+        "resolved": "4.5.3",
+        "contentHash": "3oDzvc/zzetpTKWMShs1AADwZjQ/36HnsufHRPcOjyRAAMLDlu2iD33MBI2opxnezcVUtXyqDXXjoFMOU9c7SA=="
+      },
+      "System.ValueTuple": {
+        "type": "Transitive",
+        "resolved": "4.5.0",
+        "contentHash": "okurQJO6NRE/apDIP23ajJ0hpiNmJ+f0BwOlB/cSqTLQlw5upkf+5+96+iG2Jw40G1fCVCyPz/FhIABUjMR+RQ=="
+      }
+    }
+  }
+}

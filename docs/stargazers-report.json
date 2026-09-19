@@ -1,0 +1,103 @@
+{
+  "version": "0.1.0",
+  "title": "_ENCORE_stargazers",
+  "objectName": "obj_stargazers_gimmick",
+  "proxies": 1,
+  "notes": {},
+  "modCount": 249,
+  "perFrameCount": 0,
+  "duration": 169.53225806451613,
+  "images": {
+    "manifest": null,
+    "count": 0,
+    "textures": 0
+  },
+  "profile": "core",
+  "bpm": [
+    {
+      "Time": 0,
+      "Beat": 0,
+      "Bpm": 186
+    }
+  ],
+  "diagnostics": [
+    {
+      "Source": "renderer",
+      "Line": 0,
+      "Message": "Unsupported mod: holdoverlayalpha (3 events, 1 names retained).",
+      "Error": false
+    },
+    {
+      "Source": "renderer",
+      "Line": 0,
+      "Message": "Unsupported mod: scorealph (1 events, 1 names retained).",
+      "Error": false
+    },
+    {
+      "Source": "renderer",
+      "Line": 0,
+      "Message": "Unsupported mod: sg_judgeline (2 events, 1 names retained).",
+      "Error": false
+    },
+    {
+      "Source": "renderer",
+      "Line": 0,
+      "Message": "Unsupported mod: sg_lanelines* (6 events, 3 names retained).",
+      "Error": false
+    },
+    {
+      "Source": "renderer",
+      "Line": 0,
+      "Message": "Unsupported mod: starspd_low (5 events, 1 names retained).",
+      "Error": false
+    },
+    {
+      "Source": "renderer",
+      "Line": 0,
+      "Message": "Unsupported mod: starspd_high (3 events, 1 names retained).",
+      "Error": false
+    },
+    {
+      "Source": "renderer",
+      "Line": 0,
+      "Message": "Unsupported mod: sg_starspawner (4 events, 1 names retained).",
+      "Error": false
+    },
+    {
+      "Source": "renderer",
+      "Line": 0,
+      "Message": "Unsupported mod: star_pause (169 events, 1 names retained).",
+      "Error": false
+    },
+    {
+      "Source": "renderer",
+      "Line": 0,
+      "Message": "Unsupported mod: starspawn (44 events, 1 names retained).",
+      "Error": false
+    },
+    {
+      "Source": "renderer",
+      "Line": 0,
+      "Message": "Unsupported mod: sg_bg_alpha (1 events, 1 names retained).",
+      "Error": false
+    },
+    {
+      "Source": "renderer",
+      "Line": 0,
+      "Message": "Unsupported mod: sg_bg_speed (2 events, 1 names retained).",
+      "Error": false
+    },
+    {
+      "Source": "renderer",
+      "Line": 0,
+      "Message": "Unsupported mod: sg_endblip (1 events, 1 names retained).",
+      "Error": false
+    },
+    {
+      "Source": "renderer",
+      "Line": 0,
+      "Message": "obj_stargazers_gimmick: common mods only; its custom object renderer is not implemented.",
+      "Error": false
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+$ python3 scripts/check-input-preservation.py --baseline /mnt/data/KuroakiGimmick-src-SDL_GPU-20260909-133143.zip
+
+{
+  "status": "passed",
+  "baselineSha256": "99b362dd91de968b9bed878c786227276db05f0a30abdb4e7b3090a5ab217de9",
+  "backendTypes": 13,
+  "backendMembers": 272,
+  "unchangedInputAssets": 145,
+  "allowedMetadataChanges": [
+    "Assets/Gimmicks/obj_scarletdeath_gimmick/manifest.json"
+  ],
+  "compiled": false,
+  "gpuExecuted": false
+}
+
+
+exit_code=0
