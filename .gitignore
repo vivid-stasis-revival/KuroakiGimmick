@@ -1,5 +1,7 @@
 # Local game resources and derived exports are private.
-/Assets/
+# Keep application branding available in the source repository.
+/Assets/*
+!/Assets/App/
 /GameUI_*/
 /GimmickExtras_*/
 /RoomFX_*/
@@ -22,17 +24,6 @@
 *.tar.gz
 *.tgz
 *.7z
-
-# Editor and operating-system files.
-.DS_Store
-._*
-__MACOSX/
-.idea/
-.vs/
-*.user
-*.suo
-__pycache__/
-*.py[cod]
 
 # Editor and operating-system files.
 .DS_Store
