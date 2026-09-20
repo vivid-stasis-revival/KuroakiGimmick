@@ -67,24 +67,24 @@ public sealed partial class Viewer
         float tocWidth = wide && !referenceOutlineHidden ? 194 : 0;
         float centerX = r.X + navWidth + 26;
         float centerW = Math.Max(120, r.W - navWidth - tocWidth - 66);
-        Text("VSM 手册", r.X + 20, r.Y + 17, 23, DocsText, max: navWidth - 20, unified: true, bold: true);
+        Text(L.Get("VSM 手册"), r.X + 20, r.Y + 17, 23, DocsText, max: navWidth - 20, unified: true, bold: true);
         float headerEnd = r.X + r.W - 109;
         referenceSearchRect = new(centerX, r.Y + 15, Math.Max(80, headerEnd - centerX - 175), 36);
         float focus = motion.To("docs-search-focus", referenceSearchFocus ? 1 : 0, .14, 0);
         Canvas.Fill(referenceSearchRect, referenceSelectAll ? Theme.PanelRaised : Theme.PanelAlt);
         Canvas.Border(referenceSearchRect, Mix(Theme.Border, DocsAccent, focus));
         string shown = referenceQuery.Length == 0 && referenceComposition.Length == 0
-            ? "搜索文档…  /" : referenceQuery + referenceComposition;
+            ? L.Get("搜索文档…  /") : referenceQuery + referenceComposition;
         Text(EditorHelpLayout.FitTitle(shown, referenceSearchRect.W - 22, s => fonts.Measure(s, 15, unified: true)),
             referenceSearchRect.X + 11, referenceSearchRect.Y + 5, 15, referenceQuery.Length > 0 ? DocsText : DocsMuted, unified: true);
         if (ReferenceButton("<", new(headerEnd - 159, r.Y + 16, 32, 34), enabled: referenceBack.Count > 0)) ReferenceHistory(false);
         if (ReferenceButton(">", new(headerEnd - 121, r.Y + 16, 32, 34), enabled: referenceForward.Count > 0)) ReferenceHistory(true);
-        if (ReferenceButton("目录", new(headerEnd - 82, r.Y + 16, 73, 34), active: outlineRequested))
+        if (ReferenceButton(L.Get("目录"), new(headerEnd - 82, r.Y + 16, 73, 34), active: outlineRequested))
         {
             if (wide) referenceOutlineHidden = !referenceOutlineHidden;
             else referenceOutlineOpen = !referenceOutlineOpen;
         }
-        if (ReferenceButton("关闭", new(r.X + r.W - 87, r.Y + 17, 67, 32))) CloseReference();
+        if (ReferenceButton(L.Get("关闭"), new(r.X + r.W - 87, r.Y + 17, 67, 32))) CloseReference();
         Canvas.Fill(new(r.X, r.Y + 66, r.W, 1), Theme.Border);
 
         referenceListRect = new(r.X + 10, r.Y + 79, navWidth - 9, Math.Max(1, r.H - 132));
@@ -106,7 +106,7 @@ public sealed partial class Viewer
         var selected = VsmReference.Shared.Find(referenceSelected);
         if (selected != null)
         {
-            string crumb = selected.Category;
+            string crumb = selected.Category + " · " + L.Get("Documentation is shown in its original language.");
             Text(crumb, centerX, r.Y + 79, 13, DocsMuted, max: centerW, unified: true);
             string title = EditorHelpLayout.FitTitle(selected.Name, centerW, s => fonts.Measure(s, 25, unified: true, bold: true));
             Text(title, centerX, r.Y + 109, 25, DocsText, max: centerW, unified: true, bold: true);
@@ -131,7 +131,7 @@ public sealed partial class Viewer
         else
         {
             referenceBodyMax = 0;
-            Text("文档不可用", centerX, r.Y + 110, 22, DocsText, unified: true);
+            Text(L.Get("文档不可用"), centerX, r.Y + 110, 22, DocsText, unified: true);
             Text(VsmReference.Shared.Error, centerX, r.Y + 155, 15, DocsMuted, max: centerW, unified: true);
         }
         if (outlineAlpha > .001f)
@@ -143,7 +143,7 @@ public sealed partial class Viewer
                 DrawReferenceOutline();
             }
         }
-        Text(string.IsNullOrWhiteSpace(referenceQuery) ? "Ctrl/Cmd+F 搜索 · F1 关闭" : $"{referenceResults.Length} 个结果",
+        Text(string.IsNullOrWhiteSpace(referenceQuery) ? L.Get("Ctrl/Cmd+F 搜索 · F1 关闭") : L.Format($"{referenceResults.Length} 个结果"),
             r.X + 20, r.Y + r.H - 35, 12, DocsMuted, max: navWidth - 20, unified: true);
         float toastAlpha = motion.Show("docs-toast", referenceStatus.Length > 0 && uptime.Elapsed.TotalSeconds < referenceStatusUntil, .12);
         if (toastAlpha > .001f)
@@ -251,11 +251,11 @@ public sealed partial class Viewer
             {
                 Canvas.Fill(box, Theme.PanelAlt);
                 Canvas.Border(box, Theme.Border);
-                Text("CODE", box.X + 14, box.Y + 10, 10, DocsMuted, unified: true);
+                Text(L.Get("CODE"), box.X + 14, box.Y + 10, 10, DocsMuted, unified: true);
                 // 复制按钮会画在裁剪区之外，只有整颗按钮都在正文视口内时才允许响应点击。
                 var button = new Rect(box.X + box.W - 75, box.Y + 6, 64, 26);
                 bool buttonVisible = button.Y >= referenceBodyRect.Y && button.Y + button.H <= referenceBodyRect.Y + referenceBodyRect.H;
-                if (ReferenceButton("复制", button, enabled: buttonVisible && articleInput, key: entry.Id + ":code:" + itemIndex)) CopyReferenceText(item.Text);
+                if (ReferenceButton(L.Get("复制"), button, enabled: buttonVisible && articleInput, key: entry.Id + ":code:" + itemIndex)) CopyReferenceText(item.Text);
                 for (int row = 0; row < item.Lines[0].Length; row++)
                     Text(item.Lines[0][row], box.X + 14, box.Y + 40 + row * 26, 16, Mix(Theme.Text, Theme.AccentSoft, .22f), max: box.W - 28, unified: true);
             }
@@ -283,7 +283,7 @@ public sealed partial class Viewer
     void DrawReferenceOutline()
     {
         var r = referenceOutlineRect;
-        Text("本页目录", r.X + 12, r.Y + 4, 14, DocsText, max: r.W - 24, unified: true, bold: true);
+        Text(L.Get("本页目录"), r.X + 12, r.Y + 4, 14, DocsText, max: r.W - 24, unified: true, bold: true);
         var list = new Rect(r.X + 5, r.Y + 39, r.W - 10, Math.Max(1, r.H - 39));
         referenceOutlineMax = Math.Max(0, referencePage.Anchors.Length * 37 - list.H);
         referenceOutlineScroll = Math.Clamp(referenceOutlineScroll, 0, referenceOutlineMax);
@@ -322,9 +322,9 @@ public sealed partial class Viewer
         var siblings = VsmReference.Shared.Entries.Where(e => e.Kind == entry.Kind &&
             (entry.Kind == "section" || e.ParentId == entry.ParentId)).ToArray();
         int at = Array.FindIndex(siblings, e => e.Id == entry.Id);
-        if (ReferenceButton("上一页", new(rect.X, rect.Y, 88, 31), enabled: footerInput && at > 0)) SelectReference(siblings[at - 1].Id, true);
-        if (entry.ParentId.Length > 0 && ReferenceButton("返回章节", new(rect.X + 99, rect.Y, 100, 31), enabled: footerInput)) SelectReference(entry.ParentId, true);
-        if (ReferenceButton("下一页", new(rect.X + rect.W - 88, rect.Y, 88, 31), enabled: footerInput && at >= 0 && at + 1 < siblings.Length))
+        if (ReferenceButton(L.Get("上一页"), new(rect.X, rect.Y, 88, 31), enabled: footerInput && at > 0)) SelectReference(siblings[at - 1].Id, true);
+        if (entry.ParentId.Length > 0 && ReferenceButton(L.Get("返回章节"), new(rect.X + 99, rect.Y, 100, 31), enabled: footerInput)) SelectReference(entry.ParentId, true);
+        if (ReferenceButton(L.Get("下一页"), new(rect.X + rect.W - 88, rect.Y, 88, 31), enabled: footerInput && at >= 0 && at + 1 < siblings.Length))
             SelectReference(siblings[at + 1].Id, true);
     }
 }

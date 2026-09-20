@@ -52,64 +52,64 @@ public sealed partial class Viewer
         Text("GIMMICK", 83, 50, 10, soft, true);
         Canvas.Fill(new(272, 28, 1, 30), line);
         Text(Paths.BuildRevision, 292, 35, 12, muted, true, max: Math.Max(1, w - 934));
-        if (Button("LAYOUT", new(w - 634, 25, 90, 31), enabled: !Busy)) { OpenLayout(); click = false; }
-        if (Button("EXPORT", new(w - 534, 25, 90, 31), enabled: !Busy && !Current.IsEmpty))
+        if (Button(L.Get("LAYOUT"), new(w - 634, 25, 90, 31), enabled: !Busy)) { OpenLayout(); click = false; }
+        if (Button(L.Get("EXPORT"), new(w - 534, 25, 90, 31), enabled: !Busy && !Current.IsEmpty))
         { OpenChartExport(); click = false; }
-        if (Button("EDITOR UI", new(w - 434, 25, 116, 31), enabled: !Busy && !Current.IsEmpty))
+        if (Button(L.Get("EDITOR UI"), new(w - 434, 25, 116, 31), enabled: !Busy && !Current.IsEmpty))
         { ToggleWorkspace(); click = false; }
-        if (Button("SETTINGS", new(w - 308, 25, 102, 31), enabled: !Busy))
+        if (Button(L.Get("SETTINGS"), new(w - 308, 25, 102, 31), enabled: !Busy))
         {
             settings = true;
             help = false;
         }
-        if (Button("HELP  H", new(w - 196, 25, 78, 31)))
+        if (Button(L.Get("HELP  H"), new(w - 196, 25, 78, 31)))
         {
             help = !help;
         }
-        if (Button("SAVE", new(w - 108, 25, 80, 31), enabled: !Busy))
+        if (Button(L.Get("SAVE"), new(w - 108, 25, 80, 31), enabled: !Busy))
         {
             SaveProject();
         }
         Divider(24, 79, w - 48);
         var geometry = workspaceGeometry;
         float lx = 24, lw = geometry.LeftWidth, cx = geometry.PreviewX, rw = geometry.RightWidth, rx = geometry.RightX, cw = geometry.PreviewWidth;
-        Label("01 / SOURCES", lx, 102);
-        if (Button("OPEN CHART / VSM", new(lx, 128, lw, 38), primary: true, enabled: !Busy))
+        Label(L.Get("01 / SOURCES"), lx, 102);
+        if (Button(L.Get("OPEN CHART / VSM"), new(lx, 128, lw, 38), primary: true, enabled: !Busy))
         {
             ChooseOpen();
         }
-        if (Button("+ FILES / RESOURCES", new(lx, 177, lw, 34), enabled: !Busy))
+        if (Button(L.Get("+ FILES / RESOURCES"), new(lx, 177, lw, 34), enabled: !Busy))
         {
             ChooseOpen(true);
         }
-        Text("Drop files / song folder", lx + 18, 224, 11, muted);
+        Text(L.Get("Drop files / song folder"), lx + 18, 224, 11, muted);
         Divider(lx, 253, lw);
-        FileRow("CHART", Current.Project.Chart, lx, 272, lw);
-        FileRow("GIMMICK", Current.Project.Gimmick ?? (Current.Chart.Mods.Count > 0 ? "Embedded in VSB" : null), lx, 325, lw);
-        FileRow("IMAGES / " + Current.Images.Items.Count, Current.Images.Path, lx, 378, lw);
-        FileRow("AUDIO", Current.Project.Audio, lx, 431, lw);
+        FileRow(L.Get("CHART"), Current.Project.Chart, lx, 272, lw);
+        FileRow(L.Get("GIMMICK"), Current.Project.Gimmick ?? (Current.Chart.Mods.Count > 0 ? L.Get("Embedded in VSB") : null), lx, 325, lw);
+        FileRow(L.Get("IMAGES / ") + Current.Images.Items.Count, Current.Images.Path, lx, 378, lw);
+        FileRow(L.Get("AUDIO"), Current.Project.Audio, lx, 431, lw);
         Divider(lx, 483, lw);
-        FileRow("TEXT / " + Current.Texts.Tracks.Count, Current.Texts.Tracks.Count > 0 ? Current.Texts.Tracks.Count + " subtitle tracks" : null,
+        FileRow(L.Get("TEXT / ") + Current.Texts.Tracks.Count, Current.Texts.Tracks.Count > 0 ? Current.Texts.Tracks.Count + L.Get(" subtitle tracks") : null,
             lx, 503, lw);
-        FileRow("JACKET / " + Current.Jackets.Mode, Current.Jackets.At(Current.Timeline, time), lx, 556, lw);
-        Label("ROOM FX", lx, 606);
-        string roomLabel = Current.Fx.Source is "external" or "local" ? "EXTERNAL FX" : Current.Project.RoomPreset == "auto" ? "AUTO / " + (Current.Fx.Room?.Replace("scene_gameplay_", "").Replace("scene_gameplay", "gameplay") ?? "NONE").ToUpperInvariant() : Current.Project.RoomPreset.ToUpperInvariant();
+        FileRow(L.Get("JACKET / ") + Current.Jackets.Mode, Current.Jackets.At(Current.Timeline, time), lx, 556, lw);
+        Label(L.Get("ROOM FX"), lx, 606);
+        string roomLabel = Current.Fx.Source is "external" or "local" ? L.Get("EXTERNAL FX") : Current.Project.RoomPreset == "auto" ? L.Get("AUTO / ") + (Current.Fx.Room?.Replace("scene_gameplay_", "").Replace("scene_gameplay", "gameplay") ?? L.Get("NONE")).ToUpperInvariant() : Current.Project.RoomPreset.ToUpperInvariant();
         if (Button(roomLabel, new(lx, 626, lw, 32), enabled: !Busy && !Current.IsEmpty))
         {
             int at = Array.IndexOf(GameFxProfile.Presets, GameFxProfile.NormalizePreset(Current.Project.RoomPreset));
             Rebuild(room: GameFxProfile.Presets[(at + 1) % GameFxProfile.Presets.Length]);
         }
-        if (Button("RELOAD FILES  R", new(lx, 674, lw, 33), enabled: !Busy && !Current.IsEmpty))
+        if (Button(L.Get("RELOAD FILES  R"), new(lx, 674, lw, 33), enabled: !Busy && !Current.IsEmpty))
         {
             Reload();
         }
-        Text("WINDOW MOTION", lx, Math.Max(735, h - 123), 10, soft, true);
-        if (Button(desktopPreview ? "SCENE" : "DESKTOP", new(lx, Math.Max(753, h - 101), 94, 26), key: "viewer-desktop")) desktopPreview = !desktopPreview;
-        if (Button(nativeWindows != null ? "LIVE: ON" : "LIVE: OFF", new(lx + 100, Math.Max(753, h - 101), 92, 26), key: "viewer-live")) ToggleNativeWindows();
-        Label("02 / PREVIEW", cx, 102);
-        Text(Current.Title, cx, 126, 22, white, max: cw - 10);
-        Text(Current.NativeGimmick.Data?.DisplayName ?? "CORE PROFILE", cx, 158, 10, soft, true);
-        Text($"{Renderer.Final.Texture.Width} x {Renderer.Final.Texture.Height} / NEAREST", cx + cw - 205, 158, 10, muted, true);
+        Text(L.Get("WINDOW MOTION"), lx, Math.Max(735, h - 123), 10, soft, true);
+        if (Button(desktopPreview ? L.Get("SCENE") : L.Get("DESKTOP"), new(lx, Math.Max(753, h - 101), 94, 26), key: "viewer-desktop")) desktopPreview = !desktopPreview;
+        if (Button(nativeWindows != null ? L.Get("LIVE: ON") : L.Get("LIVE: OFF"), new(lx + 100, Math.Max(753, h - 101), 92, 26), key: "viewer-live")) ToggleNativeWindows();
+        Label(L.Get("02 / PREVIEW"), cx, 102);
+        Text(Current.IsEmpty ? L.Get("Open a chart or song folder") : Current.Title, cx, 126, 22, white, max: cw - 10);
+        Text(Current.NativeGimmick.Data?.DisplayName ?? L.Get("CORE PROFILE"), cx, 158, 10, soft, true);
+        Text(L.Format($"{Renderer.Final.Texture.Width} x {Renderer.Final.Texture.Height} / NEAREST"), cx + cw - 205, 158, 10, muted, true);
         float previewY = 174, previewH = Math.Max(160, geometry.SplitY - previewY - 8);
         var frame = new Rect(cx, previewY, cw, previewH);
         previewFrame = frame;
@@ -125,7 +125,7 @@ public sealed partial class Viewer
         }
         if (Current.IsEmpty)
         {
-            Text("OPEN A CHART TO BEGIN", cx + cw / 2 - 125, previewY + previewH / 2 - 10, 18, muted);
+            Text(L.Get("OPEN A CHART TO BEGIN"), cx + cw / 2 - 125, previewY + previewH / 2 - 10, 18, muted);
         }
         // 四个小的猩红色角括号，始终画在歌曲图像之外。
         foreach (var (x, y, sx, sy) in new[]
@@ -140,7 +140,7 @@ public sealed partial class Viewer
             Canvas.Line(x, y, x, y + sy * 12, 2, soft);
         }
         float controls = previewY + previewH + 12;
-        if (Button(transport.Playing? "PAUSE" : "PLAY", new(cx, controls, 79, 34), primary : true, enabled : !Busy, key: "viewer-play"))
+        if (Button(transport.Playing? L.Get("PAUSE") : L.Get("PLAY"), new(cx, controls, 79, 34), primary : true, enabled : !Busy, key: "viewer-play"))
         {
             transport.SetPlaying(!transport.Playing);
         }
@@ -158,23 +158,23 @@ public sealed partial class Viewer
         {
             transport.SetSpeed(transport.Speed >= 2?.25 : transport.Speed + .25);
         }
-        if (Button("NOTES", new(cx + 245, controls, 65, 34), active: notes, enabled: !Busy))
+        if (Button(L.Get("NOTES"), new(cx + 245, controls, 65, 34), active: notes, enabled: !Busy))
         {
             notes = !notes;
         }
-        if (Button("FX", new(cx + 317, controls, 40, 34), active: effects, enabled: !Busy))
+        if (Button(L.Get("FX"), new(cx + 317, controls, 40, 34), active: effects, enabled: !Busy))
         {
             effects = !effects;
         }
-        if (Button(integerScale ? "INTEGER" : "FIT", new(cx + 364, controls, 73, 34)))
+        if (Button(integerScale ? L.Get("INTEGER") : L.Get("FIT"), new(cx + 364, controls, 73, 34)))
         {
             integerScale = !integerScale;
         }
-        if (Button("VS UI", new(cx + 444, controls, 65, 34), active: Current.Project.GameUiEnabled, enabled: !Busy))
+        if (Button(L.Get("VS UI"), new(cx + 444, controls, 65, 34), active: Current.Project.GameUiEnabled, enabled: !Busy))
         {
             Current.Project.GameUiEnabled = !Current.Project.GameUiEnabled;
         }
-        if (Button("FULL", new(cx + cw - 57, controls, 57, 34)))
+        if (Button(L.Get("FULL"), new(cx + cw - 57, controls, 57, 34)))
         {
             ToggleFull();
         }
@@ -182,8 +182,8 @@ public sealed partial class Viewer
         Text(Clock(time), cx, ty, 24, white, true);
         Text("/ " + Clock(Current.Duration), cx + 164, ty + 8, 12, muted, true);
         if (cw > 540 && Math.Abs(Current.Playback.RateAt(time) - 1) > 1e-9)
-            Text($"CHART {Current.Playback.RateAt(time):0.##}x", cx + 290, ty + 8, 12, soft, true, cw - 430);
-        Text("BEAT " + Current.Timeline.Bpm.Beat(time).ToString("0.00", CultureInfo.InvariantCulture), cx + cw - 126, ty + 8, 12, soft, true);
+            Text(L.Format($"CHART {Current.Playback.RateAt(time):0.##}x"), cx + 290, ty + 8, 12, soft, true, cw - 430);
+        Text(L.Get("BEAT ") + Current.Timeline.Bpm.Beat(time).ToString("0.00", CultureInfo.InvariantCulture), cx + cw - 126, ty + 8, 12, soft, true);
         var seek = new Rect(cx, ty + 38, cw, 45);
         Canvas.Fill(seek, panel);
         // 事件密度直接由已加载文件统计，从不使用占位波形数据。
@@ -219,22 +219,22 @@ public sealed partial class Viewer
         }
         float infoY = seek.Y + 78;
         Divider(cx, infoY, cw);
-        Label("EVENTS", cx, infoY + 16);
+        Label(L.Get("EVENTS"), cx, infoY + 16);
         Text(Current.Chart.Mods.Count.ToString("N0"), cx, infoY + 34, 19, white, true);
-        Label("NOTES", cx + cw * .27f, infoY + 16);
+        Label(L.Get("NOTES"), cx + cw * .27f, infoY + 16);
         Text(Current.Chart.Notes.Count(n => n.Type is not (3 or 4 or 5)).ToString("N0"), cx + cw * .27f, infoY + 34, 19, white, true);
         Label("BPM", cx + cw * .52f, infoY + 16);
         Text(Current.Timeline.Bpm.BpmAtBeat(Current.Timeline.Bpm.Beat(time)).ToString("0.##"), cx + cw * .52f, infoY + 34, 19, white, true);
-        Label("PREVIEW", cx + cw * .77f, infoY + 16);
+        Label(L.Get("PREVIEW"), cx + cw * .77f, infoY + 16);
         Text($"{measuredFps:0} fps", cx + cw * .77f, infoY + 34, 19, white, true);
-        Label("03 / INSPECT & EXPORT", rx, 102);
+        Label(L.Get("03 / INSPECT & EXPORT"), rx, 102);
         float reportTabGap = 8;
         float reportTabWidth = Math.Max(1, (rw - reportTabGap) / 2);
-        if (Button("INSPECT", new(rx, 128, reportTabWidth, 31), active: !diagnostics))
+        if (Button(L.Get("INSPECT"), new(rx, 128, reportTabWidth, 31), active: !diagnostics))
         {
             diagnostics = false;
         }
-        if (Button("REPORT " + Current.Chart.Diagnostics.Count, new(rx + reportTabWidth + reportTabGap, 128, reportTabWidth, 31), active: diagnostics))
+        if (Button(L.Get("REPORT ") + Current.Chart.Diagnostics.Count, new(rx + reportTabWidth + reportTabGap, 128, reportTabWidth, 31), active: diagnostics))
         {
             diagnostics = true;
         }
@@ -248,7 +248,7 @@ public sealed partial class Viewer
             // 一旦右侧面板宽度或全局 UI 缩放改变，面板变大了内容却不会重排。
             // 报告布局必须与工作区其余部分留在同一套响应式坐标系里，
             // 不要再回到固定像素的写法。
-            Text("Compatibility details", rx, 177, 15, white, max: rw);
+            Text(L.Get("Compatibility details"), rx, 177, 15, white, max: rw);
             var list = Current.Chart.Diagnostics;
             int index = list.Count == 0 ? 0 : Math.Clamp(diagnosticPage, 0, list.Count - 1);
             diagnosticPage = index;
@@ -262,7 +262,7 @@ public sealed partial class Viewer
 
             if (list.Count == 0)
             {
-                Text("No unsupported events found.", rx, yy, 12, muted, max: rw);
+                Text(L.Get("No unsupported events found."), rx, yy, 12, muted, max: rw);
             }
             else
             {
@@ -275,7 +275,7 @@ public sealed partial class Viewer
                     int drawRows = Math.Min(rows.Length, maxRows);
                     if (drawRows <= 0) break;
 
-                    Text(d.Error ? "ERROR" : "NOTICE", rx, yy, 9, d.Error ? red : soft, true);
+                    Text(d.Error ? L.Get("ERROR") : L.Get("NOTICE"), rx, yy, 9, d.Error ? red : soft, true);
                     for (int row = 0; row < drawRows; row++)
                     {
                         string text = rows[row];
@@ -299,15 +299,15 @@ public sealed partial class Viewer
             float navGap = 10;
             float navWidth = Math.Max(1, (rw - navGap) / 2);
             int nextIndex = Math.Min(Math.Max(0, list.Count - 1), index + Math.Max(1, shown));
-            if (Button("PREV", new(rx, navY, navWidth, 31), enabled: list.Count > 0 && index > 0))
+            if (Button(L.Get("PREV"), new(rx, navY, navWidth, 31), enabled: list.Count > 0 && index > 0))
             {
                 diagnosticPage = Math.Max(0, index - Math.Max(1, shown));
             }
-            if (Button("NEXT", new(rx + navWidth + navGap, navY, navWidth, 31), enabled: list.Count > 0 && nextIndex > index))
+            if (Button(L.Get("NEXT"), new(rx + navWidth + navGap, navY, navWidth, 31), enabled: list.Count > 0 && nextIndex > index))
             {
                 diagnosticPage = nextIndex;
             }
-            if (Button("SAVE REPORT", new(rx, saveY, rw, 36)))
+            if (Button(L.Get("SAVE REPORT"), new(rx, saveY, rw, 36)))
             {
                 Report();
             }
@@ -321,8 +321,8 @@ public sealed partial class Viewer
                 Text(Current.Timeline.Get(mods[i], time).ToString("0.000", CultureInfo.InvariantCulture), rx + 162, 180 + i * 29, 12, white, true);
             }
             Divider(rx, 340, rw);
-            Label("TIMING", rx, 357);
-            if (Button(Current.Project.NoteAlignment == 0 ? "ALIGN: TOP" : "ALIGN: BOTTOM", new(rx + 100, 349, 147, 26), enabled : !Busy))
+            Label(L.Get("TIMING"), rx, 357);
+            if (Button(Current.Project.NoteAlignment == 0 ? L.Get("ALIGN: TOP") : L.Get("ALIGN: BOTTOM"), new(rx + 100, 349, 147, 26), enabled : !Busy))
             {
                 Current.Project.NoteAlignment = 1 - Math.Clamp(Current.Project.NoteAlignment, 0, 1);
             }
@@ -338,7 +338,7 @@ public sealed partial class Viewer
             {
                 Rebuild(bpm: Current.Project.Bpm + 1);
             }
-            Text("Offset / ms", rx, 422, 11, muted);
+            Text(L.Get("Offset / ms"), rx, 422, 11, muted);
             Text(Current.Project.OffsetMs.ToString("0"), rx + 105, 422, 12, white, true);
             if (Button("-", new(rx + 178, 413, 31, 26), enabled: !Busy))
             {
@@ -348,7 +348,7 @@ public sealed partial class Viewer
             {
                 Rebuild(offset: Current.Project.OffsetMs + 1);
             }
-            Text("Scroll", rx, 458, 11, muted);
+            Text(L.Get("Scroll"), rx, 458, 11, muted);
             Text(Current.Project.ScrollSpeed.ToString("0.0"), rx + 105, 458, 12, white, true);
             if (Button("-", new(rx + 178, 449, 31, 26), enabled: !Busy))
             {
@@ -359,7 +359,7 @@ public sealed partial class Viewer
                 Rebuild(scroll: Current.Project.ScrollSpeed + .1);
             }
             Divider(rx, 491, rw);
-            Label("VIDEO EXPORT", rx, 509);
+            Label(L.Get("VIDEO EXPORT"), rx, 509);
             if (Button(new[]
             {
                 "1280 x 720",
@@ -375,22 +375,22 @@ public sealed partial class Viewer
             {
                 fps = fps == 30 ? 60 : fps == 60 ? 120 : 30;
             }
-            Text("IN  " + Clock(rangeIn), rx, 581, 12, muted, true);
-            Text("OUT " + Clock(rangeOut), rx, 605, 12, muted, true);
-            if (Button("SET IN  I", new(rx, 635, 120, 30), enabled: !Busy))
+            Text(L.Get("IN  ") + Clock(rangeIn), rx, 581, 12, muted, true);
+            Text(L.Get("OUT ") + Clock(rangeOut), rx, 605, 12, muted, true);
+            if (Button(L.Get("SET IN  I"), new(rx, 635, 120, 30), enabled: !Busy))
             {
                 rangeIn = Math.Clamp(time, 0, Math.Max(0, rangeOut - 1.0 / fps));
             }
-            if (Button("SET OUT  U", new(rx + 130, 635, 120, 30), enabled: !Busy))
+            if (Button(L.Get("SET OUT  U"), new(rx + 130, 635, 120, 30), enabled: !Busy))
             {
                 rangeOut = Math.Max(time, rangeIn + 1.0 / fps);
             }
-            if (Button("FULL SONG", new(rx, 675, rw, 28), enabled: !Busy))
+            if (Button(L.Get("FULL SONG"), new(rx, 675, rw, 28), enabled: !Busy))
             {
                 rangeIn = 0;
                 rangeOut = Current.Duration;
             }
-            if (Button(export == null ? "EXPORT MP4" : "CANCEL EXPORT", new(rx, 716, rw, 42), primary : true, enabled : loading == null))
+            if (Button(export == null ? L.Get("EXPORT MP4") : L.Get("CANCEL EXPORT"), new(rx, 716, rw, 42), primary : true, enabled : loading == null))
             {
                 if (export == null)
                 {
@@ -406,13 +406,13 @@ public sealed partial class Viewer
                 Canvas.Fill(new(rx, 770, rw, 3), line);
                 Canvas.Fill(new(rx, 770, (float) export.Progress * rw, 3), red);
             }
-            Text("Fixed frames / original audio", rx, 788, 10, muted);
+            Text(L.Get("Fixed frames / original audio"), rx, 788, 10, muted);
         }
         }
         Divider(24, h - 55, w - 48);
         Canvas.Fill(new(24, h - 35, 5, 5), Busy? red : soft);
         using (Canvas.Opacity(motion.To("status", 1, .15))) Text(message, 38, h - 40, 11, muted, max: w - 310);
-        Text("VOL", w - 237, h - 38, 9, muted, true);
+        Text(L.Get("VOL"), w - 237, h - 38, 9, muted, true);
         var volumeRect = new Rect(w - 198, h - 38, 93, 12);
         Canvas.Fill(new(volumeRect.X, volumeRect.Y + 5, volumeRect.W, 2), line);
         Canvas.Fill(new(volumeRect.X, volumeRect.Y + 5, (float) transport.Volume * volumeRect.W, 2), soft);
@@ -442,18 +442,29 @@ public sealed partial class Viewer
             var r = new Rect(w / 2 - 275, h / 2 - 230 + (1 - helpAlpha) * 10, 550, 460);
             Canvas.Fill(r, panel);
             Canvas.Border(r, soft);
-            Text("KUROAKI / QUICK CONTROLS", r.X + 30, r.Y + 29, 20, white, true);
-            string[] rows = ["Space                  Play / pause", "Left / Right           Previous / next frame",
-                "Shift + Left / Right   Move one second", "Home / End             Start / end", "I / U                  Mark export in / out",
-                "N / P                  Notes / post FX", "F / M                  Fullscreen / mute", "Ctrl or Cmd + O        Open files",
-                "Ctrl or Cmd + S        Save project", "Ctrl or Cmd + E        Export MP4", "R                      Reload source files"];
+            Text(L.Get("KUROAKI / QUICK CONTROLS"), r.X + 30, r.Y + 29, 20, white, true);
+            string[] rows = [L.Get("Space                  Play / pause"), L.Get("Left / Right           Previous / next frame"),
+                L.Get("Shift + Left / Right   Move one second"), L.Get("Home / End             Start / end"), L.Get("I / U                  Mark export in / out"),
+                L.Get("N / P                  Notes / post FX"), L.Get("F / M                  Fullscreen / mute"), L.Get("Ctrl or Cmd + O        Open files"),
+                L.Get("Ctrl or Cmd + S        Save project"), L.Get("Ctrl or Cmd + E        Export MP4"), L.Get("R                      Reload source files")];
             for (int i = 0; i < rows.Length; i++)
             {
-                Text(rows[i], r.X + 32, r.Y + 85 + i * 26, 12, muted, true);
+                if (!fonts.ChineseInterface)
+                {
+                    Text(rows[i], r.X + 32, r.Y + 85 + i * 26, 12, muted, true);
+                    continue;
+                }
+                int split = rows[i].IndexOf("  ", StringComparison.Ordinal);
+                if (split < 0) Text(rows[i], r.X + 32, r.Y + 85 + i * 26, 12, muted, max: r.W - 64);
+                else
+                {
+                    Text(rows[i][..split], r.X + 32, r.Y + 85 + i * 26, 12, muted, max: 205);
+                    Text(rows[i][split..].TrimStart(), r.X + 250, r.Y + 85 + i * 26, 12, muted, max: r.W - 282);
+                }
             }
-            if (Button("VSM DOCS / F1", new(r.X + 283, r.Y + 400, 237, 32)))
+            if (Button(L.Get("VSM DOCS / F1"), new(r.X + 283, r.Y + 400, 237, 32)))
             { OpenReference(); click = false; }
-            if (Button("CLOSE", new(r.X + 30, r.Y + 400, 237, 32)))
+            if (Button(L.Get("CLOSE"), new(r.X + 30, r.Y + 400, 237, 32)))
             {
                 help = false;
             }

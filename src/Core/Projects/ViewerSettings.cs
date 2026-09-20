@@ -21,6 +21,7 @@ public sealed class ViewerSettings
     };
     public WorkspaceLayout Workspace { get; set; } = new();
     public bool UiAnimations { get; set; } = true;
+    public string UiLanguage { get; set; } = Core.UiLanguage.Auto;
     /// <summary>
     /// 编辑器 inspector 的字段怎么改：false（默认）= 就地编辑，光标和选区都在字段里；
     /// true = 回到传统的全屏输入框模态。多行文本和超长值无论这里怎么设都仍然走模态，单行字段放不下。
@@ -65,6 +66,7 @@ public sealed class ViewerSettings
         {
             var settings = JsonSerializer.Deserialize<ViewerSettings>(File.ReadAllText(path), ViewerProject.Json) ?? new();
             settings.Workspace ??= new(); settings.Workspace.Normalize(); settings.UiTheme = ValidTheme(settings.UiTheme);
+            settings.UiLanguage = Core.UiLanguage.Normalize(settings.UiLanguage);
             return settings;
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
@@ -95,6 +97,7 @@ public sealed class ViewerSettings
     public void Save(ViewerProject p, string? path = null)
     {
         Workspace ??= new(); Workspace.Normalize(); UiTheme = ValidTheme(UiTheme);
+        UiLanguage = Core.UiLanguage.Normalize(UiLanguage);
         NoteAlignment = p.NoteAlignment;
         RenderWidth = p.RenderWidth;
         PreviewVolume = p.PreviewVolume;
@@ -113,4 +116,3 @@ public sealed class ViewerSettings
         File.Move(temporary, path, true);
     }
 }
-

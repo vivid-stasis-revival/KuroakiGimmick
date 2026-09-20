@@ -46,7 +46,7 @@ public sealed partial class Viewer
         inlineError = ""; inlineTrim = !preserveWhitespace; inlineSelecting = false; inlineScroll = 0;
         inlineAnchor = 0; inlineCaret = value.Length;
         inlineBlinkFrom = uptime.Elapsed.TotalSeconds;
-        if (!Sdl.SDL_StartTextInput(host.Window)) inlineError = "Text input: " + Sdl.Error;
+        if (!Sdl.SDL_StartTextInput(host.Window)) inlineError = L.Get("Text input: ") + Sdl.Error;
         click = false;
     }
 
@@ -108,7 +108,7 @@ public sealed partial class Viewer
         if (text.Length == 0) return;
         InlineDeleteSelection();
         int room = InlineMax - inlineValue.Length;
-        if (room <= 0) { inlineError = $"Field limit is {InlineMax} characters."; return; }
+        if (room <= 0) { inlineError = L.Format($"Field limit is {InlineMax} characters."); return; }
         if (text.Length > room)
         {
             text = text[..room];

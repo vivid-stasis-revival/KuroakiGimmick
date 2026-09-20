@@ -34,6 +34,20 @@ public static class EditorSelfTest
             File.WriteAllBytes(vsmPath, original);
             File.WriteAllText(chartPath, "0,3,0,b:120\n1000,0,0\n4000,3,0,b:240\n5000,2,1,5500\n");
             var doc = VsmDocument.Load(vsmPath);
+            var loopEditor = new EditorDocument(Session.Load(chartPath));
+            Guid loopId = loopEditor.Vsm.Clips.Last().Id;
+            Guid[] expanded = [];
+            loopEditor.Change("Split loop", () => expanded = loopEditor.Vsm.SplitLoops([loopId]));
+            string splitText = loopEditor.Vsm.Text;
+            Check(expanded.Length == 3 && loopEditor.Dirty, "loop split is a document edit");
+            loopEditor.Undo();
+            Check(loopEditor.Vsm.Bytes().SequenceEqual(original) && !loopEditor.Dirty, "loop split undo restores exact source bytes and clean state");
+            loopEditor.Redo();
+            Check(loopEditor.Vsm.Text == splitText && expanded.All(id => loopEditor.Vsm.Find(id) != null), "loop split redo restores the same event identities");
+            loopEditor.Change("Merge loop", () => loopEditor.Vsm.MergeLoop(expanded));
+            Check(loopEditor.Vsm.Find(loopId)?.RepeatCount == 3, "merge records a loop as one undoable edit");
+            loopEditor.Undo();
+            Check(loopEditor.Vsm.Text == splitText, "merge undo restores every separate event");
             Check(doc.Bytes().SequenceEqual(original), "unmodified UTF-8 BOM / CRLF / source bytes round trip");
             // 区间行 2:4:1 在编辑器里是一个可编辑片段（重复 3 次），不是展开后的三行：
             // 展开会让作者失去原来的书写形式，保存时也回不去。

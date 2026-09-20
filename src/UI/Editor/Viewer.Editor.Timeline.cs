@@ -71,7 +71,7 @@ public sealed partial class Viewer
         void AddTextTrack(string id)
         {
             if (!seen.Add("T:" + id)) return;
-            editTracks.Add(new("T:" + id, id.Length == 0 ? "Legacy text" : id, false, -1, "", TextId: id));
+            editTracks.Add(new("T:" + id, id.Length == 0 ? L.Get("Legacy text") : id, false, -1, "", TextId: id));
             if (expandedTextTracks.Contains(id))
                 foreach (var c in editor.Vsm.Clips.Where(c => CustomText.TryMod(c.Name, out _, out var target) && target == id)) AddModTrack(c.Name, c.Proxy);
         }
@@ -118,24 +118,24 @@ public sealed partial class Viewer
         if (editor == null) return;
         RebuildEditTracks(); BuildWaveform();
         Canvas.Fill(r, panel); Canvas.Border(r, line);
-        if (EButton("SNAP " + SnapLabels[snapIndex], new(r.X + 8, r.Y + 7, 88, 25))) snapIndex = (snapIndex + 1) % SnapSteps.Length;
-        if (EButton("N MAGNET", new(r.X + 104, r.Y + 7, 89, 25), active: noteMagnet)) noteMagnet = !noteMagnet;
+        if (EButton(L.Get("SNAP ") + L.Get(SnapLabels[snapIndex]), new(r.X + 8, r.Y + 7, 88, 25))) snapIndex = (snapIndex + 1) % SnapSteps.Length;
+        if (EButton(L.Get("N MAGNET"), new(r.X + 104, r.Y + 7, 89, 25), active: noteMagnet)) noteMagnet = !noteMagnet;
         if (EButton("-", new(r.X + 205, r.Y + 7, 31, 25))) ZoomTimeline(.8, r.X + 236);
         if (EButton("+", new(r.X + 242, r.Y + 7, 31, 25))) ZoomTimeline(1.25, r.X + 273);
         if (EButton("<", new(r.X + 281, r.Y + 7, 31, 25))) ScrollTimeline(beatStart - 4);
         if (EButton(">", new(r.X + 318, r.Y + 7, 31, 25))) ScrollTimeline(beatStart + 4);
-        if (EButton("GOTO", new(r.X + 357, r.Y + 7, 64, 25))) OpenValue("Jump to beat", Current.Timeline.Bpm.Beat(time).ToString("0.###"), v =>
+        if (EButton(L.Get("GOTO"), new(r.X + 357, r.Y + 7, 64, 25))) OpenValue(L.Get("Jump to beat"), Current.Timeline.Bpm.Beat(time).ToString("0.###"), v =>
         { double b = VsmDocument.Number(v); beatStart = Math.Max(-64, b - 2); selectedNoteTime = null; transport.Seek(Current.Timeline.Bpm.Time(b)); });
         if (EButton("A", new(r.X + 429, r.Y + 7, 31, 25))) loopIn = Current.Timeline.Bpm.Beat(time);
         if (EButton("B", new(r.X + 466, r.Y + 7, 31, 25))) loopOut = Math.Max(loopIn + .125, Current.Timeline.Bpm.Beat(time));
-        if (EButton("LOOP", new(r.X + 505, r.Y + 7, 63, 25), active: loopEnabled)) loopEnabled = !loopEnabled;
-        if (EButton("FOLLOW", new(r.X + 576, r.Y + 7, 74, 25), active: editorFollow)) editorFollow = !editorFollow;
-        if (EButton("MARK / E", new(r.X + 662, r.Y + 7, 82, 25))) MarkTimestamp();
-        if (EButton("CLEAR TARGET", new(r.X + 752, r.Y + 7, 110, 25), enabled: activeMarker != null)) activeMarker = null;
-        if (r.W > 1150) Text(activeMarker != null ? $"TARGET B {InsertionBeat:0.###}" : $"{editTracks.Count} tracks",
+        if (EButton(L.Get("LOOP"), new(r.X + 505, r.Y + 7, 63, 25), active: loopEnabled)) loopEnabled = !loopEnabled;
+        if (EButton(L.Get("FOLLOW"), new(r.X + 576, r.Y + 7, 74, 25), active: editorFollow)) editorFollow = !editorFollow;
+        if (EButton(L.Get("MARK / E"), new(r.X + 662, r.Y + 7, 82, 25))) MarkTimestamp();
+        if (EButton(L.Get("CLEAR TARGET"), new(r.X + 752, r.Y + 7, 110, 25), enabled: activeMarker != null)) activeMarker = null;
+        if (r.W > 1150) Text(activeMarker != null ? L.Format($"TARGET B {InsertionBeat:0.###}") : L.Format($"{editTracks.Count} tracks"),
             r.X + 874, r.Y + 14, 11, activeMarker != null ? soft : muted, true, r.W - 1005);
-        if (EButton("UP", new(r.X + r.W - 116, r.Y + 7, 49, 25))) trackScroll = Math.Max(0, trackScroll - 1);
-        if (EButton("DOWN", new(r.X + r.W - 61, r.Y + 7, 53, 25))) trackScroll++;
+        if (EButton(L.Get("UP"), new(r.X + r.W - 116, r.Y + 7, 49, 25))) trackScroll = Math.Max(0, trackScroll - 1);
+        if (EButton(L.Get("DOWN"), new(r.X + r.W - 61, r.Y + 7, 53, 25))) trackScroll++;
         float labelW = Math.Clamp(LayoutOptions.TrackLabelWidth, 180, Math.Min(500, r.W - 360)), x = r.X + labelW, rulerY = r.Y + 40, markerY = rulerY + 27, audioY = markerY + 27, noteY = audioY + 27, tracksY = noteY + 58;
         editorTracksRect = new(x, tracksY, r.W - labelW - 10, Math.Max(1, r.Y + r.H - tracksY - 8));
         trackLabelGrip = new(x - 3, rulerY, 6, r.Y + r.H - rulerY - 7);
@@ -204,12 +204,12 @@ public sealed partial class Viewer
         if (picked != null)
         {
             selectedNoteTime = picked.Time; transport.SetPlaying(false); transport.Seek(picked.Time); click = false;
-            message = $"NOTE lane {picked.Lane} / beat {pickedBeat:0.######}. Add a gimmick here; the note is unchanged.";
+            message = L.Format($"NOTE lane {picked.Lane} / beat {pickedBeat:0.######}. Add a gimmick here; the note is unchanged.");
         }
         Canvas.Clip(null);
-        Label("MARKERS / E", r.X + 12, markerY + 5);
-        Label("BEATS", r.X + 12, rulerY + 5); Label(waveformAudio == null ? "NO AUDIO" : "AUDIO / PEAKS", r.X + 12, audioY + 7);
-        Label("NOTES / READ ONLY", r.X + 12, noteY + 7);
+        Label(L.Get("MARKERS / E"), r.X + 12, markerY + 5);
+        Label(L.Get("BEATS"), r.X + 12, rulerY + 5); Label(waveformAudio == null ? L.Get("NO AUDIO") : L.Get("AUDIO / PEAKS"), r.X + 12, audioY + 7);
+        Label(L.Get("NOTES / READ ONLY"), r.X + 12, noteY + 7);
         Text("1   2   3   4", r.X + 12, noteY + 28, 10, muted, true);
         int visibleRows = Math.Max(1, (int)(editorTracksRect.H / 35));
         if (textTimelineHeight != editorTracksRect.H && textInspector && selectedTextId != null)
@@ -421,17 +421,17 @@ public sealed partial class Viewer
                 double delta = dragBeat - d.Beat;
                 var moved = editor.Vsm.Clips.Where(x => selectedClips.Contains(x.Id))
                     .Select(x => x with { Beat = x.Beat + delta, RepeatEnd = x.RepeatEnd + delta }).ToArray();
-                Edit($"Move {moved.Length} clips", () => { foreach (var m in moved) editor.Vsm.Replace(m); });
+                Edit(L.Format($"Move {moved.Length} clips"), () => { foreach (var m in moved) editor.Vsm.Replace(m); });
                 return;
             }
             var next = d.Resize ? c with { Duration = VsmDurationAt(c.LastBeat, c.LastBeat + dragDuration) } : c with { Beat = dragBeat, RepeatEnd = c.RepeatEnd + dragBeat - c.Beat };
-            Edit(d.Resize ? "Resize clip" : "Move clip", () => editor.Vsm.Replace(next));
+            Edit(d.Resize ? L.Get("Resize clip") : L.Get("Move clip"), () => editor.Vsm.Replace(next));
         }
         else if (d.Window is { } e)
         {
             if (d.Resize) e[WindowMotionConfig.Text(e, "op") == "NewWindowDance" ? "easeDur" : "dur"] = Current.Timeline.Bpm.Time(dragBeat + dragDuration) - Current.Timeline.Bpm.Time(dragBeat);
             else e["t"] = Current.Timeline.Bpm.Time(dragBeat);
-            Edit(d.Resize ? "Resize window event" : "Move window event", () => editor.ReplaceWindow(d.WindowIndex, e));
+            Edit(d.Resize ? L.Get("Resize window event") : L.Get("Move window event"), () => editor.ReplaceWindow(d.WindowIndex, e));
         }
     }
     // 正式版 VSM 时间轴用事件起点处的 BPM 把 Duration 换算成时长。当区间跨越 BPM 变化时，

@@ -31,9 +31,9 @@ public sealed partial class Viewer
     void DrawImageSources(Rect r)
     {
         EnsureImageModel();
-        if (EButton("+ IMAGE / DROP IMAGE", new(r.X, r.Y, r.W, 30), primary: true, enabled: !Busy)) ChooseImageImport();
+        if (EButton(L.Get("+ IMAGE / DROP IMAGE"), new(r.X, r.Y, r.W, 30), primary: true, enabled: !Busy)) ChooseImageImport();
         var items = Current.Images.Items.Where(i => declaredImageIds.Contains(i.Id)).ToArray();
-        Text(items.Length + " IMAGE OBJECTS", r.X + 5, r.Y + 40, 12, muted);
+        Text(items.Length + L.Get(" IMAGE OBJECTS"), r.X + 5, r.Y + 40, 12, muted);
         float listY = r.Y + 64, bottom = r.Y + r.H - 42; int visible = Math.Max(1, (int)((bottom - listY) / 61));
         imageListScroll = Math.Clamp(imageListScroll, 0, Math.Max(0, items.Length - visible));
         Canvas.Clip(new(r.X, listY, r.W, Math.Max(1, bottom - listY)));
@@ -51,17 +51,17 @@ public sealed partial class Viewer
                     Color.White, new(0, 0, 1f / item.Frames, 1));
             }
             Text(ImageShortText(item.Id, r.W - 58), r.X + 50, y + 9, 12, white, true);
-            if (EButton(hiddenImageItems.Contains(item.Id) ? "SHOW" : "HIDE", new(r.X + 50, y + 29, 53, 22), key: "image-visible:" + item.Id))
+            if (EButton(hiddenImageItems.Contains(item.Id) ? L.Get("SHOW") : L.Get("HIDE"), new(r.X + 50, y + 29, 53, 22), key: "image-visible:" + item.Id))
             { if (!hiddenImageItems.Add(item.Id)) hiddenImageItems.Remove(item.Id); }
-            if (EButton(lockedImageItems.Contains(item.Id) ? "UNLOCK" : "LOCK", new(r.X + 109, y + 29, 65, 22), key: "image-lock:" + item.Id))
+            if (EButton(lockedImageItems.Contains(item.Id) ? L.Get("UNLOCK") : L.Get("LOCK"), new(r.X + 109, y + 29, 65, 22), key: "image-lock:" + item.Id))
             { if (!lockedImageItems.Add(item.Id)) lockedImageItems.Remove(item.Id); }
             if (click && !Busy && !UiOverlayVisible && box.Contains(mouseX, mouseY))
             { SelectImageObject(item.Id); FocusImageTrack(item.Id, ImageEditBeat); click = false; }
         }
         Canvas.Clip(null);
-        if (items.Length == 0) Text("Drop an image to begin.", r.X + 5, listY + 20, 12, muted, max: r.W - 10);
-        Text("HIDE / LOCK affect editing only.", r.X + 5, bottom + 6, 10, muted, max: r.W - 10);
-        Text("Scene / exports stay unchanged.", r.X + 5, bottom + 23, 10, muted, max: r.W - 10);
+        if (items.Length == 0) Text(L.Get("Drop an image to begin."), r.X + 5, listY + 20, 12, muted, max: r.W - 10);
+        Text(L.Get("HIDE / LOCK affect editing only."), r.X + 5, bottom + 6, 10, muted, max: r.W - 10);
+        Text(L.Get("Scene / exports stay unchanged."), r.X + 5, bottom + 23, 10, muted, max: r.W - 10);
     }
     /// <summary>
     /// image 检视面板。显示值做过换算：scale 与 alpha 以百分比显示（存的是倍率 / 0~1），X/Y 与旋转是逻辑单位和度。
@@ -78,18 +78,18 @@ public sealed partial class Viewer
         if (EButton("^", new(r.X + r.W - 62, r.Y, 27, 24))) inspectorScroll = Math.Max(0, inspectorScroll - 1);
         if (EButton("v", new(r.X + r.W - 30, r.Y, 27, 24))) inspectorScroll++;
         float third = (r.W - 12) / 3;
-        if (EButton("INITIAL", new(r.X, r.Y + 32, third, 27), active: imagePoseTarget == ImagePoseTarget.Initial)) SetImageTarget(ImagePoseTarget.Initial);
-        if (EButton("KEY HERE", new(r.X + third + 6, r.Y + 32, third, 27), active: imagePoseTarget == ImagePoseTarget.Key)) SetImageTarget(ImagePoseTarget.Key);
-        if (EButton("PATH", new(r.X + 2 * (third + 6), r.Y + 32, third, 27), active: imagePoseTarget == ImagePoseTarget.Path)) SetImageTarget(ImagePoseTarget.Path);
+        if (EButton(L.Get("INITIAL"), new(r.X, r.Y + 32, third, 27), active: imagePoseTarget == ImagePoseTarget.Initial)) SetImageTarget(ImagePoseTarget.Initial);
+        if (EButton(L.Get("KEY HERE"), new(r.X + third + 6, r.Y + 32, third, 27), active: imagePoseTarget == ImagePoseTarget.Key)) SetImageTarget(ImagePoseTarget.Key);
+        if (EButton(L.Get("PATH"), new(r.X + 2 * (third + 6), r.Y + 32, third, 27), active: imagePoseTarget == ImagePoseTarget.Path)) SetImageTarget(ImagePoseTarget.Path);
         var group = ActiveImageGroup; bool simple = group?.Editable == true;
         float half = (r.W - 6) / 2;
-        if (EButton("START", new(r.X, r.Y + 66, half, 27), active: imagePoseTarget == ImagePoseTarget.Start, enabled: simple)) SetImageTarget(ImagePoseTarget.Start);
-        if (EButton("END", new(r.X + half + 6, r.Y + 66, half, 27), active: imagePoseTarget == ImagePoseTarget.End, enabled: simple && group!.Duration > 0)) SetImageTarget(ImagePoseTarget.End);
-        string target = imagePoseTarget == ImagePoseTarget.Path ? "OFFSET ALL X/Y EVENTS" : imagePoseTarget.ToString().ToUpperInvariant() + " @ " + ImageEditBeat.ToString("0.####");
+        if (EButton(L.Get("START"), new(r.X, r.Y + 66, half, 27), active: imagePoseTarget == ImagePoseTarget.Start, enabled: simple)) SetImageTarget(ImagePoseTarget.Start);
+        if (EButton(L.Get("END"), new(r.X + half + 6, r.Y + 66, half, 27), active: imagePoseTarget == ImagePoseTarget.End, enabled: simple && group!.Duration > 0)) SetImageTarget(ImagePoseTarget.End);
+        string target = imagePoseTarget == ImagePoseTarget.Path ? L.Get("OFFSET ALL X/Y EVENTS") : L.Get(imagePoseTarget.ToString().ToUpperInvariant()) + " @ " + ImageEditBeat.ToString("0.####");
         Text(target, r.X, r.Y + 102, 11, soft, true, r.W);
-        if (EButton(ImagePresets[imagePreset] + " >", new(r.X, r.Y + 125, half, 27), key: "image-preset"))
+        if (EButton(L.Get(ImagePresets[imagePreset]) + " >", new(r.X, r.Y + 125, half, 27), key: "image-preset"))
             imagePreset = (imagePreset + 1) % ImagePresets.Length;
-        if (EButton("+ ANIMATION", new(r.X + half + 6, r.Y + 125, half, 27), primary: true, enabled: !Busy)) AddImageMotion();
+        if (EButton(L.Get("+ ANIMATION"), new(r.X + half + 6, r.Y + 125, half, 27), primary: true, enabled: !Busy)) AddImageMotion();
         var pose = imageObjectDrag != null ? imageDragPose : ReadImagePose();
         string issue = ImageTransformIssue();
         int rows = 0;
@@ -111,61 +111,61 @@ public sealed partial class Viewer
         }
         if (group != null && simple && (imagePoseTarget is ImagePoseTarget.Start or ImagePoseTarget.End))
         {
-            Field("Start / beat", group.Beat.ToString("0.######"), v =>
+            Field(L.Get("Start / beat"), group.Beat.ToString("0.######"), v =>
             { double start = VsmDocument.Number(v); editor.TimeImageGroup(group, start, group.End(Current.Timeline.Bpm) + start - group.Beat, group.Ease, Current.Timeline.Bpm); });
             if (group.Duration > 0)
             {
-                Field("End / beat", group.End(Current.Timeline.Bpm).ToString("0.######"), v => editor.TimeImageGroup(group, group.Beat, VsmDocument.Number(v), group.Ease, Current.Timeline.Bpm));
-                Field("Easing", group.Ease, v => editor.TimeImageGroup(group, group.Beat, group.End(Current.Timeline.Bpm), Easings.Normalize(v), Current.Timeline.Bpm));
+                Field(L.Get("End / beat"), group.End(Current.Timeline.Bpm).ToString("0.######"), v => editor.TimeImageGroup(group, group.Beat, VsmDocument.Number(v), group.Ease, Current.Timeline.Bpm));
+                Field(L.Get("Easing"), group.Ease, v => editor.TimeImageGroup(group, group.Beat, group.End(Current.Timeline.Bpm), Easings.Normalize(v), Current.Timeline.Bpm));
             }
         }
         Field("X", pose.X.ToString("0.###"), v => CommitImagePose(ReadImagePose() with { X = VsmDocument.Number(v) }, ImageChannels.Position), Can(ImageChannels.Position));
         Field("Y", pose.Y.ToString("0.###"), v => CommitImagePose(ReadImagePose() with { Y = VsmDocument.Number(v) }, ImageChannels.Position), Can(ImageChannels.Position));
-        Field("Scale X %", (pose.ScaleX * 100).ToString("0.###"), v =>
+        Field(L.Get("Scale X %"), (pose.ScaleX * 100).ToString("0.###"), v =>
         {
             var p = ReadImagePose(); double scale = VsmDocument.Number(v) / 100;
             CommitImagePose(p with { ScaleX = scale, ScaleY = imageAspectLock ? Math.Abs(p.ScaleX) > 1e-12 ? p.ScaleY * scale / p.ScaleX : scale : p.ScaleY }, ImageChannels.Scale);
         }, Can(ImageChannels.Scale));
-        Field("Scale Y %", (pose.ScaleY * 100).ToString("0.###"), v =>
+        Field(L.Get("Scale Y %"), (pose.ScaleY * 100).ToString("0.###"), v =>
         {
             var p = ReadImagePose(); double scale = VsmDocument.Number(v) / 100;
             CommitImagePose(p with { ScaleY = scale, ScaleX = imageAspectLock ? Math.Abs(p.ScaleY) > 1e-12 ? p.ScaleX * scale / p.ScaleY : scale : p.ScaleX }, ImageChannels.Scale);
         }, Can(ImageChannels.Scale));
-        Field("Rotation", pose.Rotation.ToString("0.###"), v => CommitImagePose(ReadImagePose() with { Rotation = VsmDocument.Number(v) }, ImageChannels.Rotation), Can(ImageChannels.Rotation));
-        Field("Opacity %", (pose.Alpha * 100).ToString("0.###"), v => CommitImagePose(ReadImagePose() with { Alpha = VsmDocument.Number(v) / 100 }, ImageChannels.Alpha), Can(ImageChannels.Alpha));
-        Pair("CENTER X", () => CommitImagePose(ReadImagePose() with { X = 160 }, ImageChannels.Position), "CENTER Y", () => CommitImagePose(ReadImagePose() with { Y = 90 }, ImageChannels.Position), enabled: Can(ImageChannels.Position));
-        Pair("FIT IMAGE", () =>
+        Field(L.Get("Rotation"), pose.Rotation.ToString("0.###"), v => CommitImagePose(ReadImagePose() with { Rotation = VsmDocument.Number(v) }, ImageChannels.Rotation), Can(ImageChannels.Rotation));
+        Field(L.Get("Opacity %"), (pose.Alpha * 100).ToString("0.###"), v => CommitImagePose(ReadImagePose() with { Alpha = VsmDocument.Number(v) / 100 }, ImageChannels.Alpha), Can(ImageChannels.Alpha));
+        Pair(L.Get("CENTER X"), () => CommitImagePose(ReadImagePose() with { X = 160 }, ImageChannels.Position), L.Get("CENTER Y"), () => CommitImagePose(ReadImagePose() with { Y = 90 }, ImageChannels.Position), enabled: Can(ImageChannels.Position));
+        Pair(L.Get("FIT IMAGE"), () =>
         {
             if (ActiveImageItem is not { } item) return; double scale = Math.Min(288 / item.Width, 144 / item.Height);
             CommitImagePose(ReadImagePose() with { ScaleX = scale, ScaleY = scale }, ImageChannels.Scale);
-        }, "FRAME VIEW", FrameImageObject, leftEnabled: Can(ImageChannels.Scale));
-        Pair("LOCK RATIO", () => imageAspectLock = !imageAspectLock, "PATH LINES", () => imagePathVisible = !imagePathVisible, imageAspectLock, imagePathVisible);
-        Pair("LINK JOINTS", () => imageLinkNeighbors = !imageLinkNeighbors, "SOLO", () => imageSolo = !imageSolo, imageLinkNeighbors, imageSolo);
-        Pair("REPLACE IMAGE", ChooseImageReplacement, "RAW TRACKS", () => { expandedImageTracks.Add(id); layoutRevision = -1; imageInspector = false; FocusImageTrack(id, ImageEditBeat); });
-        Pair("CANVAS", () => { imageCanvas = true; desktopPreview = false; }, "SCENE", () => imageCanvas = false, imageCanvas, !imageCanvas);
-        Pair("CONTINUE", () => AddImageMotion(true), "LOOP MOTION", () =>
+        }, L.Get("FRAME VIEW"), FrameImageObject, leftEnabled: Can(ImageChannels.Scale));
+        Pair(L.Get("LOCK RATIO"), () => imageAspectLock = !imageAspectLock, L.Get("PATH LINES"), () => imagePathVisible = !imagePathVisible, imageAspectLock, imagePathVisible);
+        Pair(L.Get("LINK JOINTS"), () => imageLinkNeighbors = !imageLinkNeighbors, L.Get("SOLO"), () => imageSolo = !imageSolo, imageLinkNeighbors, imageSolo);
+        Pair(L.Get("REPLACE IMAGE"), ChooseImageReplacement, L.Get("RAW TRACKS"), () => { expandedImageTracks.Add(id); layoutRevision = -1; imageInspector = false; FocusImageTrack(id, ImageEditBeat); });
+        Pair(L.Get("CANVAS"), () => { imageCanvas = true; desktopPreview = false; }, L.Get("SCENE"), () => imageCanvas = false, imageCanvas, !imageCanvas);
+        Pair(L.Get("CONTINUE"), () => AddImageMotion(true), L.Get("LOOP MOTION"), () =>
         {
             if (ActiveImageGroup is not { } g || g.Duration <= 0) return;
             loopIn = g.Beat; loopOut = g.End(Current.Timeline.Bpm); loopEnabled = true;
             transport.Seek(Current.Timeline.Bpm.Time(loopIn)); transport.SetPlaying(true);
         }, enabled: simple && group!.Duration > 0);
-        Pair("RECORD POSE", () => CommitImagePose(ReadImagePose(), ImageChannels.All), "RESET VIEW", () => { imageViewZoom = 1; imageViewCenter = new(160, 90); },
+        Pair(L.Get("RECORD POSE"), () => CommitImagePose(ReadImagePose(), ImageChannels.All), L.Get("RESET VIEW"), () => { imageViewZoom = 1; imageViewCenter = new(160, 90); },
             leftEnabled: issue.Length == 0 && !transport.Playing && (imagePoseTarget is ImagePoseTarget.Initial or ImagePoseTarget.Key));
-        Pair("DUP MOTION", () =>
+        Pair(L.Get("DUP MOTION"), () =>
         {
             if (group == null) return; double beat = InsertionBeat;
             if (Math.Abs(beat - group.Beat) < 1e-9) beat = group.End(Current.Timeline.Bpm) + (group.Duration == 0 ? 1 : 0);
             Guid added = editor.DuplicateImageGroup(group, beat, Current.Timeline.Bpm); SelectImageObject(id, true, added);
-        }, "DELETE MOTION", () =>
+        }, L.Get("DELETE MOTION"), () =>
         {
             if (group == null) return; editor.DeleteImageGroup(group); selectedImageGroup = selectedClip = null; imagePoseTarget = ImagePoseTarget.Initial; layoutRevision = -1;
         }, enabled: simple);
         if (ActiveImageItem is { } resource && Row(out float infoY))
-            Text($"{resource.Asset.Width}x{resource.Asset.Height} / {resource.Frames} frame(s)", r.X, infoY + 7, 12, muted, max: r.W);
+            Text(L.Format($"{resource.Asset.Width}x{resource.Asset.Height} / {resource.Frames} frame(s)"), r.X, infoY + 7, 12, muted, max: r.W);
         inspectorScroll = Math.Clamp(inspectorScroll, 0, Math.Max(0, rows - visible));
         string footer = imageObjectError.Length > 0 ? imageObjectError : issue.Length > 0 ? issue :
-            transport.Playing ? "Playing: pause to edit." : "Drag: move / corners: scale / handle: rotate";
+            transport.Playing ? L.Get("Playing: pause to edit.") : L.Get("Drag: move / corners: scale / handle: rotate");
         Text(footer, r.X, r.Y + r.H - 36, 11, imageObjectError.Length > 0 ? soft : muted, max: r.W);
-        Text(!transport.Playing && pose.Alpha <= 0 ? "0% opacity: editing ghost only." : "Alt-click path point / arrows: 1px (Shift: 10px)", r.X, r.Y + r.H - 18, 10, muted, max: r.W);
+        Text(!transport.Playing && pose.Alpha <= 0 ? L.Get("0% opacity: editing ghost only.") : L.Get("Alt-click path point / arrows: 1px (Shift: 10px)"), r.X, r.Y + r.H - 18, 10, muted, max: r.W);
     }
 }

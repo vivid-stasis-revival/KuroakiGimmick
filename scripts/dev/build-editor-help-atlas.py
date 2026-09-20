@@ -9,17 +9,28 @@ from __future__ import annotations
 import argparse
 import json
 import math
+from io import BytesIO
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from fontTools.ttLib import TTFont
 
 ROOT = Path(__file__).resolve().parents[2]
 
-def build(font_path: Path, index: int, chars: list[str], stem: str, em: int) -> dict:
-    font = ImageFont.truetype(str(font_path), em, index=index)
+def build(font_path: Path, index: int, chars: list[str], stem: str, em: int, target: Path | None = None,
+          expected_family: str = 'Noto Sans CJK SC', output_family: str | None = None) -> dict:
+    # Pillow/FreeType builds do not all read WOFF2 directly. Decode the official
+    # webfont in memory for rasterization; no converted font is distributed.
+    font_input = str(font_path)
+    if font_path.suffix.lower() in {'.woff', '.woff2'}:
+        with TTFont(font_path) as decoded:
+            decoded.flavor = None
+            font_input = BytesIO()
+            decoded.save(font_input)
+            font_input.seek(0)
+    font = ImageFont.truetype(font_input, em, index=index)
     family, style = font.getname()
-    if family != 'Noto Sans CJK SC':
-        raise ValueError(f'Expected proportional Noto Sans CJK SC, got {family!r}. Check --font-index.')
+    if family != expected_family and not family.startswith(expected_family + ' '):
+        raise ValueError(f'Expected {expected_family}, got {family!r}. Check --font-index.')
     with TTFont(font_path, fontNumber=index, lazy=True) as source:
         cmap = source.getBestCmap()
         missing = [f'U+{ord(c):04X}' for c in chars if ord(c) not in cmap]
@@ -51,9 +62,11 @@ def build(font_path: Path, index: int, chars: list[str], stem: str, em: int) -> 
     height = math.ceil((y + row_height) / 64) * 64
     atlas = Image.new('RGBA', (width, height), (255,255,255,0))
     for tile, x, y in placements: atlas.paste(tile, (x, y))
-    target = ROOT / 'Assets/Fonts'
+    target = target or ROOT / 'Assets/Fonts'
+    target.mkdir(parents=True, exist_ok=True)
     atlas.save(target / (stem + '.png'), optimize=True)
-    metadata = dict(Family=family, Style=style, EmSize=em, Ascent=ascent, Descent=descent, Glyphs=metrics)
+    metadata = dict(Family=output_family or family, SourceFamily=family, Style=style,
+                    EmSize=em, Ascent=ascent, Descent=descent, Glyphs=metrics)
     (target / (stem + '.json')).write_text(json.dumps(metadata, ensure_ascii=False, separators=(',',':'))+'\n', encoding='utf-8')
     return dict(family=family, style=style, glyphs=len(metrics), width=width, height=height, em=em)
 
@@ -69,6 +82,9 @@ def main() -> None:
     chars.update(chr(c) for c in range(32,127))
     for path in (ROOT/'src/UI/Editor').glob('*.cs'):
         chars.update(c for c in path.read_text(encoding='utf-8') if ord(c)>127 and not c.isspace())
+    for path in (ROOT/'src/UI/Localization').glob('*.json'):
+        for text in json.loads(path.read_text(encoding='utf-8')).values():
+            chars.update(c for c in text if ord(c)>127 and not c.isspace())
     manual = ROOT/'Assets/Documentation/vsm-manual.json'
     if manual.is_file():
         chars.update(c for c in manual.read_text(encoding='utf-8') if ord(c)>127 and not c.isspace())

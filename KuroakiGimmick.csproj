@@ -20,6 +20,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="src/**/*.cs;tests/SelfTests/**/*.cs" />
+    <EmbeddedResource Include="src/UI/Localization/*.json" LogicalName="KuroakiGimmick.Localization.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Resources/Fonts/*.json;Resources/Fonts/*.png" LogicalName="KuroakiGimmick.Fonts.%(Filename)%(Extension)" />
     <!-- Embed the SAME editable definitions, so an older external Assets directory
          cannot remove the extension-ID table from a newer executable. -->
     <!-- Assets/ holds art exported from a local game install and is not in the
@@ -44,6 +46,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Assets/**/*;Samples/**/*;Integrations/**/*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <None Update="ThirdParty/IBM-Plex-OFL.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
     <None Update="Assets/Gimmicks/*/manifest.json;Assets/Catalog/*.json" CopyToOutputDirectory="Always" CopyToPublishDirectory="Always" />
   </ItemGroup>
   <ItemGroup>

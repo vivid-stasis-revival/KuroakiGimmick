@@ -12,7 +12,7 @@
 | Silk.NET native packaging | 2.23.0 | MIT; included license |
 | NVorbis | 0.10.5 | MIT, included notice |
 | StbImageSharp | 2.30.16 | Public domain / MIT; included license |
-| Noto Sans CJK SC / legacy Mono atlas | Generated raster artwork only; Regular/Bold help face | SIL OFL 1.1; ThirdParty/NotoCJK-OFL.txt; no font binaries included |
+| Noto Sans CJK SC / legacy Mono atlas | Generated raster artwork only; Regular/Bold help faces | SIL OFL 1.1; ThirdParty/NotoCJK-OFL.txt; no font binaries included |
 | DejaVu fonts | System-provided font atlas | License in Assets/Fonts/DejaVu-LICENSE.txt |
 | Adapted shader code | User-provided VIVIDSTASIS / Custom Gimmicks sources | Original code rights remain with their respective creators |
 | Fusion Pixel | 10px monospaced zh_hans, v2026.09.01 | SIL OFL 1.1; original licenses included under ThirdParty |
@@ -38,3 +38,5 @@ The user-exported shared gameplay UI/font pack is kept locally under Assets/Game
 本次新增公共 shader：GameMaker / Xor Disk Glow 与 Contrast & Brightness，来自用户提供的原游戏 dump。原始出处与字节哈希保存在 Assets/GimmickExtras/evidence 和 runtime-manifest.json；未附带任何歌曲音频或曲绘。
 
 共享原生对象资源位于 `Assets/Gimmicks`，由用户本机原游戏只读导出，供声明相同对象类型的谱面复用。精灵、shader 的原始权利仍属于其创作者；输入游戏与资源哈希记录在对应对象目录的 `SOURCE_SHA256.json`。原始 posterise shader 另由通用房间 FX 使用；不包含测试曲包的谱面、音乐或曲绘。
+
+The interface uses Kuroaki UI Sans bitmap resources, rasterized from IBM Plex Sans SC Medium / SemiBold (@ibm/plex-sans-sc 1.1.0). These font resources retain SIL OFL 1.1 independently of the application code. Copyright © 2017 IBM Corp.; original notice and license: `ThirdParty/IBM-Plex-OFL.txt`. Upstream: https://github.com/IBM/plex. No original font binaries are included.

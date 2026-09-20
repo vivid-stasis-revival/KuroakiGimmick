@@ -43,8 +43,8 @@ public sealed partial class Fonts
     HelpAtlas? helpRegular, helpBold;
     readonly HashSet<int> missingHelpGlyphs = [];
     /// <summary>regular 与 bold 成对发布，所以这一个判断同时代表标题与正文都可用，不会只有一半。</summary>
-    public bool HasReadableHelpFont => helpRegular != null && helpBold != null;
-    public string HelpFontName => helpRegular?.Metrics.Family ?? "FONT ASSETS MISSING";
+    public bool HasReadableHelpFont => GetHelpAtlas(false) != null && GetHelpAtlas(true) != null;
+    public string HelpFontName => GetHelpAtlas(false)?.Metrics.Family ?? "FONT ASSETS MISSING";
 
     /// <summary>
     /// regular 与 bold 要么一起发布，要么一起放弃并回退到旧图集；不存在只装上一半的中间状态。
@@ -112,11 +112,17 @@ public sealed partial class Fonts
         }
     }
 
-    HelpAtlas? GetHelpAtlas(bool bold) => bold ? helpBold : helpRegular;
+    HelpAtlas? GetHelpAtlas(bool bold) => bold ? helpBold ?? uiBold : helpRegular ?? uiRegular;
 
-    HelpGlyph HelpGlyphFor(HelpAtlas atlas, Rune rune)
+    HelpGlyph HelpGlyphFor(ref HelpAtlas atlas, Rune rune)
     {
         if (atlas.Metrics.Glyphs.TryGetValue(rune.ToString(), out var glyph)) return glyph;
+        var supplement = atlas.Metrics.Style.Contains("Bold", StringComparison.OrdinalIgnoreCase) ? uiBold : uiRegular;
+        if (supplement != null && supplement.Metrics.Glyphs.TryGetValue(rune.ToString(), out glyph))
+        {
+            atlas = supplement;
+            return glyph;
+        }
         // 绝不把另一套字体悄悄混进中文段落。运行期的对象标识符可能含有这张有限图集里没有的字符；
         // 宁可暴露出来（每个码位只记一次日志），也不要假装覆盖，回退到同一字体族自己的 '?'。
         if (missingHelpGlyphs.Add(rune.Value))
@@ -126,8 +132,12 @@ public sealed partial class Fonts
 
     float MeasureHelp(string text, float size, HelpAtlas atlas)
     {
-        float width = 0, scale = size / atlas.Metrics.EmSize;
-        foreach (var rune in text.EnumerateRunes()) width += HelpGlyphFor(atlas, rune).Advance * scale;
+        float width = 0;
+        foreach (var rune in text.EnumerateRunes())
+        {
+            var source = atlas;
+            width += HelpGlyphFor(ref source, rune).Advance * size / source.Metrics.EmSize;
+        }
         return width;
     }
 
@@ -139,21 +149,22 @@ public sealed partial class Fonts
         float maxWidth, HelpAtlas atlas)
     {
         if (size <= 0 || maxWidth <= 0) return;
-        float scale = size / atlas.Metrics.EmSize;
         x = canvas.SnapX(x);
         y = canvas.SnapY(y);
         float start = x;
         foreach (var rune in text.EnumerateRunes())
         {
-            var glyph = HelpGlyphFor(atlas, rune);
+            var source = atlas;
+            var glyph = HelpGlyphFor(ref source, rune);
+            float scale = size / source.Metrics.EmSize;
             float advance = glyph.Advance * scale;
             if (x - start + advance > maxWidth) break;
             if (glyph.Width > 0 && glyph.Height > 0)
-                canvas.Quad(atlas.Texture,
+                canvas.Quad(source.Texture,
                     new(x + glyph.OffsetX * scale, y + glyph.OffsetY * scale,
                         glyph.Width * scale, glyph.Height * scale), color,
-                    new(glyph.X / atlas.Texture.Width, glyph.Y / atlas.Texture.Height,
-                        glyph.Width / atlas.Texture.Width, glyph.Height / atlas.Texture.Height));
+                    new(glyph.X / source.Texture.Width, glyph.Y / source.Texture.Height,
+                        glyph.Width / source.Texture.Width, glyph.Height / source.Texture.Height));
             x += advance;
         }
     }

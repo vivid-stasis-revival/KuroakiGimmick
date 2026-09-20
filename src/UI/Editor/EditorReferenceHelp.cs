@@ -24,14 +24,14 @@ internal static class EditorReferenceHelp
         var first = matches[0].Entry;
         var body = new List<string>();
         if (matches.Count > 1)
-            body.Add("此名称匹配多个模板。以 b 结尾的字幕名可能与附加位置参数重合。");
+            body.Add(L.Get("此名称匹配多个模板。以 b 结尾的字幕名可能与附加位置参数重合。"));
         foreach (var match in matches)
         {
-            if (matches.Count > 1 || match.Arguments.Count > 0) body.Add("名称：" + match.Entry.Name);
+            if (matches.Count > 1 || match.Arguments.Count > 0) body.Add(L.Get("名称：") + match.Entry.Name);
             if (match.Arguments.Count > 0)
-                body.Add("参数：" + string.Join("；", match.Arguments.Select(p => p.Key + " = " + p.Value)));
+                body.Add(L.Get("参数：") + string.Join("；", match.Arguments.Select(p => p.Key + " = " + p.Value)));
             if (match.CaseDifference)
-                body.Add("大小写与文档名称不同。");
+                body.Add(L.Get("大小写与文档名称不同。"));
             body.AddRange(catalogue.Explain(match.Entry));
         }
         info = new(first.Summary, body.ToArray());

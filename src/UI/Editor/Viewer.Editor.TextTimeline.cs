@@ -29,7 +29,7 @@ public sealed partial class Viewer
             var box = new Rect(x, y + 6, width, 23);
             Canvas.Fill(box, Mix(Theme.PanelRaised, Theme.Accent, selected ? .7f : .3f));
             Canvas.Border(box, selected ? white : soft, selected ? 2 : 1);
-            if (width > 40) Text(raw ? "RAW" : clip.Duration > 0 ? "MOTION" : "POSE", x + 5, y + 11, 11, white, true, width - 12);
+            if (width > 40) Text(raw ? L.Get("RAW") : clip.Duration > 0 ? L.Get("MOTION") : L.Get("POSE"), x + 5, y + 11, 11, white, true, width - 12);
             if (clip.Duration == 0) Canvas.Line(x + width / 2, y + 10, x + width / 2, y + 25, 2, white);
             if (interactive && click && box.Contains(mouseX, mouseY) && editorTracksRect.Contains(mouseX, mouseY))
             {

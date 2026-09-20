@@ -14,6 +14,14 @@ public static class CustomAdaptationSelfTest
     {
         int count = 0;
         void Check(bool ok, string label) { if (!ok) throw new InvalidOperationException("CUSTOM ADAPTATION: " + label); count++; Console.WriteLine("PASS " + label); }
+        var projectionChart = new Chart { ObjectName = "obj_custom_gimmick", Proxies = 2 };
+        VsmReader.ReplaceModsText(projectionChart, "!obj:obj_custom_gimmick\n!proxies:2\n0,2,linear,0,.01,prtrX,0\n0,2,linear,0,-.01,prtrY,1\n", "projection-test.vsm");
+        var projectionTimeline = new Timeline(projectionChart, new ViewerProject { Bpm = 120 }, 2);
+        Check(ModCatalog.Supported.Contains("prtrX") && ModCatalog.Supported.Contains("prtrY") && !ModCatalog.Supported.Contains("prtrx"), "perspective controls are supported with their original case-sensitive names");
+        Check(Math.Abs(projectionTimeline.Get("prtrX", .5, 0) - .005) < 1e-12 && Math.Abs(projectionTimeline.Get("prtrY", .5, 1) + .005) < 1e-12,
+            "perspective tween values preserve each proxy and signed coefficients");
+        Check(projectionTimeline.Get("prtrX", -1, 0) == 0 && projectionTimeline.Get("prtrX", .5, 1) == 0,
+            "perspective defaults to zero before its event and on other proxies");
         // playspeed 按原版语义是"瞬时且累乘"：只取 to，from（这里故意写成 573613 这种垃圾值）和 duration 都不参与。
         // 负拍的那条代表开场前的 setup，必须在 t=0 之前就已经生效。
         var chart = new Chart();

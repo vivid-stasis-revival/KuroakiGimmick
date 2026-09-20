@@ -204,7 +204,7 @@ public sealed partial class Viewer
             }
             catch (Exception ex)
             {
-                message = "Load failed: " + ex.Message;
+                message = L.Get("Load failed: ") + ex.Message;
             }
             loading = null;
             resumePosition = null;
@@ -218,7 +218,7 @@ public sealed partial class Viewer
         catch (Exception ex)
         {
             transport.SetPlaying(false);
-            message = "Audio: " + ex.Message;
+            message = L.Get("Audio: ") + ex.Message;
         }
         UpdateImageImport();
         UpdateWorkflow();
@@ -227,7 +227,10 @@ public sealed partial class Viewer
         if (export != null)
         {
             export.Tick();
-            message = export.Status;
+            message = export.Error ?? (export.Cancelled ? L.Get("Export cancelled")
+                : export.Completed ? L.Get("Export complete")
+                : export.Finalizing ? L.Get("Finalizing audio and MP4...")
+                : L.Format($"Rendering frame {export.Frame:N0} / {export.TotalFrames:N0}"));
             if (export.Completed || export.Cancelled || export.Error != null)
             {
                 export.Dispose();

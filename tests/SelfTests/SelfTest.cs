@@ -21,6 +21,7 @@ public static class SelfTest
             checks++;
             Console.WriteLine("PASS " + description);
         }
+        LocalizationSelfTest.Check(Check);
         // 冷启动必须不依赖任何随程序分发的歌曲资源，否则裸安装的编辑器打不开。
         Check(Session.Empty().IsEmpty, "startup needs no bundled song assets");
         // 4→4.2 秒 @30 fps 恰好 6 帧；区间长度先量化再取整，不能让浮点误差凭空多出一帧。

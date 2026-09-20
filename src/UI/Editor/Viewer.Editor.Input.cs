@@ -17,12 +17,12 @@ public sealed partial class Viewer
         if (windowEvent && e.WindowID != 0 && e.WindowID != Sdl.SDL_GetWindowID(host.Window))
         {
             if (nativeWindows?.Owns(e.WindowID) == true && (e.Type == Sdl.WindowCloseRequested || e.Type == 0x300 && e.Scan == 41))
-            { nativeWindows.Dispose(); nativeWindows = null; message = "Live windows closed."; }
+            { nativeWindows.Dispose(); nativeWindows = null; message = L.Get("Live windows closed."); }
             return true;
         }
         if (e.Type == 0x100 || e.Type == Sdl.WindowCloseRequested)
         {
-            if (ChartExportBusy) { chartExportCancellation?.Cancel(); message = "Cancelling export; close again when it has stopped."; return true; }
+            if (ChartExportBusy) { chartExportCancellation?.Cancel(); message = L.Get("Cancelling export; close again when it has stopped."); return true; }
             if (referenceOpen) CloseReference();
             if (!GuardUnsaved(() => quit = true)) quit = true;
             return true;
@@ -61,7 +61,7 @@ public sealed partial class Viewer
                     try
                     {
                         string value = Marshal.PtrToStringUTF8(ptr) ?? "";
-                        if (value.Length > 65536) { modalError = "Clipboard text exceeds 64 KiB."; return true; }
+                        if (value.Length > 65536) { modalError = L.Get("Clipboard text exceeds 64 KiB."); return true; }
                         modalValue = modalSelectAll ? value : (modalValue + value);
                         if (modalValue.Length > 65536) modalValue = modalValue[..65536]; modalSelectAll = false;
                     }

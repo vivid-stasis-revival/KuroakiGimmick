@@ -40,7 +40,7 @@ public sealed partial class Viewer
         transport.SetPlaying(false); selectedNoteTime = null; selectedClip = null; selectedWindowEvent = -1;
         try { activeMarker = editor.Mark(beat); }
         catch (FormatException ex) { message = ex.Message; return; }
-        message = $"Marker at beat {beat:0.######}. New gimmicks use this target until CLEAR TARGET.";
+        message = L.Format($"Marker at beat {beat:0.######}. New gimmicks use this target until CLEAR TARGET.");
     }
     /// <summary>把新建的轨道滚动到可见区并把播放头移到该拍（换算成秒）。图片 mod 走图片轨道的专用定位路径。</summary>
     void FocusAddedTrack(string name, int proxy, double beat)
@@ -59,7 +59,7 @@ public sealed partial class Viewer
     /// <summary>创作动作的前置条件：必要时顺带进入编辑模式。返回 false 表示没有可编辑文档，调用方应直接放弃。</summary>
     bool EnsureAuthoring()
     {
-        if (Busy || Current.IsEmpty) { message = "Open a chart before adding or exporting."; return false; }
+        if (Busy || Current.IsEmpty) { message = L.Get("Open a chart before adding or exporting."); return false; }
         if (editor == null) OpenEditor();
         return editor != null;
     }
@@ -94,9 +94,9 @@ public sealed partial class Viewer
         if (editor == null) return;
         try
         {
-            if (NeedsCustomObject && !addSwitchObject) throw new InvalidOperationException("This entry requires obj_custom_gimmick. Explicitly enable USE CUSTOM OBJ or cancel.");
+            if (NeedsCustomObject && !addSwitchObject) throw new InvalidOperationException(L.Get("This entry requires obj_custom_gimmick. Explicitly enable USE CUSTOM OBJ or cancel."));
             var clip = GimmickAuthoring.Create(addName, addBeat, addDuration, addEase, addFrom, addTo, addProxy, Current.Chart.Proxies, addTemplate);
-            editor.Change("Add " + clip.Name, () =>
+            editor.Change(L.Get("Add ") + clip.Name, () =>
             {
                 if (NeedsCustomObject && addSwitchObject) editor.Vsm.SetHeader("obj", "obj_custom_gimmick");
                 editor.Vsm.Add(clip);
@@ -104,7 +104,7 @@ public sealed partial class Viewer
             selectedClip = clip.Id; selectedWindowEvent = -1; inspectorScroll = 0;
             customMod = clip.Name; newProxy = clip.Proxy; workflow = ""; click = false;
             FocusAddedTrack(clip.Name, clip.Proxy, clip.Beat);
-            message = $"Added {clip.Name} at beat {clip.Beat:0.######}.";
+            message = L.Format($"Added {clip.Name} at beat {clip.Beat:0.######}.");
         }
         catch (Exception ex) { workflowError = ex.Message; }
     }
@@ -134,7 +134,7 @@ public sealed partial class Viewer
                 chartExportCancellation?.Dispose(); chartExportCancellation = new();
                 var token = chartExportCancellation.Token;
                 chartExportPrepare = Task.Run(() => ChartExport.Prepare(input, kind, paths[0], token), token);
-                message = "Preparing export...";
+                message = L.Get("Preparing export...");
             });
         }
         catch (Exception ex) { workflowError = ex.Message; }
@@ -155,8 +155,8 @@ public sealed partial class Viewer
         if (activeMarker != null && editor?.Markers.All(m => m.Id != activeMarker) != false) activeMarker = null;
         if (chartExportPrepare is { IsCompleted: true })
         {
-            try { chartExportPlan = chartExportPrepare.GetAwaiter().GetResult(); message = "Export ready. Review the destination before writing."; }
-            catch (OperationCanceledException) { message = "Export cancelled."; }
+            try { chartExportPlan = chartExportPrepare.GetAwaiter().GetResult(); message = L.Get("Export ready. Review the destination before writing."); }
+            catch (OperationCanceledException) { message = L.Get("Export cancelled."); }
             catch (Exception ex) { workflowError = ex.Message; }
             chartExportPrepare = null;
         }
@@ -165,10 +165,10 @@ public sealed partial class Viewer
             try
             {
                 chartExportWrite.GetAwaiter().GetResult();
-                message = "Export complete: " + chartExportPlan?.Destination;
+                message = L.Get("Export complete: ") + chartExportPlan?.Destination;
                 workflow = "";
             }
-            catch (OperationCanceledException) { workflowError = "Export cancelled. No incomplete folder was published."; }
+            catch (OperationCanceledException) { workflowError = L.Get("Export cancelled. No incomplete folder was published."); }
             catch (Exception ex) { workflowError = ex.Message; }
             chartExportWrite = null;
         }
@@ -195,7 +195,7 @@ public sealed partial class Viewer
                 click = false;
             }
             else if (workflow == "add" && (e.Modifiers & 0x0CC0) != 0 && e.Scan == 9)
-                OpenValue("Search gimmicks", addQuery, value => { addQuery = value; addListScroll = 0; });
+                OpenValue(L.Get("Search gimmicks"), addQuery, value => { addQuery = value; addListScroll = 0; });
         }
         return true;
     }
@@ -237,10 +237,10 @@ public sealed partial class Viewer
     }
     void DrawAddGimmick(Rect box)
     {
-        Text("ADD GIMMICK", box.X + 24, box.Y + 20, 23, white);
+        Text(L.Get("ADD GIMMICK"), box.X + 24, box.Y + 20, 23, white);
         float split = box.X + Math.Min(305, box.W * .34f), x = split + 20, rightWidth = box.X + box.W - 24 - x;
-        if (WorkflowButton(addQuery.Length == 0 ? "SEARCH / Ctrl+F" : addQuery, new(box.X + 24, box.Y + 65, split - box.X - 40, 34)))
-            OpenValue("Search name or description", addQuery, value => { addQuery = value; addListScroll = 0; });
+        if (WorkflowButton(addQuery.Length == 0 ? L.Get("SEARCH / Ctrl+F") : addQuery, new(box.X + 24, box.Y + 65, split - box.X - 40, 34)))
+            OpenValue(L.Get("Search name or description"), addQuery, value => { addQuery = value; addListScroll = 0; });
         var results = VsmReference.Shared.Search(addQuery, "mod");
         addListRect = new(box.X + 24, box.Y + 110, split - box.X - 40, box.H - 175);
         int visible = Math.Max(1, (int)(addListRect.H / 34));
@@ -252,33 +252,33 @@ public sealed partial class Viewer
             if (WorkflowButton(entry.Name, new(addListRect.X, addListRect.Y + row * 34, addListRect.W, 31), active: addTemplate?.Id == entry.Id)) PickGimmick(entry);
         }
         Canvas.Clip(null);
-        Text($"{results.Length} entries / custom names allowed", box.X + 24, box.Y + box.H - 42, 12, muted, max: split - box.X - 30);
-        WorkflowField("Name", addName, x, box.Y + 65, rightWidth, value => { addName = value; if (addTemplate?.MatchPattern.Length == 0) addTemplate = null; });
-        WorkflowField("Target / -1 global", addProxy.ToString(CultureInfo.InvariantCulture), x, box.Y + 108, rightWidth,
+        Text(L.Format($"{results.Length} entries / custom names allowed"), box.X + 24, box.Y + box.H - 42, 12, muted, max: split - box.X - 30);
+        WorkflowField(L.Get("Name"), addName, x, box.Y + 65, rightWidth, value => { addName = value; if (addTemplate?.MatchPattern.Length == 0) addTemplate = null; });
+        WorkflowField(L.Get("Target / -1 global"), addProxy.ToString(CultureInfo.InvariantCulture), x, box.Y + 108, rightWidth,
             value => addProxy = int.Parse(value, CultureInfo.InvariantCulture));
-        WorkflowField("Beat", VsmDocument.N(addBeat), x, box.Y + 151, rightWidth, value => addBeat = VsmDocument.Number(value));
-        WorkflowField("Duration / beat", VsmDocument.N(addDuration), x, box.Y + 194, rightWidth, value => addDuration = VsmDocument.Number(value));
-        WorkflowField("From / _", addFrom, x, box.Y + 237, rightWidth, value => addFrom = value);
-        WorkflowField("To / _", addTo, x, box.Y + 280, rightWidth, value => addTo = value);
-        WorkflowField("Easing", addEase, x, box.Y + 323, rightWidth, value => addEase = value);
-        if (WorkflowButton("CUSTOM NAME", new(x, box.Y + 368, rightWidth, 32)))
-        { addTemplate = null; OpenValue("New gimmick identifier", "", value => { addName = value; addTemplate = null; }); }
-        string note = addTemplate?.Summary ?? "A new track is created for this name. Unknown mods are preserved; preview support is unchanged.";
+        WorkflowField(L.Get("Beat"), VsmDocument.N(addBeat), x, box.Y + 151, rightWidth, value => addBeat = VsmDocument.Number(value));
+        WorkflowField(L.Get("Duration / beat"), VsmDocument.N(addDuration), x, box.Y + 194, rightWidth, value => addDuration = VsmDocument.Number(value));
+        WorkflowField(L.Get("From / _"), addFrom, x, box.Y + 237, rightWidth, value => addFrom = value);
+        WorkflowField(L.Get("To / _"), addTo, x, box.Y + 280, rightWidth, value => addTo = value);
+        WorkflowField(L.Get("Easing"), addEase, x, box.Y + 323, rightWidth, value => addEase = value);
+        if (WorkflowButton(L.Get("CUSTOM NAME"), new(x, box.Y + 368, rightWidth, 32)))
+        { addTemplate = null; OpenValue(L.Get("New gimmick identifier"), "", value => { addName = value; addTemplate = null; }); }
+        string note = addTemplate?.Summary ?? L.Get("A new track is created for this name. Unknown mods are preserved; preview support is unchanged.");
         var rows = EditorHelpLayout.Wrap(note, rightWidth, s => fonts.Measure(s, 14, unified: true)).Take(2).ToArray();
         for (int i = 0; i < rows.Length; i++) Text(rows[i], x, box.Y + 413 + i * 24, 14, white, unified: true);
         if (NeedsCustomObject)
         {
-            Text("Requires obj_custom_gimmick", x, box.Y + 470, 13, soft);
-            if (WorkflowButton("USE CUSTOM OBJ", new(x, box.Y + 495, rightWidth, 31), active: addSwitchObject)) addSwitchObject = !addSwitchObject;
+            Text(L.Get("Requires obj_custom_gimmick"), x, box.Y + 470, 13, soft);
+            if (WorkflowButton(L.Get("USE CUSTOM OBJ"), new(x, box.Y + 495, rightWidth, 31), active: addSwitchObject)) addSwitchObject = !addSwitchObject;
         }
-        if (WorkflowButton("ADD TO CHART", new(x, box.Y + box.H - 49, rightWidth * .59f, 33), primary: true)) CommitGimmick();
-        if (WorkflowButton("CANCEL", new(x + rightWidth * .62f, box.Y + box.H - 49, rightWidth * .38f, 33))) workflow = "";
+        if (WorkflowButton(L.Get("ADD TO CHART"), new(x, box.Y + box.H - 49, rightWidth * .59f, 33), primary: true)) CommitGimmick();
+        if (WorkflowButton(L.Get("CANCEL"), new(x + rightWidth * .62f, box.Y + box.H - 49, rightWidth * .38f, 33))) workflow = "";
     }
     void DrawChartExport(Rect box)
     {
-        Text("EXPORT", box.X + 24, box.Y + 20, 24, white);
+        Text(L.Get("EXPORT"), box.X + 24, box.Y + 20, 24, white);
         Text("v0.1.2 / 16.0", box.X + box.W - 174, box.Y + 26, 13, muted);
-        string[] labels = ["VSM", "VSM + cgmk config", "Chart Folder"];
+        string[] labels = ["VSM", L.Get("VSM + cgmk config"), L.Get("Chart Folder")];
         float buttonWidth = (box.W - 64) / 3;
         for (int i = 0; i < labels.Length; i++)
             if (WorkflowButton(labels[i], new(box.X + 24 + i * (buttonWidth + 8), box.Y + 67, buttonWidth, 40), active: chartExportPlan != null && (int)exportKind == i))
@@ -286,12 +286,12 @@ public sealed partial class Viewer
         float y = box.Y + 128;
         if (chartExportPlan is { } plan)
         {
-            Text("DESTINATION", box.X + 24, y, 12, muted);
+            Text(L.Get("DESTINATION"), box.X + 24, y, 12, muted);
             Text(plan.Destination, box.X + 24, y + 23, 14, white, max: box.W - 48);
-            Text($"{plan.Files.Count} files / {plan.TotalBytes / 1048576.0:0.00} MiB", box.X + 24, y + 52, 14, soft);
+            Text(L.Format($"{plan.Files.Count} files / {plan.TotalBytes / 1048576.0:0.00} MiB"), box.X + 24, y + 52, 14, soft);
             int shown = Math.Min(7, plan.Files.Count);
             for (int i = 0; i < shown; i++) Text(plan.Files[i].Name, box.X + 24, y + 87 + i * 22, 13, white, max: box.W - 48);
-            if (plan.Files.Count > shown) Text($"... {plan.Files.Count - shown} more files", box.X + 24, y + 87 + shown * 22, 13, muted);
+            if (plan.Files.Count > shown) Text(L.Format($"... {plan.Files.Count - shown} more files"), box.X + 24, y + 87 + shown * 22, 13, muted);
             float wy = y + 87 + (shown + 1) * 22;
             foreach (string warning in plan.Warnings)
                 foreach (string text in EditorHelpLayout.Wrap(warning, box.W - 48, s => fonts.Measure(s, 12)))
@@ -299,20 +299,20 @@ public sealed partial class Viewer
         }
         else
         {
-            Text("Choose an export type, then select a NEW output path.", box.X + 24, y, 16, white, max: box.W - 48);
-            Text("Chart Folder: enter a new folder name in the save dialog.", box.X + 24, y + 38, 14, muted, max: box.W - 48);
-            Text("Source files are never overwritten. Unsaved edits are included.", box.X + 24, y + 70, 14, muted, max: box.W - 48);
+            Text(L.Get("Choose an export type, then select a NEW output path."), box.X + 24, y, 16, white, max: box.W - 48);
+            Text(L.Get("Chart Folder: enter a new folder name in the save dialog."), box.X + 24, y + 38, 14, muted, max: box.W - 48);
+            Text(L.Get("Source files are never overwritten. Unsaved edits are included."), box.X + 24, y + 70, 14, muted, max: box.W - 48);
         }
         if (ChartExportBusy) Text(message, box.X + 24, box.Y + box.H - 78, 13, white, max: box.W - 48);
-        if (WorkflowButton("EXPORT", new(box.X + 24, box.Y + box.H - 49, box.W * .52f, 33), primary: true, enabled: chartExportPlan != null)) WriteChartExport();
+        if (WorkflowButton(L.Get("EXPORT"), new(box.X + 24, box.Y + box.H - 49, box.W * .52f, 33), primary: true, enabled: chartExportPlan != null)) WriteChartExport();
         // 取消在工作线程忙碌期间始终可用；它不会改动编辑文档。
         var cancel = new Rect(box.X + box.W * .57f, box.Y + box.H - 49, box.W * .43f - 24, 33);
         if (ChartExportBusy)
         {
             Canvas.Fill(cancel, Color.Hex(0x384252)); Canvas.Border(cancel, line);
-            Text("CANCEL EXPORT", cancel.X + 18, cancel.Y + 10, 12, white);
+            Text(L.Get("CANCEL EXPORT"), cancel.X + 18, cancel.Y + 10, 12, white);
             if (click && cancel.Contains(mouseX, mouseY)) { chartExportCancellation?.Cancel(); click = false; }
         }
-        else if (WorkflowButton("CLOSE", cancel)) workflow = "";
+        else if (WorkflowButton(L.Get("CLOSE"), cancel)) workflow = "";
     }
 }

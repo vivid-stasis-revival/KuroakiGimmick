@@ -122,6 +122,7 @@ public static class GpuSelfTest
         // 其余需要真实 GPU 的子套件复用同一个 canvas（因而也复用同一个设备和线程），不各自再建设备。
         TextFilmSelfTest.CheckGpu(canvas);
         CustomAdaptationSelfTest.CheckGpu(canvas);
+        CustomProxySelfTest.CheckGpu(canvas);
         CustomFxSelfTest.CheckGpu(canvas);
         NativeSequenceSelfTest.CheckGpu(canvas);
         Console.WriteLine($"{checks} GPU checks plus text/film rendering passed.");

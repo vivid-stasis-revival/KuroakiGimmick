@@ -8,7 +8,7 @@ namespace KuroakiGimmick.Core.Editing;
 /// 一个源行对应一个可编辑片段。start:end:step 保持为一个重复片段，不把导入文件展开后重写。
 /// 未知行、mpf、元数据、注释、BOM、换行均原样保留；只有七字段且严格可解析的 mods 行允许可视化编辑。
 /// </summary>
-public sealed class VsmDocument
+public sealed partial class VsmDocument
 {
     /// <summary>
     /// 一个可视化编辑单元。<c>Id</c> 是事件身份，跨编辑保持不变，决定它对应哪一源行——不要用行号或字段值当身份。
@@ -220,6 +220,12 @@ public sealed class VsmDocument
             To = next.To == previous.To || next.To == "_" ? next.To : N(Number(next.To))
         };
         Validate(next);
+        Lines[i] = RewriteLine(line, next);
+    }
+
+    static Line RewriteLine(Line line, Clip next)
+    {
+        var previous = line.Event!;
         string body = Body(line.Text), suffix = line.Text[body.Length..];
         string[] parts = body.Split(','), oldFields = Fields(previous), values = Fields(next);
         // 保留每个未修改字段，包括它原本的数值写法。
@@ -231,7 +237,7 @@ public sealed class VsmDocument
             int left = token.Length - token.TrimStart().Length, right = token.Length - token.TrimEnd().Length;
             parts[f] = token[..left] + values[f] + (right > 0 ? token[^right..] : "");
         }
-        Lines[i] = line with { Text = string.Join(',', parts) + suffix, Event = next };
+        return line with { Text = string.Join(',', parts) + suffix, Event = next };
     }
 
     /// <summary>
