@@ -45,7 +45,7 @@ public sealed partial class Viewer
             anchor = Vector2.Transform(new((float)(Value(xName) + (selected.Length == 0 ? 0 : Value(xName + "b"))),
                 (float)(Value(yName) + (selected.Length == 0 ? 0 : Value(yName + "b")))), projection);
         }
-        Text("TEXT / LOCAL 320 x 180 / Ctrl+wheel zoom", viewport.X + 8, viewport.Y + 7, 10, muted, max: viewport.W - 16);
+        Text(L.Get("TEXT / LOCAL 320 x 180 / Ctrl+wheel zoom"), viewport.X + 8, viewport.Y + 7, 10, muted, max: viewport.W - 16);
         Canvas.Clip(null);
         if (!click || !viewport.Contains(mouseX, mouseY) || mouseY < viewport.Y + 24 || Busy || UiOverlayVisible || ImageGestureActive || transport.Playing) return;
         var pointer = new Vector2(mouseX, mouseY);
@@ -65,7 +65,7 @@ public sealed partial class Viewer
         string? pick = kind != 0 ? selectedTextId : textBounds.Reverse().Where(p => Hit(p.Value)).Select(p => p.Key).FirstOrDefault();
         if (pick == null) return;
         if (selectedTextId != pick || !textInspector) { SelectText(pick); click = false; return; }
-        if (Math.Abs(beat - textAt) > 1e-6) { transport.Seek(Current.Timeline.Bpm.Time(textAt)); message = "Located text target; drag again to edit."; click = false; return; }
+        if (Math.Abs(beat - textAt) > 1e-6) { transport.Seek(Current.Timeline.Bpm.Time(textAt)); message = L.Get("Located text target; drag again to edit."); click = false; return; }
         textDrag = new(editor, editor.Revision, pick, pointer, anchor, scale, kind,
             textSampler.Get("textX", pick, textAt), textSampler.Get("textY", pick, textAt), textSampler.Get("textscale", pick, textAt), textSampler.Get("textrot", pick, textAt));
         textDragValues = null; click = false; Sdl.SDL_CaptureMouse(true);

@@ -79,11 +79,11 @@ public sealed partial class Viewer
         using var fade = Canvas.Opacity(motion.To("docs-add-menu", 1, .12, 0));
         Canvas.Clip(null); Canvas.Fill(r, Color.Hex(0x252E3A)); Canvas.Border(r, DocsAccent);
         Text(entry?.Name ?? "", r.X + 12, r.Y + 12, 15, DocsText, max: r.W - 24, unified: true, bold: true);
-        Text($"BEAT {referenceAddBeat:0.######}", r.X + 12, r.Y + 41, 13, DocsMuted);
+        Text(L.Format($"BEAT {referenceAddBeat:0.######}"), r.X + 12, r.Y + 41, 13, DocsMuted);
         referenceMenuInput = true;
-        if (ReferenceButton("ADD TO CHART", new(r.X + 12, r.Y + 67, r.W - 24, 34), enabled: !Current.IsEmpty && !Busy)) AddReferenceEntry(false);
-        if (ReferenceButton("EDIT VALUES + ADD", new(r.X + 12, r.Y + 108, r.W - 24, 34), enabled: !Current.IsEmpty && !Busy)) AddReferenceEntry(true);
-        if (ReferenceButton("CANCEL", new(r.X + 12, r.Y + 150, r.W - 24, 30))) referenceAddId = "";
+        if (ReferenceButton(L.Get("ADD TO CHART"), new(r.X + 12, r.Y + 67, r.W - 24, 34), enabled: !Current.IsEmpty && !Busy)) AddReferenceEntry(false);
+        if (ReferenceButton(L.Get("EDIT VALUES + ADD"), new(r.X + 12, r.Y + 108, r.W - 24, 34), enabled: !Current.IsEmpty && !Busy)) AddReferenceEntry(true);
+        if (ReferenceButton(L.Get("CANCEL"), new(r.X + 12, r.Y + 150, r.W - 24, 30))) referenceAddId = "";
         referenceMenuInput = false;
         if (click && !r.Contains(mouseX, mouseY)) { referenceAddId = ""; click = false; }
     }

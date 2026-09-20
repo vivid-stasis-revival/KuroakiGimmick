@@ -29,6 +29,7 @@ public sealed class VideoExport : IDisposable
     public double Progress => Frame / (double) TotalFrames;
     public bool Completed { get; private set; }
     public bool Cancelled { get; private set; }
+    public bool Finalizing => inputCompleted;
     public string? Error { get; private set; }
     public string Status => Error != null ? Error : Cancelled? "Export cancelled" : Completed? "Export complete" : inputCompleted ? "Finalizing audio and MP4..." : $"Rendering frame {Frame:N0} / {TotalFrames:N0}";
     /// <summary>构造即启动 ffmpeg 子进程并建立管道；ffmpeg 不可用时直接抛错，这是 MP4 导出的硬依赖边界。</summary>

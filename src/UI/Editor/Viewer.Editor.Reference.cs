@@ -169,7 +169,7 @@ public sealed partial class Viewer
     /// <summary>复制的是原文，不是折行后的显示行。提示文字 2.5 秒后自动消失。</summary>
     void CopyReferenceText(string text)
     {
-        referenceStatus = Sdl.SDL_SetClipboardText(text) ? "已复制" : "复制失败：" + Sdl.Error;
+        referenceStatus = Sdl.SDL_SetClipboardText(text) ? L.Get("已复制") : L.Get("复制失败：") + Sdl.Error;
         referenceStatusUntil = uptime.Elapsed.TotalSeconds + 2.5;
         motion.Snap("docs-toast", 0);
     }

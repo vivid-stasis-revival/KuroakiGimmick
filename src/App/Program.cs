@@ -17,10 +17,11 @@ internal static class Program
     /// </summary>
     [STAThread] static int Main(string[] args)
     {
+        _ = UiLanguage.SystemLanguage;
         CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
         CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
         // 这一串是所有无人值守模式（自测、检查、导出、截图）。cli 为真时失败只写 stderr，不弹消息框卡住脚本。
-        bool cli = args.Any(a => a is "--inspect" or "--render" or "--snapshot" or "--self-test" or "--smoke-ui" or "--smoke-text-ui" or "--native-sequence-self-test" or "--text-film-self-test" or "--custom-adaptation-self-test" or "--gpu-test" or "--editor-self-test" or "--reference-self-test" or "--authoring-self-test" or "--layout-image-self-test" or "--image-object-self-test");
+        bool cli = args.Any(a => a is "--inspect" or "--render" or "--snapshot" or "--self-test" or "--smoke-ui" or "--smoke-text-ui" or "--smoke-i18n" or "--native-sequence-self-test" or "--text-film-self-test" or "--custom-adaptation-self-test" or "--gpu-test" or "--editor-self-test" or "--reference-self-test" or "--authoring-self-test" or "--layout-image-self-test" or "--image-object-self-test");
         try
         {
             // 后端覆盖必须早于任何 GPU 设备创建，所以在自检分派之前就读掉；否则 --gpu-test --force-vulkan
@@ -174,22 +175,24 @@ internal static class Program
                 Console.WriteLine(Path.GetFullPath(output));
                 return options.ContainsKey("strict") && session.Chart.Diagnostics.Any(d => d.Error) ? 2 : 0;
             }
-            using var viewer = new Viewer(host, session, silent: cli, applyPreferences: !changed);
+            using var viewer = new Viewer(host, session, silent: cli, applyPreferences: !changed,
+                uiLanguage: options.GetValueOrDefault("language"));
             // 单帧截图必须抓到最终布局，而不是入场动画那一帧全透明的画面。
-            if (options.ContainsKey("snapshot") || options.ContainsKey("smoke-ui") || options.ContainsKey("smoke-text-ui")) viewer.SetUiAnimationsForTest(false);
+            if (options.ContainsKey("snapshot") || options.ContainsKey("smoke-ui") || options.ContainsKey("smoke-text-ui") || options.ContainsKey("smoke-i18n")) viewer.SetUiAnimationsForTest(false);
             if (options.ContainsKey("editor")) viewer.OpenEditor();
             if (options.ContainsKey("settings"))
             {
                 viewer.OpenSettings();
             }
             if (options.ContainsKey("manual")) viewer.OpenReferenceForTest(options.GetValueOrDefault("reference"));
+            if (options.ContainsKey("smoke-i18n")) viewer.SmokeLocalization();
             if (options.ContainsKey("smoke-ui"))
             {
                 viewer.SmokeUi();
                 Console.WriteLine("UI shortcuts, frame stepping and export markers passed.");
             }
             if (options.ContainsKey("smoke-text-ui")) viewer.SmokeTextUi();
-            if (options.ContainsKey("snapshot") || options.ContainsKey("smoke-ui") || options.ContainsKey("smoke-text-ui"))
+            if (options.ContainsKey("snapshot") || options.ContainsKey("smoke-ui") || options.ContainsKey("smoke-text-ui") || options.ContainsKey("smoke-i18n"))
             {
                 // --time 单位是秒，缺省取 45 秒这一通常已进入演出主体的位置。
                 double time = options.TryGetValue("time", out var t) ? double.Parse(t, CultureInfo.InvariantCulture) : 45;
@@ -252,6 +255,7 @@ internal static class Program
             "snapshot",
             "smoke-ui",
             "smoke-text-ui",
+            "smoke-i18n",
             "no-notes",
             "no-fx",
             "no-ui",
@@ -262,6 +266,7 @@ internal static class Program
         };
         var values = new HashSet<string>
         {
+            "language",
             "reference",
             "window-motion",
             "report",
@@ -332,6 +337,8 @@ internal static class Program
                         [--start 30] [--end 45] [--fps 60] [--width 1920]
                         [--no-notes] [--no-fx]
     KuroakiGimmick --snapshot project.sgv.json --time 45 --out ui.ppm [--scene]
+    UI language: --language auto|zh-CN|en (also available in Settings)
+    UI localization check: --smoke-i18n [--editor] --out i18n.ppm
     KuroakiGimmick --editor Samples/EditorDemo/demo.sgv.json
     KuroakiGimmick --editor-self-test
     KuroakiGimmick --reference-self-test

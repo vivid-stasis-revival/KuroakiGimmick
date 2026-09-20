@@ -85,7 +85,7 @@ public sealed partial class Viewer
         selectedClips.Clear();
         foreach (var c in editor.Vsm.Clips.Where(c => c.TrackKey == clip.TrackKey)) selectedClips.Add(c.Id);
         selectedClip = clip.Id; inspectorScroll = 0;
-        message = $"Selected {selectedClips.Count} {clip.Name} clips.";
+        message = L.Format($"Selected {selectedClips.Count} {clip.Name} clips.");
     }
 
     /// <summary>
@@ -99,7 +99,7 @@ public sealed partial class Viewer
         if (targets.Length == 0) return;
         var next = targets.Select(apply).ToArray();
         editor.Change(name, () => { foreach (var c in next) editor.Vsm.Replace(c); });
-        layoutRevision = -1; message = $"{name} / {next.Length} clips";
+        layoutRevision = -1; message = L.Format($"{name} / {next.Length} clips");
     }
 
     /// <summary>批量删除，一步撤销。</summary>
@@ -108,7 +108,7 @@ public sealed partial class Viewer
         if (editor == null) return;
         var ids = SelectedClipList().Select(c => c.Id).ToArray();
         if (ids.Length == 0) return;
-        Edit($"Delete {ids.Length} clips", () => { foreach (var id in ids) editor.Vsm.Delete(id); });
+        Edit(L.Format($"Delete {ids.Length} clips"), () => { foreach (var id in ids) editor.Vsm.Delete(id); });
         SetClipSelection(null);
     }
 
@@ -125,10 +125,24 @@ public sealed partial class Viewer
         if (Math.Abs(destination - first) < 1e-7) destination += Math.Max(.25, source.Max(c => c.End) - first);
         double delta = destination - first;
         var copies = source.Select(c => c with { Id = Guid.NewGuid(), Beat = c.Beat + delta, RepeatEnd = c.RepeatEnd + delta }).ToArray();
-        Edit($"Duplicate {copies.Length} clips", () => { foreach (var c in copies) editor.Vsm.Add(c); });
+        Edit(L.Format($"Duplicate {copies.Length} clips"), () => { foreach (var c in copies) editor.Vsm.Add(c); });
         selectedClips.Clear();
         foreach (var c in copies) selectedClips.Add(c.Id);
         selectedClip = copies[0].Id;
+    }
+
+    void ConvertSelectedLoops(bool split)
+    {
+        if (editor == null || Busy) return;
+        var ids = SelectedClipList().Select(c => c.Id).ToArray();
+        Guid[]? next = null;
+        Edit(split ? L.Get("Split loops") : L.Get("Merge loop"), () =>
+            next = split ? editor.Vsm.SplitLoops(ids) : [editor.Vsm.MergeLoop(ids)]);
+        if (next == null) return;
+        selectedClips.Clear();
+        foreach (var id in next) selectedClips.Add(id);
+        selectedClip = next.FirstOrDefault();
+        inspectorScroll = 0;
     }
 
     // ---- 选框 ----
@@ -182,7 +196,7 @@ public sealed partial class Viewer
     {
         if (!marqueeActive) return;
         marqueeActive = false; marqueePending = null; inspectorScroll = 0;
-        if (BatchSelection) message = $"{selectedClips.Count} clips selected. Same mod: edit them together on the right.";
+        if (BatchSelection) message = L.Format($"{selectedClips.Count} clips selected. Same mod: edit them together on the right.");
         else if (selectedClips.Count == 0) selectedClip = null;
     }
 
@@ -258,45 +272,47 @@ public sealed partial class Viewer
         {
             string suffix = count > 1 ? $" ({count})" : "";
             var first = picked[0];
-            items.Add(("SELECT SAME MOD", true, () => SelectSameTrack(first)));
-            items.Add(("DUPLICATE" + suffix, true, () => { if (count > 1) DuplicateClips(); else DuplicateSelection(); }));
-            items.Add(("MOVE TO PLAYHEAD" + suffix, true, () =>
+            items.Add((L.Get("SELECT SAME MOD"), true, () => SelectSameTrack(first)));
+            items.Add((L.Get("DUPLICATE") + suffix, true, () => { if (count > 1) DuplicateClips(); else DuplicateSelection(); }));
+            items.Add((L.Get("SPLIT LOOP") + suffix, picked.Any(c => c.RepeatEnd != null), () => ConvertSelectedLoops(true)));
+            items.Add((L.Get("MERGE INTO LOOP") + suffix, count > 1, () => ConvertSelectedLoops(false)));
+            items.Add((L.Get("MOVE TO PLAYHEAD") + suffix, true, () =>
             {
                 double delta = Current.Timeline.Bpm.Beat(transport.Position) - picked.Min(c => c.Beat);
-                EditClips(c => c with { Beat = c.Beat + delta, RepeatEnd = c.RepeatEnd + delta }, "Move to playhead");
+                EditClips(c => c with { Beat = c.Beat + delta, RepeatEnd = c.RepeatEnd + delta }, L.Get("Move to playhead"));
             }));
-            items.Add(("SWAP FROM / TO" + suffix, true, () => EditClips(c => c with { From = c.To, To = c.From }, "Swap from/to")));
-            items.Add(("COPY VALUES", count == 1, () =>
-            { clipValues = (first.Ease, first.From, first.To, first.Duration); message = "Copied ease / from / to / duration."; }));
-            items.Add(("PASTE VALUES" + suffix, clipValues != null, () =>
+            items.Add((L.Get("SWAP FROM / TO") + suffix, true, () => EditClips(c => c with { From = c.To, To = c.From }, L.Get("Swap from/to"))));
+            items.Add((L.Get("COPY VALUES"), count == 1, () =>
+            { clipValues = (first.Ease, first.From, first.To, first.Duration); message = L.Get("Copied ease / from / to / duration."); }));
+            items.Add((L.Get("PASTE VALUES") + suffix, clipValues != null, () =>
             {
                 var v = clipValues!.Value;
-                EditClips(c => c with { Ease = v.Ease, From = v.From, To = v.To, Duration = v.Duration }, "Paste values");
+                EditClips(c => c with { Ease = v.Ease, From = v.From, To = v.To, Duration = v.Duration }, L.Get("Paste values"));
             }));
-            items.Add(("DELETE" + suffix, true, () => { if (count > 1) DeleteClips(); else DeleteSelection(); }));
+            items.Add((L.Get("DELETE") + suffix, true, () => { if (count > 1) DeleteClips(); else DeleteSelection(); }));
         }
         else if (menuTrack is { } track)
         {
-            string label = track.TextId != null ? "TEXT KEY" : track.ImageGroup ? "IMAGE KEY" : track.Window ? track.Property : track.Property;
-            items.Add(($"ADD {label} AT {menuBeat:0.###}", !Busy, () =>
+            string label = track.TextId != null ? L.Get("TEXT KEY") : track.ImageGroup ? L.Get("IMAGE KEY") : track.Window ? track.Property : track.Property;
+            items.Add((L.Format($"ADD {label} AT {menuBeat:0.###}"), !Busy, () =>
             {
                 if (track.TextId is { } textId) { SelectText(textId); textAt = menuBeat; transport.Seek(Current.Timeline.Bpm.Time(menuBeat)); }
                 else if (track.ImageGroup) { SelectImageObject(track.ImageId!); imageKeyBeat = menuBeat; imagePoseTarget = ImagePoseTarget.Key; transport.Seek(Current.Timeline.Bpm.Time(menuBeat)); }
                 else if (track.Window) AddWindowEvent(track.Property, menuBeat, track.Target);
                 else AddMod(menuBeat, track.Property, track.Target);
             }));
-            items.Add(("SEEK HERE", true, () => { selectedNoteTime = null; transport.Seek(Current.Timeline.Bpm.Time(menuBeat)); }));
-            items.Add(("MARK HERE", true, () => { transport.Seek(Current.Timeline.Bpm.Time(menuBeat)); MarkTimestamp(); }));
-            items.Add(("LOOP IN HERE", true, () => loopIn = menuBeat));
-            items.Add(("LOOP OUT HERE", true, () => loopOut = Math.Max(loopIn + .125, menuBeat)));
+            items.Add((L.Get("SEEK HERE"), true, () => { selectedNoteTime = null; transport.Seek(Current.Timeline.Bpm.Time(menuBeat)); }));
+            items.Add((L.Get("MARK HERE"), true, () => { transport.Seek(Current.Timeline.Bpm.Time(menuBeat)); MarkTimestamp(); }));
+            items.Add((L.Get("LOOP IN HERE"), true, () => loopIn = menuBeat));
+            items.Add((L.Get("LOOP OUT HERE"), true, () => loopOut = Math.Max(loopIn + .125, menuBeat)));
             if (!track.Window && track.TextId == null && !track.ImageGroup)
-                items.Add(("SELECT WHOLE TRACK", true, () =>
+                items.Add((L.Get("SELECT WHOLE TRACK"), true, () =>
                 {
                     selectedClips.Clear();
                     foreach (var c in editor.Vsm.Clips.Where(c => c.TrackKey == track.Key)) selectedClips.Add(c.Id);
                     selectedClip = selectedClips.Count > 0 ? selectedClips.First() : null;
                     selectedWindowEvent = -1; inspectorScroll = 0;
-                    message = $"Selected {selectedClips.Count} clips on {track.Label}.";
+                    message = L.Format($"Selected {selectedClips.Count} clips on {track.Label}.");
                 }));
         }
         return items;
@@ -331,7 +347,7 @@ public sealed partial class Viewer
     // ---- 批量参数面板 ----
 
     /// <summary>选择集里所有片段的某个字段是否一致；不一致时显示 (mixed)，提交时原样跳过。</summary>
-    const string Mixed = "(mixed)";
+    static string Mixed => L.Get("(mixed)");
     static string Shared(VsmDocument.Clip[] clips, Func<VsmDocument.Clip, string> read)
     {
         string first = read(clips[0]);
@@ -349,10 +365,10 @@ public sealed partial class Viewer
         var picked = SelectedClipList();
         if (picked.Length == 0) { SetClipSelection(null); return; }
         bool sameMod = picked.All(c => c.Name == picked[0].Name);
-        Label($"BATCH / {picked.Length} CLIPS" + (sameMod ? " / " + picked[0].Name : " / MIXED MODS"), r.X, r.Y);
-        if (EButton("DUP", new(r.X, r.Y + 22, 65, 25))) DuplicateClips();
-        if (EButton("DELETE", new(r.X + 71, r.Y + 22, 76, 25))) DeleteClips();
-        if (EButton("ONE", new(r.X + 153, r.Y + 22, 60, 25), key: "batch-single")) SetClipSelection(picked[0].Id);
+        Label(L.Format($"BATCH / {picked.Length} CLIPS") + (sameMod ? " / " + picked[0].Name : L.Get(" / MIXED MODS")), r.X, r.Y);
+        if (EButton(L.Get("DUP"), new(r.X, r.Y + 22, 65, 25))) DuplicateClips();
+        if (EButton(L.Get("DELETE"), new(r.X + 71, r.Y + 22, 76, 25))) DeleteClips();
+        if (EButton(L.Get("ONE"), new(r.X + 153, r.Y + 22, 60, 25), key: "batch-single")) SetClipSelection(picked[0].Id);
         if (EButton("^", new(r.X + r.W - 62, r.Y + 22, 27, 25))) inspectorScroll = Math.Max(0, inspectorScroll - 1);
         if (EButton("v", new(r.X + r.W - 30, r.Y + 22, 27, 25))) inspectorScroll++;
         int fieldCount = 0;
@@ -365,27 +381,27 @@ public sealed partial class Viewer
             // 值不一致时显示 (mixed)：原样提交等于没改，只有真的敲了新值才会写下去。
             ValueField(name, value, r.X, y, r.W, v => { if (v != Mixed) action(v); });
         }
-        if (sameMod) Field("Mod", picked[0].Name, v => EditClips(c => c with { Name = v }, "Change mod"));
-        Field("Beat / first", VsmDocument.N(first), v =>
+        if (sameMod) Field(L.Get("Mod"), picked[0].Name, v => EditClips(c => c with { Name = v }, L.Get("Change mod")));
+        Field(L.Get("Beat / first"), VsmDocument.N(first), v =>
         {
             double delta = VsmDocument.Number(v) - first;
-            EditClips(c => c with { Beat = c.Beat + delta, RepeatEnd = c.RepeatEnd + delta }, "Shift beats");
+            EditClips(c => c with { Beat = c.Beat + delta, RepeatEnd = c.RepeatEnd + delta }, L.Get("Shift beats"));
         });
-        Field("Duration / beat", Shared(picked, c => VsmDocument.N(c.Duration)), v =>
-        { double d = VsmDocument.Number(v); EditClips(c => c with { Duration = d }, "Set duration"); });
+        Field(L.Get("Duration / beat"), Shared(picked, c => VsmDocument.N(c.Duration)), v =>
+        { double d = VsmDocument.Number(v); EditClips(c => c with { Duration = d }, L.Get("Set duration")); });
         if (sameMod)
         {
-            Field("From / _", Shared(picked, c => c.From), v => EditClips(c => c with { From = v }, "Set from"));
-            Field("To / _", Shared(picked, c => c.To), v => EditClips(c => c with { To = v }, "Set to"));
+            Field(L.Get("From / _"), Shared(picked, c => c.From), v => EditClips(c => c with { From = v }, L.Get("Set from")));
+            Field(L.Get("To / _"), Shared(picked, c => c.To), v => EditClips(c => c with { To = v }, L.Get("Set to")));
         }
-        Field("Ease", Shared(picked, c => c.Ease), v => { string e = Easings.Normalize(v); EditClips(c => c with { Ease = e }, "Set ease"); });
-        Field("Proxy / -1 global", Shared(picked, c => c.Proxy.ToString(CultureInfo.InvariantCulture)), v =>
+        Field(L.Get("Ease"), Shared(picked, c => c.Ease), v => { string e = Easings.Normalize(v); EditClips(c => c with { Ease = e }, L.Get("Set ease")); });
+        Field(L.Get("Proxy / -1 global"), Shared(picked, c => c.Proxy.ToString(CultureInfo.InvariantCulture)), v =>
         {
             int p = int.Parse(v, CultureInfo.InvariantCulture);
-            if (p >= Current.Chart.Proxies) throw new FormatException("Proxy exceeds !proxies.");
-            EditClips(c => c with { Proxy = p }, "Set proxy");
+            if (p >= Current.Chart.Proxies) throw new FormatException(L.Get("Proxy exceeds !proxies."));
+            EditClips(c => c with { Proxy = p }, L.Get("Set proxy"));
         });
-        Text(sameMod ? "Beat moves the group; spacing is kept." : "Mixed mods: from / to stay per clip.",
+        Text(sameMod ? L.Get("Beat moves the group; spacing is kept.") : L.Get("Mixed mods: from / to stay per clip."),
             r.X, r.Y + r.H - 22, 10, soft, true, r.W);
         inspectorScroll = Math.Clamp(inspectorScroll, 0, Math.Max(0, fieldCount - Math.Max(1, (int)((r.H - 88) / 31))));
     }

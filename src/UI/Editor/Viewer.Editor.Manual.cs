@@ -48,7 +48,7 @@ public sealed partial class Viewer
 
     void SearchManual()
     {
-        OpenValue("Search manual: identifier / Chinese / obj / mpf", manualQuery, value =>
+        OpenValue(L.Get("Search manual: identifier / Chinese / obj / mpf"), manualQuery, value =>
         {
             manualQuery = value;
             manualCategory = "";
@@ -150,18 +150,18 @@ public sealed partial class Viewer
         {
             if (string.IsNullOrWhiteSpace(name) || name.IndexOfAny(new[] { ',', '\r', '\n' }) >= 0 ||
                 new[] { "[tid]", "[lane]", "[id]", "[图像名]" }.Any(p => name.Contains(p, StringComparison.Ordinal)))
-                throw new FormatException("Enter a concrete raw identifier, not an unresolved template.");
+                throw new FormatException(L.Get("Enter a concrete raw identifier, not an unresolved template."));
             if (entry.Pattern.Length > 0 && !System.Text.RegularExpressions.Regex.IsMatch(name, entry.Pattern,
                 System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100)))
-                throw new FormatException("The identifier does not match the selected document template.");
+                throw new FormatException(L.Get("The identifier does not match the selected document template."));
             customMod = name;
             if (entry.Scope == "global") newProxy = -1;
             else if (entry.Scope == "proxy" && Current.Chart.Proxies > 0) newProxy = Math.Clamp(newProxy, 0, Current.Chart.Proxies - 1);
             help = false;
             click = false;
-            message = "Selected identifier only (no event created). Check target, object and compatibility before adding.";
+            message = L.Get("Selected identifier only (no event created). Check target, object and compatibility before adding.");
         }
-        if (entry.Pattern.Length > 0) OpenValue("Concrete VSM identifier (replace bracketed placeholder)", entry.Key, Choose);
+        if (entry.Pattern.Length > 0) OpenValue(L.Get("Concrete VSM identifier (replace bracketed placeholder)"), entry.Key, Choose);
         else Choose(entry.Key);
     }
 
@@ -174,21 +174,21 @@ public sealed partial class Viewer
         Canvas.Fill(outer, HelpBackground);
         Canvas.Border(outer, Color.Hex(0x55505E));
         float left = outer.X + 20, top = outer.Y + 15;
-        Text("VSM / CUSTOM GIMMICK 手册", left, top, HelpTitleSize, HelpBodyColor, max: outer.W - 175,
+        Text(L.Get("VSM / CUSTOM GIMMICK 手册"), left, top, HelpTitleSize, HelpBodyColor, max: outer.W - 175,
             unified: true, bold: true);
-        if (ManualButton("关闭  Esc", new(outer.X + outer.W - 130, top, 110, 32))) help = false;
-        Text("附件原文索引 · 收录不代表已支持预览 · " + EditorManual.Entries.Length + " 个条目", left, top + 38,
+        if (ManualButton(L.Get("关闭  Esc"), new(outer.X + outer.W - 130, top, 110, 32))) help = false;
+        Text(L.Get("附件原文索引 · 收录不代表已支持预览 · ") + EditorManual.Entries.Length + L.Get(" 个条目"), left, top + 38,
             14, HelpSecondaryColor, max: outer.W - 40, unified: true);
-        if (ManualButton("搜索  Ctrl/Cmd+F", new(left, top + 69, 170, 34))) SearchManual();
-        if (ManualButton("清空", new(left + 180, top + 69, 65, 34)))
+        if (ManualButton(L.Get("搜索  Ctrl/Cmd+F"), new(left, top + 69, 170, 34))) SearchManual();
+        if (ManualButton(L.Get("清空"), new(left + 180, top + 69, 65, 34)))
         { manualQuery = manualCategory = ""; RefreshManual(); }
-        Text(manualQuery.Length > 0 ? manualQuery : "输入原始名字、中文作用、配置、obj 或 mpf", left + 260, top + 76,
+        Text(manualQuery.Length > 0 ? manualQuery : L.Get("输入原始名字、中文作用、配置、obj 或 mpf"), left + 260, top + 76,
             16, HelpSummaryColor, max: outer.W - 300, unified: true);
 
         float listWidth = Math.Clamp(outer.W * .29f, 260, 365);
         float columnTop = top + 119;
         if (ManualButton("<", new(left, columnTop, 32, 34))) CycleManualCategory(-1);
-        if (ManualButton(manualCategory.Length == 0 ? "全部分类 >" : manualCategory,
+        if (ManualButton(manualCategory.Length == 0 ? L.Get("全部分类 >") : manualCategory,
             new(left + 40, columnTop, listWidth - 40, 34))) CycleManualCategory(1);
         manualListRect = new(left, columnTop + 46, listWidth, Math.Max(1, outer.Y + outer.H - 56 - columnTop - 46));
         Canvas.Fill(manualListRect, Color.Hex(0x101218));
@@ -218,7 +218,7 @@ public sealed partial class Viewer
         Canvas.Fill(new(contentX - 13, columnTop, 1, manualListRect.Y + manualListRect.H - columnTop), Color.Hex(0x3E424D));
         if (manualResults.Length == 0)
         {
-            Text(EditorManual.LoadError.Length > 0 ? "手册加载失败：" + EditorManual.LoadError : "没有找到条目。请清空分类或换个搜索词。",
+            Text(EditorManual.LoadError.Length > 0 ? L.Get("手册加载失败：") + EditorManual.LoadError : L.Get("没有找到条目。请清空分类或换个搜索词。"),
                 contentX, columnTop + 10, 17, HelpBodyColor, max: contentWidth, unified: true);
         }
         else
@@ -229,7 +229,7 @@ public sealed partial class Viewer
             Text(heading, contentX, columnTop, HelpTitleSize, HelpBodyColor, max: contentWidth, unified: true, bold: true);
             Text(entry.Category + " · " + entry.Citation, contentX, columnTop + 38, 13, HelpSecondaryColor,
                 max: contentWidth, unified: true);
-            if (ManualButton("原文", new(contentX, columnTop + 67, 72, 32), enabled: entry.Source.Length > 0))
+            if (ManualButton(L.Get("原文"), new(contentX, columnTop + 67, 72, 32), enabled: entry.Source.Length > 0))
             {
                 var original = EditorManual.Entries.FirstOrDefault(e => e.Kind == "source" && e.Source == entry.Source);
                 if (original != null)
@@ -240,9 +240,9 @@ public sealed partial class Viewer
                     SelectManual(Array.FindIndex(manualResults, e => e.Id == original.Id));
                 }
             }
-            if (ManualButton("选用名字", new(contentX + 82, columnTop + 67, 112, 32), enabled: entry.Kind == "mod"))
+            if (ManualButton(L.Get("选用名字"), new(contentX + 82, columnTop + 67, 112, 32), enabled: entry.Kind == "mod"))
                 UseManualName(entry);
-            Text("只选名字，不自动创建事件或切换 obj", contentX + 210, columnTop + 74, 12, HelpSecondaryColor,
+            Text(L.Get("只选名字，不自动创建事件或切换 obj"), contentX + 210, columnTop + 74, 12, HelpSecondaryColor,
                 max: contentWidth - 210, unified: true);
             manualBodyRect = new(contentX, columnTop + 115, contentWidth,
                 Math.Max(1, manualListRect.Y + manualListRect.H - columnTop - 115));
@@ -259,7 +259,7 @@ public sealed partial class Viewer
             Canvas.Clip(null);
             DrawManualScrollbar(manualBodyRect, manualScroll, manualScrollMax, manualBodyRect.H, manualTotalHeight);
         }
-        Text($"{manualResults.Length} 个结果 · 目录/正文分别滚动 · ↑↓选择 · PgUp/PgDn 翻页 · Home/End 首尾",
+        Text(L.Format($"{manualResults.Length} 个结果 · 目录/正文分别滚动 · ↑↓选择 · PgUp/PgDn 翻页 · Home/End 首尾"),
             left, outer.Y + outer.H - 35, 13, HelpSecondaryColor, max: outer.W - 40, unified: true);
         // 末尾吞掉未被任何按钮消费的点击，防止它穿透到下面的片段选择上。
         if (!modalActive) click = false;

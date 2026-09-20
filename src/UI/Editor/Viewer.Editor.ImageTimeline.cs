@@ -43,7 +43,7 @@ public sealed partial class Viewer
             var box = new Rect(x, y + 6, width, 23); bool selected = selectedImageId == id && ActiveImageGroup?.Id == group.Id;
             Canvas.Fill(box, Mix(Theme.PanelRaised, Theme.Accent, selected ? .7f : .3f));
             Canvas.Border(box, selected ? white : soft, selected ? 2 : 1);
-            if (width > 40) Text(group.Label, x + 5, y + 11, 11, white, true, width - 12);
+            if (width > 40) Text(L.Get(group.Label), x + 5, y + 11, 11, white, true, width - 12);
             if (group.Duration > 0) Canvas.Fill(new(x + width - 4, y + 10, 2, 14), muted);
             else Canvas.Line(x + width / 2, y + 10, x + width / 2, y + 25, 2, white);
             if (!interactive || !click || !box.Contains(mouseX, mouseY) || !editorTracksRect.Contains(mouseX, mouseY)) continue;
@@ -51,7 +51,7 @@ public sealed partial class Viewer
             if (!group.Editable)
             {
                 imageInspector = false; expandedImageTracks.Add(id); layoutRevision = -1;
-                message = "Independent/dynamic image events: raw event editor.";
+                message = L.Get("Independent/dynamic image events: raw event editor.");
             }
             else
             {

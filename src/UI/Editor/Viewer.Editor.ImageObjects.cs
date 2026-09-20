@@ -159,10 +159,10 @@ public sealed partial class Viewer
     /// </summary>
     string ImageTransformIssue()
     {
-        if (editor == null || ActiveImageItem is not { } item) return "Waiting for image resources.";
+        if (editor == null || ActiveImageItem is not { } item) return L.Get("Waiting for image resources.");
         string issue = ImageObjectModel.DirectEditIssue(editor.Vsm, item, Current.Images.Items);
-        if (issue.Length > 0) return issue;
-        if (lockedImageItems.Contains(item.Id)) return "Image selection is locked. Unlock it in IMAGES.";
+        if (issue.Length > 0) return L.Get(issue);
+        if (lockedImageItems.Contains(item.Id)) return L.Get("Image selection is locked. Unlock it in IMAGES.");
         return "";
     }
     /// <summary>切换编辑目标并把播放头对到新的编辑拍。切到 KEY 时当场锁定插入点那一拍，之后播放头再走也不跟着变。</summary>
@@ -185,19 +185,19 @@ public sealed partial class Viewer
         var map = Current.Timeline.Bpm;
         if (imagePoseTarget == ImagePoseTarget.Path)
         {
-            if (channels != ImageChannels.Position) throw new InvalidOperationException("PATH mode edits positions only.");
+            if (channels != ImageChannels.Position) throw new InvalidOperationException(L.Get("PATH mode edits positions only."));
             var old = ReadImagePose(); editor.OffsetImagePath(selectedImageId, pose.X - old.X, pose.Y - old.Y, map);
         }
         else if (imagePoseTarget is ImagePoseTarget.Start or ImagePoseTarget.End)
         {
             var group = ActiveImageGroup;
             if (group == null || !group.Editable || (group.Channels & channels) != channels)
-                throw new InvalidOperationException("Select the animation for this property, or use INITIAL / KEY HERE.");
+                throw new InvalidOperationException(L.Get("Select the animation for this property, or use INITIAL / KEY HERE."));
             editor.SetImageEndpoint(group, imagePoseTarget == ImagePoseTarget.End, pose, channels, map, imageLinkNeighbors);
         }
         else if (imagePoseTarget == ImagePoseTarget.Initial) editor.SetInitialImagePose(selectedImageId, pose, channels, map);
         else editor.SetImagePose(selectedImageId, ImageEditBeat, pose, channels, map);
-        layoutRevision = -1; imageObjectError = ""; message = "Updated image: " + selectedImageId;
+        layoutRevision = -1; imageObjectError = ""; message = L.Get("Updated image: ") + selectedImageId;
     }
     /// <summary>
     /// 执行一次 image 编辑并把可预期的失败转成面板提示。只捕获这几类异常，
@@ -207,7 +207,7 @@ public sealed partial class Viewer
     {
         try { action(); imageObjectError = ""; }
         catch (Exception ex) when (ex is InvalidOperationException or FormatException or ArgumentException or System.IO.IOException)
-        { imageObjectError = ex.Message; message = "Image edit: " + ex.Message; }
+        { imageObjectError = ex.Message; message = L.Get("Image edit: ") + ex.Message; }
     }
     /// <summary>
     /// 按当前预设加一段 4 拍动画（outCubic）。continuePath 为真时从上一组的终点接着排，保证首尾相接不留缝。

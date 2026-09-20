@@ -37,6 +37,8 @@
 
 `SceneRenderer.Render` 保留显式阶段：对象背景/粒子、原房间与自定义背景、图片分层、轨道装饰、对象 before-playfield 回调、游玩轨道、固定判定装饰、proxy 合成、游戏 HUD、高优先级图片与文本、公共/对象后处理、GUI 覆盖和白闪。
 
+Custom 对象的 Proxy 在完整场景（包括所有 VSP 层、轨道、HUD、文字）合成后统一执行，对应原版 Draw_74 对 application_surface 的采样。此前的透明 field 分段用于组装未变换源画面；最终复制进 field 后清空 scene，再绘制固定边条和各 Proxy，防止原位画面残留。原生对象仍沿用原来的分阶段合成。
+
 `BeforeRails`、`BeforePlayfield`、`FixedJudgment`、`Gui` 是接口常量。新歌曲复用阶段，不增加曲名阶段。GUI 覆盖的位置不能通过任意移动 shader pass 来“顺便统一”。透明离屏场景的预乘/反预乘路径保持原行为，避免音符 alpha 被乘两次。
 
 ## SDL_GPU 组织

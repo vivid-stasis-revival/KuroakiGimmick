@@ -77,6 +77,43 @@ public static class VsmBeatRangeSelfTest
         // 而不是只在编辑器里显示出来。
         document.Add(editorMoved with { Id = Guid.NewGuid(), Beat = 10, RepeatEnd = 11, RepeatStep = .25 });
         Check(document.Lines.Last().Text.StartsWith("10(:11:0.25),") && Read(document.Text).Mods.Count == 1197, "duplicating a parenthesized clip roundtrips through the runtime reader");
+        // Structural loop edits must preserve expanded execution order, including dynamic starts.
+        var loops = VsmDocument.FromText("!proxies:2\r\n-1(:0:.25),.125,outSine,_,20,prx,1 // keep once\r\nmpf\r\n0,4,untouched");
+        var beforeSplit = Read(loops.Text);
+        var splitIds = loops.SplitLoops(loops.Clips.Select(c => c.Id));
+        Check(splitIds.Length == 5 && loops.Clips.All(c => c.RepeatEnd == null), "split expands a fractional negative loop into individually editable events");
+        Check(loops.Text.Split("keep once").Length == 2 && loops.Text.EndsWith("mpf\r\n0,4,untouched"), "split retains comments once and leaves mpf untouched");
+        bool SameEvents(Chart x, Chart y) => x.Mods.Select(m => (m.Beat, m.Duration, m.Ease, m.From, m.To, m.Name, m.Proxy))
+            .SequenceEqual(y.Mods.Select(m => (m.Beat, m.Duration, m.Ease, m.From, m.To, m.Name, m.Proxy)));
+        Check(SameEvents(beforeSplit, Read(loops.Text)), "split preserves production-reader event order and dynamic values");
+        var mergedId = loops.MergeLoop(splitIds.Reverse());
+        Check(mergedId == splitIds[0] && loops.Clips.Single().ParenthesizedRepeat && loops.Clips.Single().RepeatCount == 5,
+            "merge uses source order regardless of selection order and retains the first identity");
+        Check(SameEvents(beforeSplit, Read(loops.Text)), "split then merge preserves all runtime occurrences");
+        var noNewline = VsmDocument.FromText("0:1:.5,0,linear,0,1,pra,0");
+        noNewline.SplitLoops(noNewline.Clips.Select(c => c.Id));
+        Check(noNewline.Clips.Count() == 3 && Read(noNewline.Text).Mods.Count == 3 && !noNewline.Text.EndsWith('\n'), "split separates rows even when the source has no final newline");
+        var repeated = VsmDocument.FromText("0:1:.5,0,linear,0,1,pra,0\n1.5:2:.5,0,linear,0,1,pra,0 // retained\n");
+        repeated.MergeLoop(repeated.Clips.Select(c => c.Id));
+        Check(repeated.Clips.Single().RepeatCount == 5 && repeated.Text.EndsWith("// retained\n"), "compatible loops merge and preserve removed-row comments");
+        foreach (var bad in new[]
+        {
+            "0,0,linear,0,1,pra,0\n1,0,linear,0,1,pra,1\n", // different proxy
+            "0,0,linear,0,1,pra,0\n1,0,linear,0,2,pra,0\n", // different payload
+            "0,0,linear,0,1,pra,0\n0,0,linear,0,1,pra,0\n", // duplicate beat
+            "1,0,linear,0,1,pra,0\n0,0,linear,0,1,pra,0\n", // reverse source order
+            "0,0,linear,0,1,pra,0\n1,0,linear,0,1,pra,0\n3,0,linear,0,1,pra,0\n", // gap
+            "0,0,linear,0,1,pra,0\nopaque::event\n1,0,linear,0,1,pra,0\n"
+        })
+        {
+            var rejectedDoc = VsmDocument.FromText(bad); bool rejected = false;
+            try { rejectedDoc.MergeLoop(rejectedDoc.Clips.Select(c => c.Id)); } catch (FormatException) { rejected = true; }
+            Check(rejected && rejectedDoc.Text == bad, "invalid merge rejects atomically: " + bad.Replace('\n', '|'));
+        }
+        var interleaved = VsmDocument.FromText("0,0,linear,0,1,pra,0\n0,0,linear,0,50,prx,0\n1,0,linear,0,1,pra,0\n");
+        bool blocked = false;
+        try { interleaved.MergeLoop(interleaved.Clips.Where(c => c.Name == "pra").Select(c => c.Id)); } catch (FormatException) { blocked = true; }
+        Check(blocked && interleaved.Clips.Count() == 3, "merge cannot reorder selected events across another source event");
         Console.WriteLine($"{checks} beat-range checks passed."); return checks;
     }
 }

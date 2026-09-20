@@ -39,18 +39,21 @@ public sealed partial class Viewer : IDisposable
     double rangeIn, rangeOut;
     double? resumePosition;
     int fps = 60, resolution = 1, diagnosticPage;
-    string message = "Open a .vsb/.vsc chart, .vsm or song folder.";
+    string message = L.Get("Open a .vsb/.vsc chart, .vsm or song folder.");
     readonly Stopwatch uptime = Stopwatch.StartNew();
     double lastFrame, measuredFps = 60;
     /// <summary>任何图片加载、谱面导出、会话加载或仍在进行的视频导出都算忙；导出一旦完成、取消或出错就不再计入，由 Update 负责回收。</summary>
     bool Busy => imageLoad != null || ChartExportBusy || loading != null || export is { Completed: false, Cancelled: false, Error: null };
     /// <summary>所有 GPU 资源（Canvas、字体、logo、Renderer）在窗口线程创建；silent 表示无音频、也不套用用户偏好。</summary>
-    public Viewer(Host h, Session session, bool silent = false, bool applyPreferences = true)
+    public Viewer(Host h, Session session, bool silent = false, bool applyPreferences = true, string? uiLanguage = null)
     {
         this.applyPreferences = applyPreferences;
+        if (uiLanguage != null) preferences.UiLanguage = UiLanguage.Normalize(uiLanguage);
+        L.SetLanguage(preferences.UiLanguage);
         host = h;
         Canvas = new(h.Gpu);
         fonts = new(h.Gpu);
+        fonts.SetInterfaceLanguage(L.Language);
         logo = Texture.Load(h.Gpu, Path.Combine(Paths.Assets, "Brand", "kuroaki.png"), linear: true);
         Renderer = new(Canvas);
         Current = session;
@@ -76,18 +79,18 @@ public sealed partial class Viewer : IDisposable
         transport.SetChartPlayback(s.Playback);
         transport.SetVolume(s.Project.PreviewVolume);
         transport.SetDelay(s.Project.AudioDelayMs);
-        message = $"Loaded {s.Chart.Notes.Count(n=>n.Type is not (3 or 4 or 5)):N0} notes / {s.Chart.Mods.Count:N0} events.";
+        message = L.Format($"Loaded {s.Chart.Notes.Count(n=>n.Type is not (3 or 4 or 5)):N0} notes / {s.Chart.Mods.Count:N0} events.");
         if (s.IsEmpty)
         {
-            message = "Open a chart, .vsm or song folder to begin.";
+            message = L.Get("Open a chart, .vsm or song folder to begin.");
         }
         else if (s.Project.Chart == null)
         {
-            message = "No chart attached: effects and lane only. Attach a .vsb/.vsc to load notes.";
+            message = L.Get("No chart attached: effects and lane only. Attach a .vsb/.vsc to load notes.");
         }
         if (transport.AudioError != null)
         {
-            message = "Preview is silent: " + transport.AudioError;
+            message = L.Get("Preview is silent: ") + transport.AudioError;
         }
         Sdl.SDL_SetWindowTitle(host.Window, "Kuroaki/Gimmick");
     }
@@ -139,7 +142,7 @@ public sealed partial class Viewer : IDisposable
             }
             return s;
         });
-        message = "Loading chart and audio...";
+        message = L.Get("Loading chart and audio...");
     }
 
     /// <summary>重新解析源文件。先记下播放位置，加载完成后由 Update 恢复，重载不会把进度打回 0。</summary>
@@ -154,7 +157,7 @@ public sealed partial class Viewer : IDisposable
         transport.SetPlaying(false);
         var p = Current.Project.Copy();
         loading = Task.Run(() => new Session(p, Current.ProjectPath));
-        message = "Reloading source files...";
+        message = L.Get("Reloading source files...");
     }
 
     /// <summary>
@@ -190,7 +193,7 @@ public sealed partial class Viewer : IDisposable
         }
         transport.SetPlaying(false);
         loading = Task.Run(() => new Session(p, Current.ProjectPath));
-        message = "Applying timing settings...";
+        message = L.Get("Applying timing settings...");
     }
 
     /// <summary>
@@ -273,7 +276,7 @@ public sealed partial class Viewer : IDisposable
             Current.Project.Notes = notes;
             Current.Project.PostProcessing = effects;
             Current.Save(path);
-            message = "Project saved: " + path;
+            message = L.Get("Project saved: ") + path;
         });
     }
 
@@ -305,7 +308,7 @@ public sealed partial class Viewer : IDisposable
             }
             [resolution];
             export = new(Canvas, Renderer, Current, new(path, rangeIn, rangeOut, fps, width, width * 9 / 16, notes, effects));
-            message = "Rendering video...";
+            message = L.Get("Rendering video...");
         });
     }
 
@@ -314,7 +317,7 @@ public sealed partial class Viewer : IDisposable
         Directory.CreateDirectory(Paths.Output);
         var path = Path.Combine(Paths.Output, "compatibility_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".json");
         File.WriteAllText(path, Current.Report(transport.Position));
-        message = "Report saved: " + path;
+        message = L.Get("Report saved: ") + path;
     }
 
     void ToggleFull()
@@ -353,7 +356,10 @@ public sealed partial class Viewer : IDisposable
         Canvas.Fill(r, fill);
         Canvas.Border(r, primary ? red : Mix(line, soft, Math.Max(hover, selected)));
         var color = enabled ? (primary ? Color.Hex(0xFFFFFF) : white) : Color.Hex(0x8998AC);
-        Text(label, r.X + (r.W - fonts.Measure(label, 13)) / 2, r.Y + (r.H - 13) / 2 - 1, 13, color);
+        float availableWidth = Math.Max(1, r.W - 12);
+        float size = Math.Clamp(13 * availableWidth / Math.Max(1, fonts.Measure(label, 13)), 10, 13);
+        float textWidth = Math.Min(availableWidth, fonts.Measure(label, size));
+        Text(label, r.X + (r.W - textWidth) / 2, r.Y + (r.H - size) / 2 - 1, size, color, max: availableWidth);
         return available && click && over;
     }
 
@@ -362,7 +368,7 @@ public sealed partial class Viewer : IDisposable
     void FileRow(string label, string? value, float x, float y, float w)
     {
         Label(label, x, y);
-        Text(value == null ? "Not attached" : Path.GetFileName(value), x, y + 18, 12, value == null ? muted : white, max : w);
+        Text(value == null ? L.Get("Not attached") : Path.GetFileName(value), x, y + 18, 12, value == null ? muted : white, max : w);
     }
 
     public void SetTime(double t) => transport.Seek(t);

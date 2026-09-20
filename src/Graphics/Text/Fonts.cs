@@ -7,8 +7,8 @@ namespace KuroakiGimmick.Graphics;
 /// <summary>
 /// 界面字体图集的加载与文字批处理。
 ///
-/// sans / mono 保持现有 Viewer 与时间轴标签的紧凑风格；缺失字符会回退到
-/// Kuroaki 自带的 cjk-editor 位图图集。Editor 的 gimmick 帮助卡可显式要求
+/// 中文主界面使用内嵌 IBM Plex Sans SC Medium；英文保持原有 sans / mono / cjk-editor。
+/// 中文数字按统一步进绘制，计时不会抖动。Editor 的 gimmick 帮助卡可显式要求
 /// unified 模式，让中文、英文与数字全部使用独立的 Noto Sans CJK SC 比例字体。
 /// 帮助字体拥有自己的 em 尺寸、字形轴承与字重，不复用旧图集的 32px 缩放约定。
 /// </summary>
@@ -45,6 +45,7 @@ public sealed partial class Fonts : IDisposable
 
         LoadCjkAtlas(gpu);
         LoadHelpAtlases(gpu);
+        LoadUiAtlases(gpu);
     }
 
     /// <summary>CJK 回退图集缺失或损坏不算致命错误：只把原因写进 stderr，ASCII 界面继续可用。</summary>
@@ -114,10 +115,12 @@ public sealed partial class Fonts : IDisposable
         {
             string key = rune.ToString();
 
-            // Editor 帮助卡可以让整行文字都使用同一套支持 CJK 的字体。
-            // 否则中文段落里夹带的 Latin 标识符会逐字形在 DejaVu 与
-            // CJK 图集之间来回切换。
-            if (unified && TryCjk(rune, out _, out var unifiedGlyph))
+            // 字体随界面语言选择，量宽与绘制走同一分支。
+            if (TryUiGlyph(rune, out var uiAtlas, out var uiGlyph))
+            {
+                width += UiAdvance(uiAtlas, uiGlyph, rune, size);
+            }
+            else if (unified && TryCjk(rune, out _, out var unifiedGlyph))
             {
                 width += unifiedGlyph.advance * scale;
             }
@@ -139,7 +142,7 @@ public sealed partial class Fonts : IDisposable
     }
 
     /// <summary>
-    /// 回退顺序：unified 时先用帮助图集，其次 unified 的 CJK 图集，再次 sans/mono，最后 sans/mono 的 '?'。
+    /// unified 使用文档图集；中文 UI 使用 IBM Plex Sans SC Medium，英文使用原有 sans/mono/CJK。
     /// 字形四边形整体偏移 (-2,-3)*scale，这是图集烘焙时的留白补偿，改掉会让全部界面文字位移。
     /// </summary>
     public void Text(Canvas c, string text, float x, float y, float size, Color color,
@@ -166,7 +169,13 @@ public sealed partial class Fonts : IDisposable
             float advance;
             string key = rune.ToString();
 
-            if (unified && TryCjk(rune, out var unifiedTexture, out var unifiedGlyph))
+            if (TryUiGlyph(rune, out var uiAtlas, out var uiGlyph))
+            {
+                advance = UiAdvance(uiAtlas, uiGlyph, rune, size);
+                if (x - start + advance > maxWidth) break;
+                DrawUiGlyph(c, uiAtlas, uiGlyph, x, y, size, color);
+            }
+            else if (unified && TryCjk(rune, out var unifiedTexture, out var unifiedGlyph))
             {
                 advance = unifiedGlyph.advance * scale;
                 if (x - start + advance > maxWidth) break;
@@ -223,5 +232,7 @@ public sealed partial class Fonts : IDisposable
         cjk?.Dispose();
         helpRegular?.Dispose();
         helpBold?.Dispose();
+        uiRegular?.Dispose();
+        uiBold?.Dispose();
     }
 }

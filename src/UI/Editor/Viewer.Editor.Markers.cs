@@ -28,8 +28,8 @@ public sealed partial class Viewer
             {
                 activeMarker = marker.Id; selectedClip = null; selectedWindowEvent = -1; selectedNoteTime = null;
                 transport.SetPlaying(false); transport.Seek(Current.Timeline.Bpm.Time(marker.Beat)); click = false;
-                if (mouseClicks >= 2) OpenValue("Marker label", marker.Label, value => editor.RenameMarker(marker.Id, value));
-                message = $"Target marker {marker.Label}: beat {marker.Beat:0.######}. Shift+E deletes; CLEAR TARGET releases insertion target.";
+                if (mouseClicks >= 2) OpenValue(L.Get("Marker label"), marker.Label, value => editor.RenameMarker(marker.Id, value));
+                message = L.Format($"Target marker {marker.Label}: beat {marker.Beat:0.######}. Shift+E deletes; CLEAR TARGET releases insertion target.");
             }
         }
         Canvas.Clip(null);

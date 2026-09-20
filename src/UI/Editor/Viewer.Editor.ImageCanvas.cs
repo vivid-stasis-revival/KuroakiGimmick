@@ -109,7 +109,7 @@ public sealed partial class Viewer
             Text(selected.Item.Id, viewport.X + 10, viewport.Y + 34, 13, white, max: viewport.W - 20);
         }
         Canvas.Fill(new(viewport.X, viewport.Y, viewport.W, 27), panel);
-        Text("IMAGE CANVAS  /  LOCAL 320 x 180  /  NO PROXY OR SCREEN FX", viewport.X + 10, viewport.Y + 7, 11, white, max: viewport.W - 20);
+        Text(L.Get("IMAGE CANVAS  /  LOCAL 320 x 180  /  NO PROXY OR SCREEN FX"), viewport.X + 10, viewport.Y + 7, 11, white, max: viewport.W - 20);
         Canvas.Clip(null);
         HandleImageCanvasClick(viewport);
     }
@@ -224,12 +224,12 @@ public sealed partial class Viewer
         if (Math.Abs(Current.Timeline.Bpm.Beat(transport.Position) - ImageEditBeat) > 1e-8)
         {
             transport.Seek(Current.Timeline.Bpm.Time(ImageEditBeat));
-            message = "Positioned at " + imagePoseTarget + ". Drag again to edit this pose."; return;
+            message = L.Get("Positioned at ") + imagePoseTarget + L.Get(". Drag again to edit this pose."); return;
         }
         ImageChannels channel = kind == 0 ? ImageChannels.Position : kind == 1 ? ImageChannels.Scale : ImageChannels.Rotation;
         if (imagePoseTarget is ImagePoseTarget.Start or ImagePoseTarget.End && ActiveImageGroup is { } group &&
             (!group.Editable || (group.Channels & channel) == 0))
-        { imageObjectError = "Select INITIAL / KEY, or the animation for this property."; return; }
+        { imageObjectError = L.Get("Select INITIAL / KEY, or the animation for this property."); return; }
         var pose = ReadImagePose(); var offset = pointer - new Vector2((float)pose.X, (float)pose.Y);
         imageDragPose = pose; imageDragMoved = false;
         imageRotationLastAngle = MathF.Atan2(offset.Y, offset.X); imageRotationAccumulated = 0;

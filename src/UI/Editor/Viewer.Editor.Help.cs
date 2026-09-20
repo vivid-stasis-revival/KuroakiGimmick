@@ -155,7 +155,7 @@ public sealed partial class Viewer
         Canvas.Fill(new(card.X + 1, card.Y + 1, card.W - 2, 2), Theme.AccentSoft);
         Canvas.Clip(card);
 
-        string target = track.Window ? "WINDOW " + track.Target : track.Target < 0 ? "GLOBAL" : "PROXY " + track.Target;
+        string target = track.Window ? L.Get("WINDOW ") + track.Target : track.Target < 0 ? L.Get("GLOBAL") : L.Get("PROXY ") + track.Target;
         float targetWidth = fonts.Measure(target, 12, unified: true) + 18;
         float textX = card.X + HelpPadding, textWidth = Math.Max(1, card.W - HelpPadding * 2);
         float titleWidth = Math.Max(1, textWidth - targetWidth - 20);
@@ -201,9 +201,9 @@ public sealed partial class Viewer
         }
 
         string hint = detailed
-            ? helpCardScrollMax > 0 ? "松开 W 收起 · W + 滚轮翻阅 · F1 打开手册" : "松开 W 收起 · F1 打开手册"
-            : trackHelpWHeld ? "正在展开详情…" : "按住 W 查看详细说明 · F1 打开手册";
-        if (!fonts.HasReadableHelpFont) hint = "字体资源缺失，请完整覆盖 v0.1.2 源码包";
+            ? helpCardScrollMax > 0 ? L.Get("松开 W 收起 · W + 滚轮翻阅 · F1 打开手册") : L.Get("松开 W 收起 · F1 打开手册")
+            : trackHelpWHeld ? L.Get("正在展开详情…") : L.Get("按住 W 查看详细说明 · F1 打开手册");
+        if (!fonts.HasReadableHelpFont) hint = L.Get("字体资源缺失，请完整覆盖 v0.1.2 源码包");
         Text(hint, textX, footerTop, 12, fonts.HasReadableHelpFont ? HelpSecondaryColor : Color.Hex(0xFFA8B3),
             max: textWidth, unified: true);
         Canvas.Clip(null);

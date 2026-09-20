@@ -11,6 +11,8 @@ public static class ModCatalog
     {
         Supported.Add("fx_film");
         Supported.Add("playspeed");
+        Supported.Add("prtrX");
+        Supported.Add("prtrY");
         // 保留这个谱面控制项但不报警告：Viewer 有意不绘制连击数字，所以它没有可见效果。
         Supported.Add("hide_combo");
         // obj_custom_gimmick 的 InitSkinChange 用 addExtraMod 注册的，默认 0（正常皮肤），
