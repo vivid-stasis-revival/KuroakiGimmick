@@ -81,6 +81,9 @@ public sealed partial class Viewer
         // 剧情轨要排在设置面板那一段之前：它自带完整的开关编辑器流程，而下面几条断言靠的是查看器自己的布局。
         SmokeEpisodeUi();
         editorMode = false; Draw(1440, 940);
+        // 同理排在设置面板之前：那一段在当前构建里本来就是红的，放在它后面等于永远跑不到。
+        SmokeShatterDrop();
+        Draw(1440, 940);
         if (Current.GameUi.Data?.Fonts.ContainsKey(ViewerSettings.MonacoFont) == true)
         {
             string saved = Current.Project.GameUiFont;

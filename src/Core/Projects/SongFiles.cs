@@ -35,26 +35,31 @@ public static class SongFiles
     }
 
     /// <summary>
-    /// 把谱面/VSM/VSP 路径、info.json 或歌曲目录展开成工程；目录形式按固定难度候选顺序挑选，不依赖文件系统枚举顺序。
-    /// 直接给出 info.json / song.json 等同于打开它所在的歌曲目录。
+    /// 把谱面/VSM/VSP 路径、歌曲信息文件或歌曲目录展开成工程；目录形式按固定难度候选顺序挑选，不依赖文件系统枚举顺序。
+    /// 直接给出 info.json / song.json 等同于打开它所在的歌曲目录；shatterinfo.json 则直接落到 SHATTER 谱面——
+    /// 它只描述这一个难度，按目录优先级打开会落到同目录的常规难度上去。
     /// </summary>
     public static ViewerProject Open(string path)
     {
         path = Path.GetFullPath(path);
-        if (File.Exists(path) && Path.GetFileName(path).ToLowerInvariant() is "info.json" or "song.json")
+        if (File.Exists(path) && SongInfo.IsInfoFile(path))
         {
-            path = Path.GetDirectoryName(path)!;
+            string folder = Path.GetDirectoryName(path)!;
+            path = (Path.GetFileName(path).Equals(SongInfo.ShatterFile, StringComparison.OrdinalIgnoreCase)
+                ? Existing(folder, "SHATTER.vsb", "SHATTER.vsc", "SHATTER.vsm") : null) ?? folder;
         }
         if (Directory.Exists(path))
         {
             string? chosen = null;
-            // 固定的难度优先级，保证同一目录每次打开都落到同一个谱面。
+            // 固定的难度优先级，保证同一目录每次打开都落到同一个谱面。SHATTER 排在四个常规难度之后：
+            // 同目录有常规谱面时它不该抢先，只有它一张谱面时也不必落进下面按字母枚举的兜底。
             foreach (string candidate in new[]
             {
                 "ENCORE",
                 "FINALE",
                 "MIDDLE",
                 "OPENING",
+                "SHATTER",
                 "GLOBAL"
             })
             {
@@ -70,7 +75,7 @@ public static class SongFiles
         string ext = Path.GetExtension(path).ToLowerInvariant();
         if (ext is not (".vsb" or ".vsc" or ".vsm" or ".vsp"))
         {
-            throw new InvalidDataException("Open a .vsb, .vsc, .vsm, .vsp, info.json, song folder or .sgv.json project.");
+            throw new InvalidDataException("Open a .vsb, .vsc, .vsm, .vsp, info.json, shatterinfo.json, song folder or .sgv.json project.");
         }
         string dir = Path.GetDirectoryName(path)!, difficulty = Difficulty(path);
         var p = new ViewerProject
@@ -109,7 +114,7 @@ public static class SongFiles
 
     /// <summary>
     /// 一个可切换的难度。<c>Chart</c> 为 null 表示该难度在这个目录下没有谱面文件（谱包可能只写了信息槽
-    /// 或附属信息文件却没放谱面），此时只作为不可点的占位显示。
+    /// 或 shatterinfo.json 却没放谱面），此时只作为不可点的占位显示。
     /// </summary>
     public sealed record SongDifficulty(string Name, string Display, string? Level, string? Designer, string? Chart, bool Backstage);
 

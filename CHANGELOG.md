@@ -17,11 +17,12 @@
 
 ### SHATTER 的等级与谱师（修复）
 
-- `<难度>info.json` 此前根本不读。SHATTER 的等级与谱师写在同目录的 `shatterinfo.json` 里，字段是单数的 `difficulty_number` / `note_designer` 而不是带 `_N` 后缀的槽位字段，所以主 `info.json` 的第 5 槽几乎总是空的——等级与谱师一路显示为空，信息卡片的难度徽章也就一直是块空底板。
-- 手头 206 个谱包里有 18 个带 `shatterinfo.json`，其中 13 个**连主 `info.json` 都没有**：曲名、曲师、BPM、封面作者整首歌的信息都在这一份文件里。此前这类歌开出来标题就是难度名 `SHATTER`、曲师为空、BPM 退回默认值。现在主文件缺失（或损坏）时由附属文件顶上全曲字段。
-- 全曲字段里附属文件排在主曲之后：它写的往往是"曲名 [Shatter]"这种带难度后缀的变体，主曲写了曲名就该听主曲的。等级与谱师反过来以附属文件为准，那才是这个难度自己的数据。
-- 槽位认文件名不认文件内容。游戏就是按难度拼出 `shatterinfo.json` 去找的，`difficulty_name` 只是显示用的标签：真有谱包在里面写着 `EVIL`，那条谱面仍旧是 `SHATTER.vsc`、仍旧算第 5 槽，只有界面上的难度名跟着改。
-- 附属文件与主文件共用同一套读取约束（4 MiB 上限、根必须是对象、解析失败只上报诊断），损坏时只丢它自己那一份，主曲照常显示。绝大多数谱包一份附属文件都没有，因此先一次性探"有没有"，不逐个难度把同一个目录枚举五遍。
+- `shatterinfo.json` 此前根本不读。歌曲信息文件只有 `info.json` 与它两种：其余难度的等级与谱师都写在 `info.json` 带 `_N` 后缀的槽位字段里，没有各自的文件；SHATTER 的写在 `shatterinfo.json` 里，字段是单数的 `difficulty_number` / `note_designer`，所以 `info.json` 的第 5 槽几乎总是空的——等级与谱师一路显示为空，信息卡片的难度徽章也就一直是块空底板。
+- 手头 206 个谱包里有 18 个带 `shatterinfo.json`，其中 13 个**连 `info.json` 都没有**：曲名、曲师、BPM、封面作者整首歌的信息都在这一份文件里。此前这类歌开出来标题就是难度名 `SHATTER`、曲师为空、BPM 退回默认值。现在 `info.json` 缺失（或损坏）时由 `shatterinfo.json` 顶上全曲字段。
+- 全曲字段里 `shatterinfo.json` 排在 `info.json` 之后：它写的往往是"曲名 [Shatter]"这种带难度后缀的变体，`info.json` 写了曲名就该听 `info.json` 的。等级与谱师反过来以 `shatterinfo.json` 为准，那才是这个难度自己的数据。
+- 认谱面文件名不认文件内容，`difficulty_name` 只是显示用的标签：真有谱包在里面写着 `EVIL`，那条谱面仍旧是 `SHATTER.vsc`，等级与谱师仍旧归 SHATTER，只有界面上的难度名跟着改。
+- `shatterinfo.json` 与 `info.json` 共用同一套读取约束（4 MiB 上限、根必须是对象、解析失败只上报诊断），损坏时只丢它自己那一份，主曲照常显示。
+- 直接打开或拖入 `shatterinfo.json` 打开的是同目录的 SHATTER 谱面，因为它只描述这一个难度。打开目录或 `info.json` 仍按原来的难度优先级（ENCORE → FINALE → MIDDLE → OPENING）选谱面，SHATTER 接在这四个之后。
 - 顺带修好难度徽章：认不出的等级（有谱包把 SHATTER 的难度写成 `17+++`）此前是先把 LEVEL 底板画下去、再发现数字没有对应帧，于是调用方退回来的文字压在 LEVEL 字样上糊成一团。现在帧号先定下来再落笔，画不出就整块让位给文字。
 
 ### 界面字体改为运行时栅格化
@@ -40,15 +41,15 @@
 
 - `info.json` 的 `enc_data` 此前只用于覆盖曲名与曲师，`jacket` 与 `audio_id` 两项根本没有读取。结果是 ENCORE 难度拿到主曲的 `jacket.png` 与 `music.ogg`，而不是 `enc_data` 指明的那一套；由于打开歌曲目录时 ENCORE 的候选优先级最高，一进去就会踩到。
 - 新增 `SongInfo`：把 `info.json` 建模成带 encore 语义的类型，`Effective(难度)` 逐字段覆盖并对缺项回落主曲。只写了 `audio_id` / `jacket` 的部分 `enc_data` 因此仍保留主曲的曲名与 BPM。
-- `hide_backstage` 为真才显示 ENCORE，缺省显示 BACKSTAGE。等级与谱师取主曲的第 4 槽（该难度另有 `<难度>info.json` 时以附属文件为准）；缺 `difficulty_display_N` 时按 `difficulty_constant_N` 生成（17.1 → "17"）。
+- `hide_backstage` 为真才显示 ENCORE，缺省显示 BACKSTAGE。等级与谱师取主曲的第 4 槽；缺 `difficulty_display_N` 时按 `difficulty_constant_N` 生成（17.1 → "17"）。
 - 只有 `info.json` 明确写出文件名时才覆盖，没写就沿用原有的同目录候选顺序，不新增猜测。
 
 ### 难度切换
 
-- 歌曲目录带 `info.json` 或 `<难度>info.json` 且存在多个难度时，左栏 `01 / SOURCES` 出现一排难度方块，显示各自的等级；带 `enc_data` 的 ENCORE 显示为 BACKSTAGE，只有信息槽而没有谱面文件的难度置灰。
+- 歌曲目录带 `info.json` 或 `shatterinfo.json` 且存在多个难度时，左栏 `01 / SOURCES` 出现一排难度方块，显示各自的等级；带 `enc_data` 的 ENCORE 显示为 BACKSTAGE，只有信息槽而没有谱面文件的难度置灰。
 - 切换等价于打开目标谱面：音频、封面、VSM 与 BPM 全部重新解析，因此 BACKSTAGE 会换成 `enc_data` 的那一套。`CHART` 行同时显示当前难度与等级。
 - 打开 `.sgv.json` 工程时不提供切换：工程钉住了自己的图片、字幕与标记，换难度等于丢掉它们。
-- `info.json` / `song.json` 现在可以直接作为文件打开或拖入，等同于打开它所在的歌曲目录。
+- `info.json` / `song.json` 现在可以直接作为文件打开或拖入，等同于打开它所在的歌曲目录；`shatterinfo.json` 也可以，打开的是 SHATTER 谱面。
 
 ### 编辑器剪贴板
 

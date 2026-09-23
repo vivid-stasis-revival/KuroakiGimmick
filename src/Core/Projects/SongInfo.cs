@@ -6,7 +6,7 @@ namespace KuroakiGimmick.Core;
 /// <summary>
 /// info.json / song.json 的歌曲信息。ENCORE 的曲名、曲师、BPM、封面与音频由 enc_data 覆盖，
 /// enc_data 缺项回落主曲（部分谱包只在 enc_data 里写 audio_id / jacket）；难度等级与谱师取主曲的难度槽，
-/// 该难度另有附属文件（shatterinfo.json 这类）时以附属文件为准。
+/// SHATTER 的以同目录 shatterinfo.json 为准。
 /// 解析失败只上报错误文本、不抛错，损坏的显示信息不应遮住谱面本身。
 /// </summary>
 public sealed class SongInfo
@@ -40,19 +40,29 @@ public sealed class SongInfo
     /// <summary>enc_data 的原始内容；缺失时为 null，此时任何难度都不套用 backstage 语义。</summary>
     public EncoreData? Encore { get; private init; }
     Dictionary<int, SlotData> slots = [];
-    Dictionary<int, DifficultyFile> perDifficulty = [];
+    /// <summary>shatterinfo.json 的内容；目录里没有这份文件时为 null。</summary>
+    public ShatterData? Shatter { get; private set; }
 
     /// <summary>主曲第 N 槽的等级与谱师。SHATTER 这类没有对应槽的难度读不到值，显示为空而不是借用别的槽。</summary>
     public sealed record SlotData(double? Constant, string? Display, string? Designer);
 
     /// <summary>
-    /// 难度附属文件 <c>&lt;difficulty&gt;info.json</c>。现实里只有 SHATTER 会单独发一份：字段是单数的
-    /// difficulty_number / note_designer 而不是带 _N 后缀的槽位字段，所以主文件的第 5 槽几乎总是空的，
-    /// 等级与谱师只能从这里取。这类谱包多半连主文件都没有，曲名、曲师那些全曲字段也一并写在这里。
+    /// SHATTER 自己的信息文件。歌曲信息只有 info.json 与它两种，其余难度都写在 info.json 的 _N 槽位里、
+    /// 没有单独的文件。它的字段是单数的 difficulty_number / note_designer，所以主文件的第 5 槽几乎总是空的，
+    /// 等级与谱师只能从这里取；这类谱包多半连 info.json 都没有，曲名、曲师那些全曲字段也一并写在这里。
     /// </summary>
-    public sealed record DifficultyFile(int Slot, string Path, string? DifficultyName, string? ChartId, string? Name,
+    public sealed record ShatterData(string Path, string? DifficultyName, string? ChartId, string? Name,
         string? FormattedName, string? Artist, string? BpmDisplay, string? JacketArtist, string? Version,
         string? Level, string? Designer);
+
+    public const string ShatterFile = "shatterinfo.json";
+
+    /// <summary>
+    /// 能当作歌曲目录打开的信息文件。命令行、拖放与打开对话框共用这一个判断，免得三处各认各的，
+    /// 漏掉的那处表现出来就是"这个文件打不开"。
+    /// </summary>
+    public static bool IsInfoFile(string path) =>
+        System.IO.Path.GetFileName(path).ToLowerInvariant() is "info.json" or "song.json" or ShatterFile;
 
     /// <summary>
     /// enc_data。<c>HideBackstage</c> 为真才不算 backstage，缺省视为 backstage —— 与原版
@@ -70,53 +80,34 @@ public sealed class SongInfo
         string? AudioId, string? Jacket, string? PreviewId, double? Constant, string? Level, string? Designer);
 
     /// <summary>
-    /// 读取目录下的 info.json / song.json，连同各难度自带的 <c>&lt;difficulty&gt;info.json</c>。
-    /// 两类文件一个都没有才返回 null，解析失败经 <paramref name="error"/> 上报；主文件缺了但附属文件还在时，
-    /// 全曲字段由附属文件顶上——Shatter 谱包大多只发一份 shatterinfo.json，整首歌的信息都在里面。
+    /// 读取目录下的 info.json / song.json 与 shatterinfo.json。两份都没有才返回 null，解析失败经
+    /// <paramref name="error"/> 上报；info.json 缺了但 shatterinfo.json 还在时，全曲字段由后者顶上——
+    /// Shatter 谱包大多只发这一份文件，整首歌的信息都在里面。
     /// </summary>
     public static SongInfo? Read(string directory, Action<string>? error = null)
     {
-        Dictionary<int, DifficultyFile> perDifficulty = [];
-        string[] sidecars = [.. Order.Select(d => d.ToLowerInvariant() + "info.json")];
-        // 先一次性问"有没有任何一份附属文件"。绝大多数谱包一份都没有，逐个难度去探等于把同一个目录枚举五遍。
-        if (SongFiles.Existing(directory, sidecars) != null)
-        {
-            foreach (string difficulty in Order)
-            {
-                // 槽位认文件名不认文件内容：游戏就是按难度拼出这个文件名去找的。difficulty_name 只是显示用的标签，
-                // 真有谱包在 shatterinfo.json 里写着 EVIL，那条谱面仍旧是 SHATTER.vsc，仍旧算第 5 槽。
-                if (SongFiles.Existing(directory, difficulty.ToLowerInvariant() + "info.json") is not { } side)
-                {
-                    continue;
-                }
-                if (ReadDifficulty(side, Slot(difficulty), error) is { } data)
-                {
-                    perDifficulty[data.Slot] = data;
-                }
-            }
-        }
+        var shatter = SongFiles.Existing(directory, ShatterFile) is { } side ? ReadShatter(side, error) : null;
         var info = SongFiles.Existing(directory, "info.json", "song.json") is { } main ? ReadMain(main, error) : null;
         if (info == null)
         {
-            if (perDifficulty.Count == 0)
+            if (shatter == null)
             {
                 return null;
             }
-            // 主文件不在（或者刚刚已经报过解析失败）时按固定难度顺序取第一个附属文件当全曲信息。
-            var first = perDifficulty.OrderBy(kv => kv.Key).First().Value;
+            // info.json 不在（或者刚刚已经报过解析失败）时拿 shatterinfo.json 当全曲信息。
             info = new SongInfo
             {
-                Path = first.Path,
-                ChartId = first.ChartId,
-                Name = first.Name,
-                FormattedName = first.FormattedName,
-                Artist = first.Artist,
-                BpmDisplay = first.BpmDisplay,
-                JacketArtist = first.JacketArtist,
-                Version = first.Version
+                Path = shatter.Path,
+                ChartId = shatter.ChartId,
+                Name = shatter.Name,
+                FormattedName = shatter.FormattedName,
+                Artist = shatter.Artist,
+                BpmDisplay = shatter.BpmDisplay,
+                JacketArtist = shatter.JacketArtist,
+                Version = shatter.Version
             };
         }
-        info.perDifficulty = perDifficulty;
+        info.Shatter = shatter;
         return info;
     }
 
@@ -147,12 +138,12 @@ public sealed class SongInfo
         return info;
     });
 
-    static DifficultyFile? ReadDifficulty(string file, int slot, Action<string>? error) => Load(file, error, j =>
-        new DifficultyFile(slot, file, Text(j, "difficulty_name"), Text(j, "chart_id"), Text(j, "name"),
+    static ShatterData? ReadShatter(string file, Action<string>? error) => Load(file, error, j =>
+        new ShatterData(file, Text(j, "difficulty_name"), Text(j, "chart_id"), Text(j, "name"),
             Text(j, "formatted_name"), Text(j, "artist"), Text(j, "bpm_display"), Text(j, "jacket_artist"),
             Text(j, "version"), Text(j, "difficulty_number"), Text(j, "note_designer")));
 
-    /// <summary>主文件与难度附属文件共用的读取壳：4 MiB 上限、根必须是对象、解析失败只上报不抛错。</summary>
+    /// <summary>info.json 与 shatterinfo.json 共用的读取壳：4 MiB 上限、根必须是对象、解析失败只上报不抛错。</summary>
     static T? Load<T>(string file, Action<string>? error, Func<JsonElement, T?> build) where T : class
     {
         try
@@ -198,28 +189,31 @@ public sealed class SongInfo
 
     /// <summary>
     /// 该难度在 UI 上的名字。走 enc_data 且没有 hide_backstage 时 ENCORE 显示为 BACKSTAGE；
-    /// 附属文件写了 difficulty_name 就照写的显示，自造难度名（有谱包把 SHATTER 叫成 EVIL）才出得来。
+    /// shatterinfo.json 写了 difficulty_name 就照写的显示，自造难度名（有谱包把 SHATTER 叫成 EVIL）才出得来。
     /// </summary>
     public string DisplayDifficulty(string difficulty) => UsesEncore(difficulty) && !Encore!.HideBackstage
-        ? "BACKSTAGE" : FileOf(difficulty)?.DifficultyName ?? Normalize(difficulty);
+        ? "BACKSTAGE" : ShatterOf(difficulty)?.DifficultyName ?? Normalize(difficulty);
 
     public SlotData? SlotOf(string difficulty) => slots.GetValueOrDefault(Slot(difficulty));
 
-    /// <summary>该难度的附属文件；没有就是 null，此时等级与谱师照旧只看主曲的难度槽。</summary>
-    public DifficultyFile? FileOf(string difficulty) => perDifficulty.GetValueOrDefault(Slot(difficulty));
+    /// <summary>
+    /// 只有 SHATTER 难度才读 shatterinfo.json。认的是谱面文件名而不是文件里的 difficulty_name：
+    /// 有谱包在里面写着 EVIL，那条谱面仍旧是 SHATTER.vsc，只有界面上的难度名跟着改。
+    /// </summary>
+    ShatterData? ShatterOf(string difficulty) => Normalize(difficulty) == "SHATTER" ? Shatter : null;
 
     /// <summary>
     /// 合并出该难度实际生效的显示信息。enc_data 逐字段覆盖主曲，缺项回落 —— terabyte 这类只写了
     /// audio_id / jacket 的谱包必须保留主曲的曲名与 BPM，不能因为存在 enc_data 就整体替换。
-    /// 全曲字段里附属文件排在主曲之后：它写的常是"曲名 [Shatter]"这种带难度后缀的变体，主曲写了就该听主曲的。
-    /// 等级与谱师反过来以附属文件为准，那才是这个难度自己的数据。
+    /// 全曲字段里 shatterinfo.json 排在 info.json 之后：它写的常是"曲名 [Shatter]"这种带难度后缀的变体，
+    /// info.json 写了就该听 info.json 的。等级与谱师反过来以 shatterinfo.json 为准，那才是这个难度自己的数据。
     /// </summary>
     public SongView Effective(string difficulty)
     {
         bool encore = UsesEncore(difficulty);
         var e = encore ? Encore : null;
         var slot = SlotOf(difficulty);
-        var d = FileOf(difficulty);
+        var d = ShatterOf(difficulty);
         return new(Normalize(difficulty), DisplayDifficulty(difficulty), encore && !Encore!.HideBackstage, encore,
             e?.Name ?? Name ?? d?.Name, e?.FormattedName ?? FormattedName ?? d?.FormattedName,
             e?.Artist ?? Artist ?? d?.Artist, e?.BpmDisplay ?? BpmDisplay ?? d?.BpmDisplay,
