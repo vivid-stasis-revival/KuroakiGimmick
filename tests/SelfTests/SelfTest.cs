@@ -562,30 +562,49 @@ public static class SelfTest
             var shatterView = SongInfo.Read(shatter)!.Effective("SHATTER");
             Check(SongInfo.Level(shatterView) == "15+" && shatterView.Designer == "shatter charter",
                 "shatterinfo.json supplies the level and designer the main song has no slot for");
-            // 附属文件里的曲名多半是"曲名 [Shatter]"这种变体，主曲写了曲名就不该被它顶掉。
+            // shatterinfo.json 里的曲名多半是"曲名 [Shatter]"这种变体，info.json 写了曲名就不该被它顶掉。
             Check(shatterView.Name == "Main Song" && SongFiles.Open(Path.Combine(shatter, "SHATTER.vsc")).Title == "Main Song / SHATTER",
-                "the main song name outranks the per-difficulty file variant");
-            // 多数 Shatter 谱包根本没有主 info.json，整首歌的信息都在附属文件里。
+                "the info.json song name outranks the shatterinfo.json variant");
+            // 歌曲信息只有 info.json 与 shatterinfo.json 两种。别的难度没有自己的信息文件，
+            // 照 shatterinfo.json 的样子凭空造出来的 finaleinfo.json 不能被当真。
+            File.WriteAllText(Path.Combine(shatter, "finaleinfo.json"), "{\"difficulty_number\":\"99\",\"note_designer\":\"invented\"}");
+            File.WriteAllText(Path.Combine(shatter, "info.json"), "{\"name\":\"Main Song\",\"difficulty_display_3\":\"13\"}");
+            Check(SongInfo.Read(shatter)!.Effective("FINALE") is { Level: "13", Designer: null }
+                && !SongInfo.IsInfoFile(Path.Combine(shatter, "finaleinfo.json")),
+                "only shatterinfo.json is read beside info.json; there is no per-difficulty file for the other difficulties");
+            File.Delete(Path.Combine(shatter, "finaleinfo.json"));
+            // 直接打开或拖入 shatterinfo.json：它只描述 SHATTER，所以落到 SHATTER 谱面，
+            // 而不是像打开目录那样按优先级落到同目录的常规难度上。
+            File.WriteAllText(Path.Combine(shatter, "FINALE.vsc"), "0,3,0,b:245|t:0|v:undefined|s:undefined\n1000,0,0\n");
+            Check(SongInfo.IsInfoFile(shatterInfo) && SongInfo.IsInfoFile(Path.Combine(shatter, "ShatterInfo.JSON"))
+                && SongFiles.Open(shatterInfo).Chart?.EndsWith("SHATTER.vsc") == true
+                && SongFiles.Open(shatter).Chart?.EndsWith("FINALE.vsc") == true,
+                "shatterinfo.json opens its own SHATTER chart while the folder keeps its usual difficulty");
+            File.Delete(Path.Combine(shatter, "FINALE.vsc"));
+            // 多数 Shatter 谱包根本没有 info.json，整首歌的信息都在 shatterinfo.json 里。
             File.Delete(Path.Combine(shatter, "info.json"));
             var aloneView = SongInfo.Read(shatter)!.Effective("SHATTER");
             Check(aloneView.Name == "Main Song [Shatter]" && aloneView.Artist == "main" && aloneView.BpmDisplay == "245"
                 && SongInfo.Level(aloneView) == "15+", "a lone shatterinfo.json still names the song, not just the difficulty");
+            Check(SongFiles.Open(shatterInfo) is { Title: "Main Song [Shatter] / SHATTER", Bpm: 245 }
+                && SongFiles.Open(shatter).Chart?.EndsWith("SHATTER.vsc") == true,
+                "a folder holding only shatterinfo.json and a SHATTER chart opens from either the file or the folder");
             Check(SongFiles.Difficulties(shatter, SongInfo.Read(shatter))
                 .Single(d => d.Name == "SHATTER") is { Display: "SHATTER", Level: "15+", Chart: not null },
-                "difficulty enumeration picks up the level from the per-difficulty file");
-            // 槽位认文件名：有谱包把 shatterinfo.json 里的 difficulty_name 写成自造难度，谱面仍是 SHATTER.vsc，
-            // 等级谱师照旧进第 5 槽，只有 UI 上的难度名跟着改。
+                "difficulty enumeration picks up the level from shatterinfo.json");
+            // 认的是谱面文件名：有谱包把 shatterinfo.json 里的 difficulty_name 写成自造难度，谱面仍是 SHATTER.vsc，
+            // 等级谱师照旧归 SHATTER，只有 UI 上的难度名跟着改。
             File.WriteAllText(shatterInfo, "{\"difficulty_name\":\"EVIL\",\"difficulty_number\":\"17+++\",\"note_designer\":\"dracula\"}");
             var renamed = SongInfo.Read(shatter)!;
             Check(renamed.Effective("SHATTER").DisplayDifficulty == "EVIL" && SongInfo.Level(renamed.Effective("SHATTER")) == "17+++",
-                "a self-invented difficulty_name relabels the difficulty without moving its slot");
-            // 附属文件损坏时只丢它自己那一份；有主文件就该照常显示主曲。
+                "a self-invented difficulty_name relabels the difficulty without moving its data");
+            // shatterinfo.json 损坏时只丢它自己那一份；有 info.json 就该照常显示主曲。
             File.WriteAllText(Path.Combine(shatter, "info.json"), "{\"name\":\"Main Song\"}");
             File.WriteAllText(shatterInfo, "{\"difficulty_number\": ");
             var brokenSide = new Chart();
             var partial = SongInfo.Read(shatter, m => brokenSide.Diagnostics.Add(new("song-info", 0, m)));
             Check(partial?.Effective("SHATTER") is { Name: "Main Song", Level: null, DisplayDifficulty: "SHATTER" }
-                && brokenSide.Diagnostics.Count == 1, "a corrupt per-difficulty file reports once and leaves the main song readable");
+                && brokenSide.Diagnostics.Count == 1, "a corrupt shatterinfo.json reports once and leaves the main song readable");
             Directory.Delete(shatter, true);
             // 六项统计按原版 GetSongStats 计算。空谱面必须得到零而不是 NaN，长度为零则明确报错。
             var emptyCounts = SongStats.Measure([], 10);
