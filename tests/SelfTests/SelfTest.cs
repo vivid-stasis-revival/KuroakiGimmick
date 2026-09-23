@@ -855,6 +855,7 @@ public static class SelfTest
         checks += ObjectProfileSelfTest.Run();
         checks += LegacyCompatibilitySelfTest.Run();
         checks += RefactorSelfTest.Run();
+        checks += RecentProjectsSelfTest.Run();
         Console.WriteLine($"{checks} checks passed.");
         return 0;
     }

@@ -197,28 +197,30 @@ public sealed partial class Viewer
     void SaveEditor(bool saveAs = false, Action? after = null)
     {
         if (editor == null || Busy || ImageGestureActive) return;
-        void Save(string path)
-        {
-            if (editor == null) return;
-            try
-            {
-                string saved = editor.SaveCopy(path);
-                // 保存之后再次挂载 / 重新加载时必须用刚写出的伴生文件，而不是导入时的 VSM 路径。
-                Current.Project.EditorMarkers = editor.Markers.ToList();
-                Current.Project.Gimmick = editor.Project.Gimmick;
-                Current.Project.WindowMotion = editor.Project.WindowMotion;
-                Current.Project.Images = editor.Project.Images;
-                Current.Project.TextFiles = editor.Project.TextFiles == null ? null : new(editor.Project.TextFiles);
-                Current.Project.ImagePathsRelativeToVsp = editor.Project.ImagePathsRelativeToVsp;
-                renderedRevision = -1;
-                message = L.Get("Saved editor project: ") + saved; after?.Invoke();
-            }
-            catch (Exception ex) { message = L.Get("Save failed: ") + ex.Message; }
-        }
-        if (!saveAs && editor.SavedProjectPath != null) { Save(editor.SavedProjectPath); return; }
+        if (!saveAs && editor.SavedProjectPath != null) { SaveEditorAt(editor.SavedProjectPath, after); return; }
         string dir = Path.GetDirectoryName(Current.Project.Chart ?? Current.Project.Gimmick ?? Current.ProjectPath) ?? Paths.Output;
         string filename = "edit_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".sgv.json";
-        Dialog(true, Path.Combine(dir, filename), paths => Save(paths[0]));
+        Dialog(true, Path.Combine(dir, filename), paths => SaveEditorAt(paths[0], after));
+    }
+    /// <summary>Save 与 Save As 共用的成功提交点；只有 SaveCopy 真正完成才更新最近工程。</summary>
+    void SaveEditorAt(string path, Action? after = null)
+    {
+        if (editor == null) return;
+        try
+        {
+            string saved = editor.SaveCopy(path);
+            RememberRecentSource(saved);
+            // 保存之后再次挂载 / 重新加载时必须用刚写出的伴生文件，而不是导入时的 VSM 路径。
+            Current.Project.EditorMarkers = editor.Markers.ToList();
+            Current.Project.Gimmick = editor.Project.Gimmick;
+            Current.Project.WindowMotion = editor.Project.WindowMotion;
+            Current.Project.Images = editor.Project.Images;
+            Current.Project.TextFiles = editor.Project.TextFiles == null ? null : new(editor.Project.TextFiles);
+            Current.Project.ImagePathsRelativeToVsp = editor.Project.ImagePathsRelativeToVsp;
+            renderedRevision = -1;
+            message = L.Get("Saved editor project: ") + saved; after?.Invoke();
+        }
+        catch (Exception ex) { message = L.Get("Save failed: ") + ex.Message; }
     }
     /// <summary>返回 true 表示已拦截：有未保存修改时暂停播放并把动作挂起，等确认对话框决定是否真的丢弃。</summary>
     bool GuardUnsaved(Action discardAction)

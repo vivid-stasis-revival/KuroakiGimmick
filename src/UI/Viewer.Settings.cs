@@ -18,6 +18,7 @@ public sealed partial class Viewer
         preferences.UiLanguage = UiLanguage.Normalize(language);
         L.SetLanguage(preferences.UiLanguage);
         fonts.SetInterfaceLanguage(L.Language);
+        if (macMenu != null || windowsMenu != null) InstallNativeMenu();
         // Cached help and track labels must be measured again in the selected language.
         cachedHelpKey = manualCacheKey = referenceLayoutKey = "";
         layoutRevision = -1;
@@ -31,7 +32,7 @@ public sealed partial class Viewer
     {
         try
         {
-            preferences.Save(Current.Project);
+            preferences.Save(Current.Project, settingsPath);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

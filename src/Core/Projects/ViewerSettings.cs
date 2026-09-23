@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace KuroakiGimmick.Core;
 
@@ -56,6 +57,45 @@ public sealed class ViewerSettings
     /// <summary>音画对齐补偿，单位均为毫秒。AudioDelayMs 推迟声音，VisualDelayMs 推迟画面，两者相互独立。</summary>
     public double AudioDelayMs { get; set; }
     public double VisualDelayMs { get; set; }
+    /// <summary>设备本地最近打开的工程、谱面或歌曲文件夹；不属于任何 .sgv.json 工程。</summary>
+    public List<string> RecentProjects { get; set; } = [];
+    public const int MaxRecentProjects = 10;
+    static StringComparer RecentPathComparer => OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+    public void NormalizeRecentProjects()
+    {
+        var seen = new HashSet<string>(RecentPathComparer);
+        var normalized = new List<string>();
+        foreach (var value in RecentProjects ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(value)) continue;
+            try
+            {
+                var path = Path.TrimEndingDirectorySeparator(Path.GetFullPath(value));
+                if (!seen.Add(path)) continue;
+                normalized.Add(path);
+                if (normalized.Count == MaxRecentProjects) break;
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) { }
+        }
+        RecentProjects = normalized;
+    }
+    /// <summary>成功打开工程、谱面、歌曲文件夹或保存工程之后调用。</summary>
+    public bool RememberRecentSource(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        try
+        {
+            string full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+            if (!full.EndsWith(".sgv.json", StringComparison.OrdinalIgnoreCase) &&
+                Path.GetExtension(full).ToLowerInvariant() is not (".vsb" or ".vsc") && !Directory.Exists(full)) return false;
+            NormalizeRecentProjects();
+            RecentProjects.RemoveAll(p => RecentPathComparer.Equals(p, full));
+            RecentProjects.Insert(0, full);
+            if (RecentProjects.Count > MaxRecentProjects) RecentProjects.RemoveRange(MaxRecentProjects, RecentProjects.Count - MaxRecentProjects);
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) { return false; }
+    }
     /// <summary>偏好文件固定落在日志目录下，不随工程走——它是用户级设置，不属于任何一份工程。</summary>
     public static string SettingsPath => Path.Combine(Paths.LogDirectory, "settings.json");
     /// <summary>读不到或解析失败都退回全套默认值，并把原因写到 stderr；偏好文件损坏不能阻止程序启动。</summary>
@@ -68,9 +108,25 @@ public sealed class ViewerSettings
         }
         try
         {
-            var settings = JsonSerializer.Deserialize<ViewerSettings>(File.ReadAllText(path), ViewerProject.Json) ?? new();
+            // 最近工程是可丢弃的设备历史：它坏了只清这一项，不连带丢掉音量、字体等其它偏好。
+            var data = JsonNode.Parse(File.ReadAllText(path));
+            string? recentKey = (data as JsonObject)?.Select(pair => pair.Key)
+                .FirstOrDefault(key => string.Equals(key, nameof(RecentProjects), StringComparison.OrdinalIgnoreCase));
+            if (data is JsonObject obj && recentKey != null && obj.TryGetPropertyValue(recentKey, out var recents))
+            {
+                if (recents is JsonArray list)
+                {
+                    var safe = new JsonArray();
+                    foreach (var entry in list)
+                        if (entry is JsonValue value && value.TryGetValue<string>(out string? item)) safe.Add(item);
+                    obj[recentKey] = safe;
+                }
+                else obj.Remove(recentKey);
+            }
+            var settings = JsonSerializer.Deserialize<ViewerSettings>(data?.ToJsonString() ?? "null", ViewerProject.Json) ?? new();
             settings.Workspace ??= new(); settings.Workspace.Normalize(); settings.UiTheme = ValidTheme(settings.UiTheme);
             settings.UiLanguage = Core.UiLanguage.Normalize(settings.UiLanguage);
+            settings.NormalizeRecentProjects();
             return settings;
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
@@ -113,6 +169,15 @@ public sealed class ViewerSettings
         GameUiHoldEffects = p.GameUiHoldEffects;
         GameUiCombo = p.GameUiCombo;
         GameUiJudgement = p.GameUiJudgement;
+        Persist(path);
+    }
+
+    /// <summary>只持久化用户设置对象，不从当前工程抓取预览和 Game UI 默认值。</summary>
+    public void Persist(string? path = null)
+    {
+        Workspace ??= new(); Workspace.Normalize(); UiTheme = ValidTheme(UiTheme);
+        UiLanguage = Core.UiLanguage.Normalize(UiLanguage);
+        NormalizeRecentProjects();
         path ??= SettingsPath;
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         string temporary = path + ".tmp";

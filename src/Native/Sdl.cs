@@ -76,6 +76,20 @@ public static partial class Sdl
         ulong flags);
 
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint SDL_GetWindowProperties(nint window);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    public static extern nint SDL_GetPointerProperty(uint properties,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string name, nint fallback);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public delegate bool WindowsMessageHook(nint user, nint message);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    public static extern void SDL_SetWindowsMessageHook(WindowsMessageHook? callback, nint user);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     public static extern void SDL_DestroyWindow(nint window);
 
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
@@ -217,6 +231,14 @@ public static partial class Sdl
         [MarshalAs(UnmanagedType.I1)] bool multiple);
 
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    public static extern void SDL_ShowOpenFolderDialog(
+        DialogCallback callback,
+        nint user,
+        nint window,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string? location,
+        [MarshalAs(UnmanagedType.I1)] bool multiple);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     public static extern void SDL_ShowSaveFileDialog(
         DialogCallback callback,
         nint user,
@@ -262,4 +284,3 @@ public static partial class Sdl
             throw new InvalidOperationException(Error);
     }
 }
-

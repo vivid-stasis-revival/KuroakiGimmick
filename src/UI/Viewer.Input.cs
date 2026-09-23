@@ -18,6 +18,7 @@ public sealed partial class Viewer
     {
         // 先换算到逻辑坐标，再按优先级交给各手势 / 覆盖层处理器；任一处理器吃掉事件后，下方的 viewer 快捷键不再响应。
         e = LogicalInput(e);
+        if (HandleStartupInput(e)) return;
         if (HandleTextGesture(e)) return;
         if (HandleActiveImageGesture(e)) return;
         if (HandleLayoutInput(e)) return;
@@ -197,10 +198,14 @@ public sealed partial class Viewer
         // 后台解析完成后才在窗口线程切换会话；失败保留旧会话，只报错。resumePosition 无论成败都清空。
         if (loading is { IsCompleted: true })
         {
+            bool loaded = false;
             try
             {
-                UseSession(loading.GetAwaiter().GetResult());
+                var result = loading.GetAwaiter().GetResult();
+                UseSession(result);
                 ResetEditorForLoad();
+                if (loadingSourcePath != null) RememberRecentSource(loadingSourcePath);
+                loaded = true;
                 if (resumePosition is double position)
                 {
                     transport.Seek(position);
@@ -211,7 +216,9 @@ public sealed partial class Viewer
                 message = L.Get("Load failed: ") + ex.Message;
             }
             loading = null;
+            loadingSourcePath = null;
             resumePosition = null;
+            FinishStartupLoad(loaded);
             if (editorMode && editor == null) OpenEditor();
         }
         try
@@ -241,5 +248,6 @@ public sealed partial class Viewer
                 export = null;
             }
         }
+        UpdateNativeMenuState();
     }
 }

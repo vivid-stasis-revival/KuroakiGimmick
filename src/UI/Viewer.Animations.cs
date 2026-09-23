@@ -5,20 +5,20 @@ namespace KuroakiGimmick.UI;
 public sealed partial class Viewer
 {
     readonly UiMotion motion = new();
-    float workspaceAlpha = 1, settingsAlpha, helpAlpha, valueAlpha, discardAlpha, infoCardAlpha;
+    float workspaceAlpha = 1, settingsAlpha, helpAlpha, valueAlpha, discardAlpha, infoCardAlpha, startupAlpha;
     bool? animatedWorkspace, animatedDiagnostics;
     string animatedInspector = "", animatedStatus = "";
     /// <summary>有覆盖层已经关闭、但淡出还没播完。这期间控件必须继续屏蔽，否则点击会穿到正在消失的那一层上。</summary>
     bool UiClosingOverlay => !referenceOpen && referenceAlpha > .001f ||
         !settings && settingsAlpha > .001f || !help && helpAlpha > .001f ||
         !modalActive && valueAlpha > .001f || pendingDiscard == null && discardAlpha > .001f ||
-        !infoCard && infoCardAlpha > .001f;
+        !infoCard && infoCardAlpha > .001f || !startup && startupAlpha > .001f;
     // 阻塞型覆盖层会让下方的工作区失效。轨道帮助被刻意排除在外：
     // 把它自己的可见性当作其悬停来源的输入会构成一个单帧反馈回路
     // （显示帮助 -> overlay=true -> 悬停来源被清空 -> 隐藏帮助 -> overlay=false -> 又显示）。
     bool UiBlockingOverlayVisible => LayoutVisible || ImageImportVisible || WorkflowVisible || dialogOpen ||
         ReferenceVisible || settings || help || modalActive || menuOpen || pendingDiscard != null || UiClosingOverlay
-        || InfoCardVisible;
+        || InfoCardVisible || StartupVisible;
     /// <summary>含轨道帮助在内的"有东西挡着"判定；只用于抑制 seek、音量拖动这类工作区交互，不参与帮助自身的可见性计算。</summary>
     bool UiOverlayVisible => UiBlockingOverlayVisible || trackHelpVisualActive;
 
@@ -41,6 +41,7 @@ public sealed partial class Viewer
         valueAlpha = motion.Show("value-modal", modalActive, .15);
         discardAlpha = motion.Show("discard-modal", pendingDiscard != null, .15);
         infoCardAlpha = motion.Show("info-card", infoCard, .17);
+        startupAlpha = motion.Show("startup", startup, .2);
         if (animatedStatus != message) { animatedStatus = message; motion.Snap("status", .4f); }
     }
 

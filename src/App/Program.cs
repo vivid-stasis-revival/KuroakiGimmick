@@ -21,7 +21,7 @@ internal static class Program
         CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
         CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
         // 这一串是所有无人值守模式（自测、检查、导出、截图）。cli 为真时失败只写 stderr，不弹消息框卡住脚本。
-        bool cli = args.Any(a => a is "--inspect" or "--render" or "--snapshot" or "--card" or "--self-test" or "--smoke-ui" or "--smoke-text-ui" or "--smoke-i18n" or "--native-sequence-self-test" or "--text-film-self-test" or "--custom-adaptation-self-test" or "--gpu-test" or "--editor-self-test" or "--reference-self-test" or "--authoring-self-test" or "--layout-image-self-test" or "--image-object-self-test");
+        bool cli = args.Any(a => a is "--inspect" or "--render" or "--snapshot" or "--card" or "--self-test" or "--smoke-ui" or "--smoke-startup" or "--smoke-mac-menu" or "--smoke-windows-menu" or "--smoke-text-ui" or "--smoke-i18n" or "--native-sequence-self-test" or "--text-film-self-test" or "--custom-adaptation-self-test" or "--gpu-test" or "--editor-self-test" or "--reference-self-test" or "--authoring-self-test" or "--layout-image-self-test" or "--image-object-self-test");
         try
         {
             // 后端覆盖必须早于任何 GPU 设备创建，所以在自检分派之前就读掉；否则 --gpu-test --force-vulkan
@@ -175,10 +175,32 @@ internal static class Program
                 Console.WriteLine(Path.GetFullPath(output));
                 return options.ContainsKey("strict") && session.Chart.Diagnostics.Any(d => d.Error) ? 2 : 0;
             }
+            string? startupTestSettings = options.ContainsKey("smoke-startup")
+                ? Path.Combine(Path.GetTempPath(), "kuroaki-startup-settings-" + Guid.NewGuid().ToString("N"), "settings.json") : null;
             using var viewer = new Viewer(host, session, silent: cli, applyPreferences: !changed,
-                uiLanguage: options.GetValueOrDefault("language"));
+                uiLanguage: options.GetValueOrDefault("language"), showStartup: path == null && (!cli || options.ContainsKey("smoke-startup")),
+                initialPath: path, settingsPath: startupTestSettings);
             // 单帧截图必须抓到最终布局，而不是入场动画那一帧全透明的画面。
-            if (options.ContainsKey("snapshot") || options.ContainsKey("smoke-ui") || options.ContainsKey("smoke-text-ui") || options.ContainsKey("smoke-i18n")) viewer.SetUiAnimationsForTest(false);
+            if (options.ContainsKey("snapshot") || options.ContainsKey("smoke-ui") || options.ContainsKey("smoke-startup") || options.ContainsKey("smoke-text-ui") || options.ContainsKey("smoke-i18n")) viewer.SetUiAnimationsForTest(false);
+            if (options.ContainsKey("smoke-startup"))
+            {
+                string output = Path.GetFullPath(options.GetValueOrDefault("out", "KuroakiStartup.ppm"));
+                try { viewer.SmokeStartupUi(output); }
+                finally { if (startupTestSettings != null && Directory.Exists(Path.GetDirectoryName(startupTestSettings)))
+                    Directory.Delete(Path.GetDirectoryName(startupTestSettings)!, true); }
+                Console.WriteLine(output);
+                return 0;
+            }
+            if (options.ContainsKey("smoke-mac-menu"))
+            {
+                viewer.SmokeMacMenu();
+                return 0;
+            }
+            if (options.ContainsKey("smoke-windows-menu"))
+            {
+                viewer.SmokeWindowsMenu();
+                return 0;
+            }
             if (options.ContainsKey("editor")) viewer.OpenEditor();
             if (options.ContainsKey("settings"))
             {
@@ -269,6 +291,9 @@ internal static class Program
             "snapshot",
             "card",
             "smoke-ui",
+            "smoke-startup",
+            "smoke-mac-menu",
+            "smoke-windows-menu",
             "smoke-text-ui",
             "smoke-i18n",
             "no-notes",
