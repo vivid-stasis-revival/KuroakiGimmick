@@ -511,6 +511,7 @@ public sealed partial class Viewer
             DrawEditorModals(w, h);
             DrawLayout(w, h);
             DrawImageImport(w, h);
+            DrawStartup(w, h);
         }
         Canvas.Flush();
         Canvas.Begin(null, pw, ph, w, h, bg);

@@ -21,6 +21,13 @@ internal static class LocalizationSelfTest
             var chinese = L.ReadCatalog(UiLanguage.Chinese);
             check(english.Count > 500 && english.Keys.Order().SequenceEqual(chinese.Keys.Order()),
                 "both embedded UI catalogs contain the same complete key set");
+            var menuKeys = MenuCatalog.Groups.SelectMany(group => new[] { group.Label }
+                .Concat(group.Items.Where(item => item.Command != MenuCommand.None).Select(item => item.Label)))
+                .Append("NO RECENT FILES").Distinct().ToArray();
+            check(menuKeys.All(key => english.ContainsKey(key) && chinese.ContainsKey(key)) &&
+                MenuCatalog.Actions.Distinct().Count() == MenuCatalog.Actions.Count() &&
+                MenuCatalog.Actions.All(command => (int)command < MenuCatalog.RecentBaseId),
+                "native menu commands and translations are complete on both platforms");
             bool formatsValid = true;
             string[] Fields(string text) => Regex.Matches(text, @"\{\d+(?:,[^}:]+)?(?::[^}]+)?\}")
                 .Select(m => m.Value).Order().ToArray();

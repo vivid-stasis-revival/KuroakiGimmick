@@ -8,4 +8,8 @@ if ! command -v "$DOTNET" >/dev/null 2>&1; then
   exit 1
 fi
 "$DOTNET" build KuroakiGimmick.csproj -c Release --nologo
-"$DOTNET" run --project KuroakiGimmick.csproj -c Release --no-build -- --editor "${1:-Samples/EditorDemo/demo.sgv.json}"
+if [ "$#" -gt 0 ]; then
+  "$DOTNET" run --project KuroakiGimmick.csproj -c Release --no-build -- --editor "$1"
+else
+  "$DOTNET" run --project KuroakiGimmick.csproj -c Release --no-build
+fi

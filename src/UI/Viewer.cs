@@ -20,8 +20,13 @@ public sealed partial class Viewer : IDisposable
     readonly Fonts fonts;
     readonly Texture logo;
     readonly Transport transport = new();
-    readonly ViewerSettings preferences = ViewerSettings.Load();
+    readonly ViewerSettings preferences;
+    readonly string? settingsPath;
     readonly bool applyPreferences;
+    readonly bool persistRecentProjects;
+    MacMenuBar? macMenu;
+    WindowsMenuBar? windowsMenu;
+    int menuStateHash = int.MinValue;
     bool settings, settingsInput;
     public Session Current { get; private set; }
     Target? uiTarget;
@@ -32,6 +37,7 @@ public sealed partial class Viewer : IDisposable
     Sdl.DialogCallback? dialog;
     /// <summary>后台解析任务。结果只在 Update 中由窗口线程取回；任务存在期间 Busy 为真，阻止再次加载。</summary>
     Task<Session>? loading;
+    string? loadingSourcePath;
     VideoExport? export;
     float mouseX, mouseY;
     bool click, held, seeking, quit, full, notes = true, effects = true, integerScale, diagnostics, help;
@@ -45,9 +51,12 @@ public sealed partial class Viewer : IDisposable
     /// <summary>任何图片加载、谱面导出、会话加载或仍在进行的视频导出都算忙；导出一旦完成、取消或出错就不再计入，由 Update 负责回收。</summary>
     bool Busy => imageLoad != null || ChartExportBusy || loading != null || export is { Completed: false, Cancelled: false, Error: null };
     /// <summary>所有 GPU 资源（Canvas、字体、logo、Renderer）在窗口线程创建；silent 表示无音频、也不套用用户偏好。</summary>
-    public Viewer(Host h, Session session, bool silent = false, bool applyPreferences = true, string? uiLanguage = null)
+    public Viewer(Host h, Session session, bool silent = false, bool applyPreferences = true, string? uiLanguage = null, bool showStartup = false, string? initialPath = null, string? settingsPath = null)
     {
         this.applyPreferences = applyPreferences;
+        this.settingsPath = settingsPath;
+        preferences = ViewerSettings.Load(settingsPath);
+        persistRecentProjects = !silent || settingsPath != null;
         if (uiLanguage != null) preferences.UiLanguage = UiLanguage.Normalize(uiLanguage);
         L.SetLanguage(preferences.UiLanguage);
         host = h;
@@ -58,6 +67,9 @@ public sealed partial class Viewer : IDisposable
         Renderer = new(Canvas);
         Current = session;
         UseSession(session, silent);
+        startup = showStartup && session.IsEmpty;
+        if (!silent) RememberRecentSource(initialPath ?? session.ProjectPath);
+        if (!silent && (OperatingSystem.IsMacOS() || OperatingSystem.IsWindows())) InstallNativeMenu();
     }
 
     /// <summary>
@@ -132,10 +144,10 @@ public sealed partial class Viewer : IDisposable
         }
         transport.SetPlaying(false);
         var old = Current;
+        var selected = paths.FirstOrDefault(p => p.EndsWith(".sgv.json",
+            StringComparison.OrdinalIgnoreCase)) ?? paths.FirstOrDefault(p => Path.GetExtension(p).ToLowerInvariant() is ".vsb" or ".vsc") ?? paths.FirstOrDefault(p => Directory.Exists(p) || (!attach && (p.EndsWith(".vsm", StringComparison.OrdinalIgnoreCase) || SongInfoFile(p))));
         loading = Task.Run(() =>
         {
-            var selected = paths.FirstOrDefault(p => p.EndsWith(".sgv.json",
-                StringComparison.OrdinalIgnoreCase)) ?? paths.FirstOrDefault(p => Path.GetExtension(p).ToLowerInvariant() is ".vsb" or ".vsc") ?? paths.FirstOrDefault(p => Directory.Exists(p) || (!attach && (p.EndsWith(".vsm", StringComparison.OrdinalIgnoreCase) || SongInfoFile(p))));
             var s = selected != null ? Session.Load(selected) : old;
             foreach (var path in paths.Where(p => p != selected))
             {
@@ -143,6 +155,7 @@ public sealed partial class Viewer : IDisposable
             }
             return s;
         });
+        loadingSourcePath = selected;
         message = L.Get("Loading chart and audio...");
     }
 
@@ -158,6 +171,7 @@ public sealed partial class Viewer : IDisposable
         transport.SetPlaying(false);
         var p = Current.Project.Copy();
         loading = Task.Run(() => new Session(p, Current.ProjectPath));
+        loadingSourcePath = null;
         message = L.Get("Reloading source files...");
     }
 
@@ -194,6 +208,7 @@ public sealed partial class Viewer : IDisposable
         }
         transport.SetPlaying(false);
         loading = Task.Run(() => new Session(p, Current.ProjectPath));
+        loadingSourcePath = null;
         message = L.Get("Applying timing settings...");
     }
 
@@ -201,7 +216,7 @@ public sealed partial class Viewer : IDisposable
     /// 打开原生文件对话框，同一时间只允许一个。回调期间只把路径复制出来（files 指针仅在回调内有效），
     /// result 与 dialogOpen 复位都经 actions 队列推迟到窗口线程；取消对话框时不调用 result。
     /// </summary>
-    void Dialog(bool save, string? location, Action<string[]> result)
+    void Dialog(bool save, string? location, Action<string[]> result, Action? cancelled = null, bool folder = false)
     {
         if (dialogOpen)
         {
@@ -236,9 +251,14 @@ public sealed partial class Viewer : IDisposable
                 {
                     result(values);
                 }
+                else cancelled?.Invoke();
             });
         };
-        if (save)
+        if (folder)
+        {
+            Sdl.SDL_ShowOpenFolderDialog(dialog, 0, host.Window, location, false);
+        }
+        else if (save)
         {
             Sdl.SDL_ShowSaveFileDialog(dialog, 0, host.Window, 0, 0, location);
         }
@@ -277,6 +297,7 @@ public sealed partial class Viewer : IDisposable
             Current.Project.Notes = notes;
             Current.Project.PostProcessing = effects;
             Current.Save(path);
+            RememberRecentSource(path);
             message = L.Get("Project saved: ") + path;
         });
     }
@@ -345,6 +366,7 @@ public sealed partial class Viewer : IDisposable
         bool available = enabled && !ImageGestureActive && !dialogOpen && (!LayoutVisible || (layoutInput && layoutOpen)) && (!ImageImportVisible || imageImportInput) &&
             (resizingLayout == 0) && !ReferenceVisible && !UiClosingOverlay && (!WorkflowVisible || workflowInput || modalInput) && (!settings || settingsInput) &&
             (!infoCard || infoCardInput) &&
+            (!StartupVisible || startupInput && startup) &&
             ((!modalActive && pendingDiscard == null && !help) || modalInput);
         bool over = available && r.Contains(mouseX, mouseY);
         string id = "control:" + (key ?? caller + ":" + callerLine + ":" + label);
@@ -397,6 +419,8 @@ public sealed partial class Viewer : IDisposable
     /// </summary>
     public void Dispose()
     {
+        macMenu?.Dispose();
+        windowsMenu?.Dispose();
         chartExportCancellation?.Cancel();
         CancelImageGesture();
         ReleaseImageImports();
