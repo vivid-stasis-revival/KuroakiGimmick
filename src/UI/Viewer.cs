@@ -52,7 +52,7 @@ public sealed partial class Viewer : IDisposable
         L.SetLanguage(preferences.UiLanguage);
         host = h;
         Canvas = new(h.Gpu);
-        fonts = new(h.Gpu);
+        fonts = new();
         fonts.SetInterfaceLanguage(L.Language);
         logo = Texture.Load(h.Gpu, Path.Combine(Paths.Assets, "Brand", "kuroaki.png"), linear: true);
         Renderer = new(Canvas);
@@ -73,6 +73,7 @@ public sealed partial class Viewer : IDisposable
         Current = s;
         notes = s.Project.Notes;
         effects = s.Project.PostProcessing;
+        RefreshDifficulties();
         rangeIn = 0;
         rangeOut = s.Duration;
         transport.Load(silent ? null : s.Audio, s.Duration);
@@ -119,8 +120,8 @@ public sealed partial class Viewer : IDisposable
     }
 
     /// <summary>
-    /// 在后台线程解析文件，结果由 Update 取回。主文件选取优先级：.sgv.json 项目 > .vsb/.vsc 谱面 > 歌曲文件夹或 .vsm
-    /// （attach 模式下 .vsm 不作为主文件）；其余路径按顺序附加为资源。没有主文件时全部附加到当前会话。
+    /// 在后台线程解析文件，结果由 Update 取回。主文件选取优先级：.sgv.json 项目 > .vsb/.vsc 谱面 > 歌曲文件夹、info.json 或 .vsm
+    /// （attach 模式下 .vsm 与 info.json 不作为主文件）；其余路径按顺序附加为资源。没有主文件时全部附加到当前会话。
     /// </summary>
     void LoadPaths(string[] paths, bool attach = false)
     {
@@ -134,7 +135,7 @@ public sealed partial class Viewer : IDisposable
         loading = Task.Run(() =>
         {
             var selected = paths.FirstOrDefault(p => p.EndsWith(".sgv.json",
-                StringComparison.OrdinalIgnoreCase)) ?? paths.FirstOrDefault(p => Path.GetExtension(p).ToLowerInvariant() is ".vsb" or ".vsc") ?? paths.FirstOrDefault(p => Directory.Exists(p) || (!attach && p.EndsWith(".vsm", StringComparison.OrdinalIgnoreCase)));
+                StringComparison.OrdinalIgnoreCase)) ?? paths.FirstOrDefault(p => Path.GetExtension(p).ToLowerInvariant() is ".vsb" or ".vsc") ?? paths.FirstOrDefault(p => Directory.Exists(p) || (!attach && (p.EndsWith(".vsm", StringComparison.OrdinalIgnoreCase) || SongInfoFile(p))));
             var s = selected != null ? Session.Load(selected) : old;
             foreach (var path in paths.Where(p => p != selected))
             {
@@ -343,6 +344,7 @@ public sealed partial class Viewer : IDisposable
     {
         bool available = enabled && !ImageGestureActive && !dialogOpen && (!LayoutVisible || (layoutInput && layoutOpen)) && (!ImageImportVisible || imageImportInput) &&
             (resizingLayout == 0) && !ReferenceVisible && !UiClosingOverlay && (!WorkflowVisible || workflowInput || modalInput) && (!settings || settingsInput) &&
+            (!infoCard || infoCardInput) &&
             ((!modalActive && pendingDiscard == null && !help) || modalInput);
         bool over = available && r.Contains(mouseX, mouseY);
         string id = "control:" + (key ?? caller + ":" + callerLine + ":" + label);
@@ -403,6 +405,7 @@ public sealed partial class Viewer : IDisposable
         if (modalActive || InlineActive) Sdl.SDL_StopTextInput(host.Window);
         export?.Dispose();
         transport.Dispose();
+        cardRenderer?.Dispose();
         uiTarget?.Dispose();
         Renderer.Dispose();
         fonts.Dispose();

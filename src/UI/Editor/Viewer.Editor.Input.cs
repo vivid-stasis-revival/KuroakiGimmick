@@ -184,6 +184,10 @@ public sealed partial class Viewer
         if (command && e.Scan == 28) { editor?.Redo(); layoutRevision = -1; return true; }
         if (!command && e.Scan is 42 or 76) { DeleteSelection(); return true; }
         if (!command && e.Scan == 7) { DuplicateSelection(); return true; }
+        // 6 = C，25 = V：选择集经系统剪贴板往返，两个编辑器实例之间因此可以互相粘贴。
+        // 就地编辑与模态在更前面就已经拦下按键，这里不会抢走文本框里的复制粘贴。
+        if (command && e.Scan == 6) { CopySelection(); return true; }
+        if (command && e.Scan == 25) { PasteClipboard(); return true; }
         // 4 = A，5 = B，15 = L：以当前播放位置（秒）换算成拍设置循环试听区间；出点至少比入点晚 1/8 拍。
         if (!command && e.Scan == 4) { loopIn = Current.Timeline.Bpm.Beat(transport.Position); return true; }
         if (!command && e.Scan == 5) { loopOut = Math.Max(loopIn + .125, Current.Timeline.Bpm.Beat(transport.Position)); return true; }

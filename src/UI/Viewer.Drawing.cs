@@ -39,6 +39,8 @@ public sealed partial class Viewer
         var time = transport.Position;
         // 本帧全部 GPU 工作从这里开始，只在窗口线程执行：先渲染场景，再把 UI 画到离屏 uiTarget。
         Renderer.Render(Current, time, notes, effects);
+        // 信息卡片有自己的离屏目标，必须在 UI 合成开始之前画完，中途不再切换渲染目标。
+        RenderInfoCard();
         Canvas.Begin(uiTarget, pw, ph, w, h, bg);
         using var workspaceFade = Canvas.Opacity(workspaceAlpha);
         if (editorMode && editor != null)
@@ -51,8 +53,9 @@ public sealed partial class Viewer
         Text("KUROAKI", 82, 22, 23, white, true);
         Text("GIMMICK", 83, 50, 10, soft, true);
         Canvas.Fill(new(272, 28, 1, 30), line);
-        Text(Paths.BuildRevision, 292, 35, 12, muted, true, max: Math.Max(1, w - 934));
+        Text(Paths.BuildRevision, 292, 35, 12, muted, true, max: Math.Max(1, w - 1024));
         if (Button(L.Get("LAYOUT"), new(w - 634, 25, 90, 31), enabled: !Busy)) { OpenLayout(); click = false; }
+        if (Button(L.Get("CARD"), new(w - 724, 25, 80, 31), enabled: !Busy && !Current.IsEmpty)) { OpenInfoCard(); }
         if (Button(L.Get("EXPORT"), new(w - 534, 25, 90, 31), enabled: !Busy && !Current.IsEmpty))
         { OpenChartExport(); click = false; }
         if (Button(L.Get("EDITOR UI"), new(w - 434, 25, 116, 31), enabled: !Busy && !Current.IsEmpty))
@@ -82,9 +85,16 @@ public sealed partial class Viewer
         {
             ChooseOpen(true);
         }
-        Text(L.Get("Drop files / song folder"), lx + 18, 224, 11, muted);
+        if (DifficultyBarVisible)
+        {
+            DrawDifficulties(lx, 213, lw);
+        }
+        else
+        {
+            Text(L.Get("Drop files / song folder"), lx + 18, 224, 11, muted);
+        }
         Divider(lx, 253, lw);
-        FileRow(L.Get("CHART"), Current.Project.Chart, lx, 272, lw);
+        FileRow(activeDifficulty.Length > 0 ? L.Get("CHART") + " / " + DifficultyLabel : L.Get("CHART"), Current.Project.Chart, lx, 272, lw);
         FileRow(L.Get("GIMMICK"), Current.Project.Gimmick ?? (Current.Chart.Mods.Count > 0 ? L.Get("Embedded in VSB") : null), lx, 325, lw);
         FileRow(L.Get("IMAGES / ") + Current.Images.Items.Count, Current.Images.Path, lx, 378, lw);
         FileRow(L.Get("AUDIO"), Current.Project.Audio, lx, 431, lw);
@@ -433,6 +443,7 @@ public sealed partial class Viewer
             using var fade = Canvas.Opacity(settingsAlpha);
             DrawSettings(w, h);
         }
+        DrawInfoCard(w, h);
         if ((help || helpAlpha > .001f) && !settings)
         {
             using var fade = Canvas.Opacity(helpAlpha);

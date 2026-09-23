@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 namespace KuroakiGimmick.Core;
 
 /// <summary>
@@ -13,43 +11,21 @@ public sealed record SongMetadata(string Name, string Artist, string Difficulty,
     /// </summary>
     public static SongMetadata Load(ViewerProject p, Chart chart)
     {
-        string basis = p.Chart ?? p.Gimmick ?? p.Images ?? "", difficulty = SongFiles.Difficulty(basis).ToUpperInvariant().Replace("_STORY", "");
-        // slot 是原版难度编号，用于挑选 difficulty_display_N；未知难度归 0。
-        int slot = difficulty switch
-        {
-            "OPENING" => 1,
-            "MIDDLE" => 2,
-            "FINALE" => 3,
-            "ENCORE" => 4,
-            "SHATTER" => 5,
-            _ => 0
-        };
+        string basis = p.Chart ?? p.Gimmick ?? p.Images ?? "", difficulty = SongInfo.Normalize(SongFiles.Difficulty(basis));
+        int slot = SongInfo.Slot(difficulty);
         string name = chart.Title, artist = "", level = "?";
         bool backstage = false;
-        string? root = SongFiles.Root(p), file = root == null ? null : SongFiles.Existing(root, "info.json", "song.json");
-        if (file != null)
+        string? root = SongFiles.Root(p);
+        var info = root == null ? null : SongInfo.Read(root,
+            m => chart.Diagnostics.Add(new("song-info", 0, "Song UI metadata unavailable: " + m)));
+        if (info != null)
         {
-            try
-            {
-                using var doc = JsonDocument.Parse(File.ReadAllText(file));
-                var j = doc.RootElement;
-                string S(JsonElement e, string key, string fallback) => e.TryGetProperty(key, out var v)
-                    && v.ValueKind is JsonValueKind.String or JsonValueKind.Number? v.ToString() : fallback;
-                name = S(j, "name", S(j, "formatted_name", name));
-                artist = S(j, "artist", artist);
-                level = S(j, "difficulty_display_" + slot, level);
-                if (slot == 4 && j.TryGetProperty("enc_data", out var enc) && enc.ValueKind == JsonValueKind.Object)
-                {
-                    // ENCORE 的 enc_data 覆盖曲名与曲师；hide_backstage 为 true 才不算 backstage，缺省视为 backstage。
-                    backstage = !(enc.TryGetProperty("hide_backstage", out var hide) && hide.ValueKind == JsonValueKind.True);
-                    name = S(enc, "name", S(enc, "formatted_name", name));
-                    artist = S(enc, "artist", artist);
-                }
-            }
-            catch (Exception ex) when (ex is IOException or JsonException or InvalidOperationException)
-            {
-                chart.Diagnostics.Add(new("song-info", 0, "Song UI metadata unavailable: " + ex.Message));
-            }
+            // ENCORE 的曲名、曲师由 enc_data 覆盖；等级与谱师仍取主曲的第 4 槽。
+            var view = info.Effective(difficulty);
+            name = view.Name ?? view.FormattedName ?? name;
+            artist = view.Artist ?? artist;
+            level = SongInfo.Level(view) ?? level;
+            backstage = view.Backstage;
         }
         // DifficultyFrame 是 HUD 难度图框的索引：backstage 用第 5 张，已知难度 1..4 映射到 0..3，其余归到 4。
         return new(p.SongName ?? name, p.SongArtist ?? artist, difficulty, p.SongLevel ?? level,

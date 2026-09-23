@@ -320,7 +320,11 @@ public sealed partial class Viewer
             "wave" => 5,
             _ => from
         };
-        var clip = new VsmDocument.Clip(Guid.NewGuid(), beat, 1, "outSine", VsmDocument.Value(from), VsmDocument.N(to), name, target);
+        // custom_episode 是一个触发点，不是数值渐变：时长、缓动、取值都不参与判定。写成零时长的 `_` 形式
+        // 与模组文档一致，也免得时间轴上出现一个看起来有长度、实则时长毫无意义的片段。
+        var clip = name.Equals(EpisodeScript.ModName, StringComparison.OrdinalIgnoreCase)
+            ? new VsmDocument.Clip(Guid.NewGuid(), beat, 0, "linear", "_", "_", name, target)
+            : new VsmDocument.Clip(Guid.NewGuid(), beat, 1, "outSine", VsmDocument.Value(from), VsmDocument.N(to), name, target);
         Edit(L.Get("Add ") + name, () => editor.Vsm.Add(clip));
         if (editor.Vsm.Find(clip.Id) != null)
         { selectedClip = clip.Id; selectedWindowEvent = -1; inspectorScroll = 0; FocusAddedTrack(name, target, beat); }

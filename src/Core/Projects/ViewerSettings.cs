@@ -35,6 +35,10 @@ public sealed class ViewerSettings
     public string UiTheme { get; set; } = "Nekomiya";
     public static readonly string[] UiThemes = ["Nekomiya", "Scarlet", "Kuroaki"];
     public static string ValidTheme(string? value) => UiThemes.FirstOrDefault(x => string.Equals(x, value, StringComparison.OrdinalIgnoreCase)) ?? "Nekomiya";
+    /// <summary>信息卡片的导出宽度，固定 16:9。卡面按 1280x720 的逻辑坐标绘制，这里只决定实际像素密度。</summary>
+    public int CardWidth { get; set; } = 1920;
+    public static readonly int[] CardWidths = [1280, 1920, 2560, 3840];
+    public static int ValidCardWidth(int value) => CardWidths.Contains(value) ? value : 1920;
     public string GameUiFont { get; set; } = DefaultFont;
     /// <summary>VS UI 里各元素的开关，语义见 ViewerProject 上的同名字段；总开关 GameUiEnabled 属于工程，不在这里。</summary>
     public bool GameUiScore { get; set; } = true;

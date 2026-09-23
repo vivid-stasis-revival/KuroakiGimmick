@@ -78,6 +78,9 @@ public sealed partial class Viewer
         });
         SetTime(45);
         Draw(1440, 940);
+        // 剧情轨要排在设置面板那一段之前：它自带完整的开关编辑器流程，而下面几条断言靠的是查看器自己的布局。
+        SmokeEpisodeUi();
+        editorMode = false; Draw(1440, 940);
         if (Current.GameUi.Data?.Fonts.ContainsKey(ViewerSettings.MonacoFont) == true)
         {
             string saved = Current.Project.GameUiFont;

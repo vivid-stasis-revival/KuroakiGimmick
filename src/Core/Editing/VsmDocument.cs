@@ -192,6 +192,12 @@ public sealed partial class VsmDocument
         ? $"{N(c.Beat)}(:{N(end)}:{N(c.RepeatStep)})" : $"{N(c.Beat)}:{N(end)}:{N(c.RepeatStep)}" : N(c.Beat),
         N(c.Duration), c.Ease, c.From, c.To, c.Name, c.Proxy.ToString(CultureInfo.InvariantCulture)];
 
+    /// <summary>
+    /// 把片段写成一行 VSM 源文本。剪贴板与源文件共用同一套字段格式，因此贴回来的行必定能被同一个解析器读回；
+    /// 这里只产出事件行本身，不含 "mods" 头也不含注释 —— 原版 read_mods_file 见到这两者会崩。
+    /// </summary>
+    public static string Compose(Clip c) => string.Join(',', Fields(c));
+
     /// <summary>提交前的取值校验；抛出的 FormatException 文案会直接显示给用户，所以写的是可操作的约束而非内部术语。</summary>
     static void Validate(Clip c)
     {

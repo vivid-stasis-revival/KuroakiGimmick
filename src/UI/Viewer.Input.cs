@@ -74,10 +74,14 @@ public sealed partial class Viewer
         }
         // 0x0CC0 = 左右 Ctrl / GUI（command），3 = 左右 Shift。
         bool ctrl = (e.Modifiers & 0x0CC0) != 0, shift = (e.Modifiers & 3) != 0;
-        // scancode 41 = Esc：按优先级只关闭一层，设置（并落盘）> 快捷键卡片 > 全屏 > 进行中的导出。
+        // scancode 41 = Esc：按优先级只关闭一层，信息卡片 > 设置（并落盘）> 快捷键卡片 > 全屏 > 进行中的导出。
         if (e.Scan == 41)
         {
-            if (settings)
+            if (infoCard)
+            {
+                CloseInfoCard();
+            }
+            else if (settings)
             {
                 settings = false;
                 SaveSettings();

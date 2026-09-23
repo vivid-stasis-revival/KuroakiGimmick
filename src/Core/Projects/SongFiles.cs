@@ -34,10 +34,17 @@ public static class SongFiles
             StringComparison.OrdinalIgnoreCase))).FirstOrDefault(f => f != null);
     }
 
-    /// <summary>把谱面/VSM/VSP 路径或歌曲目录展开成工程；目录形式按固定难度候选顺序挑选，不依赖文件系统枚举顺序。</summary>
+    /// <summary>
+    /// 把谱面/VSM/VSP 路径、info.json 或歌曲目录展开成工程；目录形式按固定难度候选顺序挑选，不依赖文件系统枚举顺序。
+    /// 直接给出 info.json / song.json 等同于打开它所在的歌曲目录。
+    /// </summary>
     public static ViewerProject Open(string path)
     {
         path = Path.GetFullPath(path);
+        if (File.Exists(path) && Path.GetFileName(path).ToLowerInvariant() is "info.json" or "song.json")
+        {
+            path = Path.GetDirectoryName(path)!;
+        }
         if (Directory.Exists(path))
         {
             string? chosen = null;
@@ -63,7 +70,7 @@ public static class SongFiles
         string ext = Path.GetExtension(path).ToLowerInvariant();
         if (ext is not (".vsb" or ".vsc" or ".vsm" or ".vsp"))
         {
-            throw new InvalidDataException("Open a .vsb, .vsc, .vsm, .vsp, song folder or .sgv.json project.");
+            throw new InvalidDataException("Open a .vsb, .vsc, .vsm, .vsp, info.json, song folder or .sgv.json project.");
         }
         string dir = Path.GetDirectoryName(path)!, difficulty = Difficulty(path);
         var p = new ViewerProject
@@ -73,35 +80,59 @@ public static class SongFiles
         p.Chart = ext is ".vsb" or ".vsc" ? path : Existing(dir, difficulty + ".vsb", difficulty + ".vsc");
         p.Gimmick = ext == ".vsm" ? path : Existing(dir, difficulty + ".vsm", "GLOBAL.vsm");
         p.Images = ext == ".vsp" ? path : null;
-        p.Audio = Existing(dir, "music.ogg", "song.ogg", "song.wav", "music.wav", "song.mp3", "music.mp3", "song.flac", "music.flac");
+        p.Notes = true;
+        // 即使 VSM 还没有对应的音符，轨道本身也应当可以查看。
+        // BACKSTAGE 的音频与封面由 enc_data 明确指定，必须先于同目录候选顺序生效：
+        // crimson 这类谱包里 music.ogg / jacket.png 属于主曲，ENCORE 用的是 music_chart_scarlet.ogg / song_scarlet_0.png。
+        var info = SongInfo.Read(dir);
+        var view = info?.Effective(difficulty);
+        if (view != null)
+        {
+            p.Audio = view.AudioId == null ? null : Existing(dir, view.AudioId);
+            p.Jacket = view.Jacket == null ? null : Existing(dir, view.Jacket);
+            if (double.TryParse(view.BpmDisplay, NumberStyles.Float, CultureInfo.InvariantCulture, out double bpm)
+                && bpm > 0 && bpm <= 10000)
+            {
+                p.Bpm = bpm;
+            }
+            if (view.Name is { Length: > 0 } name)
+            {
+                p.Title = name + " / " + view.DisplayDifficulty;
+            }
+        }
+        p.Audio ??= Existing(dir, "music.ogg", "song.ogg", "song.wav", "music.wav", "song.mp3", "music.mp3", "song.flac", "music.flac");
         // 只有在命名类别下存在唯一候选时才接受导出的游戏音乐。
         // 绝不能因为某个 .ogg 恰好排在第一个，就把人声/前奏文件当成歌曲音频。
         p.Audio ??= FindUniqueChartAudio(dir);
-        p.Notes = true;
-        // 即使 VSM 还没有对应的音符，轨道本身也应当可以查看。
-        string? info = Existing(dir, "info.json", "song.json");
-        if (info != null)
-        {
-            try
-            {
-                using var json = JsonDocument.Parse(File.ReadAllText(info));
-                var j = json.RootElement;
-                if (j.TryGetProperty("bpm_display", out var b) && double.TryParse(b.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture,
-                    out double bpm) && bpm > 0 && bpm <= 10000)
-                {
-                    p.Bpm = bpm;
-                }
-                if (j.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String)
-                {
-                    p.Title = n.GetString() + " / " + difficulty;
-                }
-            }
-            catch (JsonException)
-            {
-                /* 可选的歌曲标题损坏不应遮住谱面。 */
-            }
-        }
         return p;
+    }
+
+    /// <summary>
+    /// 一个可切换的难度。<c>Chart</c> 为 null 表示该难度在这个目录下没有谱面文件（谱包可能只写了信息槽
+    /// 或附属信息文件却没放谱面），此时只作为不可点的占位显示。
+    /// </summary>
+    public sealed record SongDifficulty(string Name, string Display, string? Level, string? Designer, string? Chart, bool Backstage);
+
+    /// <summary>
+    /// 枚举目录下的难度，顺序固定为 OPENING→SHATTER，不依赖文件系统枚举顺序。
+    /// info.json 缺失时仍按文件名列出，只是没有等级与谱师文字。
+    /// </summary>
+    public static SongDifficulty[] Difficulties(string directory, SongInfo? info)
+    {
+        var result = new List<SongDifficulty>();
+        foreach (string name in SongInfo.Order)
+        {
+            string? chart = Existing(directory, name + ".vsb", name + ".vsc");
+            var view = info?.Effective(name);
+            // 没有谱面又没有信息槽的难度完全不存在，不作为占位显示。
+            if (chart == null && (view == null || (view.Level == null && view.Constant == null)))
+            {
+                continue;
+            }
+            result.Add(new(name, view?.DisplayDifficulty ?? name, view == null ? null : SongInfo.Level(view),
+                view?.Designer, chart, view?.Backstage ?? false));
+        }
+        return [.. result];
     }
 
     /// <summary>取唯一的 music_chart_* 音频；一旦存在两个及以上候选就返回 null，宁可不挂音频也不猜。</summary>

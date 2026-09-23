@@ -16,6 +16,8 @@ public sealed partial class Session
     public CustomImages Images { get; }
     public AudioData? Audio { get; }
     public CustomText Texts { get; }
+    /// <summary>谱面内剧情（custom_episode）；谱面没写这个 gimmick 时为 null。</summary>
+    public EpisodeScript? Episode { get; }
     public JacketAssets Jackets { get; }
     public bool DfEnabled { get; }
     public bool DistortBgEnabled { get; }
@@ -83,6 +85,12 @@ public sealed partial class Session
         Images = CustomImages.Load(p, Chart, editedVsp, imageResourceRoot);
         bool? textEnabled = WindowMotion.Root["ENABLE_TEXT"] is System.Text.Json.Nodes.JsonValue textSwitch && textSwitch.TryGetValue<bool>(out var enabled) ? enabled : null;
         Texts = CustomText.Load(p, Chart, editedTexts, textEnabled);
+        // Custom Episodes 的谱面内剧情：只解析剧本并报静态问题，时刻表要量字体宽度，留到绘制侧。
+        Episode = EpisodeScript.Load(p, Chart);
+        foreach (var diagnostic in Episode?.Diagnostics ?? [])
+        {
+            Chart.Diagnostics.Add(diagnostic);
+        }
         Jackets = JacketAssets.Load(p, Chart, NativeGimmick);
         DfEnabled = Chart.ObjectName == "obj_custom_gimmick" && SongFiles.Config(p, "ENABLE_DF_GRID_AND_SIDELINE");
         DistortBgEnabled = Chart.ObjectName == "obj_custom_gimmick" && SongFiles.Config(p, "ENABLE_DISTORT_BG");

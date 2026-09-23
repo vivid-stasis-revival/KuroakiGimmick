@@ -12,11 +12,11 @@ public sealed record NativeStoryState(string Speaker, IReadOnlyList<string> Line
         var window = sequence.StoryWindows.LastOrDefault(w => w.Start <= time && (w.Destroy == null || time < w.Destroy) && triggered(w.Trigger));
         if (window == null) return null;
         // 原版的入场 tween：1 秒内从 y=180 缓动到 132，行数变化时再以当前位置为新起点重新起 tween。
-        double tweenTime = window.Start, from = 180, to = 132;
+        double tweenTime = window.Start, from = 180, to = 132, span = 1;
         int lineCount = 4;
         double Y(double at)
         {
-            double t = Math.Clamp(at - tweenTime, 0, 1);
+            double t = span <= 0 ? 1 : Math.Clamp((at - tweenTime) / span, 0, 1);
             double eased = t >= 1 ? 1 : 1 - Math.Pow(2, -10 * t);
             return from + (to - from) * eased;
         }
@@ -31,24 +31,25 @@ public sealed record NativeStoryState(string Speaker, IReadOnlyList<string> Line
             if (lines.Count != lineCount)
             {
                 from = Y(cue.Time); to = 162 - Math.Clamp(lines.Count, 2, 10) * 10;
-                tweenTime = cue.Time; lineCount = lines.Count;
+                tweenTime = cue.Time; lineCount = lines.Count; span = 1;
             }
         }
         if (current == null) return null;
         bool cleared = window.Clear is double clear && time >= clear;
         if (cleared)
         {
-            // 源码明确从 122 开始退场，短文本也一样，不按实际行数重新取起点。
-            from = 122; to = 180; tweenTime = window.Clear!.Value;
+            // 原版剧情房间明确从 122 开始退场，短文本也一样，不按实际行数重新取起点；
+            // 谱面内剧情改为从停稳位置退场、用更短的时长，由窗口自己带着这两个值。
+            from = window.ExitFrom; to = 180; tweenTime = window.Clear!.Value; span = window.ExitSeconds;
         }
         int count = lines.Sum(s => s.Length);
-        // 原版打字速度固定每秒 100 个字符；1e-8 只用来抵消浮点误差，避免整秒边界少显示一个字。
-        int visible = cleared ? 0 : (int)Math.Clamp(Math.Floor((time - current.Time) * 100 + 1e-8), 0, count);
+        // 打字速度是每秒 100×Speed 个字；1e-8 只用来抵消浮点误差，避免整秒边界少显示一个字。
+        int visible = cleared ? 0 : (int)Math.Clamp(Math.Floor((time - current.Time) * 100 * current.Speed + 1e-8), 0, count);
         return new(current.Speaker, lines, Y(time), visible, thinking, cleared);
     }
 
-    /// <summary>复刻 TextDrawer 的换行：在空格处向前看整个单词，宽度超过 308 逻辑像素才断行。</summary>
-    public static IReadOnlyList<string> Wrap(string text, Func<string, float> width)
+    /// <summary>复刻 TextDrawer 的换行：在空格处向前看整个单词，宽度超过 <paramref name="limit"/> 逻辑像素才断行。</summary>
+    public static IReadOnlyList<string> Wrap(string text, Func<string, float> width, double limit = 308)
     {
         var lines = new List<string>(); string row = "";
         for (int i = 0; i < text.Length; i++)
@@ -61,7 +62,7 @@ public sealed record NativeStoryState(string Speaker, IReadOnlyList<string> Line
                 while (end < text.Length && text[end] != ' ' && text[end] != '\n') end++;
                 // TextDrawer 的单词预读不包含字符串的最后一个字符，这里照搬该偏差以对齐原版断行位置。
                 int lookEnd = end == text.Length ? Math.Max(i + 1, end - 1) : end;
-                if (width(row + text[i..lookEnd]) > 308) { lines.Add(row); row = ""; continue; }
+                if (width(row + text[i..lookEnd]) > limit) { lines.Add(row); row = ""; continue; }
             }
             row += ch;
         }

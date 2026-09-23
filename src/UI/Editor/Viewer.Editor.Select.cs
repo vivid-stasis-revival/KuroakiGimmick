@@ -274,6 +274,9 @@ public sealed partial class Viewer
             var first = picked[0];
             items.Add((L.Get("SELECT SAME MOD"), true, () => SelectSameTrack(first)));
             items.Add((L.Get("DUPLICATE") + suffix, true, () => { if (count > 1) DuplicateClips(); else DuplicateSelection(); }));
+            // 整段内容经系统剪贴板往返，与只搬 ease/from/to/duration 的 COPY VALUES 是两回事。
+            items.Add((L.Get("COPY") + suffix, true, CopySelection));
+            items.Add((L.Get("PASTE"), true, PasteClipboard));
             items.Add((L.Get("SPLIT LOOP") + suffix, picked.Any(c => c.RepeatEnd != null), () => ConvertSelectedLoops(true)));
             items.Add((L.Get("MERGE INTO LOOP") + suffix, count > 1, () => ConvertSelectedLoops(false)));
             items.Add((L.Get("MOVE TO PLAYHEAD") + suffix, true, () =>
@@ -302,6 +305,8 @@ public sealed partial class Viewer
                 else AddMod(menuBeat, track.Property, track.Target);
             }));
             items.Add((L.Get("SEEK HERE"), true, () => { selectedNoteTime = null; transport.Seek(Current.Timeline.Bpm.Time(menuBeat)); }));
+            // 空白处也要能粘贴：落点用的是插入点，与选中什么无关。
+            items.Add((L.Get("PASTE"), !Busy, PasteClipboard));
             items.Add((L.Get("MARK HERE"), true, () => { transport.Seek(Current.Timeline.Bpm.Time(menuBeat)); MarkTimestamp(); }));
             items.Add((L.Get("LOOP IN HERE"), true, () => loopIn = menuBeat));
             items.Add((L.Get("LOOP OUT HERE"), true, () => loopOut = Math.Max(loopIn + .125, menuBeat)));

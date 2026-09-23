@@ -15,6 +15,9 @@ public static class ModCatalog
         Supported.Add("prtrY");
         // 保留这个谱面控制项但不报警告：Viewer 有意不绘制连击数字，所以它没有可见效果。
         Supported.Add("hide_combo");
+        // Custom Episodes 模组注册的全局 mod：到点在谱面上浮出一段对白（story.json），
+        // 不影响判定也不改任何演出参数。value1/value2 用不到，作者写 _ 即可。
+        Supported.Add("custom_episode");
         // obj_custom_gimmick 的 InitSkinChange 用 addExtraMod 注册的，默认 0（正常皮肤），
         // 取值 0-3 是 lane_sprites 那两张表的下标，越界由 NoteSkinProfile 折回 0。
         Supported.Add("changeskin");

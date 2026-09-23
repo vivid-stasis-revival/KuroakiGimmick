@@ -132,6 +132,13 @@ internal static class EditorTrackHelp
                 L.Get("原始 N 索引按目标 Custom Gimmicks 协议解释。"),
                 L.Get("轨道左侧保持 source identifier，不改成人造别名。")
             ]),
+            EpisodeScript.ModName => new(L.Get("谱面内剧情触发点（Custom Episodes 模组）。"), [
+                L.Get("作用：到点在谱面上浮出原版文字框，按 story.json 逐句自动推进。"),
+                L.Get("时长 / 缓动 / 取值都不参与判定：这是一个触发点，不是数值渐变。"),
+                L.Get("演多久由 story.json 的字数与打字速度决定，在轨道上画成琥珀色区间。"),
+                L.Get("下一次触发会当场顶掉正在播的那一段；被切掉几句写在区间标签上。"),
+                L.Get("立绘 / CG / 转场只在剧情房间可用，谱面内会被模组静默跳过。")
+            ]),
             _ => Generic(name, defaultText)
         };
     }
