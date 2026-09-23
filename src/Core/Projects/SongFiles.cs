@@ -50,27 +50,7 @@ public static class SongFiles
         }
         if (Directory.Exists(path))
         {
-            string? chosen = null;
-            // 固定的难度优先级，保证同一目录每次打开都落到同一个谱面。SHATTER 排在四个常规难度之后：
-            // 同目录有常规谱面时它不该抢先，只有它一张谱面时也不必落进下面按字母枚举的兜底。
-            foreach (string candidate in new[]
-            {
-                "ENCORE",
-                "FINALE",
-                "MIDDLE",
-                "OPENING",
-                "SHATTER",
-                "GLOBAL"
-            })
-            {
-                if ((chosen = Existing(path, candidate + ".vsb", candidate + ".vsc", candidate + ".vsm")) != null)
-                {
-                    break;
-                }
-            }
-            chosen ??= Directory.EnumerateFiles(path)
-                .Where(p => Path.GetExtension(p).ToLowerInvariant() is ".vsb" or ".vsc" or ".vsm").Order().FirstOrDefault();
-            path = chosen ?? throw new FileNotFoundException("This folder contains no .vsb, .vsc or .vsm.");
+            path = PreferredChart(path) ?? throw new FileNotFoundException("This folder contains no .vsb, .vsc or .vsm.");
         }
         string ext = Path.GetExtension(path).ToLowerInvariant();
         if (ext is not (".vsb" or ".vsc" or ".vsm" or ".vsp"))
@@ -110,6 +90,33 @@ public static class SongFiles
         // 绝不能因为某个 .ogg 恰好排在第一个，就把人声/前奏文件当成歌曲音频。
         p.Audio ??= FindUniqueChartAudio(dir);
         return p;
+    }
+
+    /// <summary>
+    /// 打开歌曲目录时选中的那张谱面。固定的难度优先级，保证同一目录每次打开都落到同一个谱面，
+    /// 不依赖文件系统枚举顺序；SHATTER 排在四个常规难度之后：同目录有常规谱面时它不该抢先，
+    /// 只有它一张谱面时也不必落进按字母枚举的兜底。目录里一张谱面都没有时返回 null。
+    /// 最近打开列表要显示的难度也走这里，否则列表上写的和点进去看到的可能不是同一张谱。
+    /// </summary>
+    public static string? PreferredChart(string directory)
+    {
+        foreach (string candidate in new[]
+        {
+            "ENCORE",
+            "FINALE",
+            "MIDDLE",
+            "OPENING",
+            "SHATTER",
+            "GLOBAL"
+        })
+        {
+            if (Existing(directory, candidate + ".vsb", candidate + ".vsc", candidate + ".vsm") is { } chosen)
+            {
+                return chosen;
+            }
+        }
+        return Directory.EnumerateFiles(directory)
+            .Where(p => Path.GetExtension(p).ToLowerInvariant() is ".vsb" or ".vsc" or ".vsm").Order().FirstOrDefault();
     }
 
     /// <summary>

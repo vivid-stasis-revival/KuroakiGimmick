@@ -61,6 +61,39 @@ internal static class RecentProjectsSelfTest
             var lowerCase = ViewerSettings.Load(settingsPath);
             Check(lowerCase.RecentProjects.Count == 0 && lowerCase.PreviewVolume == .2,
                 "case-insensitive malformed recent JSON preserves other settings");
+
+            // 最近列表的标题取歌曲信息而不是文件名：谱面文件名本身就是难度（ENCORE.vsc），
+            // 直接显示文件名会让整列看起来全是难度名。
+            string song = Path.Combine(root, "scarlet");
+            Directory.CreateDirectory(song);
+            File.WriteAllText(Path.Combine(song, "ENCORE.vsc"), "0,3,0\n1000,0,0\n");
+            File.WriteAllText(Path.Combine(song, "FINALE.vsc"), "0,3,0\n1000,0,0\n");
+            File.WriteAllText(Path.Combine(song, "info.json"), """
+            {
+              "name":"Scarlet Death","artist":"lexycat","has_encore":true,
+              "difficulty_display_3":"15","difficulty_display_4":"17",
+              "enc_data":{"audio_id":"music_chart_scarlet.ogg"}
+            }
+            """);
+            Check(RecentSource.Title(Path.Combine(song, "ENCORE.vsc")) == "Scarlet Death / lexycat @ BACKSTAGE  LV.17",
+                "recent chart shows song name, artist, difficulty and level");
+            Check(RecentSource.Title(song) == "Scarlet Death / lexycat @ BACKSTAGE  LV.17",
+                "recent song folder shows the difficulty it would open");
+            Check(RecentSource.Title(Path.Combine(song, "FINALE.vsc")) == "Scarlet Death / lexycat @ FINALE  LV.15",
+                "each chart shows its own difficulty slot, not the folder's");
+            Check(RecentSource.Title(chart) == "song.vsc", "a chart without song info keeps its file name");
+            Check(RecentSource.Title(A) == "a", "a saved project keeps its project name");
+            Check(RecentSource.Title(Path.Combine(root, "gone", "MIDDLE.vsc")) == "MIDDLE.vsc",
+                "a removed chart still yields a title without throwing");
+
+            // 只发 shatterinfo.json 的谱包：曲名与等级都只写在这一份文件里，曲师缺失时省略那一截。
+            string shatter = Path.Combine(root, "drop");
+            Directory.CreateDirectory(shatter);
+            File.WriteAllText(Path.Combine(shatter, "SHATTER.vsc"), "0,3,0\n1000,0,0\n");
+            File.WriteAllText(Path.Combine(shatter, SongInfo.ShatterFile),
+                "{\"name\":\"Drop Song [Shatter]\",\"difficulty_number\":\"15+\",\"note_designer\":\"drop\"}");
+            Check(RecentSource.Title(shatter) == "Drop Song [Shatter] @ SHATTER  LV.15+",
+                "shatterinfo.json supplies the title and the folder falls back to SHATTER");
         }
         finally { Directory.Delete(root, true); }
         return checks;

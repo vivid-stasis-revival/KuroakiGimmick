@@ -8,34 +8,54 @@ namespace KuroakiGimmick.UI;
 /// <summary>空会话的欢迎层。所有工程解析仍由 LoadPaths 在后台执行。</summary>
 public sealed partial class Viewer
 {
-    bool startup, startupInput, startupLoadPending, startupEnterEditorAfterLoad;
+    bool startup, startupInput, startupLoadPending;
     int startupScroll;
     bool StartupVisible => startup || startupAlpha > .001f;
+
+    /// <summary>
+    /// 最近列表每帧都要重画，标题却要读同目录的歌曲信息文件；按路径缓存，最近列表一变就整体作废。
+    /// 列表只在 RememberRecentSource 里变化，因此缓存不会落后于用户新打开的歌。
+    /// </summary>
+    readonly Dictionary<string, string> recentTitles = [];
+
+    string RecentTitle(string path) => recentTitles.TryGetValue(path, out string? title)
+        ? title : recentTitles[path] = RecentSource.Title(path);
+
+    /// <summary>
+    /// 原生菜单构建时要一次拿到全部标题，走的是启动页同一个缓存：两处入口显示的字必须一样，
+    /// 也不该为了装一次菜单把同一批歌曲信息重复读一遍。
+    /// </summary>
+    RecentSource.Item[] RecentItems() =>
+        [.. preferences.RecentProjects.Select(path => new RecentSource.Item(path, RecentTitle(path)))];
 
     void RememberRecentSource(string? path)
     {
         if (!preferences.RememberRecentSource(path)) return;
-        if (macMenu != null || windowsMenu != null) InstallNativeMenu();
+        recentTitles.Clear();
+        RequestNativeMenuRefresh();
         if (!persistRecentProjects) return;
         try { preferences.Persist(settingsPath); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         { message = L.Get("Settings could not be saved: ") + ex.Message; }
     }
 
-    void LoadFromStartup(string[] paths, bool enterEditor)
+    /// <summary>
+    /// 欢迎层里的打开动作。对话框、拖放与最近列表走的都是这一条，加载完一律停在 viewer：
+    /// 打开是"看"，要编辑再由 VIEW → EDITOR / VIEWER 或工作区里的按钮显式进入。
+    /// </summary>
+    void LoadFromStartup(string[] paths)
     {
         if (Busy || paths.Length == 0) return;
         if (editor?.Dirty == true)
         {
             startup = false;
-            if (GuardUnsaved(() => LoadFromStartup(paths, enterEditor))) return;
+            if (GuardUnsaved(() => LoadFromStartup(paths))) return;
         }
         startupLoadPending = true;
-        startupEnterEditorAfterLoad = enterEditor;
         LoadPaths(paths);
         if (loading == null)
         {
-            startupLoadPending = startupEnterEditorAfterLoad = false;
+            startupLoadPending = false;
             startup = true;
         }
     }
@@ -45,17 +65,15 @@ public sealed partial class Viewer
         if (Busy || dialogOpen) return;
         startup = false;
         held = click = false;
-        Dialog(false, null, paths => LoadFromStartup(paths, false), cancelled: () => startup = true, folder: folder);
+        Dialog(false, null, paths => LoadFromStartup(paths), cancelled: () => startup = true, folder: folder);
     }
 
     void FinishStartupLoad(bool loaded)
     {
         if (!startupLoadPending) return;
-        bool enterEditor = loaded && startupEnterEditorAfterLoad;
         if (loaded) { startup = false; held = click = false; }
         else startup = true;
-        startupLoadPending = startupEnterEditorAfterLoad = false;
-        if (enterEditor) OpenEditor();
+        startupLoadPending = false;
     }
 
     /// <summary>欢迎层先于工作区手势和快捷键接收事件；关闭的淡出帧也继续吞掉输入。</summary>
@@ -67,7 +85,7 @@ public sealed partial class Viewer
         if (e.Type == 0x1000 && startup)
         {
             string? path = Marshal.PtrToStringUTF8(e.DropData);
-            if (path != null) LoadFromStartup([path], false);
+            if (path != null) LoadFromStartup([path]);
             return true;
         }
         if (e.Type is 0x400 or 0x401 or 0x402)
@@ -144,10 +162,9 @@ public sealed partial class Viewer
                 if (Button("", item, enabled: exists && !Busy, key: "startup-recent:" + path))
                 {
                     click = false;
-                    LoadFromStartup([path], true);
+                    LoadFromStartup([path]);
                 }
-                string name = Path.GetFileName(path);
-                if (name.EndsWith(".sgv.json", StringComparison.OrdinalIgnoreCase)) name = name[..^9];
+                string name = RecentTitle(path);
                 float textWidth = rightWidth - (exists ? 22 : 95);
                 Text(name, right + 11, y + 5, 14, exists ? white : muted, max: textWidth);
                 Text(path, right + 11, y + 25, 10, muted, max: textWidth);
@@ -166,9 +183,27 @@ public sealed partial class Viewer
         string sample = Path.GetFullPath("Samples/EditorDemo/demo.sgv.json");
         if (!File.Exists(sample)) throw new FileNotFoundException("Startup smoke sample is missing.", sample);
         string missing = Path.Combine(Path.GetTempPath(), "kuroaki-missing-" + Guid.NewGuid().ToString("N") + ".sgv.json");
-        preferences.RecentProjects = [missing, sample];
-        Draw(1440, 940);
-        Canvas.SavePpm(UiTarget, screenshot);
+        // 截图里要有一行真正的歌：谱面文件名本身就是难度，列表该显示的是曲名 / 曲师 @ 难度 等级。
+        // 只用于这一帧，画完立刻删掉，后面的点击断言用的还是下面几个固定条目。
+        string song = Path.Combine(Path.GetTempPath(), "kuroaki-startup-song-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(song);
+        File.WriteAllText(Path.Combine(song, "ENCORE.vsc"), "0,3,0\n1000,0,0\n");
+        File.WriteAllText(Path.Combine(song, "info.json"), """
+        {"name":"Scarlet Death","artist":"lexycat","has_encore":true,
+         "difficulty_display_4":"17","enc_data":{"audio_id":"music_chart_scarlet.ogg"}}
+        """);
+        preferences.RecentProjects = [missing, song, sample];
+        try
+        {
+            Draw(1440, 940);
+            Canvas.SavePpm(UiTarget, screenshot);
+            // 断言的正是绘制循环取标题的那个函数：谱面文件名是 ENCORE，列表里必须是这首歌。
+            if (RecentTitle(song) != "Scarlet Death / lexycat @ BACKSTAGE  LV.17")
+            {
+                throw new Exception("Startup recent row did not show the song: " + RecentTitle(song));
+            }
+        }
+        finally { Directory.Delete(song, true); }
         if (!UiBlockingOverlayVisible) throw new Exception("Startup did not block the workspace.");
         bool before = notes;
         Handle(new Sdl.Event { Type = 0x300, Scan = 17 });
@@ -198,7 +233,7 @@ public sealed partial class Viewer
             throw new Exception("Recent chart did not persist across settings reload.");
         startup = true;
         string folder = Path.GetFullPath("Samples/EditorDemo");
-        LoadFromStartup([folder], false);
+        LoadFromStartup([folder]);
         if (loading == null || !loading.Wait(TimeSpan.FromSeconds(30)))
             throw new Exception("Startup folder load did not start or timed out.");
         Update();
@@ -235,9 +270,12 @@ public sealed partial class Viewer
         if (loading == null) throw new Exception("Recent click did not use LoadPaths.");
         if (!loading.Wait(TimeSpan.FromSeconds(30))) throw new TimeoutException("Recent project load timed out.");
         Update();
-        if (startup || editor == null || !editorMode || Current.ProjectPath != sample || preferences.RecentProjects[0] != sample)
-            throw new Exception("Recent project did not open in the editor.");
+        if (startup || editorMode || editor != null || Current.ProjectPath != sample || preferences.RecentProjects[0] != sample)
+            throw new Exception("Recent project did not open in the viewer.");
         Draw(1440, 940);
+        // 后面那段 Save As 覆盖的是编辑器，这里显式进一次编辑器——打开本身不再顺带进去。
+        OpenEditor();
+        if (!editorMode || editor == null) throw new Exception("Opening the editor after a recent load failed.");
         string saveDir = Path.Combine(Path.GetTempPath(), "kuroaki-startup-save-" + Guid.NewGuid().ToString("N"));
         try
         {
@@ -249,6 +287,6 @@ public sealed partial class Viewer
                 throw new Exception("Editor Save As recent entry did not persist.");
         }
         finally { if (Directory.Exists(saveDir)) Directory.Delete(saveDir, true); }
-        Console.WriteLine("Startup overlay, chart/folder history, missing path, input blocking, recent load, editor entry and Save As passed.");
+        Console.WriteLine("Startup overlay, chart/folder history, missing path, input blocking, recent load, viewer entry, editor entry and Save As passed.");
     }
 }

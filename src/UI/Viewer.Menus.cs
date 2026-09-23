@@ -4,6 +4,15 @@ namespace KuroakiGimmick.UI;
 
 public sealed partial class Viewer
 {
+    bool menuRefreshQueued;
+
+    void RequestNativeMenuRefresh()
+    {
+        if ((macMenu == null && windowsMenu == null) || menuRefreshQueued) return;
+        menuRefreshQueued = true;
+        actions.Enqueue(() => { menuRefreshQueued = false; InstallNativeMenu(); });
+    }
+
     void InstallNativeMenu()
     {
         try
@@ -12,8 +21,8 @@ public sealed partial class Viewer
             windowsMenu?.Dispose(); windowsMenu = null;
             Action<MenuCommand, string?> callback = (command, path) =>
                 actions.Enqueue(() => RunMenu(command, path));
-            if (OperatingSystem.IsMacOS()) macMenu = new MacMenuBar(callback, preferences.RecentProjects);
-            else if (OperatingSystem.IsWindows()) windowsMenu = new WindowsMenuBar(host.Window, callback, preferences.RecentProjects);
+            if (OperatingSystem.IsMacOS()) macMenu = new MacMenuBar(callback, RecentItems());
+            else if (OperatingSystem.IsWindows()) windowsMenu = new WindowsMenuBar(host.Window, callback, RecentItems(), preferences.UiTheme);
             menuStateHash = int.MinValue;
             UpdateNativeMenuState();
         }
@@ -88,7 +97,7 @@ public sealed partial class Viewer
         {
             if (!File.Exists(recentPath) && !Directory.Exists(recentPath))
             { message = L.Get("Recent source is missing: ") + recentPath; return; }
-            if (StartupVisible) LoadFromStartup([recentPath], true);
+            if (StartupVisible) LoadFromStartup([recentPath]);
             else LoadPaths([recentPath]);
             return;
         }
@@ -153,10 +162,27 @@ public sealed partial class Viewer
     {
         if (!OperatingSystem.IsMacOS()) throw new PlatformNotSupportedException("Run this menu smoke on macOS.");
         string sample = Path.GetFullPath("Samples/EditorDemo/demo.sgv.json");
+        // 菜单里的最近条目必须和欢迎页显示同一首歌：谱面文件名就是难度，菜单不该只显示 ENCORE.vsc。
+        // 这条歌只用来核对标题，核对完立刻删掉；后面的点击断言用的仍是 sample。
+        string song = Path.Combine(Path.GetTempPath(), "kuroaki-mac-menu-song-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(song);
+        File.WriteAllText(Path.Combine(song, "ENCORE.vsc"), "0,3,0\n1000,0,0\n");
+        File.WriteAllText(Path.Combine(song, "info.json"), """
+        {"name":"Scarlet Death","artist":"lexycat","has_encore":true,
+         "difficulty_display_4":"17","enc_data":{"audio_id":"music_chart_scarlet.ogg"}}
+        """);
+        try
+        {
+            preferences.RecentProjects = [sample, song];
+            InstallNativeMenu(); InstallNativeMenu();
+            if (macMenu == null) throw new Exception("Native macOS menu was not created.");
+            macMenu.AssertInstalled();
+            if (macMenu.RecentLabelForTest(1) != "Scarlet Death / lexycat @ BACKSTAGE  LV.17")
+                throw new Exception("Native recent menu did not show the song: " + macMenu.RecentLabelForTest(1));
+        }
+        finally { Directory.Delete(song, true); }
         preferences.RecentProjects = [sample];
-        InstallNativeMenu(); InstallNativeMenu();
-        if (macMenu == null) throw new Exception("Native macOS menu was not created.");
-        macMenu.AssertInstalled();
+        InstallNativeMenu();
         if (!macMenu.EnabledForTest(MenuCommand.OpenFile) || macMenu.EnabledForTest(MenuCommand.Undo))
             throw new Exception("Native menu context did not disable editor actions for an empty session.");
         startup = false;
@@ -171,8 +197,8 @@ public sealed partial class Viewer
             if (!task.Wait(TimeSpan.FromSeconds(30))) throw new TimeoutException("Native recent menu load timed out.");
             Update();
         }
-        if (Current.ProjectPath != sample || startup || editor == null)
-            throw new Exception("Native recent menu action did not open the project in Editor.");
+        if (Current.ProjectPath != sample || startup || editorMode || editor != null)
+            throw new Exception("Native recent menu action did not open the project in the viewer.");
         preferences.UiAnimations = false;
         Draw(1440, 940);
         Update();

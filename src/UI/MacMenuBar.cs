@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using KuroakiGimmick.Core;
 
 namespace KuroakiGimmick.UI;
 
@@ -43,7 +44,7 @@ internal sealed class MacMenuBar : IDisposable
         finally { Marshal.FreeCoTaskMem(utf8); }
     }
 
-    public MacMenuBar(Action<MenuCommand, string?> execute, IReadOnlyList<string> recent)
+    public MacMenuBar(Action<MenuCommand, string?> execute, IReadOnlyList<RecentSource.Item> recent)
     {
         if (!OperatingSystem.IsMacOS()) throw new PlatformNotSupportedException();
         handler = execute;
@@ -71,7 +72,7 @@ internal sealed class MacMenuBar : IDisposable
         return menu;
     }
 
-    void AddGroup(MenuGroupSpec group, IReadOnlyList<string> recent, ref int index)
+    void AddGroup(MenuGroupSpec group, IReadOnlyList<RecentSource.Item> recent, ref int index)
     {
         string name = L.Get(group.Label);
         nint menu = NewMenu(name);
@@ -103,27 +104,31 @@ internal sealed class MacMenuBar : IDisposable
         Send(menu, Sel("release"));
     }
 
-    void AddRecent(nint parent, MenuItemSpec spec, IReadOnlyList<string> paths)
+    /// <summary>
+    /// 最近条目的文字由调用方给（曲名 / 曲师 @ 难度 等级），不再是文件名——谱面文件名就是难度，
+    /// 菜单里只会显示成一列 ENCORE.vsc。完整路径仍挂在 tooltip 上，菜单项本身不塞路径。
+    /// </summary>
+    void AddRecent(nint parent, MenuItemSpec spec, IReadOnlyList<RecentSource.Item> items)
     {
         nint submenu = NewMenu(L.Get(spec.Label));
-        if (paths.Count == 0)
+        if (items.Count == 0)
         {
             nint empty = Send(submenu, Sel("addItemWithTitle:action:keyEquivalent:"), String(L.Get("NO RECENT FILES")), 0, String(""));
             Send(empty, Sel("setEnabled:"), 0);
         }
-        for (int i = 0; i < paths.Count; i++)
+        for (int i = 0; i < items.Count; i++)
         {
-            string path = paths[i];
-            string title = Path.GetFileName(path);
-            if (title.Length > 52) title = title[..49] + "...";
+            var entry = items[i];
+            string title = entry.Title;
+            if (title.Length > 72) title = title[..69] + "...";
             nint item = Send(submenu, Sel("addItemWithTitle:action:keyEquivalent:"),
                 String(title), Sel("kgMenuAction:"), String(""));
             int tag = MenuCatalog.RecentBaseId + i;
             Send(item, Sel("setTarget:"), target);
             Send(item, Sel("setTag:"), tag);
-            Send(item, Sel("setToolTip:"), String(path));
-            recentTags[tag] = path;
-            recentEntries.Add((item, path));
+            Send(item, Sel("setToolTip:"), String(entry.Path));
+            recentTags[tag] = entry.Path;
+            recentEntries.Add((item, entry.Path));
         }
         nint top = Send(parent, Sel("addItemWithTitle:action:keyEquivalent:"), String(L.Get(spec.Label)), 0, String(""));
         Send(top, Sel("setSubmenu:"), submenu);
@@ -161,6 +166,10 @@ internal sealed class MacMenuBar : IDisposable
         nint itemIndex = Send(menu, Sel("indexOfItem:"), item);
         Send(menu, Sel("performActionForItemAtIndex:"), itemIndex);
     }
+
+    /// <summary>测试用：最近条目在菜单里实际显示的文字。AppKit 侧的标题只有这样才读得回来。</summary>
+    internal string RecentLabelForTest(int index) =>
+        Marshal.PtrToStringUTF8(Send(Send(recentEntries[index].Item, Sel("title")), Sel("UTF8String"))) ?? "";
 
     internal bool EnabledForTest(MenuCommand command) => Send(entries[command].Item, Sel("isEnabled")) != 0;
     internal bool CheckedForTest(MenuCommand command) => Send(entries[command].Item, Sel("state")) != 0;

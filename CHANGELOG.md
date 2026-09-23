@@ -66,6 +66,22 @@
 - GIMMICK 项需要演出权重：优先读与谱面同名的 `.vmv` 里 `[mods] weight`，没有时按 VSM 现算（重复区间先展开，表外的 mod 按 `addExtraMod` 默认权重 1）。
 - 卡面文字保持英文：卡片是拿来分享的图片，界面语言不应该改变别人收到的那张图。
 
+### 最近打开列表显示歌曲（修复）
+
+- 欢迎页的 `RECENTLY OPENED` 此前直接把文件名当标题。而谱面文件名本身就是难度——打开过的歌在列表里排下来是一列 `ENCORE.vsc` / `BACKSTAGE.vsb`，看不出是哪首歌。
+- 现在按同目录的 `info.json` / `shatterinfo.json` 还原成 `曲名 / 曲师 @ 难度  LV.等级`，例如 `Scarlet Death / lexycat @ BACKSTAGE  LV.17`。难度名与等级取自当前谱面自己那一槽，谱面叫 `ENCORE` 而界面显示 `BACKSTAGE` 的规则与左栏难度条一致；目录条目取 `SongFiles.PreferredChart` 选中的那张谱面，也就是点进去真正打开的那一档。
+- 缺项逐段省略：没有曲师就只显示曲名，没有等级就只显示难度。信息文件缺失或损坏、路径已被删除时退回原来的文件名写法，解析失败不抛错——最近列表里混进一条坏路径不该让欢迎页画不出来。
+- 歌曲信息要读盘，而列表每帧都重画，所以标题按路径缓存在 `Viewer` 里，最近列表变化时整体作废。
+- 原生菜单的 `OPEN RECENT` 子菜单一并改掉：`MacMenuBar` / `WindowsMenuBar` 的构造参数由路径列表改成 `RecentSource.Item`（路径 + 标题），标题从同一个缓存取，欢迎页和菜单栏不会各显示各的。macOS 的完整路径仍挂在菜单项 tooltip 上，标题上限由 52 放宽到 72 个字符以适应"曲名 / 曲师 @ 难度 等级"；Windows 没有 tooltip，标题后面照旧接目录，用来区分不同唱片目录里的同名歌。
+- 新增 `RecentSource`（标题规则）并把 `SongFiles.Open` 的目录难度候选顺序抽成 `SongFiles.PreferredChart`，打开目录与列表显示共用同一份顺序，不会各挑各的难度。自测覆盖用户给的这条例子、按槽取难度、缺曲师、只有 `shatterinfo.json`、无信息文件与路径已删除六种情形；macOS 菜单冒烟另断言 AppKit 里实际存着的标题就是这首歌（`--smoke-mac-menu`）。
+
+### 打开最近条目不再自动进编辑器（修复）
+
+- 欢迎页点最近的一行、以及原生菜单的 `OPEN RECENT`，此前都会在加载结束后调用 `OpenEditor()`，点开一首歌直接落在时间轴上；同一个"打开"动作，`OPEN PROJECT / FILE`、`OPEN SONG FOLDER` 对话框和拖放进来的文件却停在 viewer。现在三个入口统一：**打开就是看**，要编辑再由 `VIEW → EDITOR / VIEWER` 或工作区里的按钮显式进入。
+- 编辑器里有未保存修改时，从最近列表打开仍旧先弹确认，这条没有变。
+- 删掉 `LoadFromStartup` 的 `enterEditor` 参数与 `startupEnterEditorAfterLoad` 状态：所有调用方早就传 `false`，只留最近列表那一处传 `true`，这个没有第二个取值的参数只会让人以为还存在"从最近进来直接编辑"的分支。
+- 启动页冒烟与 macOS 菜单冒烟相应改成断言落在 viewer，需要编辑器的那段 `Save As` 覆盖改为显式 `OpenEditor()` 之后再跑。
+
 ### 音符排序（修复）
 
 - `Chart.Notes` 此前用 `List.Sort` 排序，那是不稳定的内省排序，同一时刻的音符次序会随实现变化。原版按读入顺序遍历音符，jack / chain 的配对与同刻音符的密度权重都依赖这个次序，因此统计结果会随运行漂移。改为稳定排序后，六项统计与参考实现逐值一致。

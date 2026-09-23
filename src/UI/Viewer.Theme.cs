@@ -61,5 +61,6 @@ public sealed partial class Viewer
         preferences.UiTheme = ViewerSettings.ValidTheme(name);
         cachedHelpKey = "";
         SaveSettings();
+        RequestNativeMenuRefresh();
     }
 }
