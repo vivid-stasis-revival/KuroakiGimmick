@@ -17,6 +17,7 @@ public sealed partial class Viewer
         preferences.UiAnimations = false;
         try
         {
+            Dictionary<string, float> widths = [];
             foreach (string next in new[] { UiLanguage.English, UiLanguage.Chinese, UiLanguage.English })
             {
                 SetUiLanguage(next, persist: false);
@@ -29,21 +30,37 @@ public sealed partial class Viewer
                 {
                     foreach (float fontSize in new[] { 13f, 24f })
                     {
-                        float expected;
-                        if (next == UiLanguage.English)
+                        float measured = fonts.Measure(sample, fontSize, monospaced: mono);
+                        if (measured <= 0)
                         {
-                            var metrics = JsonSerializer.Deserialize<Dictionary<string, Graphics.Fonts.Glyph>>(
-                                File.ReadAllText(Path.Combine(Paths.Assets, "Fonts", mono ? "mono.json" : "sans.json")))!;
-                            expected = sample.Sum(c => metrics[c.ToString()].advance) * fontSize / 32;
+                            throw new InvalidOperationException("UI text measured to nothing.");
                         }
-                        else
+                        // 中英文共用同一份字体，换界面语言不应该改变任何一段文字的宽度。
+                        string widthKey = mono + "|" + fontSize;
+                        if (widths.TryGetValue(widthKey, out float first) && Math.Abs(first - measured) > .001f)
                         {
-                            using var stream = typeof(Viewer).Assembly.GetManifestResourceStream("KuroakiGimmick.Fonts.ui-sans.json")!;
-                            var metrics = JsonSerializer.Deserialize<Graphics.Fonts.HelpAtlasMetrics>(stream)!;
-                            expected = sample.Sum(c => metrics.Glyphs[char.IsAsciiDigit(c) ? "0" : c.ToString()].Advance) * fontSize / metrics.EmSize;
+                            throw new InvalidOperationException("UI text width changed with the interface language.");
                         }
-                        if (Math.Abs(fonts.Measure(sample, fontSize, monospaced: mono) - expected) > .001f)
-                            throw new InvalidOperationException("UI text did not use original English / Medium Chinese metrics.");
+                        widths[widthKey] = measured;
+                        // 步进来自 em 归一化的字体度量，因此宽度对字号严格线性；
+                        // 如果它改为依赖某个栅格像素尺寸，这里就会失败。
+                        if (Math.Abs(fonts.Measure(sample, fontSize * 2, monospaced: mono) - measured * 2) > .001f)
+                        {
+                            throw new InvalidOperationException("UI text width was not linear in font size.");
+                        }
+                        // 等宽请求要保证的是数字列对齐：任意数字串与等长的 "0" 串同宽，
+                        // 卡片统计面板靠它右对齐。更宽的字形（汉字整格一个 em）保留自身宽度，
+                        // 否则相邻的字会叠在一起。
+                        if (mono && Math.Abs(fonts.Measure("0123456789", fontSize, monospaced: true)
+                                - fonts.Measure("0000000000", fontSize, monospaced: true)) > .001f)
+                        {
+                            throw new InvalidOperationException("Monospaced digits did not share a uniform advance.");
+                        }
+                        if (mono && fonts.Measure("中", fontSize, monospaced: true)
+                                < fonts.Measure("0", fontSize, monospaced: true))
+                        {
+                            throw new InvalidOperationException("Monospacing squeezed a full-em glyph into the digit cell.");
+                        }
                     }
                 }
                 foreach (var size in new[] { (1180, 860), (1440, 940) })

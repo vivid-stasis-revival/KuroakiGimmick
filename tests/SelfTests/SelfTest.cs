@@ -486,6 +486,163 @@ public static class SelfTest
             var plaudite = Session.Load(song);
             Check(plaudite.Jackets.Count == 12 && plaudite.Jackets.At(plaudite.Timeline, 0) == cover, "plaudite starts on local cover slot 11");
             Check(!plaudite.Jackets.Files.ContainsKey(10), "ASTELLION cover is never bundled or invented");
+            // BACKSTAGE 的音频与封面由 enc_data 明确指定。这类谱包里两套文件同时存在（music.ogg / jacket.png 属于主曲，
+            // music_chart_*.ogg / song_*_0.png 属于 encore），只按同目录候选顺序挑会稳定挑错，而且目录打开时
+            // ENCORE 的优先级最高，一进去就会踩到。
+            string backstage = Path.Combine(dir, "Backstage");
+            Directory.CreateDirectory(backstage);
+            foreach (string level in new[]
+            {
+                "FINALE",
+                "ENCORE"
+            })
+            {
+                File.WriteAllText(Path.Combine(backstage, level + ".vsc"), "0,3,0,b:195|t:0|v:undefined|s:undefined\n1000,0,0\n");
+            }
+            string encInfo = Path.Combine(backstage, "info.json");
+            File.WriteAllText(encInfo, "{\"chart_id\":\"fixture\",\"name\":\"Main Song\",\"artist\":\"main\",\"bpm_display\":\"195\","
+                + "\"has_encore\":true,\"difficulty_constant_3\":13.7,\"difficulty_display_3\":\"13+\",\"note_designer_3\":\"main charter\","
+                + "\"difficulty_constant_4\":17.1,\"note_designer_4\":\"enc charter\","
+                + "\"enc_data\":{\"name\":\"Encore Song\",\"artist\":\"enc\",\"bpm_display\":\"210\","
+                + "\"audio_id\":\"music_chart_enc.ogg\",\"jacket\":\"song_enc_0.png\"}}");
+            File.WriteAllText(Path.Combine(backstage, "music.ogg"), "");
+            File.WriteAllText(Path.Combine(backstage, "music_chart_enc.ogg"), "");
+            File.Copy(Path.Combine(dir, "grid.png"), Path.Combine(backstage, "jacket.png"));
+            File.Copy(Path.Combine(dir, "grid.png"), Path.Combine(backstage, "song_enc_0.png"));
+            var mainSong = SongFiles.Open(Path.Combine(backstage, "FINALE.vsc"));
+            var encSong = SongFiles.Open(Path.Combine(backstage, "ENCORE.vsc"));
+            Check(Path.GetFileName(mainSong.Audio!) == "music.ogg" && Path.GetFileName(encSong.Audio!) == "music_chart_enc.ogg",
+                "enc_data audio_id selects the backstage track instead of the main song audio");
+            Check(mainSong.Jacket == null && Path.GetFileName(encSong.Jacket!) == "song_enc_0.png",
+                "enc_data jacket is an explicit cover; the main song keeps auto-discovery");
+            Check(Path.GetFileName(JacketAssets.Load(mainSong, new Chart()).DefaultPath!) == "jacket.png"
+                && Path.GetFileName(JacketAssets.Load(encSong, new Chart()).DefaultPath!) == "song_enc_0.png",
+                "cover resolution keeps jacket.png for the main song and the enc_data cover for backstage");
+            Check(mainSong.Bpm == 195 && encSong.Bpm == 210 && mainSong.Title == "Main Song / FINALE"
+                && encSong.Title == "Encore Song / BACKSTAGE", "backstage reports its own name, artist BPM and UI label");
+            // 等级与谱师始终取主曲的难度槽：缺 difficulty_display_4 时按 difficulty_constant_4 生成（17.1 → "17"）。
+            var encInfoRead = SongInfo.Read(backstage)!;
+            var encView = encInfoRead.Effective("ENCORE");
+            Check(SongInfo.Level(encView) == "17" && encView.Designer == "enc charter" && encView.Artist == "enc",
+                "backstage level and designer come from the main song slot 4, not from enc_data");
+            Check(SongInfo.Level(encInfoRead.Effective("FINALE")) == "13+", "explicit difficulty_display wins over the generated constant label");
+            var levels = SongFiles.Difficulties(backstage, encInfoRead);
+            Check(levels.Select(d => d.Display).SequenceEqual(["FINALE", "BACKSTAGE"])
+                && levels.All(d => d.Chart != null) && levels[1].Backstage, "difficulty enumeration lists present charts in source order");
+            // 直接打开 info.json 等同于打开它所在的歌曲目录，目录形式仍按固定难度优先级落到同一个谱面。
+            Check(SongFiles.Open(encInfo).Chart == SongFiles.Open(backstage).Chart
+                && SongFiles.Open(encInfo).Chart?.EndsWith("ENCORE.vsc") == true, "info.json opens as its own song folder");
+            // 只写了 audio_id / jacket 的部分 enc_data 必须保留主曲的曲名与 BPM，不能因为存在 enc_data 就整体替换。
+            File.WriteAllText(encInfo, "{\"chart_id\":\"fixture\",\"name\":\"Main Song\",\"bpm_display\":\"195\",\"has_encore\":true,"
+                + "\"enc_data\":{\"audio_id\":\"music_chart_enc.ogg\",\"jacket\":\"song_enc_0.png\"}}");
+            var partialEnc = SongFiles.Open(Path.Combine(backstage, "ENCORE.vsc"));
+            Check(partialEnc.Bpm == 195 && partialEnc.Title == "Main Song / BACKSTAGE"
+                && Path.GetFileName(partialEnc.Audio!) == "music_chart_enc.ogg",
+                "partial enc_data overrides media while falling back to the main song name and BPM");
+            // hide_backstage 为真才不算 backstage；缺省视为 backstage。
+            File.WriteAllText(encInfo, "{\"name\":\"Main Song\",\"has_encore\":true,"
+                + "\"enc_data\":{\"jacket\":\"song_enc_0.png\",\"hide_backstage\":true}}");
+            Check(SongFiles.Open(Path.Combine(backstage, "ENCORE.vsc")).Title == "Main Song / ENCORE"
+                && !SongInfo.Read(backstage)!.Effective("ENCORE").Backstage, "hide_backstage keeps the ENCORE label");
+            // 损坏的显示信息只报诊断，不能遮住谱面本身。
+            File.WriteAllText(encInfo, "{\"name\": ");
+            var brokenInfo = new Chart();
+            Check(SongInfo.Read(backstage, m => brokenInfo.Diagnostics.Add(new("song-info", 0, m))) == null
+                && brokenInfo.Diagnostics.Count == 1 && SongFiles.Open(Path.Combine(backstage, "ENCORE.vsc")).Chart != null,
+                "corrupt song info reports a diagnostic without hiding the chart");
+            // SHATTER 的等级与谱师写在 shatterinfo.json 里，字段是单数的 difficulty_number / note_designer，
+            // 主 info.json 的第 5 槽通常压根不存在；只读主文件的话这两项永远是空的。
+            string shatter = Path.Combine(dir, "Shatter");
+            Directory.CreateDirectory(shatter);
+            File.WriteAllText(Path.Combine(shatter, "SHATTER.vsc"), "0,3,0,b:245|t:0|v:undefined|s:undefined\n1000,0,0\n");
+            File.WriteAllText(Path.Combine(shatter, "info.json"), "{\"name\":\"Main Song\",\"artist\":\"main\",\"bpm_display\":\"245\"}");
+            string shatterInfo = Path.Combine(shatter, "shatterinfo.json");
+            File.WriteAllText(shatterInfo, "{\"chart_id\":\"fixture\",\"name\":\"Main Song [Shatter]\",\"artist\":\"main\","
+                + "\"bpm_display\":\"245\",\"difficulty_name\":\"SHATTER\",\"difficulty_number\":\"15+\",\"note_designer\":\"shatter charter\"}");
+            var shatterView = SongInfo.Read(shatter)!.Effective("SHATTER");
+            Check(SongInfo.Level(shatterView) == "15+" && shatterView.Designer == "shatter charter",
+                "shatterinfo.json supplies the level and designer the main song has no slot for");
+            // 附属文件里的曲名多半是"曲名 [Shatter]"这种变体，主曲写了曲名就不该被它顶掉。
+            Check(shatterView.Name == "Main Song" && SongFiles.Open(Path.Combine(shatter, "SHATTER.vsc")).Title == "Main Song / SHATTER",
+                "the main song name outranks the per-difficulty file variant");
+            // 多数 Shatter 谱包根本没有主 info.json，整首歌的信息都在附属文件里。
+            File.Delete(Path.Combine(shatter, "info.json"));
+            var aloneView = SongInfo.Read(shatter)!.Effective("SHATTER");
+            Check(aloneView.Name == "Main Song [Shatter]" && aloneView.Artist == "main" && aloneView.BpmDisplay == "245"
+                && SongInfo.Level(aloneView) == "15+", "a lone shatterinfo.json still names the song, not just the difficulty");
+            Check(SongFiles.Difficulties(shatter, SongInfo.Read(shatter))
+                .Single(d => d.Name == "SHATTER") is { Display: "SHATTER", Level: "15+", Chart: not null },
+                "difficulty enumeration picks up the level from the per-difficulty file");
+            // 槽位认文件名：有谱包把 shatterinfo.json 里的 difficulty_name 写成自造难度，谱面仍是 SHATTER.vsc，
+            // 等级谱师照旧进第 5 槽，只有 UI 上的难度名跟着改。
+            File.WriteAllText(shatterInfo, "{\"difficulty_name\":\"EVIL\",\"difficulty_number\":\"17+++\",\"note_designer\":\"dracula\"}");
+            var renamed = SongInfo.Read(shatter)!;
+            Check(renamed.Effective("SHATTER").DisplayDifficulty == "EVIL" && SongInfo.Level(renamed.Effective("SHATTER")) == "17+++",
+                "a self-invented difficulty_name relabels the difficulty without moving its slot");
+            // 附属文件损坏时只丢它自己那一份；有主文件就该照常显示主曲。
+            File.WriteAllText(Path.Combine(shatter, "info.json"), "{\"name\":\"Main Song\"}");
+            File.WriteAllText(shatterInfo, "{\"difficulty_number\": ");
+            var brokenSide = new Chart();
+            var partial = SongInfo.Read(shatter, m => brokenSide.Diagnostics.Add(new("song-info", 0, m)));
+            Check(partial?.Effective("SHATTER") is { Name: "Main Song", Level: null, DisplayDifficulty: "SHATTER" }
+                && brokenSide.Diagnostics.Count == 1, "a corrupt per-difficulty file reports once and leaves the main song readable");
+            Directory.Delete(shatter, true);
+            // 六项统计按原版 GetSongStats 计算。空谱面必须得到零而不是 NaN，长度为零则明确报错。
+            var emptyCounts = SongStats.Measure([], 10);
+            Check(emptyCounts.NoteCount == 0 && SongStats.Compute(emptyCounts, 10, "FINALE", null, 0).Total == 0,
+                "an empty chart produces zero stats instead of NaN");
+            Check(SongStats.DifficultyMultiplier("ENCORE") == 2.5 && SongStats.DifficultyMultiplier("BACKSTAGE") == 2.5
+                && SongStats.DifficultyMultiplier("OPENING") == 0 && SongStats.DifficultyMultiplier("SHATTER") == 0,
+                "difficulty multipliers match the source table, including the BACKSTAGE alias");
+            Check(SongStats.Round(2.5) == 3 && SongStats.Round(-2.5) == -3 && SongStats.Round(1.4) == 1,
+                "stat rounding uses the source half-away-from-zero rule, not banker's rounding");
+            // 统计按读入顺序遍历音符，jack / chain 的配对因此依赖同刻音符的先后。
+            // 排序必须稳定，否则同一份谱面在不同运行里会算出不同的 TECH。
+            var tied = new Chart();
+            for (int i = 0; i < 40; i++) tied.Notes.Add(new(i % 2, i % 2 == 0 ? 0 : 1, i % 4, i % 2, new Dictionary<int, object>()));
+            var beforeSort = tied.Notes.ToArray();
+            tied.Notes.StableSortByTime();
+            Check(tied.Notes.Where(n => n.Time == 0).SequenceEqual(beforeSort.Where(n => n.Time == 0))
+                && tied.Notes.Zip(tied.Notes.Skip(1)).All(p => p.First.Time <= p.Second.Time),
+                "note sorting is stable, so equal-time notes keep their source order");
+            // GIMMICK 权重：表内的名字取表里的权重，表外的是谱面自己 addExtraMod 注册的，原版默认 1；
+            // start:end:step 先展开再累加，因此一行 0:7:1 计 8 次。mpf 段不参与。
+            var derived = ModWeights.FromVsm("!obj:obj_custom_gimmick\n0,0,linear,0,1,prx,-1 // keep\n"
+                + "0:7:1,0,linear,0,1,driven,-1\n0,0,linear,0,1,my_custom_mod,-1\nmpf\n0,1,someFunction\n");
+            Check(derived.ModCount == 10 && Math.Abs(derived.Weight - (2 + 8 * 4 + 1)) < 1e-9
+                && derived.Unknown.SequenceEqual(["my_custom_mod"]),
+                "VSM-derived gimmick weight expands repeat ranges and defaults unknown mods to 1");
+            Check(ModWeights.Global["driven"] == 4 && ModWeights.Global["scrollspeed"] == 0 && ModWeights.Global.Count == 74,
+                "global mod weight table matches the source mod_setup table");
+            // 模组注册的 mod 必须留在 External：Global 是原版 mod_setup 的镜像，混进模组的名字
+            // 就再也没法拿它和源码对照了。custom_episode 的权重 0 来自 addGlobalMod 的第二个参数。
+            Check(ModWeights.External["custom_episode"] == 0
+                && !ModWeights.Global.ContainsKey("custom_episode")
+                && ModWeights.TryWeight("custom_episode", out double episodeWeight) && episodeWeight == 0,
+                "mod-registered global mods resolve their own weight without polluting the vanilla table");
+            // VMV 是生成出来的权重缓存，存在时优先于按 VSM 现算的近似值。
+            string weightDir = Path.Combine(dir, "Weights");
+            Directory.CreateDirectory(weightDir);
+            File.WriteAllText(Path.Combine(weightDir, "FINALE.vsc"), "0,3,0,b:120|t:0|v:undefined|s:undefined\n");
+            File.WriteAllText(Path.Combine(weightDir, "FINALE.vsm"), "0,0,linear,0,1,prx,-1\n");
+            string chartInWeights = Path.Combine(weightDir, "FINALE.vsc");
+            Check(ModWeights.Resolve(chartInWeights, "FINALE") is { Source: "vsm-derived", Weight: 2 },
+                "gimmick weight falls back to the VSM source when no VMV cache exists");
+            File.WriteAllText(Path.Combine(weightDir, "FINALE.vmv"), "[mods]\nweight = 1105.5\n[other]\nweight = 1\n");
+            Check(ModWeights.Resolve(chartInWeights, "FINALE") is { Source: "vmv", Weight: 1105.5 },
+                "the generated VMV weight cache wins over the VSM estimate");
+            // 难度专属 VSM 缺失时回落 GLOBAL.vsm，与 read_mods_file 的优先规则一致。
+            File.Delete(Path.Combine(weightDir, "FINALE.vsm"));
+            File.Delete(Path.Combine(weightDir, "FINALE.vmv"));
+            File.WriteAllText(Path.Combine(weightDir, "GLOBAL.vsm"), "0,0,linear,0,1,beat,-1\n");
+            Check(ModWeights.Resolve(chartInWeights, "FINALE") is { Source: "vsm-derived", Weight: 1.5 },
+                "GLOBAL.vsm is the fallback gimmick source for a difficulty without its own VSM");
+            // 信息卡片的导出宽度只接受登记过的几档，配置文件被改坏时回落 1080p 而不是画出一张 0 像素的图。
+            Check(ViewerSettings.ValidCardWidth(1920) == 1920 && ViewerSettings.ValidCardWidth(3840) == 3840
+                && ViewerSettings.ValidCardWidth(0) == 1920 && ViewerSettings.ValidCardWidth(1000000) == 1920,
+                "info card width falls back to 1080p when the stored value is not a supported size");
+            Check(ViewerSettings.CardWidths.All(w => w % 16 == 0 && w * 9 / 16 * 16 / 9 == w),
+                "every info card size stays exactly 16:9 in whole pixels");
             // 瞬时爆发照搬原版的两颗一组生成调用：循环次数向上取整后每组两颗（25→50 颗、1.1→4 颗）。
             // 粒子从屏幕上方 y=-10 出发，速度取 pburstspeed，寿命是源码里固定的 alpha 衰减时长。
             // "重复模式"里的 25 是毫秒倒计时间隔而非 25 组粒子：按倒计时 tick 发射，也不该为此报 repeated mode 诊断。

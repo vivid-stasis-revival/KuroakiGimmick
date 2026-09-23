@@ -47,7 +47,7 @@ public sealed partial class Viewer
         try
         {
             var p = Current.Project;
-            var r = new Rect(width / 2 - 340, height / 2 - 405 + (1 - settingsAlpha) * 10, 680, 810);
+            var r = new Rect(width / 2 - 340, height / 2 - 444 + (1 - settingsAlpha) * 10, 680, 888);
             Canvas.Fill(new(0, 0, width, height), Color.Hex(0, .83f));
             Canvas.Fill(r, panel);
             Canvas.Border(r, soft);
@@ -188,19 +188,33 @@ public sealed partial class Viewer
             }
             Text(L.Get("Master switch is the VS UI button in the top bar. Sprites come from the installed Game UI pack."), label, r.Y + 672, 11, muted,
                 max: r.W - 60);
-            if (Button(L.Get("RESET DEFAULTS"), new(label, r.Y + 694, 205, 34)))
+            // 信息卡片的导出分辨率。卡面按 1280x720 的逻辑坐标绘制，这里只决定输出的像素密度。
+            Text(L.Get("Info card size"), label, r.Y + 704, 14, white);
+            for (int i = 0; i < ViewerSettings.CardWidths.Length; i++)
+            {
+                int cardWidth = ViewerSettings.CardWidths[i];
+                if (Button(cardWidth == 1280 ? "720P" : cardWidth == 1920 ? "1080P" : cardWidth == 2560 ? "1440P" : "4K",
+                    new(control + i * 88, r.Y + 694, 83, 32), active: CardWidth == cardWidth, key: "settings-card-size:" + cardWidth))
+                {
+                    preferences.CardWidth = cardWidth;
+                    SaveSettings();
+                }
+            }
+            Text(L.Format($"Exported info cards are {CardWidth} x {CardWidth * 9 / 16}, always 16:9."), label, r.Y + 733, 11, muted, max: r.W - 60);
+            if (Button(L.Get("RESET DEFAULTS"), new(label, r.Y + 772, 205, 34)))
             {
                 preferences.UiAnimations = true;
                 preferences.ModalValueEditor = false;
                 preferences.AlwaysFollow = false;
                 preferences.UiTheme = "Nekomiya";
+                preferences.CardWidth = new ViewerSettings().CardWidth;
                 SetUiLanguage(UiLanguage.Auto, persist: false);
                 // 默认值只套到 project 上；transport 自己缓存音量和延迟，必须再同步一次。工作区布局不在此重置。
                 new ViewerSettings().Apply(p);
                 transport.SetVolume(p.PreviewVolume);
                 transport.SetDelay(p.AudioDelayMs);
             }
-            if (Button(L.Get("DONE"), new(r.X + r.W - 180, r.Y + 694, 150, 34), primary: true))
+            if (Button(L.Get("DONE"), new(r.X + r.W - 180, r.Y + 772, 150, 34), primary: true))
             {
                 settings = false;
                 SaveSettings();

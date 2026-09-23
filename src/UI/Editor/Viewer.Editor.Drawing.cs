@@ -22,7 +22,7 @@ public sealed partial class Viewer
     {
         if (editor == null) { editorMode = false; return; }
         Canvas.Quad(logo, new(24, 20, 46, 46), Color.White);
-        Text("KUROAKI", 82, 22, 23, white, true); Text(L.Get("EDITOR / v0.1.2 / 16.2"), 83, 50, 10, soft, true);
+        Text("KUROAKI", 82, 22, 23, white, true); Text(L.Get("EDITOR") + " / " + Paths.BuildRevision, 83, 50, 10, soft, true);
         Text(Current.Title + (editor.Dirty ? " *" : ""), 282, 32, 16, white, max: Math.Max(0, w - 1160));
         if (EButton(L.Get("LAYOUT"), new(w - 858, 25, 90, 31), enabled: !Busy)) OpenLayout();
         if (EButton(L.Get("EXPORT"), new(w - 758, 25, 92, 31), primary: true, enabled: !Busy)) OpenChartExport();
@@ -239,6 +239,15 @@ public sealed partial class Viewer
             if (row < 0 || y + 27 > r.Y + r.H - 31) return;
             ValueField(name, value, r.X, y, r.W, action);
         }
+        // 只读说明行 / 可点的跳转行，与 Field 共用同一套滚动计数，因此底部的 Clamp 自动把它们算进范围。
+        void Row(string label, Action? run)
+        {
+            int index = fieldCount++;
+            float row = index - shownScroll; float y = r.Y + 57 + row * 31;
+            if (row < 0 || y + 27 > r.Y + r.H - 31) return;
+            if (run == null) Text(label, r.X + 2, y + 8, 11, muted, max: r.W - 4);
+            else if (EButton(label, new(r.X, y, r.W, 27), key: "inspector-row:" + index)) run();
+        }
         if (selectedClip is Guid id && editor.Vsm.Find(id) is { } c)
         {
             Field(L.Get("Mod"), c.Name, v => EditClip(m => m with { Name = v }, L.Get("Change mod")));
@@ -253,6 +262,8 @@ public sealed partial class Viewer
                 Field(L.Get("Repeat end"), VsmDocument.N(end), v => EditClip(m => m with { RepeatEnd = VsmDocument.Number(v) }, L.Get("Set repeat end")));
                 Field(L.Get("Repeat step"), VsmDocument.N(c.RepeatStep), v => EditClip(m => m with { RepeatStep = VsmDocument.Number(v) }, L.Get("Set repeat step")));
             }
+            // 谱面内剧情的触发点自己不带时长信息，真正演什么写在 story.json 里，所以额外列出来。
+            if (c.Name.Equals(EpisodeScript.ModName, StringComparison.OrdinalIgnoreCase)) DrawEpisodeRows(c, Row);
             Text(L.Format($"SOURCE LINE {editor.Vsm.SourceLine(id)} / NOW {Current.Timeline.Get(c.Name, time, c.Proxy):0.####}"), r.X, r.Y + r.H - 22, 10, soft, true, r.W);
         }
         else if (selectedWindowEvent >= 0 && selectedWindowEvent < (editor.Windows.Events?.Count ?? 0) && editor.Windows.Events![selectedWindowEvent] is JsonObject ev)

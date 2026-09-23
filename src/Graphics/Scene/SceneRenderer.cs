@@ -15,6 +15,8 @@ public sealed partial class SceneRenderer : IDisposable
     readonly Texture[] dustTextures, noteParticles;
     readonly SceneFont sceneFont;
     readonly GameUiRenderer gameUi;
+    /// <summary>游戏 HUD 渲染器。信息卡片复用它画原版难度徽章，避免两处各维护一套帧序。</summary>
+    public GameUiRenderer GameUi => gameUi;
     readonly CheckerboardRenderer checker;
     readonly CustomEffects customEffects;
     readonly CustomGimmickRenderer customGimmicks;
@@ -218,6 +220,8 @@ public sealed partial class SceneRenderer : IDisposable
             gameUi.DrawSequenceStory(session, time);
             nativeSequence.EndFade(session, time);
         }
+        // 谱面内剧情不依赖原生 gimmick：任何自定义曲写了 custom_episode 都能触发，所以在门控之外。
+        gameUi.DrawEpisodeStory(session, time);
         if (M("wflash") > 0)
         {
             canvas.Fill(new(0, 0, 320, 180), Color.White.Alpha(M("wflash")));

@@ -48,6 +48,18 @@
         "resolved": "2.30.16",
         "contentHash": "qg1i+NHihXVKLKYacGKrauhSQIGL31eBWcTC4Vc7jnGmBFj87LkRuCdXB5aDZisWMRnB6x2mcfwYXQxMWEG/lw=="
       },
+      "StbImageWriteSharp": {
+        "type": "Direct",
+        "requested": "[1.16.7, )",
+        "resolved": "1.16.7",
+        "contentHash": "NF9kOxi0iS9VunklnRKgOpAWC2knCGKRjdy7RT6XAqYNyb7LQfyPHPdl4l1fJw7TFYKrGQzQOmK1XpBONC2MoA=="
+      },
+      "StbTrueTypeSharp": {
+        "type": "Direct",
+        "requested": "[1.26.13, )",
+        "resolved": "1.26.13",
+        "contentHash": "vfl9hIROP2CeDSqPTVxfXrH/ZaFN6o6h0EsoG9aSzErrXUTwp8bZ4NpycVMSKtdmPGBI4eyvTIg1yzGs1jthMw=="
+      },
       "System.Memory": {
         "type": "Transitive",
         "resolved": "4.5.3",

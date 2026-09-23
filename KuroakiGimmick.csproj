@@ -5,10 +5,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Version>0.1.3</Version>
-    <AssemblyVersion>0.1.3.0</AssemblyVersion>
-    <FileVersion>0.1.3.170</FileVersion>
-    <InformationalVersion>0.1.3+17.0</InformationalVersion>
+    <Version>0.1.4</Version>
+    <AssemblyVersion>0.1.4.0</AssemblyVersion>
+    <FileVersion>0.1.4.175</FileVersion>
+    <InformationalVersion>0.1.4+17.5</InformationalVersion>
     <AssemblyName>KuroakiGimmick</AssemblyName>
     <RootNamespace>KuroakiGimmick</RootNamespace>
     <ApplicationIcon Condition="Exists('Assets/App/Kuroaki.ico')">Assets/App/Kuroaki.ico</ApplicationIcon>
@@ -21,7 +21,8 @@
   <ItemGroup>
     <Compile Include="src/**/*.cs;tests/SelfTests/**/*.cs" />
     <EmbeddedResource Include="src/UI/Localization/*.json" LogicalName="KuroakiGimmick.Localization.%(Filename)%(Extension)" />
-    <EmbeddedResource Include="Resources/Fonts/*.json;Resources/Fonts/*.png" LogicalName="KuroakiGimmick.Fonts.%(Filename)%(Extension)" />
+    <!-- 界面字体是真正的字体文件，运行时按目标像素密度栅格化；加文案不需要重新生成任何资源。 -->
+    <EmbeddedResource Include="Resources/Fonts/*.ttf" LogicalName="KuroakiGimmick.Fonts.%(Filename)%(Extension)" />
     <!-- Embed the SAME editable definitions, so an older external Assets directory
          cannot remove the extension-ID table from a newer executable. -->
     <!-- Assets/ holds art exported from a local game install and is not in the
@@ -42,7 +43,9 @@
     <PackageReference Include="Silk.NET.Shaderc.Native" Version="2.23.0" />
     <PackageReference Include="Silk.NET.SPIRV.Cross.Native" Version="2.23.0" />
     <PackageReference Include="StbImageSharp" Version="2.30.16" />
+    <PackageReference Include="StbImageWriteSharp" Version="1.16.7" />
     <PackageReference Include="NVorbis" Version="0.10.5" />
+    <PackageReference Include="StbTrueTypeSharp" Version="1.26.13" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Assets/**/*;Samples/**/*;Integrations/**/*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />

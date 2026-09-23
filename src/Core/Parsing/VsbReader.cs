@@ -76,7 +76,9 @@ public static class VsbReader
             throw new InvalidDataException($"Truncated VSB at byte {r.BaseStream.Position}.", ex);
         }
         // 音符按时间升序，后续查询才能二分；mod 事件保持读入顺序，由 Order 承载声明顺序。
-        c.Notes.Sort((a, b) => a.Time.CompareTo(b.Time));
+        // 排序必须稳定：同一时刻的音符要保留文件里的先后，原版统计正是按读入顺序配对 jack/chain，
+        // List.Sort 是不稳定的内省排序，同刻音符的次序会随实现变化。
+        c.Notes.StableSortByTime();
         return c;
     }
 

@@ -109,7 +109,8 @@ public static class VscReader
             }
         }
         // 按时间升序，后续查询才能二分；解析失败的行只留诊断，不影响其余音符。
-        chart.Notes.Sort((a, b) => a.Time.CompareTo(b.Time));
+        // 同上：排序稳定，同一时刻的音符保留源文件里的先后。
+        chart.Notes.StableSortByTime();
         return chart;
     }
 

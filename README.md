@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.3_%2F_17.0-94cddd?style=flat-square" alt="v0.1.3 / Build 17.0">
+  <img src="https://img.shields.io/badge/version-0.1.4_%2F_17.5-94cddd?style=flat-square" alt="v0.1.4 / Build 17.5">
   <img src="https://img.shields.io/badge/C%23-.NET_8-b5a3e8?style=flat-square" alt="C# / .NET 8">
   <img src="https://img.shields.io/badge/renderer-SDL3_GPU-94cddd?style=flat-square" alt="SDL3 GPU">
   <img src="https://img.shields.io/badge/UI-中文_%2F_English-e8a4bd?style=flat-square" alt="中文 / English">
@@ -54,12 +54,15 @@ KuroakiGimmick 主要解决的是 **演出制作与验证**。
 | 功能 | 支持内容 |
 | --- | --- |
 | 演出预览 | 读取 VSB / VSC 谱面、VSM 演出、VSP 图片声明以及 SGV 工程，在歌曲场景中显示音符、判定效果、HUD 与演出。 |
+| 难度切换 | 歌曲目录带 `info.json` 时在左栏列出各难度并直接切换；BACKSTAGE 使用 `enc_data` 指定的曲名、封面与音频，SHATTER 的等级与谱师取同目录的 `shatterinfo.json`。 |
 | 时间轴编辑 | 编辑事件时间、持续时间与缓动；支持音符吸附、循环试听、时间标记、批量操作、片段拆分／合并以及撤销重做。 |
+| 跨实例复制 | 选择集以文本形式进出系统剪贴板，两个编辑器之间可以互相粘贴，也能把内容直接发给别人。 |
 | 图片动画 | 独立图片画布，可调整初始姿态和关键帧，支持位置、缩放、旋转、路径续接与资源替换。 |
 | 文字与字幕 | 编辑字幕内容、时间和样式，并通过文字画布调整位置、排版、颜色及动画端点。 |
 | 场景效果 | 支持 Custom Proxy 裁剪与变换、部分原生 gimmick、粒子、film 等效果；预览与视频输出共用主要渲染流程。 |
 | 窗口运动 | 提供虚拟桌面与真实辅助窗口预览，并支持部分 ExtCustomGimmick 窗口事件和 Proxy 内容绑定。 |
 | 工程与导出 | 保存 SGV 工程，并导出 VSM、VSM + cgmk config、Chart Folder 或 MP4。 |
+| 乐曲信息卡片 | 按当前难度生成 1280×720 卡片，含封面、难度徽章与原版六项统计，可保存 PNG 或复制图片。 |
 | 编辑工作区 | 中英双语、可调布局与 UI 缩放、主题、F1 离线文档、轨道说明以及编辑辅助工具。 |
 
 界面语言可在：
@@ -178,6 +181,7 @@ FFmpeg 也可以直接放入 `PATH`。
 | 导出方式 | 输出内容 |
 | --- | --- |
 | VSM | 当前演出文本；不自动包含 VSP、图片或字幕资源。 |
+| Info Card | 当前难度的 1280×720 PNG；包含封面、难度徽章与六项统计。 |
 | VSM + cgmk config | VSM 以及对应窗口配置；不自动包含其他资源文件。 |
 | Chart Folder | 当前难度所需的演出、VSP、图片、字幕等依赖，并附带可重新打开的预览工程。 |
 | Video | H.264 / AAC MP4；画面和音频遵循谱面的 `playspeed` 以及已支持的音乐跳转行为。 |
@@ -199,6 +203,8 @@ Chart Folder 不负责安装游戏扩展，也不保证收集同一歌曲其他�
 | `Ctrl/⌘ + Shift + S` | 另存为 |
 | `Ctrl/⌘ + Z` | 撤销 |
 | `Ctrl/⌘ + Shift + Z` | 重做 |
+| `Ctrl/⌘ + C` | 复制选择集到剪贴板 |
+| `Ctrl/⌘ + V` | 从剪贴板粘贴到插入点 |
 | `E` | 创建或激活时间标记 |
 | `Shift + E` | 取消固定标记 |
 | `A` | 设置循环起点 |
@@ -241,7 +247,7 @@ bash scripts/publish-win.sh x64
 
 ```text
 dist/
-└── KuroakiGimmick-v0.1.3-<RID>-17.0-<timestamp>/
+└── KuroakiGimmick-v0.1.4-<RID>-17.5-<timestamp>/
 ```
 
 同时会生成对应 ZIP。
@@ -264,7 +270,7 @@ macOS 构建会在可用时执行 ad-hoc 签名，但不会进行 Apple notariza
 
 当前版本：
 
-**v0.1.3 / Build 17.0**
+**v0.1.4 / Build 17.5**
 
 实际版本号以 [`KuroakiGimmick.csproj`](KuroakiGimmick.csproj) 为准。
 
@@ -341,6 +347,17 @@ dotnet run -c Release --no-build -- \
   --inspect /path/chart.vsb \
   --time 45
 ```
+
+生成乐曲信息卡片：
+
+```bash
+dotnet run -c Release --no-build -- \
+  --card /path/FINALE.vsb \
+  --out card.png \
+  --width 1920
+```
+
+`--width` 取 1280 / 1920 / 2560 / 3840，缺省跟随设置里的那一档；高度按 16:9 得出。
 
 生成场景截图：
 

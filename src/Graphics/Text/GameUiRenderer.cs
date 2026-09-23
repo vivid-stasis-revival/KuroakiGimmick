@@ -13,6 +13,8 @@ public sealed partial class GameUiRenderer : IDisposable
     GameUiAssets? current;
     readonly Dictionary<string, Texture> textures = [];
     readonly Dictionary<string, Dictionary<int, GameUiAssets.Glyph>> glyphs = [];
+    /// <summary>统计数字精灵的不透明包围盒缓存，按文件名索引；整张透明或读不出时存 null。</summary>
+    readonly Dictionary<string, Rect?> opaqueBounds = [];
     public GameUiRenderer(Canvas c) => canvas = c;
     /// <summary>
     /// 资源包身份（引用相等）变化时才重建缓存：先 Flush 把仍引用旧纹理的批次交出去，再 Dispose，
@@ -113,6 +115,154 @@ public sealed partial class GameUiRenderer : IDisposable
     /// 固定 HUD：所有坐标都是原版 320×180 逻辑空间里的常量，不随窗口缩放改写。
     /// 时间轴的 uialpha 统一控制整块 HUD 的透明度，为 0 时直接跳过而不是画全透明四边形。
     /// </summary>
+    /// <summary>
+    /// 在任意位置按任意倍率画一枚难度徽章，供信息卡片复用。相对位置与帧序同 HUD：
+    /// 指示框在原点，LEVEL 字样偏移 (3,3)、数字偏移 (26,2)，各自在 +1 像素处先压一层三成黑作为阴影。
+    /// 资源包缺失或等级没有对应帧时返回 false 且一笔不画，由调用方决定退回文字，不去猜一个不存在的帧。
+    /// </summary>
+    public bool DrawDifficultyBadge(Session session, string level, float x, float y, float scale)
+    {
+        Use(session.GameUi);
+        if (current?.Data == null || !current.Data.Sprites.ContainsKey("sp_newdifficultyindicator"))
+        {
+            return false;
+        }
+        // 帧号先定下来再落笔。自造等级（有谱包把 SHATTER 的难度写成 17+++）没有对应帧，
+        // 底板已经画下去才发现数字画不出来的话，调用方退回来的文字会压在 LEVEL 字样上糊成一团。
+        int number = DifficultyNumberFrame(level);
+        if (!current.Data.Sprites.TryGetValue("sp_newdifficultynumbers", out var numbers)
+            || number < 0 || number >= numbers.Frames.Count)
+        {
+            return false;
+        }
+        int frame = session.Song.DifficultyFrame;
+        var white = Color.White;
+        var shadow = Color.Hex(0).Alpha(.3);
+        Sprite("sp_newdifficultyindicator", frame, x, y, white, scale);
+        Sprite("sp_newdifficultylevel", frame, x + 4 * scale, y + 4 * scale, shadow, scale);
+        Sprite("sp_newdifficultylevel", frame, x + 3 * scale, y + 3 * scale, white, scale);
+        Sprite("sp_newdifficultynumbers", number, x + 27 * scale, y + 3 * scale, shadow, scale);
+        Sprite("sp_newdifficultynumbers", number, x + 26 * scale, y + 2 * scale, white, scale);
+        return true;
+    }
+
+    /// <summary>
+    /// 等级文字到数字精灵帧号。0-18 是普通等级，"9+" 到 "17+" 接在其后，因此带加号的映射为 plus+10；
+    /// 认不出的写法返回 -1。
+    /// </summary>
+    public static int DifficultyNumberFrame(string? level)
+    {
+        if (string.IsNullOrEmpty(level))
+        {
+            return -1;
+        }
+        if (level.EndsWith('+') && int.TryParse(level[..^1], out int plus) && plus is >= 9 and <= 17)
+        {
+            return plus + 10;
+        }
+        return int.TryParse(level, out int number) && number is >= 0 and <= 18 ? number : -1;
+    }
+
+    /// <summary>
+    /// 统计面板的标签精灵。第 0 帧是含 GIMMICK 的六项排布，第 1 帧是五项；
+    /// <paramref name="scale"/> 是一个源像素对应的目标像素数。资源缺失时返回 false，由调用方退回文字。
+    /// </summary>
+    public bool DrawStatLabels(Session session, float x, float y, float scale, bool gimmick)
+    {
+        Use(session.GameUi);
+        if (current?.Data == null || !current.Data.Sprites.ContainsKey("sp_techstats2025"))
+        {
+            return false;
+        }
+        Sprite("sp_techstats2025", gimmick ? 0 : 1, x, y, Color.White, scale);
+        return true;
+    }
+
+    /// <summary>
+    /// 用统计数字精灵右对齐画一个整数。字距取一个源像素，与原版面板一致。
+    /// 资源缺失时返回 false，由调用方退回文字。
+    /// </summary>
+    public bool DrawStatNumber(Session session, float rightX, float y, float scale, int value)
+    {
+        Use(session.GameUi);
+        if (current?.Data == null || !current.Data.Sprites.TryGetValue("sp_font_techstat", out var sprite))
+        {
+            return false;
+        }
+        string text = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var glyphs = new List<(Texture Texture, Rect Bounds)>(text.Length);
+        float total = 0;
+        foreach (char c in text)
+        {
+            if (c is < '0' or > '9' || c - '0' >= sprite.Frames.Count)
+            {
+                return false;
+            }
+            string file = sprite.Frames[c - '0'];
+            if (Opaque(file, sprite) is not { } bounds)
+            {
+                return false;
+            }
+            glyphs.Add((Image(file), bounds));
+            total += bounds.W * scale;
+        }
+        if (glyphs.Count == 0)
+        {
+            return false;
+        }
+        total += scale * (glyphs.Count - 1);
+        float pen = rightX - total;
+        foreach (var (texture, bounds) in glyphs)
+        {
+            // 只取不透明区域那一块：源图四周留白，整张贴会把数字排得过散。
+            var uv = new Rect(bounds.X / texture.Width, bounds.Y / texture.Height,
+                bounds.W / texture.Width, bounds.H / texture.Height);
+            canvas.Quad(texture, new(pen, y, bounds.W * scale, bounds.H * scale), Color.White, uv);
+            pen += (bounds.W + 1) * scale;
+        }
+        return true;
+    }
+
+    /// <summary>数字精灵的不透明包围盒，按文件缓存；无法读取或整张透明时返回 null。</summary>
+    Rect? Opaque(string file, GameUiAssets.Sprite sprite)
+    {
+        if (opaqueBounds.TryGetValue(file, out var cached))
+        {
+            return cached;
+        }
+        Rect? bounds = null;
+        try
+        {
+            using var stream = System.IO.File.OpenRead(current!.File(file));
+            var image = StbImageSharp.ImageResult.FromStream(stream, StbImageSharp.ColorComponents.RedGreenBlueAlpha);
+            int minX = image.Width, minY = image.Height, maxX = -1, maxY = -1;
+            for (int py = 0; py < image.Height; py++)
+            {
+                for (int px = 0; px < image.Width; px++)
+                {
+                    if (image.Data[(py * image.Width + px) * 4 + 3] == 0)
+                    {
+                        continue;
+                    }
+                    minX = Math.Min(minX, px);
+                    minY = Math.Min(minY, py);
+                    maxX = Math.Max(maxX, px);
+                    maxY = Math.Max(maxY, py);
+                }
+            }
+            if (maxX >= minX && maxY >= minY)
+            {
+                bounds = new(minX, minY, maxX - minX + 1, maxY - minY + 1);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or ArgumentException)
+        {
+            bounds = null;
+        }
+        opaqueBounds[file] = bounds;
+        return bounds;
+    }
+
     public void Draw(Session session, double time)
     {
         Use(session.GameUi);
@@ -153,17 +303,9 @@ public sealed partial class GameUiRenderer : IDisposable
         Sprite("sp_newdifficultyindicator", info.DifficultyFrame, 274, 167, white);
         Sprite("sp_newdifficultylevel", info.DifficultyFrame, 278, 171, Color.Hex(0).Alpha(.3 * alpha));
         Sprite("sp_newdifficultylevel", info.DifficultyFrame, 277, 170, white);
-        int level = -1;
-        // 原版数字精灵的帧序：0-18 是普通等级，"9+" 到 "17+" 接在后面，所以带加号的等级映射为 plus+10。
+        // 原版数字精灵的帧序：0-18 是普通等级，"9+" 到 "17+" 接在后面，映射见 DifficultyNumberFrame。
         // 超出帧数范围的等级退回用文字画，不去猜一个不存在的帧。
-        if (info.Level.EndsWith('+') && int.TryParse(info.Level[..^1], out int plus) && plus is >= 9 and <= 17)
-        {
-            level = plus + 10;
-        }
-        else if (int.TryParse(info.Level, out int number) && number >= 0)
-        {
-            level = number;
-        }
+        int level = DifficultyNumberFrame(info.Level);
         if (level >= 0 && level < current.Data.Sprites["sp_newdifficultynumbers"].Frames.Count)
         {
             Sprite("sp_newdifficultynumbers", level, 301, 170, Color.Hex(0).Alpha(.3 * alpha));
@@ -195,9 +337,53 @@ public sealed partial class GameUiRenderer : IDisposable
     {
         if (session.NativeGimmick.Data?.Sequence is not { } sequence || sequence.Story.Count == 0) return;
         Use(session.GameUi); if (current?.Data == null) return;
-        string font = current.Data.Fonts.ContainsKey(session.Project.GameUiFont) ? session.Project.GameUiFont : "fnt_monacovs";
+        string font = Font(session);
         var state = NativeStoryState.Sample(sequence, time,
             trigger => session.Chart.Mods.Any(e => e.Name == trigger && session.Timeline.Bpm.Time(e.Beat) <= time), s => Width(font, s));
+        DrawStoryBox(state, font);
+    }
+
+    /// <summary>
+    /// Custom Episodes 的谱面内剧情。剧本只解析一次，时刻表按当前字体展开后缓存：换行依赖字体宽度，
+    /// 所以换字体必须重算，否则停留时间会按另一套断行结果计时。
+    /// 触发窗口由展开时的顺序决定，与谱面里 custom_episode 事件一一对应。
+    /// 编辑器画区间和列台词也走这里，保证时间轴上看到的和预览里演的是同一份。
+    /// </summary>
+    public NativeSequenceDefinition? EpisodeSequence(Session session)
+    {
+        if (session.Episode is not { Playable: true } episode) return null;
+        Use(session.GameUi); if (current?.Data == null) return null;
+        string font = Font(session);
+        if (!ReferenceEquals(episodeSource, episode) || episodeFont != font)
+        {
+            var triggers = session.Chart.Mods
+                .Where(e => e.Name.Equals(EpisodeScript.ModName, StringComparison.OrdinalIgnoreCase))
+                .Select(e => session.Timeline.Bpm.Time(e.Beat)).Order().ToArray();
+            episodeSequence = episode.Expand(triggers, s => Width(font, s));
+            episodeSource = episode;
+            episodeFont = font;
+        }
+        return episodeSequence;
+    }
+
+    public void DrawEpisodeStory(Session session, double time)
+    {
+        if (EpisodeSequence(session) is not { } sequence) return;
+        string font = Font(session);
+        // 窗口名是展开时自己造的，不是谱面里的 mod 名，所以到点即已触发，无需再查谱面。
+        DrawStoryBox(NativeStoryState.Sample(sequence, time, _ => true, s => Width(font, s)), font);
+    }
+
+    EpisodeScript? episodeSource;
+    string? episodeFont;
+    NativeSequenceDefinition? episodeSequence;
+
+    string Font(Session session) =>
+        current!.Data!.Fonts.ContainsKey(session.Project.GameUiFont) ? session.Project.GameUiFont : "fnt_monacovs";
+
+    /// <summary>原版文字框的绘制。两条剧情来源共用，避免谱面内剧情和 sequence 剧情在版式上慢慢分叉。</summary>
+    void DrawStoryBox(NativeStoryState? state, string font)
+    {
         if (state == null) return;
         float y = (float)state.Y;
         Sprite("sp_dialogue", 0, 0, y, Color.White);

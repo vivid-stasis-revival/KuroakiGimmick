@@ -2,6 +2,7 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
 using KuroakiGimmick.Native;
+using StbImageWriteSharp;
 
 namespace KuroakiGimmick.Graphics;
 
@@ -13,6 +14,27 @@ public sealed partial class Canvas : IDisposable
     {
         Flush();
         return Gpu.Read(target.Texture);
+    }
+
+    /// <summary>
+    /// 编码成 PNG 字节。读回的排列（左上原点、紧密 RGBA8）正好是编码器要的格式，中间不做任何重排；
+    /// 返回字节而不是直接落盘，是因为卡片既要能保存也要能进剪贴板。
+    /// </summary>
+    public byte[] EncodePng(Target target)
+    {
+        var bytes = Read(target);
+        using var stream = new MemoryStream();
+        new ImageWriter().WritePng(bytes, target.Texture.Width, target.Texture.Height,
+            ColorComponents.RedGreenBlueAlpha, stream);
+        return stream.ToArray();
+    }
+
+    /// <summary>写出 PNG；必要时先建目录。</summary>
+    public void SavePng(Target target, string path)
+    {
+        var png = EncodePng(target);
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+        File.WriteAllBytes(path, png);
     }
 
     /// <summary>写出二进制 P6 PPM：只保留 RGB，丢弃每像素的第 4 个字节；必要时先建目录。</summary>

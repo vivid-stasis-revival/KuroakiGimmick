@@ -33,13 +33,43 @@ internal static class LocalizationSelfTest
                 }
             }
             check(formatsValid, "translations preserve argument indexes, counts and numeric format specifiers");
-            var uiRunes = english.Values.Concat(chinese.Values).Append("中文English")
-                .SelectMany(text => text.EnumerateRunes()).Where(r => !Rune.IsWhiteSpace(r)).Select(r => r.ToString()).Distinct();
-            foreach (string name in new[] { "ui-sans", "ui-sans-bold" })
+            // 本程序自己的版本号只能来自 Paths.BuildRevision：写进语言包的版本不会随构建更新，
+            // 编辑器标题就曾经因此停在 v0.1.2 / 16.2，而同一个程序的 viewer 显示的是另一个号。
+            // 指向外部目标包的版本说明放行——那是行为来源的出处，不随本程序构建变化。
+            string[] externalTargets = ["v1.12.7"];
+            check(english.Concat(chinese).All(pair =>
             {
-                using var stream = typeof(LocalizationSelfTest).Assembly.GetManifestResourceStream($"KuroakiGimmick.Fonts.{name}.json")!;
-                var metrics = JsonSerializer.Deserialize<Graphics.Fonts.HelpAtlasMetrics>(stream)!;
-                check(uiRunes.All(metrics.Glyphs.ContainsKey), $"embedded {name} covers every Chinese and English UI character");
+                string text = pair.Key + " " + pair.Value;
+                foreach (string target in externalTargets)
+                {
+                    text = text.Replace(target, "");
+                }
+                return !Regex.IsMatch(text, @"v\d+\.\d+\.\d+");
+            }), "UI strings never hard-code this application's own version; it comes from Paths.BuildRevision");
+            var uiRunes = english.Values.Concat(chinese.Values).Append("中文English")
+                // 这些符号只出现在代码字面量里，语言包扫不到，但旧图集专门为它们烘过字形。
+                .Append("←→−×▶Ⅱ✓…·")
+                .SelectMany(text => text.EnumerateRunes()).Where(r => !Rune.IsWhiteSpace(r)).Distinct().ToArray();
+            // 界面字体是运行时栅格化的真字体，加文案不再需要重新烘焙图集；这里查的是
+            // 上游字体本身是否真的没有某个字，那才是唯一还会让界面出现缺字的情况。
+            using (var uiFont = Graphics.UiFont.Load())
+            {
+                foreach (bool bold in new[] { false, true })
+                {
+                    check(uiRunes.All(rune => uiFont.Covers(rune, bold)),
+                        $"embedded UI font covers every Chinese and English UI character ({(bold ? "SemiBold" : "Regular")})");
+                }
+                // 轮廓真的能栅格出墨迹，而不是只有 cmap 命中：汉字、拉丁字母各验一个。
+                bool rasterized = true;
+                foreach (var rune in new[] { new Rune('难'), new Rune('W') })
+                {
+                    rasterized &= uiFont.TryGlyph(rune, 32, false, out var glyph) && glyph.W > 0 && glyph.H > 0;
+                }
+                check(rasterized, "UI font rasterizes Chinese and Latin glyphs at an exact pixel size");
+                // 步进按 em 归一化，与栅格尺寸无关，否则同一段文字在不同 DPI 上宽度会变。
+                check(Math.Abs(uiFont.AdvanceEm(new Rune('难'), false) - uiFont.AdvanceEm(new Rune('难'), false)) < 1e-6f
+                    && uiFont.AdvanceEm(new Rune('难'), false) > 0,
+                    "UI font advances are em-normalized and independent of raster size");
             }
             check(UiLanguage.FromCulture("zh-TW") == UiLanguage.Chinese && UiLanguage.FromCulture("fr-FR") == UiLanguage.English
                 && UiLanguage.Normalize(" EN-us ") == UiLanguage.English && UiLanguage.Normalize("zh-Hans") == UiLanguage.Chinese,

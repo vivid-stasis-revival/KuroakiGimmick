@@ -203,7 +203,7 @@ public sealed partial class Viewer
         string hint = detailed
             ? helpCardScrollMax > 0 ? L.Get("松开 W 收起 · W + 滚轮翻阅 · F1 打开手册") : L.Get("松开 W 收起 · F1 打开手册")
             : trackHelpWHeld ? L.Get("正在展开详情…") : L.Get("按住 W 查看详细说明 · F1 打开手册");
-        if (!fonts.HasReadableHelpFont) hint = L.Get("字体资源缺失，请完整覆盖 v0.1.2 源码包");
+        if (!fonts.HasReadableHelpFont) hint = L.Get("字体资源缺失，请完整覆盖源码包");
         Text(hint, textX, footerTop, 12, fonts.HasReadableHelpFont ? HelpSecondaryColor : Color.Hex(0xFFA8B3),
             max: textWidth, unified: true);
         Canvas.Clip(null);

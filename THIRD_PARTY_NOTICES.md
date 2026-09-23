@@ -12,8 +12,11 @@
 | Silk.NET native packaging | 2.23.0 | MIT; included license |
 | NVorbis | 0.10.5 | MIT, included notice |
 | StbImageSharp | 2.30.16 | Public domain / MIT; included license |
-| Noto Sans CJK SC / legacy Mono atlas | Generated raster artwork only; Regular/Bold help faces | SIL OFL 1.1; ThirdParty/NotoCJK-OFL.txt; no font binaries included |
-| DejaVu fonts | System-provided font atlas | License in Assets/Fonts/DejaVu-LICENSE.txt |
+| StbImageWriteSharp | 1.16.7 | Public domain / MIT; included license; used to encode exported info cards as PNG |
+| StbTrueTypeSharp | 1.26.13 | Public domain / MIT; included license; rasterizes the interface font at run time |
+| Noto Sans SC | Two static weights shipped as font files under Resources/Fonts | SIL OFL 1.1; ThirdParty/NotoSansSC-OFL.txt |
+| Noto Sans CJK SC / legacy Mono atlas | Generated raster artwork only; retired, no longer loaded | SIL OFL 1.1; ThirdParty/NotoCJK-OFL.txt; no font binaries included |
+| DejaVu fonts | Former interface atlas; retired, no longer loaded | License in Assets/Fonts/DejaVu-LICENSE.txt |
 | Adapted shader code | User-provided VIVIDSTASIS / Custom Gimmicks sources | Original code rights remain with their respective creators |
 | Fusion Pixel | 10px monospaced zh_hans, v2026.09.01 | SIL OFL 1.1; original licenses included under ThirdParty |
 | Room FX settings | User-exported original Mac game, 7 JSON profiles | Original bytes and hashes under Assets/RoomFX; original rights retained |
@@ -29,7 +32,7 @@
 
 ASTELLION song audio, background images and sample charts have been removed. Chart decoding and adapted shader logic remain. Rights to third-party shader code and the user-supplied note skin remain with their respective creators. `Samples/ImageGimmicks` contains original procedural demonstration images.
 
-Primary references: [SDL3](https://wiki.libsdl.org/SDL3/FrontPage), [SDL3 macOS](https://wiki.libsdl.org/SDL3/README-macos), [SDL3-CS](https://github.com/edwardgushchin/SDL3-CS), [.NET runtime](https://github.com/dotnet/runtime), [NVorbis](https://github.com/NVorbis/NVorbis), [StbImageSharp](https://github.com/StbSharp/StbImageSharp), [FFmpeg](https://ffmpeg.org/).
+Primary references: [SDL3](https://wiki.libsdl.org/SDL3/FrontPage), [SDL3 macOS](https://wiki.libsdl.org/SDL3/README-macos), [SDL3-CS](https://github.com/edwardgushchin/SDL3-CS), [.NET runtime](https://github.com/dotnet/runtime), [NVorbis](https://github.com/NVorbis/NVorbis), [StbImageSharp](https://github.com/StbSharp/StbImageSharp), [StbImageWriteSharp](https://github.com/StbSharp/StbImageWriteSharp), [FFmpeg](https://ffmpeg.org/).
 
 Font source: [Fusion Pixel](https://github.com/TakWolf/fusion-pixel-font). Text layout reference: [GameMaker draw_text_ext_transformed](https://manual.gamemaker.io/lts/en/GameMaker_Language/GML_Reference/Drawing/Text/draw_text_ext_transformed.htm).
 
@@ -39,4 +42,6 @@ The user-exported shared gameplay UI/font pack is kept locally under Assets/Game
 
 共享原生对象资源位于 `Assets/Gimmicks`，由用户本机原游戏只读导出，供声明相同对象类型的谱面复用。精灵、shader 的原始权利仍属于其创作者；输入游戏与资源哈希记录在对应对象目录的 `SOURCE_SHA256.json`。原始 posterise shader 另由通用房间 FX 使用；不包含测试曲包的谱面、音乐或曲绘。
 
-The interface uses Kuroaki UI Sans bitmap resources, rasterized from IBM Plex Sans SC Medium / SemiBold (@ibm/plex-sans-sc 1.1.0). These font resources retain SIL OFL 1.1 independently of the application code. Copyright © 2017 IBM Corp.; original notice and license: `ThirdParty/IBM-Plex-OFL.txt`. Upstream: https://github.com/IBM/plex. No original font binaries are included.
+The interface is drawn with **Noto Sans SC**, shipped as two static font files under `Resources/Fonts` and rasterized at run time. They are licensed under SIL OFL 1.1, retained independently of the application code; full text and copyright in `ThirdParty/NotoSansSC-OFL.txt`. The family derives from Adobe Source Han Sans and its Reserved Font Name is `Source`, which this project does not use. Upstream: https://github.com/google/fonts (`ofl/notosanssc`).
+
+Earlier releases rasterized the interface from IBM Plex Sans SC into bitmap atlases named Kuroaki UI Sans. Those atlases are no longer loaded; the IBM Plex notice and license are retained in `ThirdParty/IBM-Plex-OFL.txt` for the history of that artwork. Copyright © 2017 IBM Corp. Upstream: https://github.com/IBM/plex.

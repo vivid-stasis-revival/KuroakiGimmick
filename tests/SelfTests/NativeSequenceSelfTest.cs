@@ -41,6 +41,7 @@ public static class NativeSequenceSelfTest
         // 采样必须是时间的纯函数：先看 781，跳到 835.59，再回到 781 必须完全一样，不能依赖"上一次问到哪了"。
         var beforeSeek = Sample(781); _ = Sample(835.59);
         Check(Sample(781)!.Y == beforeSeek!.Y && Sample(781)!.VisibleCharacters == beforeSeek.VisibleCharacters, "story sampling is independent of playback history");
+        CheckChartEpisode(Check);
         if (realChart != null)
         {
             var session = Session.Load(realChart);
@@ -121,6 +122,90 @@ public static class NativeSequenceSelfTest
                 throw new Exception("Dialogue leaked after its lifetime or changed after seeking backwards.");
             Console.WriteLine("PASS original dialogue artwork, entrance, typing, clear, destruction and backward seek on GPU");
             Console.WriteLine("PASS native CG, two heat-haze backgrounds, Glow, slash, HP bar and seek determinism on GPU");
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    /// <summary>
+    /// Custom Episodes 的谱面内剧情（custom_episode）。数值全部对照模组的 mod_cs_chart_step：
+    /// 打字机每秒 100×speed 个字，停留 max(200, 显式 dwell 或 chart_dwell + 字数×40/speed)，
+    /// 两者相加才是一句话占用的时间。谱面内 speed 缺省 0.5，文字框停在 132 而不是剧情房间的 122。
+    /// </summary>
+    static void CheckChartEpisode(Action<bool, string> Check)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "kuroaki-episode-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string file = Path.Combine(root, "story.json");
+            File.WriteAllText(file, """
+            {
+              "chart_dwell": 1000,
+              "characters": { "sat": { "display_name": "Saturday" } },
+              "lines": [
+                { "kind": "narration", "text": "abcde" },
+                { "kind": "delay", "ms": 500 },
+                { "kind": "portrait", "who": "sat" },
+                { "kind": "bg", "value": "bg_wm_nightstreet" },
+                { "who": "sat", "text": "fg", "speed": 1 },
+                { "kind": "end" },
+                { "kind": "narration", "text": "unreachable" }
+              ]
+            }
+            """);
+            var script = EpisodeScript.Read(file);
+            // 谱面内不支持的指令在游戏里只写进存档目录的日志，作者还关不掉；编辑器要在试玩前就报出来。
+            var skipped = script.Diagnostics.Where(d => !d.Error).Select(d => d.Message).ToArray();
+            Check(skipped.Length == 2 && skipped[0].Contains("'bg'") && skipped[1].Contains("'portrait'"),
+                "in-chart episode reports every step the game would silently skip");
+
+            var sequence = script.Expand([0], s => s.Length * 5);
+            // end 之后的步骤不该被展开——模组把索引直接推到末尾。
+            Check(sequence.Story.Count == 2, "episode stops expanding at 'end'");
+            // "abcde" 5 字 speed 0.5：打字 5/50=0.1 秒，停留 1000+5*40/0.5=1400 毫秒，合计 1.5 秒；
+            // 再加 delay 的 0.5 秒，第二句正好落在 2.0 秒。portrait / bg 不占时间。
+            Check(Math.Abs(sequence.Story[0].Time) < 1e-9 && sequence.Story[0].Speed == .5
+                && sequence.Story[0].Speaker.Length == 0 && sequence.Story[0].Text == "abcde",
+                "first episode line starts at the trigger with the in-chart default speed");
+            Check(Math.Abs(sequence.Story[1].Time - 2) < 1e-9 && sequence.Story[1].Speed == 1
+                && sequence.Story[1].Speaker == "Saturday",
+                "episode dwell, typing time and delay accumulate onto the next line");
+            // "fg" 2 字 speed 1：打字 0.02 秒，停留 1000+2*40=1080 毫秒 → 2.0+1.1=3.1 收尾，再过 1 秒销毁。
+            var window = sequence.StoryWindows[0];
+            Check(Math.Abs(window.Clear!.Value - 3.1) < 1e-9 && Math.Abs(window.Destroy!.Value - 4.1) < 1e-9
+                && window.ExitFrom == 132 && window.ExitSeconds == .8,
+                "episode exits from the in-chart rest position, not the story room's 122");
+
+            NativeStoryState? Sample(double t) => NativeStoryState.Sample(sequence, t, _ => true, s => s.Length * 5);
+            // 谱面内 speed 0.5 = 每秒 50 字：0.06 秒正好 3 个字。
+            Check(Sample(.06) is { VisibleCharacters: 3 } && Sample(2.01) is { VisibleCharacters: 1, Speaker: "Saturday" },
+                "episode typewriter follows 100 x speed characters per second");
+            // 拖时间轴要求纯函数：先看 1.0，跳到 9.0，再回 1.0 必须逐字段一致。
+            // record 的合成相等对 Lines 走引用比较，两次采样必然是不同的 list 实例，所以逐项比。
+            var before = Sample(1); _ = Sample(9);
+            var again = Sample(1);
+            Check(again!.Y == before!.Y && again.VisibleCharacters == before.VisibleCharacters
+                && again.Speaker == before.Speaker && again.Lines.SequenceEqual(before.Lines)
+                && Sample(4.1) == null,
+                "episode sampling is independent of playback history");
+
+            // 编辑器在时间轴上画的区间就是 Extent 的结果，因此它必须与 Sample 的取窗规则一致：
+            // 两次触发相隔 2 秒，而剧本要演到 4.1 秒，第一段于是在第二次触发到来时当场被切断。
+            var cut = script.Expand([0, 2], s => s.Length * 5);
+            var (firstStart, firstEnd, firstCut) = EpisodeScript.Extent(cut, 0);
+            var (nextStart, nextEnd, nextCut) = EpisodeScript.Extent(cut, 1);
+            Check(firstStart == 0 && Math.Abs(firstEnd - 2) < 1e-9 && firstCut
+                && Math.Abs(nextStart - 2) < 1e-9 && Math.Abs(nextEnd - 4.1 - 2) < 1e-9 && !nextCut,
+                "a later episode trigger cuts the playing one short instead of queueing behind it");
+            // 区间右端两侧各采一次：左边仍是第一段演完的 5 个字，右边已经换成第二段的第 0 个字。
+            // 画出来的长度因此不会承诺一段演不完的剧情。
+            NativeStoryState? Cut(double t) => NativeStoryState.Sample(cut, t, _ => true, s => s.Length * 5);
+            Check(Cut(firstEnd - 1e-6) is { VisibleCharacters: 5 } && Cut(firstEnd) is { VisibleCharacters: 0 },
+                "the drawn episode span ends exactly where playback hands over to the next trigger");
+            // 同一拍上的两行 custom_episode 不算互相切断——那只是重复写了一次，不是"被顶掉"。
+            var same = EpisodeScript.Extent(script.Expand([0, 0], s => s.Length * 5), 0);
+            Check(!same.Truncated && Math.Abs(same.End - 4.1) < 1e-9,
+                "two episode triggers on the same beat do not report each other as a cut-off");
         }
         finally { Directory.Delete(root, true); }
     }

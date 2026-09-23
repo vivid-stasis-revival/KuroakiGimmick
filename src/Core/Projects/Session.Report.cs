@@ -30,6 +30,35 @@ public sealed partial class Session
             Project.PreviewVolume
         },
         notes = Chart.Notes.GroupBy(n => n.Type).ToDictionary(g => g.Key.ToString(), g => g.Count()),
+        // 六项统计按原版 GetSongStats 计算；长度取解码后的音频时长，没有音频时退回谱面末尾事件。
+        songStats = SongInfoCard.Build(this) is var card ? new
+        {
+            card.Title,
+            card.Artist,
+            card.DisplayDifficulty,
+            card.Level,
+            card.Designer,
+            card.BpmDisplay,
+            lengthSeconds = card.LengthSeconds,
+            card.LengthDisplay,
+            card.NoteCount,
+            card.JacketPath,
+            gimmick = new
+            {
+                weight = card.GimmickWeight,
+                source = card.GimmickSource
+            },
+            rounded = new
+            {
+                CHIP = card.Stats.RoundedChip,
+                TECH = card.Stats.RoundedTech,
+                STREAM = card.Stats.RoundedStream,
+                CHORD = card.Stats.RoundedChord,
+                BURST = card.Stats.RoundedBurst,
+                GIMMICK = card.Stats.RoundedGimmick
+            },
+            total = card.Stats.Total
+        } : null,
         windowMotion = new
         {
             path = WindowMotion.Path ?? Project.WindowMotion,

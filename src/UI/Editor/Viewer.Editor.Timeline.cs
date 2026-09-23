@@ -77,6 +77,9 @@ public sealed partial class Viewer
         }
         foreach (var clip in editor.Vsm.Clips)
         {
+            // custom_episode 一律垫到最后一行，所以这里不让它按源文件顺序插队——否则写在哪一行就排在哪儿，
+            // 末尾那次登记会被去重当成已存在而跳过，看上去就是"没挪动"。
+            if (clip.Proxy < 0 && clip.Name.Equals(EpisodeScript.ModName, StringComparison.OrdinalIgnoreCase)) continue;
             if (CustomText.TryMod(clip.Name, out _, out var textId) && editor.TextSources.ContainsKey(textId)) AddTextTrack(textId);
             else if (CustomImages.TryMod(clip.Name, out _, out var imageId) && declaredImageIds.Contains(imageId)) AddImageTrack(imageId);
             else AddModTrack(clip.Name, clip.Proxy);
@@ -88,6 +91,17 @@ public sealed partial class Viewer
         {
             string key = "W:" + group.Key.Window + ":" + group.Key.Op;
             if (seen.Add(key)) editTracks.Add(new(key, group.Key.Op, true, group.Key.Window, group.Key.Op));
+        }
+        // 这首歌旁边有剧本时，custom_episode 轨常驻，排在最后一行。第一条触发还没写下去之前它也在，
+        // 作者因此能直接在轨上按 + 或双击插入，而不必先知道这个模组注册的 mod 叫什么名字。
+        // 压在最底下是因为整首歌通常只有一两个触发点，却要占满整条轨：夹在 SV / 图片 / 窗口那些
+        // 逐条对齐着看的轨中间，等于把它们劈成两截；垫在最后则谁都不挡，要看时滚到底就是。
+        // 剧本不在时也要为已有的触发留下这一行，否则谱面里写了 custom_episode 却没有 story.json，
+        // 那条事件会连同"剧本找不到"的诊断一起从时间轴上消失，变得既看不见也删不掉。
+        if (EpisodeScriptPath != null || editor.Vsm.Clips.Any(c => c.Proxy < 0
+            && c.Name.Equals(EpisodeScript.ModName, StringComparison.OrdinalIgnoreCase)))
+        {
+            AddModTrack(EpisodeScript.ModName, -1);
         }
         layoutRevision = editor.Revision;
     }
@@ -289,8 +303,15 @@ public sealed partial class Viewer
                     DrawEventClip(y, b, end, WindowMotionConfig.Text(e, "preset", track.Property), selectedWindowEvent == i, true, null, e, i, timelineInteractive);
                 }
             }
-            else foreach (var c in clips.Where(c => c.TrackKey == track.Key))
-                DrawEventClip(y, c.Beat, VsmVisualEnd(c), c.RepeatEnd != null ? $"{c.RepeatCount}x / {c.From}>{c.To}" : $"{c.From}>{c.To}", selectedClip == c.Id, false, c, null, -1, timelineInteractive);
+            else
+            {
+                // 剧情区间画在片段之前，因此片段始终压在上面——可点可拖的东西不该被背景挡住。
+                if (IsEpisodeTrack(track)) DrawEpisodeSpans(y);
+                foreach (var c in clips.Where(c => c.TrackKey == track.Key))
+                    DrawEventClip(y, c.Beat, VsmVisualEnd(c), c.RepeatEnd != null ? $"{c.RepeatCount}x / {c.From}>{c.To}" : $"{c.From}>{c.To}", selectedClip == c.Id, false, c, null, -1, timelineInteractive);
+                // 区间接住漏掉片段的那些点击，排在片段之后：那 9 像素仍然优先，拖拽也仍然只从片段上开始。
+                if (IsEpisodeTrack(track) && timelineInteractive) ClickEpisodeSpans();
+            }
             Canvas.Clip(null);
             rowHits.Add((track, new(x, clipY, editorTracksRect.W, clipEnd - clipY)));
             if (timelineInteractive && click && mouseClicks >= 2 && editorTracksRect.Contains(mouseX, mouseY) && new Rect(x, y, editorTracksRect.W, 34).Contains(mouseX, mouseY))

@@ -21,7 +21,7 @@ internal static class Program
         CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
         CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
         // 这一串是所有无人值守模式（自测、检查、导出、截图）。cli 为真时失败只写 stderr，不弹消息框卡住脚本。
-        bool cli = args.Any(a => a is "--inspect" or "--render" or "--snapshot" or "--self-test" or "--smoke-ui" or "--smoke-text-ui" or "--smoke-i18n" or "--native-sequence-self-test" or "--text-film-self-test" or "--custom-adaptation-self-test" or "--gpu-test" or "--editor-self-test" or "--reference-self-test" or "--authoring-self-test" or "--layout-image-self-test" or "--image-object-self-test");
+        bool cli = args.Any(a => a is "--inspect" or "--render" or "--snapshot" or "--card" or "--self-test" or "--smoke-ui" or "--smoke-text-ui" or "--smoke-i18n" or "--native-sequence-self-test" or "--text-film-self-test" or "--custom-adaptation-self-test" or "--gpu-test" or "--editor-self-test" or "--reference-self-test" or "--authoring-self-test" or "--layout-image-self-test" or "--image-object-self-test");
         try
         {
             // 后端覆盖必须早于任何 GPU 设备创建，所以在自检分派之前就读掉；否则 --gpu-test --force-vulkan
@@ -192,6 +192,20 @@ internal static class Program
                 Console.WriteLine("UI shortcuts, frame stepping and export markers passed.");
             }
             if (options.ContainsKey("smoke-text-ui")) viewer.SmokeTextUi();
+            // --snapshot --card 截的是带覆盖层的界面；单独 --card 写出的是卡片本身。
+            if (options.ContainsKey("card") && options.ContainsKey("snapshot")) viewer.OpenInfoCard();
+            if (options.ContainsKey("card") && !options.ContainsKey("snapshot"))
+            {
+                // 卡片是独立的 16:9 图像，与界面截图无关，因此不经 --snapshot 那条路。
+                // --width 覆盖设置里的导出尺寸，便于批量生成；不给就用用户设置的那一档。
+                string output = Path.GetFullPath(options.GetValueOrDefault("out",
+                    Path.Combine(Paths.Output, "card.png")));
+                int? width = options.TryGetValue("width", out var cardWidth)
+                    ? int.Parse(cardWidth, CultureInfo.InvariantCulture) : null;
+                viewer.SaveInfoCardTo(output, width);
+                Console.WriteLine(output);
+                return options.ContainsKey("strict") && session.Chart.Diagnostics.Any(d => d.Error) ? 2 : 0;
+            }
             if (options.ContainsKey("snapshot") || options.ContainsKey("smoke-ui") || options.ContainsKey("smoke-text-ui") || options.ContainsKey("smoke-i18n"))
             {
                 // --time 单位是秒，缺省取 45 秒这一通常已进入演出主体的位置。
@@ -253,6 +267,7 @@ internal static class Program
             "inspect",
             "render",
             "snapshot",
+            "card",
             "smoke-ui",
             "smoke-text-ui",
             "smoke-i18n",
@@ -337,6 +352,8 @@ internal static class Program
                         [--start 30] [--end 45] [--fps 60] [--width 1920]
                         [--no-notes] [--no-fx]
     KuroakiGimmick --snapshot project.sgv.json --time 45 --out ui.ppm [--scene]
+    Info card:  --card chart.vsb --out card.png [--width 1280|1920|2560|3840]
+                        (16:9 PNG for the chart's difficulty; default follows Settings)
     UI language: --language auto|zh-CN|en (also available in Settings)
     UI localization check: --smoke-i18n [--editor] --out i18n.ppm
     KuroakiGimmick --editor Samples/EditorDemo/demo.sgv.json

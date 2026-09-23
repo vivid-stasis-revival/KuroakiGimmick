@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
-"""Offline bitmap/help-layout asset checks. Does NOT compile C# or initialize SDL.
+"""Offline help-layout and UI font checks. Does NOT compile C# or initialize SDL.
 
-Optional validation tool requiring Pillow. Standard .NET builds use the already
-rendered assets and do not invoke this script.
+Optional validation tool requiring fontTools. Standard .NET builds embed the shipped
+font files directly and do not invoke this script.
 """
 from __future__ import annotations
 import json
-import math
 import re
 from pathlib import Path
-from PIL import Image
+from fontTools.ttLib import TTFont
 
 ROOT = Path(__file__).resolve().parents[2]
 checks: list[str] = []
@@ -33,40 +32,27 @@ def main() -> None:
     for p in paths:
         needed.update(c for c in p.read_text(encoding='utf-8') if ord(c) > 127 and not c.isspace())
     summaries = []
-    for stem, style in [('editor-help-sans', 'Regular'), ('editor-help-sans-bold', 'Bold')]:
-        metadata = json.loads((ROOT / 'Assets/Fonts' / (stem + '.json')).read_text(encoding='utf-8'))
-        glyphs = metadata['Glyphs']
-        with Image.open(ROOT / 'Assets/Fonts' / (stem + '.png')) as image:
-            check(image.mode == 'RGBA', f'{stem}: RGBA coverage image')
-            check(metadata['Family'] == 'Noto Sans CJK SC' and metadata['Style'] == style,
-                  f'{stem}: proportional SC face, expected weight')
-            check(metadata['EmSize'] == 64, f'{stem}: explicit 64px em')
-            check(needed <= glyphs.keys(), f'{stem}: current editor CJK and printable ASCII covered')
-            check(glyphs['W']['Advance'] > glyphs['i']['Advance'] * 2,
-                  f'{stem}: proportional Latin advances')
-            check(abs(glyphs['中']['Advance'] * 17 / metadata['EmSize'] - 17) < .01,
-                  f'{stem}: 17-unit CJK is actually a 17-unit em')
-            fields = ('X', 'Y', 'Width', 'Height', 'Advance', 'OffsetX', 'OffsetY')
-            alpha = image.getchannel('A')
-            for char, glyph in glyphs.items():
-                if not all(math.isfinite(glyph[key]) for key in fields):
-                    raise AssertionError(f'{stem} invalid metrics U+{ord(char):04X}')
-                x, y, w, h = (glyph[key] for key in fields[:4])
-                if not (x >= 0 and y >= 0 and w >= 0 and h >= 0 and
-                        x + w <= image.width and y + h <= image.height):
-                    raise AssertionError(f'{stem} glyph out of bounds U+{ord(char):04X}')
-                if not char.isspace():
-                    bounds = alpha.crop((x, y, x + w, y + h)).getbbox()
-                    if bounds is None:
-                        raise AssertionError(f'{stem} blank glyph U+{ord(char):04X}')
-                    if not (bounds[0] >= 7 and bounds[1] >= 7 and bounds[2] <= w - 7 and bounds[3] <= h - 7):
-                        raise AssertionError(f'{stem} insufficient transparent padding U+{ord(char):04X}')
-            checks.append(f'{stem}: every glyph finite, in bounds, nonblank, and padded')
-            line_box = (metadata['Ascent'] + metadata['Descent']) * 17 / metadata['EmSize']
-            check(line_box <= 29, f'{stem}: body line box fits 29-unit spacing')
-            summaries.append(dict(stem=stem, family=metadata['Family'], style=style,
-                                  glyphs=len(glyphs), width=image.width, height=image.height,
-                                  sourceEm=metadata['EmSize'], bodyLineBox=line_box))
+    # 界面与文档共用运行时栅格化的 Noto Sans SC。这里查的是上游字体本身是否真的缺字——
+    # 那是唯一还会让界面出现缺字的情况；字形不再预先烘焙，加文案不需要重新生成任何资源。
+    for stem, style in [('NotoSansSC-Regular', 'Regular'), ('NotoSansSC-SemiBold', 'SemiBold')]:
+        font = TTFont(ROOT / 'Resources/Fonts' / (stem + '.ttf'))
+        upem = font['head'].unitsPerEm
+        cmap = font.getBestCmap()
+        widths = font['hmtx']
+        missing = sorted(c for c in needed if ord(c) not in cmap)
+        check(not missing, f'{stem}: current editor CJK and printable ASCII covered'
+                           + (f' (missing {"".join(missing[:8])})' if missing else ''))
+        check('glyf' in font, f'{stem}: TrueType outlines, the path the renderer rasterizes')
+        check('fvar' not in font, f'{stem}: static instance, not a variable font read at its default weight')
+        advance = lambda ch: widths[cmap[ord(ch)]][0] / upem
+        check(advance('W') > advance('i') * 2, f'{stem}: proportional Latin advances')
+        check(abs(advance('中') - 1) < .01, f'{stem}: CJK advances are a full em')
+        # 排版按 OS/2 typo 升部定位，界面既有版式是照 0.89em 标定的。
+        typo = font['OS/2'].sTypoAscender / upem
+        check(.85 <= typo <= .95, f'{stem}: typographic ascent matches the established UI baseline')
+        summaries.append(dict(stem=stem, family='Noto Sans SC', style=style,
+                              glyphs=font['maxp'].numGlyphs, unitsPerEm=upem,
+                              typoAscent=round(typo, 4)))
     code = (ROOT / 'src/UI/Editor/Viewer.Editor.Help.cs').read_text(encoding='utf-8')
     check('HelpBodySize = 17' in code and 'HelpTitleSize = 22' in code, 'explicit readable body/title sizes')
     check('Canvas.Fill(card, HelpBackground)' in code and 'Color HelpBackground => Theme.HelpBackground;' in code,
@@ -84,11 +70,21 @@ def main() -> None:
     contrast = contrasts['Nekomiya']
     check('foreach (var row in layout.Body)' in code and 'EditorHelpLayout.Wrap' in code,
           'wrapped rows drawn without the former five-line cap')
+    # 界面字体是随程序集发行的 OFL 字体，允许放在 Resources/Fonts 下；别处仍然不收字体二进制，
+    # 以免把系统字体或游戏自带字集混进源码树。Noto Sans SC 的保留字体名是 'Source'，
+    # 我们既没有使用该名称，也附带了完整的 OFL 与版权声明。
     forbidden = {'.ttf', '.ttc', '.otf', '.otc', '.woff', '.woff2', '.pfb', '.pfa'}
-    check(not any(p.is_file() and p.suffix.lower() in forbidden for p in ROOT.rglob('*')),
-          'no installed font binaries in source tree')
-    result = dict(scope='offline bitmap metrics/ink/source checks only',
-                  compiled=False, gpuExecuted=False, atlases=summaries,
+    licensed = ROOT / 'Resources/Fonts'
+    skipped = {ROOT / 'bin', ROOT / 'obj', ROOT / 'dist', licensed}
+    strays = [p.relative_to(ROOT) for p in ROOT.rglob('*')
+              if p.is_file() and p.suffix.lower() in forbidden
+              and not any(root in p.parents for root in skipped)]
+    check(not strays, 'font binaries only where their license is declared'
+                      + (f' (stray {strays[0]})' if strays else ''))
+    check((ROOT / 'ThirdParty/NotoSansSC-OFL.txt').is_file(),
+          'shipped UI font carries its OFL text and copyright notice')
+    result = dict(scope='offline UI font and help-layout source checks only',
+                  compiled=False, gpuExecuted=False, fonts=summaries,
                   specifiedBodyContrast=round(contrast, 3), paletteBodyContrast={k: round(v, 3) for k,v in contrasts.items()}, checks=checks)
     (ROOT / 'docs/validation-help-typography.json').write_text(
         json.dumps(result, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')

@@ -150,6 +150,36 @@ public static class EditorSelfTest
             var regular = WindowMotionConfig.Empty(); regular.EnsureCount(3);
             var poses = new WindowMotionTimeline(regular).At(0);
             Check(poses.Select(p => p.Id).SequenceEqual(new[] { 0, 100, 101 }) && Near(poses[0].Width, 704.0 / 1920), "default window geometry and native ids match the adapter contract");
+            // 剪贴板信封：事件以 VSM 源行形式携带，与源文件共用同一套格式和解析器，往返必须逐字段一致。
+            var copied = new[]
+            {
+                new VsmDocument.Clip(Guid.NewGuid(), 4, 2, "linear", "0", "1", "prx", -1),
+                new VsmDocument.Clip(Guid.NewGuid(), 8, 0, "inOutSine", "_", "0.5", "przm", 3, 12, 2, true)
+            };
+            string envelope = EditorClipboard.Write(copied, []);
+            var restored = EditorClipboard.Read(envelope)!;
+            Check(restored.Beat == 4 && restored.Events.Length == 2
+                && restored.Events.Zip(copied).All(p => p.First.Beat == p.Second.Beat && p.First.Duration == p.Second.Duration
+                    && p.First.Ease == p.Second.Ease && p.First.From == p.Second.From && p.First.To == p.Second.To
+                    && p.First.Name == p.Second.Name && p.First.Proxy == p.Second.Proxy
+                    && p.First.RepeatEnd == p.Second.RepeatEnd && p.First.RepeatStep == p.Second.RepeatStep
+                    && p.First.ParenthesizedRepeat == p.Second.ParenthesizedRepeat),
+                "clipboard round-trip preserves every clip field, including the repeat form");
+            Check(restored.Events.All(c => copied.All(o => o.Id != c.Id)), "pasted events never reuse the copied event identity");
+            // 信封是纯文本 JSON，因此可以在两个实例之间、甚至通过聊天工具转发后粘贴。
+            Check(envelope.TrimStart().StartsWith('{') && envelope.Contains("\"kuroaki\": \"clipboard/1\"")
+                && envelope.Contains("4,2,linear,0,1,prx,-1"), "clipboard payload is portable text carrying VSM source rows");
+            // 原版 read_mods_file 见到 "mods" 行或注释就会崩，复制方向绝不能产出这两者。
+            Check(!envelope.Split('\n').Any(l => l.Trim() is "mods" or "mpf" || l.TrimStart().StartsWith("//")),
+                "clipboard never emits a bare mods header or comment rows");
+            // 从文本编辑器直接贴一段裸 VSM 事件行也要能收下，不必先包成信封。
+            var bare = EditorClipboard.Read("16,1,linear,0,1,pry,-1\n20,1,linear,1,0,pry,-1\n")!;
+            Check(bare.Events.Length == 2 && bare.Beat == 16, "bare VSM rows paste without an envelope");
+            Check(EditorClipboard.Read("hello world") == null && EditorClipboard.Read("{\"kuroaki\":\"clipboard/9\"}") == null
+                && EditorClipboard.Read("") == null && EditorClipboard.Read(new string('x', EditorClipboard.MaxLength + 1)) == null,
+                "foreign, future-version, empty and oversized clipboard text is refused instead of guessed");
+            var windowClip = EditorClipboard.Read(EditorClipboard.Write([], [WindowMotionConfig.NewEvent("HideWindow", 1, 0, 1)]))!;
+            Check(windowClip.Windows.Length == 1 && windowClip.Events.Length == 0, "window events travel through the clipboard too");
             Console.WriteLine($"EDITOR SELF-TEST PASSED: {count} checks. Native GPU/compositor behavior is a separate platform test.");
             return 0;
         }

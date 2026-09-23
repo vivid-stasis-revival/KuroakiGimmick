@@ -1,27 +1,23 @@
 {
-  "scope": "offline bitmap metrics/ink/source checks only",
+  "scope": "offline UI font and help-layout source checks only",
   "compiled": false,
   "gpuExecuted": false,
-  "atlases": [
+  "fonts": [
     {
-      "stem": "editor-help-sans",
-      "family": "Noto Sans CJK SC",
+      "stem": "NotoSansSC-Regular",
+      "family": "Noto Sans SC",
       "style": "Regular",
-      "glyphs": 949,
-      "width": 2048,
-      "height": 2944,
-      "sourceEm": 64,
-      "bodyLineBox": 24.96875
+      "glyphs": 31036,
+      "unitsPerEm": 1000,
+      "typoAscent": 0.88
     },
     {
-      "stem": "editor-help-sans-bold",
-      "family": "Noto Sans CJK SC",
-      "style": "Bold",
-      "glyphs": 949,
-      "width": 2048,
-      "height": 2944,
-      "sourceEm": 64,
-      "bodyLineBox": 24.96875
+      "stem": "NotoSansSC-SemiBold",
+      "family": "Noto Sans SC",
+      "style": "SemiBold",
+      "glyphs": 31036,
+      "unitsPerEm": 1000,
+      "typoAscent": 0.88
     }
   ],
   "specifiedBodyContrast": 16.81,
@@ -31,22 +27,18 @@
     "Nekomiya": 16.81
   },
   "checks": [
-    "editor-help-sans: RGBA coverage image",
-    "editor-help-sans: proportional SC face, expected weight",
-    "editor-help-sans: explicit 64px em",
-    "editor-help-sans: current editor CJK and printable ASCII covered",
-    "editor-help-sans: proportional Latin advances",
-    "editor-help-sans: 17-unit CJK is actually a 17-unit em",
-    "editor-help-sans: every glyph finite, in bounds, nonblank, and padded",
-    "editor-help-sans: body line box fits 29-unit spacing",
-    "editor-help-sans-bold: RGBA coverage image",
-    "editor-help-sans-bold: proportional SC face, expected weight",
-    "editor-help-sans-bold: explicit 64px em",
-    "editor-help-sans-bold: current editor CJK and printable ASCII covered",
-    "editor-help-sans-bold: proportional Latin advances",
-    "editor-help-sans-bold: 17-unit CJK is actually a 17-unit em",
-    "editor-help-sans-bold: every glyph finite, in bounds, nonblank, and padded",
-    "editor-help-sans-bold: body line box fits 29-unit spacing",
+    "NotoSansSC-Regular: current editor CJK and printable ASCII covered",
+    "NotoSansSC-Regular: TrueType outlines, the path the renderer rasterizes",
+    "NotoSansSC-Regular: static instance, not a variable font read at its default weight",
+    "NotoSansSC-Regular: proportional Latin advances",
+    "NotoSansSC-Regular: CJK advances are a full em",
+    "NotoSansSC-Regular: typographic ascent matches the established UI baseline",
+    "NotoSansSC-SemiBold: current editor CJK and printable ASCII covered",
+    "NotoSansSC-SemiBold: TrueType outlines, the path the renderer rasterizes",
+    "NotoSansSC-SemiBold: static instance, not a variable font read at its default weight",
+    "NotoSansSC-SemiBold: proportional Latin advances",
+    "NotoSansSC-SemiBold: CJK advances are a full em",
+    "NotoSansSC-SemiBold: typographic ascent matches the established UI baseline",
     "explicit readable body/title sizes",
     "opaque card uses theme help background, not scene transparency",
     "body uses theme text color",
@@ -57,6 +49,7 @@
     "Nekomiya: all opaque palette colors present",
     "Nekomiya: help body/background contrast exceeds 12:1",
     "wrapped rows drawn without the former five-line cap",
-    "no installed font binaries in source tree"
+    "font binaries only where their license is declared",
+    "shipped UI font carries its OFL text and copyright notice"
   ]
 }
