@@ -221,7 +221,7 @@ Chart Folder 不负责安装游戏扩展，也不保证收集同一歌曲其他�
 
 发行包构建需要完整的本地 `Assets/`。
 
-生成的应用包含 .NET 运行时，因此目标机器无需单独安装 .NET。
+应用包自包含，因此目标机器无需单独安装 .NET。
 
 ### macOS
 
@@ -258,7 +258,25 @@ macOS 包结构中 `.app` 与 `Assets/` 并列，其中 `Contents/MacOS/` 只放
 
 Windows 包同理：单个 `.exe`，同时保留外置 `Assets/`。
 
-两个平台都默认单文件发布，这个默认写在 `KuroakiGimmick.csproj` 里，所以 `dotnet publish -r <rid>` 不用再手写 `-p:PublishSingleFile=true`。需要散装布局排查问题时可以显式 `-p:PublishSingleFile=false` 覆盖。
+### NativeAOT 试验构建
+
+在本机平台打包原生应用和资源：
+
+```bash
+# macOS：arm64 / x64 / all；默认当前 CPU
+bash scripts/publish-aot-mac.sh arm64
+
+# Windows Git Bash：x64 / arm64 / all；默认 x64
+bash scripts/publish-aot-win.sh x64
+```
+
+NativeAOT 需要在目标操作系统上构建，不能使用常规 `publish-win.sh` 的跨系统构建方式；Windows 主机还需要对应架构的 Visual Studio C++ 构建工具，见 [Microsoft 的 NativeAOT 交叉编译说明](https://learn.microsoft.com/en-us/dotnet/core/deploying/native-aot/cross-compile)。脚本需要 `zip` 命令，并在 `dist/` 生成带 `NativeAOT` 标记的目录与 ZIP。已在 macOS arm64 验证编译、无 GPU 自测和 Metal GPU 测试；Windows NativeAOT 仍需 Windows 本机验证。
+
+NativeAOT 输出包含原生可执行文件，以及 SDL3 与 shader 库等动态库；运行时需要把这些库和外置 `Assets/` 一起保留。NativeAOT 不走下方的 .NET 单文件自解压流程；常规发行脚本仍使用原有 .NET 单文件发布。
+
+AOT 编译所需的 RID 专属包锁定文件写在 `obj/`，不会改动仓库的 `packages.lock.json`，所以常规的 `dotnet restore --locked-mode` 可以继续使用。
+
+上面的常规发行脚本使用 .NET 单文件发布。直接执行 `dotnet publish -c Release -r <rid>` 时，项目默认使用 NativeAOT；如需手动构建原有单文件版本，请指定 `-p:PublishAot=false -p:PublishSingleFile=true`。
 
 单文件把原生库（SDL3、shaderc、SPIRV-Cross）一并压进可执行文件，首次运行会自解压到 `DOTNET_BUNDLE_EXTRACT_BASE_DIR`，默认是用户缓存目录（macOS 为 `~/.net`，Windows 为 `%TEMP%\.net`），之后启动直接复用。因此**运行账户的缓存目录必须可写**，容器或只读 HOME 环境下需要显式指定这个变量。
 

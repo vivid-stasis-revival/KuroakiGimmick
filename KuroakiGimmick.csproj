@@ -1,70 +1,308 @@
 <Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- ============================================================
+       KuroakiGimmick
+       Release profile:
+         - NativeAOT
+         - Speed-first code generation
+         - Workstation + concurrent GC
+         - Trim unused runtime features
+         - No unnecessary diagnostics instrumentation
+         - Preserve globalization/CJK
+         - Preserve useful crash stack traces
+       ============================================================ -->
+
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
+
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
     <Version>0.1.4</Version>
     <AssemblyVersion>0.1.4.0</AssemblyVersion>
     <FileVersion>0.1.4.175</FileVersion>
     <InformationalVersion>0.1.4+17.5</InformationalVersion>
+
     <AssemblyName>KuroakiGimmick</AssemblyName>
     <RootNamespace>KuroakiGimmick</RootNamespace>
+
+    <!-- IMPORTANT:
+         Property text values must remain on one line.
+         Indented multiline text can become part of the actual MSBuild value. -->
     <ApplicationIcon Condition="Exists('Assets/App/Kuroaki.ico')">Assets/App/Kuroaki.ico</ApplicationIcon>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationManifest Condition="Exists('app.manifest')">app.manifest</ApplicationManifest>
+
+    <!-- KuroakiGimmick needs CJK/localization support. -->
     <InvariantGlobalization>false</InvariantGlobalization>
+
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <DefaultItemExcludes>$(DefaultItemExcludes);dist/**</DefaultItemExcludes>
+
+    <!-- Reproducible optimized builds. -->
+    <Deterministic>true</Deterministic>
+
+    <!-- NuGet lock. -->
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-    <!-- 单文件打包是项目级默认：指定 RID 时（dotnet publish -r <rid>，包括各平台发布
-         脚本）自动产出单个可执行文件。显式传 -p:PublishSingleFile=false 可以覆盖，
-         用于排查只在散装布局下复现的问题。 -->
-    <PublishSingleFile Condition="'$(RuntimeIdentifier)' != '' and '$(PublishSingleFile)' == ''">true</PublishSingleFile>
-    <!-- 原生库进自解压：首次运行落地到 DOTNET_BUNDLE_EXTRACT_BASE_DIR（默认用户缓存目录），
-         之后复用，所以发行包必须保证该目录可写。 -->
+
+    <!--
+      Release + explicit RID automatically selects NativeAOT.
+
+      Examples:
+        dotnet publish -c Release -r osx-arm64
+        dotnet publish -c Release -r win-x64
+        dotnet publish -c Release -r linux-x64
+
+      Can still be overridden with:
+        -p:PublishAot=false
+
+      An explicit PublishSingleFile=true also selects the managed fallback
+      used by the existing packaging scripts.
+    -->
+    <PublishAot Condition="'$(Configuration)' == 'Release' and '$(RuntimeIdentifier)' != '' and '$(PublishAot)' == '' and '$(PublishSingleFile)' != 'true'">true</PublishAot>
+
+    <!--
+      NativeAOT restore adds RID-specific compiler packages.
+      Keep that lock outside the repository packages.lock.json.
+    -->
+    <NuGetLockFilePath Condition="'$(PublishAot)' == 'true' and '$(NuGetLockFilePath)' == ''">obj/packages.nativeaot.$(RuntimeIdentifier).lock.json</NuGetLockFilePath>
+
+    <!--
+      Managed/JIT fallback:
+      RID-specific non-AOT publish becomes a single-file application.
+    -->
+    <PublishSingleFile Condition="'$(RuntimeIdentifier)' != '' and '$(PublishSingleFile)' == '' and '$(PublishAot)' != 'true'">true</PublishSingleFile>
+
+    <!-- Native libraries used by managed single-file fallback. -->
     <IncludeNativeLibrariesForSelfExtract Condition="'$(PublishSingleFile)' == 'true' and '$(IncludeNativeLibrariesForSelfExtract)' == ''">true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
+
+
+  <!-- ============================================================
+       RELEASE OPTIMIZATION
+       ============================================================ -->
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+
+    <!-- Roslyn optimized IL. -->
+    <Optimize>true</Optimize>
+
+    <!-- No managed debug payload in shipping builds. -->
+    <DebugSymbols>false</DebugSymbols>
+    <DebugType>none</DebugType>
+
+    <!-- Avoid checked arithmetic unless explicitly requested in code. -->
+    <CheckForOverflowUnderflow>false</CheckForOverflowUnderflow>
+
+    <!--
+      Interactive graphics/editor application:
+      Workstation GC is preferable to Server GC.
+
+      Concurrent/background collection stays enabled to reduce
+      large blocking pauses.
+    -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+
+    <!-- Let GC release unused virtual memory after large projects/assets. -->
+    <RetainVMGarbageCollection>false</RetainVMGarbageCollection>
+
+  </PropertyGroup>
+
+
+  <!-- ============================================================
+       NATIVE AOT
+       ============================================================ -->
+
+  <PropertyGroup Condition="'$(PublishAot)' == 'true'">
+
+    <!-- NativeAOT is self-contained. -->
+    <SelfContained>true</SelfContained>
+
+    <!--
+      PERFORMANCE FIRST.
+
+      NativeAOT translates this into speed-biased native code generation.
+    -->
+    <OptimizationPreference>Speed</OptimizationPreference>
+
+    <!-- NativeAOT inherently depends on trimming. -->
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>full</TrimMode>
+
+    <!-- Do not silently hide AOT/trimming incompatibilities. -->
+    <SuppressTrimAnalysisWarnings>false</SuppressTrimAnalysisWarnings>
+
+    <!-- Remove separate native debug symbols from release package. -->
+    <StripSymbols>true</StripSymbols>
+
+    <!--
+      Runtime code mutation / Hot Reload has no useful role in the
+      NativeAOT distribution executable.
+    -->
+    <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
+
+    <!-- Remove System.Diagnostics.Metrics implementation. -->
+    <MetricsSupport>false</MetricsSupport>
+
+    <!--
+      Remove EventSource instrumentation from trimmed framework code.
+
+      Re-enable if runtime EventSource diagnostics are ever required.
+    -->
+    <EventSourceSupport>false</EventSourceSupport>
+
+    <!--
+      KuroakiGimmick is not an HTTP tracing application.
+      HttpClient itself remains usable.
+    -->
+    <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+
+    <!-- Disable legacy/unsafe runtime facilities. -->
+    <EnableUnsafeBinaryFormatterSerialization>false</EnableUnsafeBinaryFormatterSerialization>
+    <EnableUnsafeUTF7Encoding>false</EnableUnsafeUTF7Encoding>
+
+    <!--
+      KEEP stack traces.
+
+      Turning this off mostly saves metadata/size and destroys useful
+      crash information. It does not meaningfully improve render-loop FPS.
+    -->
+    <StackTraceSupport>true</StackTraceSupport>
+
+    <!-- Keep readable framework exception messages. -->
+    <UseSystemResourceKeys>false</UseSystemResourceKeys>
+
+  </PropertyGroup>
+
+
+  <!-- ============================================================
+       MANAGED/JIT RELEASE FALLBACK
+
+       Only used when PublishAot=false.
+       ============================================================ -->
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' and '$(PublishAot)' != 'true'">
+
+    <!-- Tiered compilation + dynamic PGO for hot code. -->
+    <TieredCompilation>true</TieredCompilation>
+    <TieredPGO>true</TieredPGO>
+
+    <!-- Fast startup for cold methods. -->
+    <TieredCompilationQuickJit>true</TieredCompilationQuickJit>
+
+    <!--
+      Long-running rendering/audio loops should not remain in low-quality
+      Tier-0 loop code longer than necessary.
+    -->
+    <TieredCompilationQuickJitForLoops>false</TieredCompilationQuickJitForLoops>
+
+    <!-- RID-specific managed release startup optimization. -->
+    <PublishReadyToRun Condition="'$(RuntimeIdentifier)' != ''">true</PublishReadyToRun>
+
+  </PropertyGroup>
+
+
+  <!-- ============================================================
+       SOURCE + EMBEDDED RESOURCES
+       ============================================================ -->
+
   <ItemGroup>
     <Compile Include="src/**/*.cs;tests/SelfTests/**/*.cs" />
-    <EmbeddedResource Include="src/UI/Localization/*.json" LogicalName="KuroakiGimmick.Localization.%(Filename)%(Extension)" />
-    <!-- 界面字体是真正的字体文件，运行时按目标像素密度栅格化；加文案不需要重新生成任何资源。 -->
-    <EmbeddedResource Include="Resources/Fonts/*.ttf" LogicalName="KuroakiGimmick.Fonts.%(Filename)%(Extension)" />
-    <!-- Embed the SAME editable definitions, so an older external Assets directory
-         cannot remove the extension-ID table from a newer executable. -->
-    <!-- Assets/ holds art exported from a local game install and is not in the
-         source repository, so every reference to it is guarded by Exists(): a
-         clone without Assets/ still compiles. With Assets/ present nothing changes. -->
-    <EmbeddedResource Include="Assets/Gimmicks/*/manifest.json" />
-    <EmbeddedResource Include="Assets/Documentation/vsm-reference.json" LogicalName="KuroakiGimmick.VsmReference.json" Condition="Exists('Assets/Documentation/vsm-reference.json')" />
-    <EmbeddedResource Include="tests/Fixtures/r15-scarlet-definition.json" LogicalName="KuroakiGimmick.Tests.LegacyScarletDefinition.json" />
-    <EmbeddedResource Include="Assets/Catalog/legacy-per-frame-bindings.json" LogicalName="KuroakiGimmick.LegacyPerFrameBindings.json" Condition="Exists('Assets/Catalog/legacy-per-frame-bindings.json')" />
-    <EmbeddedResource Include="Assets/Catalog/jackets.json" LogicalName="KuroakiGimmick.JacketCatalog.json" Condition="Exists('Assets/Catalog/jackets.json')" />
-    <EmbeddedResource Include="Assets/Catalog/room-associations.json" LogicalName="KuroakiGimmick.RoomAssociations.json" Condition="Exists('Assets/Catalog/room-associations.json')" />
 
+    <EmbeddedResource Include="src/UI/Localization/*.json" LogicalName="KuroakiGimmick.Localization.%(Filename)%(Extension)" />
+
+    <!--
+      Actual font files.
+      Runtime rasterization remains resolution/DPI aware.
+    -->
+    <EmbeddedResource Include="Resources/Fonts/*.ttf" LogicalName="KuroakiGimmick.Fonts.%(Filename)%(Extension)" />
+
+    <!--
+      Embed the same editable definitions so an old external Assets
+      directory cannot remove newer executable-side definitions.
+    -->
+    <EmbeddedResource Include="Assets/Gimmicks/*/manifest.json" />
+
+    <EmbeddedResource Include="Assets/Documentation/vsm-reference.json"
+                      LogicalName="KuroakiGimmick.VsmReference.json"
+                      Condition="Exists('Assets/Documentation/vsm-reference.json')" />
+
+    <EmbeddedResource Include="tests/Fixtures/r15-scarlet-definition.json"
+                      LogicalName="KuroakiGimmick.Tests.LegacyScarletDefinition.json" />
+
+    <EmbeddedResource Include="Assets/Catalog/legacy-per-frame-bindings.json"
+                      LogicalName="KuroakiGimmick.LegacyPerFrameBindings.json"
+                      Condition="Exists('Assets/Catalog/legacy-per-frame-bindings.json')" />
+
+    <EmbeddedResource Include="Assets/Catalog/jackets.json"
+                      LogicalName="KuroakiGimmick.JacketCatalog.json"
+                      Condition="Exists('Assets/Catalog/jackets.json')" />
+
+    <EmbeddedResource Include="Assets/Catalog/room-associations.json"
+                      LogicalName="KuroakiGimmick.RoomAssociations.json"
+                      Condition="Exists('Assets/Catalog/room-associations.json')" />
   </ItemGroup>
+
+
+  <!-- ============================================================
+       DEPENDENCIES
+       ============================================================ -->
+
   <ItemGroup>
     <PackageReference Include="SDL3-CS.Linux" Version="3.4.16" />
     <PackageReference Include="SDL3-CS.MacOS" Version="3.4.16" />
     <PackageReference Include="SDL3-CS.Windows" Version="3.4.16" />
+
     <PackageReference Include="Silk.NET.Shaderc.Native" Version="2.23.0" />
     <PackageReference Include="Silk.NET.SPIRV.Cross.Native" Version="2.23.0" />
+
     <PackageReference Include="StbImageSharp" Version="2.30.16" />
     <PackageReference Include="StbImageWriteSharp" Version="1.16.7" />
+
     <PackageReference Include="NVorbis" Version="0.10.5" />
     <PackageReference Include="StbTrueTypeSharp" Version="1.26.13" />
   </ItemGroup>
+
+
+  <!-- ============================================================
+       EXTERNAL ASSETS
+       ============================================================ -->
+
   <ItemGroup>
-    <None Include="Assets/**/*;Samples/**/*;Integrations/**/*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
-    <None Update="ThirdParty/IBM-Plex-OFL.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
-    <None Update="Assets/Gimmicks/*/manifest.json;Assets/Catalog/*.json" CopyToOutputDirectory="Always" CopyToPublishDirectory="Always" />
+    <None Include="Assets/**/*;Samples/**/*;Integrations/**/*"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest"
+          ExcludeFromSingleFile="true" />
+
+    <None Update="ThirdParty/IBM-Plex-OFL.txt"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest"
+          ExcludeFromSingleFile="true" />
+
+    <None Update="Assets/Gimmicks/*/manifest.json;Assets/Catalog/*.json"
+          CopyToOutputDirectory="Always"
+          CopyToPublishDirectory="Always" />
   </ItemGroup>
+
+
   <ItemGroup>
     <Folder Include="docs\media\" />
   </ItemGroup>
-  <!-- 单文件需要 RID，RID-less publish 只能得到散装输出。这里只警告，不报错：
-       框架依赖的本地冒烟测试仍然可用，但发行包不该走这条路。 -->
-  <Target Name="WarnSingleFileNeedsRuntimeIdentifier" BeforeTargets="Publish" Condition="'$(RuntimeIdentifier)' == ''">
-    <Warning Code="KUROAKI001" Text="未指定 RuntimeIdentifier，本次 publish 不会打包成单文件。发行请使用 dotnet publish -r &lt;rid&gt;（或 scripts/publish-mac.sh、scripts/publish-win.sh、scripts/publish-windows.ps1）。" />
+
+
+  <!-- ============================================================
+       PUBLISH CHECK
+       ============================================================ -->
+
+  <Target Name="WarnSingleFileNeedsRuntimeIdentifier"
+          BeforeTargets="Publish"
+          Condition="'$(RuntimeIdentifier)' == ''">
+
+    <Warning Code="KUROAKI001"
+             Text="未指定 RuntimeIdentifier，本次 publish 无法进行 NativeAOT / RID 单文件优化。发行请使用 dotnet publish -c Release -r &lt;rid&gt;（或对应平台发布脚本）。" />
+
   </Target>
+
 </Project>

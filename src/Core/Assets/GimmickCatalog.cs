@@ -74,7 +74,7 @@ public static class GimmickCatalog
                 {
                     candidate = FileSource(ResourceFiles.ContainedFile(shared, Path.GetRelativePath(shared,
                         path).Replace(Path.DirectorySeparatorChar, '/')), "shared");
-                    data = JsonSerializer.Deserialize<GimmickDefinition>(candidate.Json, ViewerProject.Json);
+                    data = AppJson.Deserialize<GimmickDefinition>(candidate.Json, ViewerProject.Json);
                 }
                 catch (Exception ex) when (ResourceFiles.IsResourceError(ex))
                 {

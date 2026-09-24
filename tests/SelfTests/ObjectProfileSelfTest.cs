@@ -135,7 +135,7 @@ public static class ObjectProfileSelfTest
                     }
                 };
                 string manifest = Path.Combine(directory, "gimmick-object.json");
-                File.WriteAllText(manifest, JsonSerializer.Serialize(definition, ViewerProject.Json));
+                File.WriteAllText(manifest, AppJson.Serialize(definition, ViewerProject.Json));
                 var chart = new Chart
                 {
                     ObjectName = objectName
@@ -215,7 +215,7 @@ public static class ObjectProfileSelfTest
                 // 资源路径出问题时按组件粒度报告：Data 仍然加载成功，只有 "shape" 这一项进 Issues，
                 // 其余合法资源照常可用，不能因为一张图坏了整个对象都不预览。
                 definition.Sprites["shape"].Frames = ["../outside.png"];
-                File.WriteAllText(manifest, JsonSerializer.Serialize(definition, ViewerProject.Json));
+                File.WriteAllText(manifest, AppJson.Serialize(definition, ViewerProject.Json));
                 var invalidResource = NativeGimmickProfile.Load(project, new Chart
                 {
                     ObjectName = objectName

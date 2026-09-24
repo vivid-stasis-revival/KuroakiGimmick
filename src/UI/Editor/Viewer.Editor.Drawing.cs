@@ -313,7 +313,7 @@ public sealed partial class Viewer
             var settingsObject = (JsonObject)root[SettingsKey]!;
             if (settingsObject["windows"] is not JsonArray) settingsObject["windows"] = new JsonArray();
             var a = (JsonArray)settingsObject["windows"]!;
-            while (a.Count <= index) a.Add(new JsonObject());
+            while (a.Count <= index) a.Add((JsonNode)new JsonObject());
             if (a[index] is not JsonObject) a[index] = new JsonObject();
             var o = (JsonObject)a[index]!; if (title != null) o["title"] = title; if (border != null) o["border"] = border.Value;
         });

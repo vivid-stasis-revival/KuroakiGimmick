@@ -100,7 +100,7 @@ public static class RefactorSelfTest
                 CallbackLifetimes = new() { ["pulse"] = .4 }
             };
             string manifest = Path.Combine(root, "gimmick-object.json");
-            File.WriteAllText(manifest, JsonSerializer.Serialize(definition, ViewerProject.Json));
+            File.WriteAllText(manifest, AppJson.Serialize(definition, ViewerProject.Json));
             string chartPath = Path.Combine(root, "fixture.vsc");
             File.WriteAllText(chartPath, "");
             var chart = new Chart { ObjectName = objectName };
@@ -137,7 +137,7 @@ public static class RefactorSelfTest
             // 命令行解析阶段只做路径解析：audio 指向一个不存在的文件，此时也不许去解码它，更不许顺手建 Session。
             // 否则用 --audio 覆盖路径的用法会在覆盖生效之前就先失败。
             string projectPath = Path.Combine(root, "paths.sgv.json");
-            File.WriteAllText(projectPath, JsonSerializer.Serialize(new ViewerProject
+            File.WriteAllText(projectPath, AppJson.Serialize(new ViewerProject
             {
                 Chart = "fixture.vsc", Audio = "not-loaded.ogg", GimmickDefinition = "gimmick-object.json"
             }, ViewerProject.Json));

@@ -122,7 +122,7 @@ internal sealed class VsmReference
     /// <summary>从 JSON 文本建索引。反序列化出 null 视为损坏，直接抛错，不返回一份空目录冒充可用文档。</summary>
     internal static VsmReference FromJson(string text)
     {
-        var data = JsonSerializer.Deserialize<Data>(text)
+        var data = AppJson.Deserialize<Data>(text)
             ?? throw new InvalidDataException("Empty reference index.");
         return new(data);
     }

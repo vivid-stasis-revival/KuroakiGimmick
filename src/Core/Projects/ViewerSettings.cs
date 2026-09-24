@@ -118,12 +118,12 @@ public sealed class ViewerSettings
                 {
                     var safe = new JsonArray();
                     foreach (var entry in list)
-                        if (entry is JsonValue value && value.TryGetValue<string>(out string? item)) safe.Add(item);
+                        if (entry is JsonValue value && value.TryGetValue<string>(out string? item)) safe.Add((JsonNode?)JsonValue.Create(item));
                     obj[recentKey] = safe;
                 }
                 else obj.Remove(recentKey);
             }
-            var settings = JsonSerializer.Deserialize<ViewerSettings>(data?.ToJsonString() ?? "null", ViewerProject.Json) ?? new();
+            var settings = AppJson.Deserialize<ViewerSettings>(data?.ToJsonString() ?? "null", ViewerProject.Json) ?? new();
             settings.Workspace ??= new(); settings.Workspace.Normalize(); settings.UiTheme = ValidTheme(settings.UiTheme);
             settings.UiLanguage = Core.UiLanguage.Normalize(settings.UiLanguage);
             settings.NormalizeRecentProjects();
@@ -181,7 +181,7 @@ public sealed class ViewerSettings
         path ??= SettingsPath;
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         string temporary = path + ".tmp";
-        File.WriteAllText(temporary, JsonSerializer.Serialize(this, ViewerProject.Json));
+        File.WriteAllText(temporary, AppJson.Serialize(this, ViewerProject.Json));
         File.Move(temporary, path, true);
     }
 }
