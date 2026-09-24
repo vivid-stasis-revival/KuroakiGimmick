@@ -186,7 +186,7 @@ public static class ChartExport
             }
             project.FxProfile = InternalOnly(project.FxProfile); project.GameUi = InternalOnly(project.GameUi);
             project.GimmickAssets = InternalOnly(project.GimmickAssets); project.GimmickDefinition = InternalOnly(project.GimmickDefinition);
-            Bytes("Kuroaki.sgv.json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(project, ViewerProject.Json)));
+            Bytes("Kuroaki.sgv.json", Encoding.UTF8.GetBytes(AppJson.Serialize(project, ViewerProject.Json)));
             warnings.Add("Copies the source song folder, excluding build/cache/editor backup files. No game/mod installation is changed.");
             warnings.Add("Kuroaki.sgv.json retains E markers. Game compatibility still depends on the target game and required mods.");
             if (chart.EndsWith(".vsb", StringComparison.OrdinalIgnoreCase))

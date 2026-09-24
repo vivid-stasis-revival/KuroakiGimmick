@@ -102,7 +102,7 @@ public sealed class GameUiAssets
             {
                 throw new InvalidDataException("UI manifest exceeds 16 MiB.");
             }
-            var data = JsonSerializer.Deserialize<Pack>(System.IO.File.ReadAllText(result.Manifest),
+            var data = AppJson.Deserialize<Pack>(System.IO.File.ReadAllText(result.Manifest),
                 ViewerProject.Json) ?? throw new InvalidDataException("Empty UI pack.");
             if (data.Version != 1 || data.Sprites == null || data.Fonts == null || data.Sprites.Count > 16 || data.Fonts.Count > 8)
             {

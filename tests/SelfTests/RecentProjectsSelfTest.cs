@@ -46,7 +46,7 @@ internal static class RecentProjectsSelfTest
             Check(reloaded.PreviewVolume == .37 && reloaded.GameUiFont == ViewerSettings.MonacoFont,
                 "persisting recents preserves preview defaults");
             var project = new ViewerProject { PreviewVolume = .91, GameUiFont = ViewerSettings.DefaultFont };
-            string projectJson = JsonSerializer.Serialize(project, ViewerProject.Json);
+            string projectJson = AppJson.Serialize(project, ViewerProject.Json);
             Check(!projectJson.Contains("RecentProjects", StringComparison.Ordinal), "recent list is absent from project JSON");
             File.WriteAllText(settingsPath, "{\"RecentProjects\":null,\"PreviewVolume\":0.4}");
             var nullList = ViewerSettings.Load(settingsPath);

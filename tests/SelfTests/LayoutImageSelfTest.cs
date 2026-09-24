@@ -101,7 +101,7 @@ public static class LayoutImageSelfTest
                 "layout and scale survive preference save/reload");
             // 工作区尺寸属于本机设置，不能随谱面工程走：一旦序列化进 project，别人打开这份谱面
             // 就会被改掉自己的 UI 缩放。这里按名字扫一遍序列化结果来卡住这条边界。
-            Check(!JsonSerializer.Serialize(new ViewerProject(), ViewerProject.Json).Contains("UiScale", StringComparison.OrdinalIgnoreCase),
+            Check(!AppJson.Serialize(new ViewerProject(), ViewerProject.Json).Contains("UiScale", StringComparison.OrdinalIgnoreCase),
                 "device UI preferences do not leak into a song project");
             string chartPath = Path.Combine(song, "ENCORE.vsc"), vsm = Path.Combine(song, "ENCORE.vsm"), vsp = Path.Combine(song, "ENCORE.vsp");
             // 最小可用谱面：开头 b:120 把 BPM 定成 120（0.5 秒一拍），后面一个单点音符加一个长按。

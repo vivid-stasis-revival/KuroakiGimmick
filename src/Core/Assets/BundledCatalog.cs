@@ -22,13 +22,13 @@ internal static class BundledCatalog
 
         if (path != null)
         {
-            return JsonSerializer.Deserialize<T>(ResourceFiles.ReadText(path), ViewerProject.Json)
+            return AppJson.Deserialize<T>(ResourceFiles.ReadText(path), ViewerProject.Json)
                 ?? throw new InvalidDataException("Empty catalog: " + path);
         }
 
         using Stream stream = typeof(BundledCatalog).Assembly.GetManifestResourceStream(resourceName)
             ?? throw new InvalidDataException("Missing embedded catalog: " + resourceName);
-        return JsonSerializer.Deserialize<T>(stream, ViewerProject.Json)
+        return AppJson.Deserialize<T>(stream, ViewerProject.Json)
             ?? throw new InvalidDataException("Empty embedded catalog: " + resourceName);
     }
 }

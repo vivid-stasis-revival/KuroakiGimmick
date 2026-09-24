@@ -1,3 +1,6 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+
 namespace KuroakiGimmick.Core;
 
 /// <summary>
@@ -24,6 +27,10 @@ public static class SelfTest
         LocalizationSelfTest.Check(Check);
         // 冷启动必须不依赖任何随程序分发的歌曲资源，否则裸安装的编辑器打不开。
         Check(Session.Empty().IsEmpty, "startup needs no bundled song assets");
+        using (var report = JsonDocument.Parse(Session.Empty().Report()))
+            Check(report.RootElement.GetProperty("reportSchemaVersion").GetInt32() == 2 &&
+                report.RootElement.GetProperty("songStats").ValueKind == JsonValueKind.Object,
+                "schema2 report serializes without runtime reflection");
         // 4→4.2 秒 @30 fps 恰好 6 帧；区间长度先量化再取整，不能让浮点误差凭空多出一帧。
         Check(new ExportOptions("unused.mp4", 4, 4.2, 30).FrameCount == 6, "decimal export range does not gain a frame from floating-point rounding");
         // 故意用带小数起点的 viewport：预览区必须落在整数物理像素上，缩放系数也必须是整数，
@@ -121,29 +128,22 @@ public static class SelfTest
             {
                 File.WriteAllBytes(Path.Combine(exact, name + ".png"), [0]);
             }
-            var exactRows = exactNames.Select((name, i) => new
+            var exactRows = exactNames.Select((name, i) => new JsonObject
             {
-                file = name + ".png",
-                source_sprite = name == "bumper_L" ? "sp_note_bumper_normal" : "dummy_" + i,
-                source_frame = name == "bumper_L" ? 0 : i,
-                width = 130,
-                height = 43,
-                target_size = new[]
-                {
-                    name.StartsWith("bumper") || name.StartsWith("judge_bumper") ? 45 : 22,
-                    7
-                },
-                bounding_size = new[]
-                {
-                    name == "bumper_L" ? 107 : (name.StartsWith("bumper") || name.StartsWith("judge_bumper") ? 45 : 22),
-                    7
-                }
-            });
-            File.WriteAllText(Path.Combine(exact, "manifest.json"), System.Text.Json.JsonSerializer.Serialize(new
+                ["file"] = name + ".png",
+                ["source_sprite"] = name == "bumper_L" ? "sp_note_bumper_normal" : "dummy_" + i,
+                ["source_frame"] = name == "bumper_L" ? 0 : i,
+                ["width"] = 130,
+                ["height"] = 43,
+                ["target_size"] = new JsonArray(name.StartsWith("bumper") || name.StartsWith("judge_bumper") ? 45 : 22, 7),
+                ["bounding_size"] = new JsonArray(name == "bumper_L" ? 107 :
+                    (name.StartsWith("bumper") || name.StartsWith("judge_bumper") ? 45 : 22), 7)
+            }).ToArray();
+            File.WriteAllText(Path.Combine(exact, "manifest.json"), new JsonObject
             {
-                format = "vividstasis-default-note-skin-exact-lanes-v2",
-                files = exactRows
-            }));
+                ["format"] = "vividstasis-default-note-skin-exact-lanes-v2",
+                ["files"] = new JsonArray(exactRows.Select(row => (JsonNode?)row.DeepClone()).ToArray())
+            }.ToJsonString());
             File.WriteAllText(Path.Combine(meta, "sprites.json"), "[{\"name\":\"sp_note_bumper_normal\",\"origin_x\":53,\"origin_y\":3}]");
             File.WriteAllText(Path.Combine(meta, "frames.json"),
                 "[{\"sprite\":\"sp_note_bumper_normal\",\"frame\":0,\"target\":{\"x\":24,\"y\":0,\"width\":52,\"height\":7}}]");
@@ -160,43 +160,26 @@ public static class SelfTest
             string multi = Path.Combine(noteAssets, "NoteSkinFull", "NotesExact"), alt = Path.Combine(multi, "stopmotion");
             Directory.CreateDirectory(alt);
             File.WriteAllBytes(Path.Combine(alt, "chip_L.png"), [0]);
-            var multiRows = exactRows.Cast<object>().Append(new
+            var multiRows = new JsonArray(exactRows.Select(row => (JsonNode?)row.DeepClone()).ToArray());
+            multiRows.Add((JsonNode)new JsonObject
             {
-                file = "stopmotion/chip_L.png",
-                skin = 1,
-                source_sprite = "sp_note_chip_stopmotion",
-                source_frame = 0,
-                width = 20,
-                height = 7,
-                target_size = new[]
-                {
-                    20,
-                    7
-                },
-                bounding_size = new[]
-                {
-                    20,
-                    7
-                }
+                ["file"] = "stopmotion/chip_L.png",
+                ["skin"] = 1,
+                ["source_sprite"] = "sp_note_chip_stopmotion",
+                ["source_frame"] = 0,
+                ["width"] = 20,
+                ["height"] = 7,
+                ["target_size"] = new JsonArray(20, 7),
+                ["bounding_size"] = new JsonArray(20, 7)
             });
-            File.WriteAllText(Path.Combine(multi, "manifest.json"), System.Text.Json.JsonSerializer.Serialize(new
+            File.WriteAllText(Path.Combine(multi, "manifest.json"), new JsonObject
             {
-                format = "vividstasis-default-note-skin-exact-lanes-v2",
-                skins = new[]
-                {
-                    new
-                    {
-                        index = 0,
-                        name = "normal"
-                    },
-                    new
-                    {
-                        index = 1,
-                        name = "stopmotion"
-                    }
-                },
-                files = multiRows
-            }));
+                ["format"] = "vividstasis-default-note-skin-exact-lanes-v2",
+                ["skins"] = new JsonArray(
+                    new JsonObject { ["index"] = 0, ["name"] = "normal" },
+                    new JsonObject { ["index"] = 1, ["name"] = "stopmotion" }),
+                ["files"] = multiRows
+            }.ToJsonString());
             var skinned = NoteSkinProfile.Load(noteAssets);
             Check(skinned.SkinNames.Count == 2 && skinned.Chip(0, 1) !.File.EndsWith("chip_L.png")
                 && skinned.Chip(0, 1) !.Width == 20 && skinned.Chip(0) !.Width == 22,

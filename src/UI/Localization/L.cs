@@ -21,7 +21,7 @@ internal static class L
     {
         using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream($"KuroakiGimmick.Localization.{language}.json")
             ?? throw new InvalidDataException($"Missing UI language catalog: {language}");
-        return JsonSerializer.Deserialize<Dictionary<string, string>>(stream)
+        return AppJson.Deserialize<Dictionary<string, string>>(stream)
             ?? throw new InvalidDataException($"Empty UI language catalog: {language}");
     }
 
