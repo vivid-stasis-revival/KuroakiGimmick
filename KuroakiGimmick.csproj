@@ -17,6 +17,13 @@
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <DefaultItemExcludes>$(DefaultItemExcludes);dist/**</DefaultItemExcludes>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <!-- 单文件打包是项目级默认：指定 RID 时（dotnet publish -r <rid>，包括各平台发布
+         脚本）自动产出单个可执行文件。显式传 -p:PublishSingleFile=false 可以覆盖，
+         用于排查只在散装布局下复现的问题。 -->
+    <PublishSingleFile Condition="'$(RuntimeIdentifier)' != '' and '$(PublishSingleFile)' == ''">true</PublishSingleFile>
+    <!-- 原生库进自解压：首次运行落地到 DOTNET_BUNDLE_EXTRACT_BASE_DIR（默认用户缓存目录），
+         之后复用，所以发行包必须保证该目录可写。 -->
+    <IncludeNativeLibrariesForSelfExtract Condition="'$(PublishSingleFile)' == 'true' and '$(IncludeNativeLibrariesForSelfExtract)' == ''">true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="src/**/*.cs;tests/SelfTests/**/*.cs" />
@@ -55,4 +62,9 @@
   <ItemGroup>
     <Folder Include="docs\media\" />
   </ItemGroup>
+  <!-- 单文件需要 RID，RID-less publish 只能得到散装输出。这里只警告，不报错：
+       框架依赖的本地冒烟测试仍然可用，但发行包不该走这条路。 -->
+  <Target Name="WarnSingleFileNeedsRuntimeIdentifier" BeforeTargets="Publish" Condition="'$(RuntimeIdentifier)' == ''">
+    <Warning Code="KUROAKI001" Text="未指定 RuntimeIdentifier，本次 publish 不会打包成单文件。发行请使用 dotnet publish -r &lt;rid&gt;（或 scripts/publish-mac.sh、scripts/publish-win.sh、scripts/publish-windows.ps1）。" />
+  </Target>
 </Project>

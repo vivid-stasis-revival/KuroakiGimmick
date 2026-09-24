@@ -86,6 +86,13 @@
 
 - `Chart.Notes` 此前用 `List.Sort` 排序，那是不稳定的内省排序，同一时刻的音符次序会随实现变化。原版按读入顺序遍历音符，jack / chain 的配对与同刻音符的密度权重都依赖这个次序，因此统计结果会随运行漂移。改为稳定排序后，六项统计与参考实现逐值一致。
 
+### 单文件打包改为项目级默认（构建）
+
+- 此前只有 Windows 走单文件：`scripts/publish-common.sh` 按 RID 分支把 macOS 写死成 `single_file=false`，于是 `.app/Contents/MacOS/` 里散着近 200 个文件（运行时程序集、`libSDL3.dylib`、`createdump` 等）。现在两个平台一致，单文件默认写进 `KuroakiGimmick.csproj`：指定 RID 时（`dotnet publish -r <rid>` 以及三个发布脚本）自动产出单个可执行文件，不再依赖调用方手写 `-p:PublishSingleFile=true`。显式传 `-p:PublishSingleFile=false` 仍可覆盖，用于排查只在散装布局下复现的问题。
+- 原生库改为自解压：首次运行落地到 `DOTNET_BUNDLE_EXTRACT_BASE_DIR`（默认用户缓存目录），之后复用。运行账户的缓存目录必须可写。
+- 发布脚本增加单文件校验：macOS 侧统计 `Contents/MacOS` 里带执行位的文件，必须恰好一个，否则说明 `PublishSingleFile` 没生效；Windows PowerShell 侧检查包根目录没有 `.dll` / `.json` / `.pdb` 残留。`scripts/dev/check-publish.py` 相应改为断言两个 RID 都传单文件参数，并要求 macOS 的 `Contents/MacOS` 只有 apphost 一项。
+- 不指定 RID 的 `dotnet publish` 无法单文件，新增 `KUROAKI001` 警告点名这一点；`dotnet build` 不受影响，仍输出散装程序集供调试。
+
 ## v0.1.3 / 17.0
 
 **TL;DR** — 相对 16.2 有三件大事：① 预览补上了游戏内 HUD 与命中特效（分数 / EX / 连击 / 判定 / hold 特效，逐项可关）；② Custom 与原生对象的演出按导出的原始素材补齐（星星、`static`、`cover`、DF 侧线、冲击波、`fx_film` / `fx_edge`、Extendnova 的 CG 与剧情框）；③ 编辑器由「弹模态框改一个值」改成「右侧就地改 + 轨道上框选批量改 + 右键菜单」，FOLLOW 改为连续平滑跟随。另外重新导出了音符素材（修掉右半轨道用错帧），脚本与历史文档归档整理，验证统一到 `scripts/verify.sh`。

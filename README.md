@@ -254,9 +254,17 @@ dist/
 
 使用 `all` 时会分别构建两个架构，不会生成 macOS Universal Binary。
 
-macOS 包结构中 `.app` 与 `Assets/` 并列。
+macOS 包结构中 `.app` 与 `Assets/` 并列，其中 `Contents/MacOS/` 只放一个可执行文件。
 
-Windows 包使用单文件 `.exe`，同时保留外置 `Assets/`。
+Windows 包同理：单个 `.exe`，同时保留外置 `Assets/`。
+
+两个平台都默认单文件发布，这个默认写在 `KuroakiGimmick.csproj` 里，所以 `dotnet publish -r <rid>` 不用再手写 `-p:PublishSingleFile=true`。需要散装布局排查问题时可以显式 `-p:PublishSingleFile=false` 覆盖。
+
+单文件把原生库（SDL3、shaderc、SPIRV-Cross）一并压进可执行文件，首次运行会自解压到 `DOTNET_BUNDLE_EXTRACT_BASE_DIR`，默认是用户缓存目录（macOS 为 `~/.net`，Windows 为 `%TEMP%\.net`），之后启动直接复用。因此**运行账户的缓存目录必须可写**，容器或只读 HOME 环境下需要显式指定这个变量。
+
+普通 `dotnet build` 不受影响，仍输出常规的散装程序集，调试照旧。
+
+不指定 `-r` 的 `dotnet publish` 会收到 `KUROAKI001` 警告：单文件打包需要 RID，那种输出不是发行包。
 
 因此无论哪个平台，移动发行版本时都应移动整个目录，而不是只把可执行文件单独拖走，然后疑惑为什么所有资源突然蒸发。
 
