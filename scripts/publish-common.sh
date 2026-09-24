@@ -9,7 +9,7 @@ trap kg_cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 kg_publish() {
-    local rid="$1" name stamp package binary dest log single_file font_asset reference_asset
+    local rid="$1" name stamp package binary dest log single_file font_asset reference_asset macos_executable
     command -v "${KG_DOTNET}" >/dev/null 2>&1 || { echo '请先安装 .NET 8 SDK，并让 dotnet 位于 PATH。' >&2; return 1; }
     command -v zip >/dev/null 2>&1 || { echo '需要 zip 命令。' >&2; return 1; }
     [ -f "${KG_ROOT}/KuroakiGimmick.csproj" ] || { echo '请把 scripts 放在完整源码目录内。' >&2; return 1; }
@@ -30,11 +30,11 @@ kg_publish() {
     package="${KG_STAGE}/${name}"
     log="${KG_ROOT}/dist/publish-${rid}-${stamp}.log"
     case "${rid}" in
-        osx-*) binary="${package}/KuroakiGimmick.app/Contents/MacOS"; single_file=false ;;
+        osx-*) binary="${package}/KuroakiGimmick.app/Contents/MacOS"; single_file=true ;;
         win-*) binary="${package}"; single_file=true ;;
         *) echo "不支持的 RID：${rid}" >&2; return 2 ;;
     esac
-    echo "Publish ${rid} / Release / self-contained"
+    echo "Publish ${rid} / Release / self-contained / single-file=${single_file}"
     echo "日志：${log}"
     "${KG_DOTNET}" publish "${KG_ROOT}/KuroakiGimmick.csproj" -c Release -r "${rid}" \
         --self-contained true --nologo -o "${binary}" \
@@ -44,7 +44,11 @@ kg_publish() {
         "-p:NuGetLockFilePath=${KG_STAGE}/publish.lock.json" 2>&1 | tee "${log}"
     case "${rid}" in
         osx-*)
-            [ -f "${binary}/KuroakiGimmick" ] && [ -f "${binary}/libSDL3.dylib" ] || { echo '发布结果缺少 macOS apphost / SDL3。' >&2; return 1; }
+            [ -f "${binary}/KuroakiGimmick" ] || { echo '发布结果缺少 macOS apphost。' >&2; return 1; }
+            # 单文件包必须只有一个可执行文件：散落的 .dylib / .deps.json 说明
+            # PublishSingleFile 没生效，那正是这一步要拦住的回归。
+            macos_executable="$(find "${binary}" -maxdepth 1 -type f -perm -u+x | wc -l | tr -d ' ')"
+            [ "${macos_executable}" = '1' ] || { echo "macOS 单文件包应只有 1 个可执行文件，实际 ${macos_executable} 个。" >&2; return 1; }
             mkdir -p "${package}/KuroakiGimmick.app/Contents/Resources"
             cp "${KG_ROOT}/Assets/App/Kuroaki.icns" "${package}/KuroakiGimmick.app/Contents/Resources/Kuroaki.icns"
             cat > "${package}/KuroakiGimmick.app/Contents/Info.plist" <<'PLIST'
@@ -66,6 +70,7 @@ PLIST
             for shared in Samples Integrations; do
                 [ ! -d "${binary}/${shared}" ] || mv "${binary}/${shared}" "${package}/${shared}"
             done
+            # 真实 dotnet publish 已经给出 0755，这一步只是保证 zip 里的执行位稳定。
             chmod +x "${binary}/KuroakiGimmick"
             ;;
         win-*)

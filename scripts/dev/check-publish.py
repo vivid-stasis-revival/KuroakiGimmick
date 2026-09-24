@@ -23,13 +23,14 @@ if os.getenv('FAIL_PUBLISH'):sys.exit(23)
 assert a[:1]==['publish'] and a[a.index('-c')+1]=='Release'
 assert a[a.index('--self-contained')+1]=='true'
 assert '-p:PublishTrimmed=false' in a and '-p:UseAppHost=true' in a
-single_file='true' if rid.startswith('win-') else 'false'
+single_file='true'
 assert '-p:PublishSingleFile='+single_file in a
 assert '-p:IncludeNativeLibrariesForSelfExtract='+single_file in a
 out.mkdir(parents=True)
 for n in ['Assets','Samples','Integrations']:shutil.copytree(p/n,out/n)
-for f in ['KuroakiGimmick.exe'] if rid.startswith('win-') else ['KuroakiGimmick','libSDL3.dylib']:(out/f).write_bytes(b'fixture')
-(out/'publish-arguments.json').write_text(json.dumps(a))
+for f in ['KuroakiGimmick.exe'] if rid.startswith('win-') else ['KuroakiGimmick']:
+ exe=out/f;exe.write_bytes(b'fixture')
+ if not rid.startswith('win-'):exe.chmod(0o755)
 ''');mock.chmod(0o755)
  env=os.environ|{'KUROAKI_DOTNET':str(mock)}
  for script,rid in [('publish-mac.sh','osx-arm64'),('publish-mac.sh','osx-x64'),('publish-win.sh','win-x64'),('publish-win.sh','win-arm64')]:
@@ -54,6 +55,8 @@ for f in ['KuroakiGimmick.exe'] if rid.startswith('win-') else ['KuroakiGimmick'
     info=plistlib.loads(z.read(folder+'KuroakiGimmick.app/Contents/Info.plist'))
     check(info['CFBundleShortVersionString']=='0.1.3' and info['CFBundleVersion']=='17.0','macOS bundle release versions '+rid)
     check(info['CFBundleExecutable']=='KuroakiGimmick' and z.getinfo(folder+'KuroakiGimmick.app/Contents/MacOS/KuroakiGimmick').external_attr>>16&0o111,'valid plist and executable ZIP permissions '+rid)
+    macos_entries=[n for n in names if n.startswith(folder+'KuroakiGimmick.app/Contents/MacOS/') and '/' not in n[len(folder+'KuroakiGimmick.app/Contents/MacOS/'):] and not n.endswith('/')]
+    check(macos_entries==[folder+'KuroakiGimmick.app/Contents/MacOS/KuroakiGimmick'],'single-file macOS executable with no loose runtime files in '+rid)
   # Different RID, no successful pre-existing destination to hit the collision guard.
  previous={p.name:p.read_bytes() for p in (root/'dist').glob('*.zip')}
  run=subprocess.run(['bash',str(root/'scripts/publish-win.sh'),'bad-cpu'],env=env,capture_output=True)

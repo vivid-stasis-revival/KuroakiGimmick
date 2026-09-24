@@ -27,6 +27,10 @@ foreach ($Cpu in $Architectures) {
         foreach ($Required in @('KuroakiGimmick.exe','Assets/GameUI/game-ui.gameui.json','Assets/Fonts/cjk-editor.png','Assets/Fonts/cjk-editor.json','Assets/Fonts/editor-help-sans.png','Assets/Fonts/editor-help-sans.json','Assets/Fonts/editor-help-sans-bold.png','Assets/Fonts/editor-help-sans-bold.json','Assets/GimmickExtras/scene_gameplay.runtime.fx.json','Assets/Documentation/vsm-reference.json')) {
             if (-not (Test-Path (Join-Path $Package $Required))) { throw "Publish output missing: $Required" }
         }
+        # The package root must hold the single .exe and nothing else executable:
+        # loose .dll/.deps.json/.runtimeconfig.json means PublishSingleFile did not apply.
+        $LooseBuildFiles = @(Get-ChildItem -LiteralPath $Package -File | Where-Object { $_.Extension -in @('.dll','.json','.pdb') })
+        if ($LooseBuildFiles.Count -gt 0) { throw "Single-file output leaked build files: $($LooseBuildFiles.Name -join ', ')" }
         foreach ($Item in @('README.md','CHANGELOG.md','THIRD_PARTY_NOTICES.md','ThirdParty','docs')) {
             Copy-Item -LiteralPath (Join-Path $ProjectRoot $Item) -Destination $Package -Recurse
         }
