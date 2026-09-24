@@ -1,0 +1,76 @@
+name: NativeAOT builds
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.rid }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2022
+            rid: win-x64
+            executable: KuroakiGimmick.exe
+            sdl: SDL3.dll
+            shaderc: shaderc_shared.dll
+            spirv_cross: spirv-cross.dll
+          - runner: macos-15
+            rid: osx-arm64
+            executable: KuroakiGimmick
+            sdl: libSDL3.dylib
+            shaderc: libshaderc_shared.dylib
+            spirv_cross: libspirv-cross.dylib
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        id: dotnet
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Select the installed SDK
+        shell: bash
+        run: printf '{"sdk":{"version":"%s"}}\n' '${{ steps.dotnet.outputs.dotnet-version }}' > global.json
+
+      - name: Publish NativeAOT
+        shell: bash
+        run: >-
+          dotnet publish KuroakiGimmick.csproj -c Release -r ${{ matrix.rid }}
+          --self-contained true -p:PublishAot=true -p:PublishSingleFile=false
+          -o artifacts/${{ matrix.rid }}
+
+      - name: Verify native output
+        shell: bash
+        run: |
+          test -f 'artifacts/${{ matrix.rid }}/${{ matrix.executable }}'
+          test -f 'artifacts/${{ matrix.rid }}/${{ matrix.sdl }}'
+          test -f 'artifacts/${{ matrix.rid }}/${{ matrix.shaderc }}'
+          test -f 'artifacts/${{ matrix.rid }}/${{ matrix.spirv_cross }}'
+          test ! -f 'artifacts/${{ matrix.rid }}/KuroakiGimmick.runtimeconfig.json'
+          test ! -f 'artifacts/${{ matrix.rid }}/KuroakiGimmick.deps.json'
+
+      - name: Archive macOS build
+        if: runner.os == 'macOS'
+        shell: bash
+        run: ditto -c -k --keepParent 'artifacts/${{ matrix.rid }}' 'artifacts/KuroakiGimmick-${{ matrix.rid }}.zip'
+
+      - name: Archive Windows build
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -LiteralPath 'artifacts/${{ matrix.rid }}' -DestinationPath 'artifacts/KuroakiGimmick-${{ matrix.rid }}.zip'
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: nativeaot-${{ matrix.rid }}
+          path: artifacts/KuroakiGimmick-${{ matrix.rid }}.zip
+          archive: false
+          if-no-files-found: error
+          retention-days: 14

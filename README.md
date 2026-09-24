@@ -274,6 +274,8 @@ NativeAOT 需要在目标操作系统上构建，不能使用常规 `publish-win
 
 NativeAOT 输出包含原生可执行文件，以及 SDL3 与 shader 库等动态库；运行时需要把这些库和外置 `Assets/` 一起保留。NativeAOT 不走下方的 .NET 单文件自解压流程；常规发行脚本仍使用原有 .NET 单文件发布。
 
+每次向 GitHub 推送提交时，Actions 会构建 `win-x64` 与 `osx-arm64`，并附上对应的 ZIP 产物。公开仓库不包含完整游戏 `Assets/`，因此 CI 产物用于编译验证；完整本地应用包仍需使用上述发布脚本和自己的资源。
+
 AOT 编译所需的 RID 专属包锁定文件写在 `obj/`，不会改动仓库的 `packages.lock.json`，所以常规的 `dotnet restore --locked-mode` 可以继续使用。
 
 上面的常规发行脚本使用 .NET 单文件发布。直接执行 `dotnet publish -c Release -r <rid>` 时，项目默认使用 NativeAOT；如需手动构建原有单文件版本，请指定 `-p:PublishAot=false -p:PublishSingleFile=true`。
