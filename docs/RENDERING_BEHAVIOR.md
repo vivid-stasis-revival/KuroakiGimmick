@@ -14,7 +14,7 @@
 
 Custom 对象已支持 `starspawner_timer`、`starspd_low/high`、`starspd_multiplier`、`active_startrans`、`startrans_alpha`，并接入同一原始系统的渐变色星星参数。`ENABLE_STARPARTICLE` 默认关闭，启用后才创建星星系统。蒙版星星在背景乘色之前绘制，停用时冻结自身状态；速度变化使用累计位移，已经越界或死亡的粒子不会因为反向播放而复活。预览与导出使用相同的固定 60 Hz 模拟和随机种子，可重复跳转；随机布局不保证与游戏某一次运行完全相同。
 
-`cover1/2/3` 使用游戏原始精灵及黑色混合，按源码的覆盖层顺序绘制。`hide_combo` 仍是空操作：无论谱面是否包含该参数、其值为何，都不改变画面；顶部连击读数由 SETTINGS 的 TOP COMBO READOUT 控制，默认显示 COMBO，可设为 OFF。该参数仍保留在谱面中。
+`cover1/2/3` 使用游戏原始精灵及黑色混合，按源码的覆盖层顺序绘制。Custom 的旧式和具名字幕位于 depth -10，cover 位于 depth -400，因此遮罩会盖住字幕；遮罩透明度、形状仍由原参数与精灵决定。字幕和遮罩先合成，再一起参与 Custom Proxy 采样，预览与视频导出共用此顺序。`hide_combo` 仍是空操作：无论谱面是否包含该参数、其值为何，都不改变画面；顶部连击读数由 SETTINGS 的 TOP COMBO READOUT 控制，默认显示 COMBO，可设为 OFF。该参数仍保留在谱面中。
 
 `playspeed` 遵循游戏源码：在事件开始时将当前速度乘以按游戏规则取两位小数的终值，忽略普通补间时长，受 `ENABLE_MUSIC_CONTROL` 控制。负拍数初始化同样生效；多个事件累乘，倒拖不会重复叠乘。界面手动倍速作为额外倍率，时间轴仍显示音乐/谱面时间；Viewer 在时间旁显示非 1 的 `CHART` 倍率。
 
