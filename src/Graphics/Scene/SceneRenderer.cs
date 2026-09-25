@@ -175,7 +175,11 @@ public sealed partial class SceneRenderer : IDisposable
         }
         canvas.Begin(scene, RenderWidth, RenderHeight, 320, 180);
         canvas.Flush();
-        sceneFont.Draw(canvas, session, time);
+        // Custom 字幕已在 field 的 depth -10 绘制，不能在 cover 上方重复补画。
+        if (session.Chart.ObjectName != "obj_custom_gimmick")
+        {
+            sceneFont.Draw(canvas, session, time);
+        }
         canvas.Flush();
         if (customProxy)
         {
