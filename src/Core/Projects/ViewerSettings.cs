@@ -59,6 +59,15 @@ public sealed class ViewerSettings
     public double VisualDelayMs { get; set; }
     /// <summary>设备本地最近打开的工程、谱面或歌曲文件夹；不属于任何 .sgv.json 工程。</summary>
     public List<string> RecentProjects { get; set; } = [];
+    /// <summary>设备本地的导出目录；不同导出类型各自记忆，不写入工程。</summary>
+    public Dictionary<string, string> ExportDirectories { get; set; } = new();
+    public string ExportDirectory(string kind) => ExportDirectories != null &&
+        ExportDirectories.TryGetValue(kind, out var directory) && Directory.Exists(directory) ? directory : Paths.Output;
+    public void RememberExportDestination(string kind, string path)
+    {
+        string directory = Path.GetDirectoryName(Path.GetFullPath(path))!;
+        (ExportDirectories ??= new())[kind] = directory;
+    }
     public const int MaxRecentProjects = 10;
     static StringComparer RecentPathComparer => OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
     public void NormalizeRecentProjects()

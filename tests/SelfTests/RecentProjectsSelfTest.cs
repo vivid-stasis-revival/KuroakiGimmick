@@ -45,6 +45,13 @@ internal static class RecentProjectsSelfTest
             Check(reloaded.RecentProjects.SequenceEqual(settings.RecentProjects), "recent list survives settings reload");
             Check(reloaded.PreviewVolume == .37 && reloaded.GameUiFont == ViewerSettings.MonacoFont,
                 "persisting recents preserves preview defaults");
+            settings.RememberExportDestination("Vsm", Path.Combine(root, "song.vsm"));
+            settings.RememberExportDestination("Video", Path.Combine(root, "missing", "movie.mp4"));
+            settings.Persist(settingsPath);
+            var exportSettings = ViewerSettings.Load(settingsPath);
+            Check(exportSettings.ExportDirectory("Vsm") == root, "export directory survives restart");
+            Check(exportSettings.ExportDirectory("Video") == Paths.Output && exportSettings.ExportDirectory("InfoCard") == Paths.Output,
+                "missing and unset export directories fall back independently");
             var project = new ViewerProject { PreviewVolume = .91, GameUiFont = ViewerSettings.DefaultFont };
             string projectJson = AppJson.Serialize(project, ViewerProject.Json);
             Check(!projectJson.Contains("RecentProjects", StringComparison.Ordinal), "recent list is absent from project JSON");
