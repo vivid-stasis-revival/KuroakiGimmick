@@ -313,10 +313,10 @@ public sealed partial class Viewer : IDisposable
             return;
         }
         transport.SetPlaying(false);
-        Directory.CreateDirectory(Paths.Output);
-        Dialog(true, Path.Combine(Paths.Output, "Kuroaki_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".mp4"), paths =>
+        Dialog(true, SuggestedExportPath("Video", "Kuroaki_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".mp4"), paths =>
         {
             var path = paths[0];
+            RememberExportDestination("Video", path);
             if (!path.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase))
             {
                 path += ".mp4";

@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.4_%2F_17.6-94cddd?style=flat-square" alt="v0.1.4 / Build 17.6">
+  <img src="https://img.shields.io/badge/version-0.1.4_%2F_17.6.1-94cddd?style=flat-square" alt="v0.1.4 / Build 17.6.1">
   <img src="https://img.shields.io/badge/C%23-.NET_8-b5a3e8?style=flat-square" alt="C# / .NET 8">
   <img src="https://img.shields.io/badge/renderer-SDL3_GPU-94cddd?style=flat-square" alt="SDL3 GPU">
   <img src="https://img.shields.io/badge/UI-中文_%2F_English-e8a4bd?style=flat-square" alt="中文 / English">
@@ -247,7 +247,7 @@ bash scripts/publish-win.sh x64
 
 ```text
 dist/
-└── KuroakiGimmick-v0.1.4-<RID>-17.6-<timestamp>/
+└── KuroakiGimmick-v0.1.4-<RID>-17.6.1-<timestamp>/
 ```
 
 同时会生成对应 ZIP。
@@ -298,7 +298,7 @@ macOS 构建会在可用时执行 ad-hoc 签名，但不会进行 Apple notariza
 
 当前版本：
 
-**v0.1.4 / Build 17.6**
+**v0.1.4 / Build 17.6.1**
 
 实际版本号以 [`KuroakiGimmick.csproj`](KuroakiGimmick.csproj) 为准。
 

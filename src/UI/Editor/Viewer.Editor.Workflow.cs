@@ -124,13 +124,13 @@ public sealed partial class Viewer
         {
             var input = ChartExportInput.Capture(editor, Current);
             string name = ChartExportInput.Stem(input.Project);
-            string location = Path.Combine(Paths.Output, kind == ChartExportKind.ChartFolder
+            string location = SuggestedExportPath(kind.ToString(), kind == ChartExportKind.ChartFolder
                 ? name + "_chart_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") : name + ".vsm");
-            Directory.CreateDirectory(Paths.Output);
             // 保存对话框接受新路径。Chart Folder 会把选中的路径建成一个目录，绝不建成占位文件；
             // 选中已存在的目录会在开始复制之前被拒绝。
             Dialog(true, location, paths =>
             {
+                RememberExportDestination(kind.ToString(), paths[0]);
                 chartExportCancellation?.Dispose(); chartExportCancellation = new();
                 var token = chartExportCancellation.Token;
                 chartExportPrepare = Task.Run(() => ChartExport.Prepare(input, kind, paths[0], token), token);

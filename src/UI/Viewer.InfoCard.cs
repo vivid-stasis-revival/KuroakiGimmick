@@ -142,12 +142,12 @@ public sealed partial class Viewer
         {
             return;
         }
-        Directory.CreateDirectory(Paths.Output);
-        string suggested = Path.Combine(Paths.Output,
+        string suggested = SuggestedExportPath("InfoCard",
             Sanitize(card.Title) + "_" + Sanitize(card.DisplayDifficulty) + ".png");
         Dialog(true, suggested, paths =>
         {
             string path = paths[0];
+            RememberExportDestination("InfoCard", path);
             if (!path.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
             {
                 path += ".png";
