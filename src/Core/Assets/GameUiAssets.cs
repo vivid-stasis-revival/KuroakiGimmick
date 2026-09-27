@@ -94,7 +94,7 @@ public sealed class GameUiAssets
                 if (p.GameUiEnabled)
                 {
                     chart.Diagnostics.Add(new("game-ui", 0,
-                        "Original UI sprites/font atlas not installed. Run Dump_Game_UI_Mac.sh, then reload, or attach game-ui.gameui.json. No replacement UI graphics are drawn."));
+                        "Original UI sprites/font atlas not installed. Install the original GameUI assets, then reload, or attach game-ui.gameui.json. No replacement UI graphics are drawn."));
                 }
                 return result;
             }

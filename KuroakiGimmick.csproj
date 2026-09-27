@@ -209,7 +209,7 @@
        ============================================================ -->
 
   <ItemGroup>
-    <Compile Include="src/**/*.cs;tests/SelfTests/**/*.cs" />
+    <Compile Include="src/**/*.cs" />
 
     <EmbeddedResource Include="src/UI/Localization/*.json" LogicalName="KuroakiGimmick.Localization.%(Filename)%(Extension)" />
 
@@ -229,8 +229,6 @@
                       LogicalName="KuroakiGimmick.VsmReference.json"
                       Condition="Exists('Assets/Documentation/vsm-reference.json')" />
 
-    <EmbeddedResource Include="tests/Fixtures/r15-scarlet-definition.json"
-                      LogicalName="KuroakiGimmick.Tests.LegacyScarletDefinition.json" />
 
     <EmbeddedResource Include="Assets/Catalog/legacy-per-frame-bindings.json"
                       LogicalName="KuroakiGimmick.LegacyPerFrameBindings.json"
@@ -287,9 +285,6 @@
   </ItemGroup>
 
 
-  <ItemGroup>
-    <Folder Include="docs\media\" />
-  </ItemGroup>
 
 
   <!-- ============================================================

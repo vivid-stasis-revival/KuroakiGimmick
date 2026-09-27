@@ -88,7 +88,6 @@ PLIST
     for item in README.md CHANGELOG.md THIRD_PARTY_NOTICES.md; do cp "${KG_ROOT}/${item}" "${package}/${item}"; done
     cp -R "${KG_ROOT}/ThirdParty" "${package}/ThirdParty"
     mkdir -p "${package}/docs"
-    cp -R "${KG_ROOT}/docs/." "${package}/docs/"
     # FFmpeg is optional for preview, required for video export. If explicitly
     # supplied, the caller must provide a binary for the TARGET architecture.
     if [ -n "${KUROAKI_FFMPEG:-}" ]; then

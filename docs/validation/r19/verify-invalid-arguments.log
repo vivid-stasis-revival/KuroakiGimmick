@@ -1,6 +1,0 @@
-$ bash scripts/verify-refactor.sh --unexpected
-
-
-Usage: bash scripts/verify-refactor.sh [--gpu]
-
-exit_code=2

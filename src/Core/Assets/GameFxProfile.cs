@@ -439,7 +439,7 @@ public sealed class GameFxProfile
             if (active && result.Find(group.Key) == null)
             {
                 chart.Diagnostics.Add(new("fx", 0,
-                    $"{group.Key}: renderer requires original room FX settings in gimmick-fx.json (or attach a .fx.json). No substitute filter is applied. See docs/FX_RESOURCES.md."));
+                    $"{group.Key}: renderer requires original room FX settings in gimmick-fx.json (or attach a .fx.json). No substitute filter is applied."));
             }
         }
         if (chart.Mods.Any(e => e.Name == "BG_ditortAmount" && e.To != 0) && !chart.Mods.Any(e => e.Name == "BG_ditortScale" && (e.To > 0
