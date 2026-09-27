@@ -265,8 +265,8 @@ public sealed partial class Viewer
         WorkflowField(L.Get("Name"), addName, x, box.Y + 65, rightWidth, value => { addName = value; if (addTemplate?.MatchPattern.Length == 0) addTemplate = null; });
         WorkflowField(L.Get("Target / -1 global"), addProxy.ToString(CultureInfo.InvariantCulture), x, box.Y + 108, rightWidth,
             value => addProxy = int.Parse(value, CultureInfo.InvariantCulture));
-        WorkflowField(L.Get("Beat"), VsmDocument.N(addBeat), x, box.Y + 151, rightWidth, value => addBeat = VsmDocument.Number(value));
-        WorkflowField(L.Get("Duration / beat"), VsmDocument.N(addDuration), x, box.Y + 194, rightWidth, value => addDuration = VsmDocument.Number(value));
+        WorkflowField(L.Get("Beat"), VsmDocument.Ui(addBeat), x, box.Y + 151, rightWidth, value => addBeat = VsmDocument.Number(value));
+        WorkflowField(L.Get("Duration / beat"), VsmDocument.Ui(addDuration), x, box.Y + 194, rightWidth, value => addDuration = VsmDocument.Number(value));
         WorkflowField(L.Get("From / _"), addFrom, x, box.Y + 237, rightWidth, value => addFrom = value);
         WorkflowField(L.Get("To / _"), addTo, x, box.Y + 280, rightWidth, value => addTo = value);
         WorkflowField(L.Get("Easing"), addEase, x, box.Y + 323, rightWidth, value => addEase = value);
