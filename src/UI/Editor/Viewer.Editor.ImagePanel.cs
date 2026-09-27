@@ -119,6 +119,13 @@ public sealed partial class Viewer
                 Field(L.Get("Easing"), group.Ease, v => editor.TimeImageGroup(group, group.Beat, group.End(Current.Timeline.Bpm), Easings.Normalize(v), Current.Timeline.Bpm));
             }
         }
+        if (ActiveImageItem is { } layerItem)
+        {
+            Field(L.Get("Layer depth"), VsmDocument.Ui(layerItem.LayerPriority), v =>
+            { editor.SetImageLayerPriority(layerItem, VsmDocument.Number(v)); layoutRevision = -1; message = L.Get("Updated image layer: ") + id; }, !Busy && !ImageGestureActive);
+            Field(L.Get("Order in layer"), VsmDocument.Ui(layerItem.Priority), v =>
+            { editor.SetImagePriority(layerItem, VsmDocument.Number(v)); layoutRevision = -1; message = L.Get("Updated image layer: ") + id; }, !Busy && !ImageGestureActive);
+        }
         Field("X", pose.X.ToString("0.###"), v => CommitImagePose(ReadImagePose() with { X = VsmDocument.Number(v) }, ImageChannels.Position), Can(ImageChannels.Position));
         Field("Y", pose.Y.ToString("0.###"), v => CommitImagePose(ReadImagePose() with { Y = VsmDocument.Number(v) }, ImageChannels.Position), Can(ImageChannels.Position));
         Field(L.Get("Scale X %"), (pose.ScaleX * 100).ToString("0.###"), v =>
@@ -141,7 +148,9 @@ public sealed partial class Viewer
         }, L.Get("FRAME VIEW"), FrameImageObject, leftEnabled: Can(ImageChannels.Scale));
         Pair(L.Get("LOCK RATIO"), () => imageAspectLock = !imageAspectLock, L.Get("PATH LINES"), () => imagePathVisible = !imagePathVisible, imageAspectLock, imagePathVisible);
         Pair(L.Get("LINK JOINTS"), () => imageLinkNeighbors = !imageLinkNeighbors, L.Get("SOLO"), () => imageSolo = !imageSolo, imageLinkNeighbors, imageSolo);
-        Pair(L.Get("REPLACE IMAGE"), ChooseImageReplacement, L.Get("RAW TRACKS"), () => { expandedImageTracks.Add(id); layoutRevision = -1; imageInspector = false; FocusImageTrack(id, ImageEditBeat); });
+        Pair(L.Get("REPLACE IMAGE"), ChooseImageReplacement, L.Get("DELETE IMAGE"), DeleteSelectedImage, enabled: !Busy && !ImageGestureActive);
+        if (Row(out float rawTracksY) && EButton(L.Get("RAW TRACKS"), new(r.X, rawTracksY, r.W, 27), enabled: !Busy && !ImageGestureActive))
+        { expandedImageTracks.Add(id); layoutRevision = -1; imageInspector = false; FocusImageTrack(id, ImageEditBeat); }
         Pair(L.Get("CANVAS"), () => { imageCanvas = true; desktopPreview = false; }, L.Get("SCENE"), () => imageCanvas = false, imageCanvas, !imageCanvas);
         Pair(L.Get("CONTINUE"), () => AddImageMotion(true), L.Get("LOOP MOTION"), () =>
         {
@@ -167,5 +176,20 @@ public sealed partial class Viewer
             transport.Playing ? L.Get("Playing: pause to edit.") : L.Get("Drag: move / corners: scale / handle: rotate");
         Text(footer, r.X, r.Y + r.H - 36, 11, imageObjectError.Length > 0 ? soft : muted, max: r.W);
         Text(!transport.Playing && pose.Alpha <= 0 ? L.Get("0% opacity: editing ghost only.") : L.Get("Alt-click path point / arrows: 1px (Shift: 10px)"), r.X, r.Y + r.H - 18, 10, muted, max: r.W);
+    }
+
+    /// <summary>删除当前图片声明和它的所有图片 mod。撤销由 EditorDocument 的同一个快照同时恢复 VSP 与 VSM。</summary>
+    void DeleteSelectedImage()
+    {
+        if (editor == null || ActiveImageItem is not { } item) return;
+        string id = item.Id;
+        ImageAction(() =>
+        {
+            editor.DeleteImage(item);
+            hiddenImageItems.Remove(id); lockedImageItems.Remove(id); expandedImageTracks.Remove(id);
+            selectedImageId = null; selectedImageGroup = selectedClip = null; imagePoseTarget = ImagePoseTarget.Initial;
+            imageInspector = false; layoutRevision = -1; inspectorScroll = 0;
+            message = L.Get("Deleted image: ") + id;
+        });
     }
 }

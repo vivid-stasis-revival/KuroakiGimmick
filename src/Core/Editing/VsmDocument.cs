@@ -297,6 +297,34 @@ public sealed partial class VsmDocument
             }
         if (!found) Lines.Insert(0, new("!" + key + ":" + value, NewLine, null));
     }
+    /// <summary>
+    /// 删除属于某张 VSP 图片的全部 mod 行。已解析事件与解析失败但仍能明确识别出第 6 列图片 mod 名的行都会删除；
+    /// mpf 段之后不再按 mod 解释，因此绝不碰那里的不透明文本。
+    /// </summary>
+    public int DeleteImageEvents(string imageId)
+    {
+        int removed = 0; bool perFrame = false;
+        for (int i = 0; i < Lines.Count;)
+        {
+            string body = Body(Lines[i].Text).Trim();
+            if (body == "mpf") { perFrame = true; i++; continue; }
+            bool target = false;
+            if (!perFrame)
+            {
+                if (Lines[i].Event is { } clip && CustomImages.TryMod(clip.Name, out _, out var parsedId))
+                    target = string.Equals(parsedId, imageId, StringComparison.Ordinal);
+                else
+                {
+                    string[] fields = body.Split(',').Select(x => x.Trim()).ToArray();
+                    if (fields.Length == 7 && CustomImages.TryMod(fields[5], out _, out var rawId))
+                        target = string.Equals(rawId, imageId, StringComparison.Ordinal);
+                }
+            }
+            if (target) { Lines.RemoveAt(i); removed++; } else i++;
+        }
+        return removed;
+    }
+
     /// <summary>整行删除，连同它的换行一起消失；其余行的文本与顺序不受影响，不做任何重排或重新格式化。</summary>
     public void Delete(Guid id) => Lines.RemoveAll(l => l.Event?.Id == id);
 }

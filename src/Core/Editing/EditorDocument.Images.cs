@@ -40,4 +40,29 @@ public sealed partial class EditorDocument
         });
         return names;
     }
+
+    /// <summary>修改图片所在 VSP layer 的绘制深度。共享同一 layer 的图片遵循源格式语义一起移动。</summary>
+    public void SetImageLayerPriority(CustomImages.Item item, double priority)
+    {
+        RequireImage(item.Id);
+        Change("Set image layer: " + item.Id, () => Images.SetLayerPriority(item, priority));
+    }
+
+    /// <summary>修改图片声明自身的 priority，用于同一 VSP layer 内的相对顺序。</summary>
+    public void SetImagePriority(CustomImages.Item item, double priority)
+    {
+        RequireImage(item.Id);
+        Change("Set image priority: " + item.Id, () => Images.SetImagePriority(item, priority));
+    }
+
+    /// <summary>删除图片声明以及所有明确属于该图片的 VSM 事件。一次 Change 完成，因此 Undo 会把两边一起恢复。</summary>
+    public void DeleteImage(CustomImages.Item item)
+    {
+        RequireImage(item.Id);
+        Change("Delete image: " + item.Id, () =>
+        {
+            Images.Remove(item);
+            Vsm.DeleteImageEvents(item.Id);
+        });
+    }
 }
