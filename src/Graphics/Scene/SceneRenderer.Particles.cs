@@ -46,6 +46,35 @@ public sealed partial class SceneRenderer
         }
     }
 
+    void DrawLoreleiSlashes(Session session, double time)
+    {
+        var slashes = session.Timeline.LoreleiSlashes;
+        int first = LowerBound(slashes, time - 1, e => e.Time);
+        if (first >= slashes.Count || slashes[first].Time > time) return;
+        for (int pass = 0; pass < 2; pass++)
+        {
+            canvas.Blend(pass == 0 ? BlendFactor.SourceAlpha : BlendFactor.InverseDestinationColor,
+                pass == 0 ? BlendFactor.InverseSourceAlpha : BlendFactor.Zero);
+            for (int i = first; i < slashes.Count && slashes[i].Time <= time; i++)
+            {
+                var e = slashes[i];
+                double age = time - e.Time;
+                if (age >= 1 || (e.Color == 0) != (pass == 0)) continue;
+                uint bgr = (uint)Math.Clamp(e.Color, 0, 16777215);
+                var color = Color.Hex(((bgr & 255) << 16) | (bgr & 0xFF00) | ((bgr >> 16) & 255));
+                float width = (float)(12 * (1 - age) * (1 - age));
+                for (int n = 0; n < e.Count; n++)
+                {
+                    uint seed = unchecked((uint)e.Index * 65537 + (uint)n * 127 + 3127);
+                    float side = Timeline.Hash(seed) < .5f ? 0 : 207;
+                    canvas.Line(side + Timeline.Hash(seed + 1) * 110, -10,
+                        side + Timeline.Hash(seed + 2) * 110, 190, width, color);
+                }
+            }
+        }
+        canvas.Blend(BlendFactor.SourceAlpha, BlendFactor.InverseSourceAlpha);
+    }
+
     /// <summary>slash_anycol 斜线；col_convertion 为 0 时按原版交换 R 与 B，不是颜色解析写反。</summary>
     void DrawSlashes(Session session, double time)
     {
@@ -74,4 +103,3 @@ public sealed partial class SceneRenderer
         }
     }
 }
-

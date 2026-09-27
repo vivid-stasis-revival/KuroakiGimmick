@@ -9,6 +9,8 @@ public static class ModCatalog
 {
     static ModCatalog()
     {
+        Supported.Add("lr_slash");
+        Supported.Add("lr_slash_color");
         Supported.Add("fx_film");
         Supported.Add("playspeed");
         Supported.Add("prtrX");
@@ -147,7 +149,7 @@ public static class ModCatalog
             "plaudite_jacket" => 11,
             "fx_contrast" or "fx_red_intensity" or "fx_hue_saturation" or "fx_colorise_col_alpha" or "sinp" or "tanp" or "rotdir" => 1,
             "ditortedBG_col_rgb" or "fx_colorise_col_rgb" => 16777215,
-            "set_slash_col" => 16777215,
+            "set_slash_col" or "lr_slash_color" => 16777215,
             "boost_time" => 300,
             "shxs" or "shys" => .2,
             "shxp" or "shyp" => 10,

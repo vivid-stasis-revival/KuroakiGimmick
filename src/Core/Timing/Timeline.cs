@@ -18,6 +18,8 @@ public sealed partial class Timeline
         bool Burst = false, double Life = 2, bool FollowPower = false);
     public Dictionary<(string Name, int Proxy), List<Segment>> Tracks { get; } = [];
     public List<Callback> Callbacks { get; } = [];
+    public record LoreleiSlash(double Time, int Count, double Color, int Index);
+    public List<LoreleiSlash> LoreleiSlashes { get; } = [];
     public List<Dust> Particles { get; } = [];
     public List<Dust> ObjectParticles { get; } = [];
     /// <summary>原版会跳过的控制项记录。这些事件不执行但保留在报告里，不当作解析错误，也不悄悄删掉。</summary>
@@ -41,6 +43,7 @@ public sealed partial class Timeline
         End = duration;
         // freeze 的两个回调点分别落在事件起点和终点，后者可能排在后续事件之后，所以先攒起来最后统一排序。
         List<(double Time, double Value, ModEvent Event)> freezeLatches = [];
+        double loreleiColor = 16777215;
         // 事件先按拍、再按声明顺序展开，这是整条链路的稳定顺序来源。
         foreach (var e in c.Mods.OrderBy(x => x.Beat).ThenBy(x => x.Order))
         {
@@ -51,6 +54,33 @@ public sealed partial class Timeline
             // 拍 → 秒：起点查 BPM map，时长按事件起点所在分段的 BPM 折算。
             // 与原版一致，跨变速点的 tween 不重新积分，整段沿用起点的 BPM。
             double start = Bpm.Time(e.Beat), span = e.Duration * 60 / Bpm.BpmAtBeat(e.Beat);
+            if (e.Name is "lr_slash" or "lr_slash_color")
+            {
+                if (c.ObjectName != "obj_custom_gimmick")
+                {
+                    SourceNoOps.Add(new(e.Name, e.SourceLine, e.Beat,
+                        "Frollsy's Extra Gimmicks requires obj_custom_gimmick."));
+                    continue;
+                }
+                if (e.Name == "lr_slash_color")
+                {
+                    if (e.To != 573613)
+                    {
+                        loreleiColor = e.To;
+                        var colorKey = (e.Name, -1);
+                        if (!Tracks.TryGetValue(colorKey, out var colors)) Tracks[colorKey] = colors = [];
+                        colors.Add(new(start, 0, loreleiColor, loreleiColor, "linear", e));
+                    }
+                    End = Math.Max(End, start);
+                }
+                else
+                {
+                    int count = e.From == 573613 ? 1 : (int)Math.Clamp(Math.Floor(e.From), 1, 64);
+                    LoreleiSlashes.Add(new(start, count, e.To == 573613 ? loreleiColor : e.To, e.Order));
+                    End = Math.Max(End, start + 1);
+                }
+                continue;
+            }
             if (Native?.Data?.Sequence is { } sequence && (e.Name == sequence.Mod("slash") || e.Name == sequence.Mod("gun")))
             {
                 // slash 的实例数来自原版：1 + 时长毫秒数，取偶数舍入；gun 恒为 1 次。
