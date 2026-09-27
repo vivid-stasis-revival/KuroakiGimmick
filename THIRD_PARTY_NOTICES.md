@@ -1,6 +1,6 @@
 # Third-party materials
 
-`Assets/` 中的游戏素材属于游戏《vivid/stasis》及其相应权利人，不公开提供。
+
 以下清单记录本地开发资源与第三方依赖的来源，不表示这些游戏资源可随源码公开分发。
 
 | Component | Version / source | Notice |
