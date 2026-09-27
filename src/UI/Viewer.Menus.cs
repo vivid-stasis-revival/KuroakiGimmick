@@ -118,7 +118,7 @@ public sealed partial class Viewer
             case MenuCommand.Reload: Reload(); break;
             case MenuCommand.Save: SaveProject(); break;
             case MenuCommand.SaveAs:
-                if (editor != null) SaveEditor(true); else SaveProject();
+                SaveProject(true);
                 break;
             case MenuCommand.ExportChart: OpenChartExport(); break;
             case MenuCommand.ExportVideo: ChooseExport(); break;

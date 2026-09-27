@@ -40,7 +40,7 @@ public sealed partial class Session
         Notes = false,
         Profile = "core"
     };
-    public string? ProjectPath { get; }
+    public string? ProjectPath { get; private set; }
     public double Duration { get; }
     public ChartPlaybackMap Playback { get; }
     public CustomStarTimeline Stars { get; }

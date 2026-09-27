@@ -112,6 +112,7 @@ public sealed partial class Session
     /// <summary>仅保存项目引用与设置，不复制或修改外部歌曲素材。</summary>
     public void Save(string path)
     {
+        path = Path.GetFullPath(path);
         var p = Project.Copy();
         string dir = Path.GetDirectoryName(Path.GetFullPath(path))!;
         Directory.CreateDirectory(dir);
@@ -128,6 +129,11 @@ public sealed partial class Session
         p.GameUi = Rel(p.GameUi);
         p.GimmickAssets = Rel(p.GimmickAssets);
         p.GimmickDefinition = Rel(p.GimmickDefinition);
-        File.WriteAllText(path, AppJson.Serialize(p, ViewerProject.Json));
+        ProjectBackups.Write(path, new Dictionary<string, byte[]>
+        {
+            [path] = System.Text.Encoding.UTF8.GetBytes(AppJson.Serialize(p, ViewerProject.Json))
+        });
+        ProjectPath = path;
+        ProjectBackups.Prune(path);
     }
 }

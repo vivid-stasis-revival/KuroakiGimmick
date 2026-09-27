@@ -69,6 +69,11 @@ public sealed partial class EditorDocument
         foreach (var track in CustomText.Load(Project, new Chart(), enabled: true).Tracks) texts.Add(track.Id, track.SourceText);
         cleanTexts = TextSnapshot();
         cleanText = Vsm.Text; cleanWindows = Windows.Serialize(); cleanImages = Images.Text;
+        if (session.ProjectPath is { } projectPath)
+        {
+            SavedProjectPath = Path.GetFullPath(projectPath);
+            foreach (string file in ProjectBackups.Files(SavedProjectPath)) savedHashes[file] = Hash(file);
+        }
     }
 
     /// <summary>取一次全量快照作为撤销点。Lines 只复制数组本身，行对象是共享的不可变 record。</summary>
@@ -159,7 +164,7 @@ public sealed partial class EditorDocument
 
     /// <summary>
     /// 写出工程文件、VSM/cgmk 配置，以及本次编辑产生的 VSP 与图片伴生文件。全部内容先在内存里备齐，再一次性落盘；中途失败按提交的逆序回滚。
-    /// 进程被强杀时 journal 与 .bak 会留在原地供恢复。这不是跨文件的原子事务，别当成事务来依赖。
+    /// 进程被强杀时恢复数据保留在工程目录的 .kuroaki/tmp 中。这不是跨文件的原子事务，别当成事务来依赖。
     /// 保存只记录对外部素材的引用与设置，绝不复制或修改歌曲目录里的原始音频、封面与图片。
     /// </summary>
     public string SaveCopy(string path)
@@ -169,18 +174,32 @@ public sealed partial class EditorDocument
         string dir = Path.GetDirectoryName(path)!;
         Directory.CreateDirectory(dir);
         string stem = Path.GetFileName(path)[..^9];
-        string vsmPath = Path.Combine(dir, stem + ".editor.vsm");
-        string windowsPath = Path.Combine(dir, stem + ".editor_cgmk_config.json");
+        string working = ProjectBackups.WorkingFolder(path);
+        string vsmPath = Path.Combine(working, stem + ".editor.vsm");
+        string windowsPath = Path.Combine(working, stem + ".editor_cgmk_config.json");
         var outputWindows = CompiledWindows().AsInlineGameConfig();
         var p = Project.Copy(); p.EditorMarkers = markers.ToList(); p.Gimmick = vsmPath; p.WindowMotion = windowsPath;
         // 用正式的读取器把生成的 VSM 文本再解一遍，任何源文件落盘之前先确认它读得回来；解析成功不等于渲染成功，但解析失败一定不该写出去。
         var check = new Chart(); VsmReader.ReplaceModsText(check, Vsm.Text, vsmPath);
         if (check.Mods.Count == 0 && Vsm.Clips.Any()) throw new InvalidDataException("Generated VSM could not be read.");
         var files = new Dictionary<string, byte[]>();
+        foreach (string file in ProjectBackups.LegacyFiles(path))
+        {
+            if (!savedHashes.TryGetValue(file, out var hash) || Hash(file) != hash)
+                throw new IOException("Legacy companion changed or belongs to another project. Use Save As: " + file);
+        }
+        var relocated = new Dictionary<string, string>(StringComparer.Ordinal);
+        string legacyAssets = Path.Combine(dir, stem + ".editor-assets") + Path.DirectorySeparatorChar;
+        foreach (string file in ProjectBackups.LegacyFiles(path).Where(f => f.StartsWith(legacyAssets, StringComparison.Ordinal)))
+        {
+            string target = Path.Combine(working, Path.GetRelativePath(dir, file));
+            files[target] = File.ReadAllBytes(file);
+            relocated[file] = target;
+        }
         if (Images.HasContent)
         {
-            string imageText = Images.PrepareSave(dir, stem, files);
-            p.Images = Path.Combine(dir, stem + ".editor.vsp"); p.ImagePathsRelativeToVsp = true;
+            string imageText = Images.PrepareSave(working, stem, files, relocated);
+            p.Images = Path.Combine(working, stem + ".editor.vsp"); p.ImagePathsRelativeToVsp = true;
             files[p.Images] = Encoding.UTF8.GetBytes(imageText);
         }
         else { p.Images = null; p.ImagePathsRelativeToVsp = false; }
@@ -188,7 +207,7 @@ public sealed partial class EditorDocument
         int textIndex = 0;
         foreach (var pair in texts)
         {
-            string target = Path.Combine(dir, stem + ".editor-texts", "text-" + textIndex++ + ".txt");
+            string target = Path.Combine(working, stem + ".editor-texts", "text-" + textIndex++ + ".txt");
             files[target] = Encoding.UTF8.GetBytes(pair.Value); p.TextFiles.Add(pair.Key, target);
         }
         // 工程文件里一律存相对于自身目录的路径，整个工程文件夹可以随意搬动；解析基准是工程文件所在目录，不是当前工作目录。
@@ -212,43 +231,24 @@ public sealed partial class EditorDocument
             if (File.Exists(target) && !savedHashes.ContainsKey(target))
                 throw new IOException("A companion file already exists. Choose a new project name: " + target);
         }
-        // 顺序不能改：先把全部临时文件写完，再写 .bak 备份，再写 journal，最后才逐个改名就位。journal 先于改名落盘，崩溃后才知道该回滚哪些目标。
-        string token = Guid.NewGuid().ToString("N"), journal = path + ".save-journal.json";
-        var backups = files.Keys.ToDictionary(f => f, f => File.Exists(f) ? File.ReadAllBytes(f) : null);
-        var committed = new List<string>();
-        try
+        ProjectBackups.Write(path, files);
+        if (relocated.Count > 0)
         {
-            foreach (var (target, bytes) in files)
+            string RewriteImages(string text) => VspDocument.Rewrite(text, value =>
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                File.WriteAllBytes(target + ".tmp-" + token, bytes);
-            }
-            foreach (var (target, bytes) in backups)
-                if (bytes != null) File.WriteAllBytes(target + ".bak", bytes);
-            File.WriteAllText(journal, new System.Text.Json.Nodes.JsonObject
-            {
-                ["token"] = token,
-                ["targets"] = new System.Text.Json.Nodes.JsonArray(files.Keys.Select(target =>
-                    (System.Text.Json.Nodes.JsonNode?)System.Text.Json.Nodes.JsonValue.Create(target)).ToArray()),
-                ["backupSuffix"] = ".bak"
-            }.ToJsonString());
-            foreach (var target in files.Keys) { File.Move(target + ".tmp-" + token, target, true); committed.Add(target); }
-            File.Delete(journal);
+                string full = Path.GetFullPath(value.Replace('\\', Path.DirectorySeparatorChar), Images.ResourceRoot);
+                return relocated.TryGetValue(full, out var target) ? Path.GetRelativePath(Images.ResourceRoot, target) : value;
+            });
+            Images.Restore(RewriteImages(Images.Text));
+            for (int i = 0; i < undo.Count; i++) undo[i] = undo[i] with { ImageText = RewriteImages(undo[i].ImageText) };
+            for (int i = 0; i < redo.Count; i++) redo[i] = redo[i] with { ImageText = RewriteImages(redo[i].ImageText) };
         }
-        catch
-        {
-            foreach (string target in committed.AsEnumerable().Reverse())
-            {
-                // 按提交的逆序回滚：原先存在的还原成备份内容，原先不存在的直接删掉。回滚本身再失败也不能吞掉原始异常。
-                try { if (backups[target] is byte[] bytes) File.WriteAllBytes(target, bytes); else File.Delete(target); }
-                catch (IOException) { /* 保留 journal 与 .bak 供事后手工恢复。 */ }
-            }
-            throw;
-        }
-        finally { foreach (string target in files.Keys) if (File.Exists(target + ".tmp-" + token)) File.Delete(target + ".tmp-" + token); }
         // 全部就位之后才更新哈希与四份 clean 基线，Dirty 随即变回 false；任何一步失败都不会走到这里，脏状态原样保留。
         foreach (string target in files.Keys) savedHashes[target] = Hash(target);
         Project = p; SavedProjectPath = path; cleanText = Vsm.Text; cleanWindows = Windows.Serialize(); cleanMarkers = markers.ToArray(); cleanImages = Images.Text; cleanTexts = TextSnapshot();
+        try { ProjectBackups.ArchiveLegacy(path); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Console.Error.WriteLine("[save migration] " + ex.Message); }
+        ProjectBackups.Prune(path);
         return path;
     }
     /// <summary>整文件 SHA-256，只用来判断文件是否被编辑器之外改动过，不参与任何安全判定。</summary>
