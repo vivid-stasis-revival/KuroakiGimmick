@@ -183,7 +183,7 @@ public sealed partial class Viewer
         }
         void Button(string label, Action action)
         { if (Row(out float y) && EButton(label, new(r.X, y, r.W, 27), enabled: !transport.Playing, key: "text-action:" + label)) TextAction(action); }
-        Field(L.Get("At / beat"), VsmDocument.N(textAt), value => { double beat = VsmDocument.Number(value); if (Math.Abs(beat) > 1e8) throw new FormatException(L.Get("Beat out of range.")); textAnimation = null; textAt = beat; transport.Seek(Current.Timeline.Bpm.Time(beat)); });
+        Field(L.Get("At / beat"), VsmDocument.Ui(textAt), value => { double beat = VsmDocument.Number(value); if (Math.Abs(beat) > 1e8) throw new FormatException(L.Get("Beat out of range.")); textAnimation = null; textAt = beat; transport.Seek(Current.Timeline.Bpm.Time(beat)); });
         if (textAnimation is Guid animId && editor.Vsm.Find(animId) is { } animation)
         {
             Button(L.Get("EDIT START") + (!textAnimationEnd ? " *" : ""), () => SelectTextAnimation(animation, false));
@@ -207,7 +207,7 @@ public sealed partial class Viewer
             });
         }
         Button(L.Get("CENTER X + Y"), () => CommitTextValues(new Dictionary<string, double> { ["textX"] = 160, ["textY"] = 90 }));
-        Field(L.Get("Duration / beat"), VsmDocument.N(textDuration), value => { double n = VsmDocument.Number(value); if (n <= 0 || n > 1e8) throw new FormatException(L.Get("Use a positive duration.")); textDuration = n; });
+        Field(L.Get("Duration / beat"), VsmDocument.Ui(textDuration), value => { double n = VsmDocument.Number(value); if (n <= 0 || n > 1e8) throw new FormatException(L.Get("Use a positive duration.")); textDuration = n; });
         Field(L.Get("Easing"), textEase, value => { if (!Easings.IsKnown(value)) throw new FormatException(L.Get("Unknown easing.")); textEase = Easings.Normalize(value); });
         Button(L.Get("+ MOVE ANIMATION"), () => { CommitTextValues(new Dictionary<string, double> { ["textX"] = textSampler.Get("textX", id, textAt) + 40,
             ["textY"] = textSampler.Get("textY", id, textAt) }, textDuration); });
@@ -219,14 +219,14 @@ public sealed partial class Viewer
             .GroupBy(c => (c.Beat, c.Duration, c.Ease)).Select(g => g.First()))
         {
             var motionClip = clip;
-            Button(L.Get("ANIMATION @ ") + VsmDocument.N(clip.Beat), () => SelectTextAnimation(motionClip, true));
+            Button(L.Get("ANIMATION @ ") + VsmDocument.Ui(clip.Beat), () => SelectTextAnimation(motionClip, true));
         }
         foreach (var cue in track.Cues)
         {
             var selected = cue;
-            Button(L.Get("CUE @ ") + VsmDocument.N(cue.Beat) + " / " + ImageShortText(cue.Text.Replace('\n', ' '), r.W * .45f, 11), () => { textAnimation = null; textAt = selected.Beat; transport.Seek(Current.Timeline.Bpm.Time(textAt)); inspectorScroll = 0; });
+            Button(L.Get("CUE @ ") + VsmDocument.Ui(cue.Beat) + " / " + ImageShortText(cue.Text.Replace('\n', ' '), r.W * .45f, 11), () => { textAnimation = null; textAt = selected.Beat; transport.Seek(Current.Timeline.Bpm.Time(textAt)); inspectorScroll = 0; });
         }
-        Field(L.Get("Move cue to"), VsmDocument.N(textAt), value => { double beat = VsmDocument.Number(value); editor.MoveTextCue(id, textAt, beat); textAt = beat; transport.Seek(Current.Timeline.Bpm.Time(beat)); });
+        Field(L.Get("Move cue to"), VsmDocument.Ui(textAt), value => { double beat = VsmDocument.Number(value); editor.MoveTextCue(id, textAt, beat); textAt = beat; transport.Seek(Current.Timeline.Bpm.Time(beat)); });
         Button(L.Get("DELETE CUE AT TARGET"), () => editor.DeleteTextCue(id, textAt));
         inspectorScroll = Math.Clamp(inspectorScroll, 0, Math.Max(0, rows - visible));
         Text(transport.Playing ? L.Get("Pause to edit text.") : L.Get("Drag: move / corner: scale / top: rotate"), r.X, r.Y + r.H - 17, 10, muted, max: r.W);
