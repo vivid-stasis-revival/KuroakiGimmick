@@ -102,7 +102,6 @@ kg_aot_publish() {
 </dict></plist>
 PLIST
             mv "${binary}/Assets" "${package}/Assets"
-            # Keep Samples next to the executable: the built-in self-tests resolve them there.
             for shared in Integrations; do
                 [ ! -d "${binary}/${shared}" ] || mv "${binary}/${shared}" "${package}/${shared}"
             done
@@ -127,7 +126,6 @@ PLIST
     for item in README.md CHANGELOG.md THIRD_PARTY_NOTICES.md; do cp "${KG_AOT_ROOT}/${item}" "${package}/${item}"; done
     cp -R "${KG_AOT_ROOT}/ThirdParty" "${package}/ThirdParty"
     mkdir -p "${package}/docs"
-    cp -R "${KG_AOT_ROOT}/docs/." "${package}/docs/"
     if [ -n "${KUROAKI_FFMPEG:-}" ]; then
         [ -f "${KUROAKI_FFMPEG}" ] || { echo 'KUROAKI_FFMPEG 文件不存在。' >&2; return 1; }
         case "${rid}" in

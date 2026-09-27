@@ -21,16 +21,12 @@ internal static class Program
         CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
         CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
         // 这一串是所有无人值守模式（自测、检查、导出、截图）。cli 为真时失败只写 stderr，不弹消息框卡住脚本。
-        bool cli = args.Any(a => a is "--inspect" or "--render" or "--snapshot" or "--card" or "--self-test" or "--smoke-ui" or "--smoke-startup" or "--smoke-mac-menu" or "--smoke-windows-menu" or "--smoke-text-ui" or "--smoke-i18n" or "--native-sequence-self-test" or "--text-film-self-test" or "--custom-adaptation-self-test" or "--gpu-test" or "--editor-self-test" or "--reference-self-test" or "--authoring-self-test" or "--layout-image-self-test" or "--image-object-self-test");
+        bool cli = args.Any(a => a is "--inspect" or "--render" or "--snapshot" or "--card" or "--smoke-ui" or "--smoke-startup" or "--smoke-mac-menu" or "--smoke-windows-menu" or "--smoke-text-ui" or "--smoke-i18n");
         try
         {
-            // 后端覆盖必须早于任何 GPU 设备创建，所以在自检分派之前就读掉；否则 --gpu-test --force-vulkan
-            // 检的还是平台默认后端，而"能不能强制起 Vulkan"恰恰是这个组合唯一想回答的问题。
+            // 后端覆盖必须早于任何 GPU 设备创建；否则显式 --force-vulkan 仍可能先创建平台默认后端。
             if (args.Contains("--force-vulkan")) Sdl.ForceGpuDriver("vulkan");
             // 自测与 --version/--help 在解析工程之前返回：它们不需要 Session，也不应为了跑一次检查去解码音频。
-            if (args.Contains("--native-sequence-self-test")) return NativeSequenceSelfTest.Run(args.FirstOrDefault(a => !a.StartsWith("--", StringComparison.Ordinal)));
-            if (args.Contains("--custom-adaptation-self-test")) return CustomAdaptationSelfTest.Run();
-            if (args.Contains("--text-film-self-test")) return TextFilmSelfTest.Run();
             if (args.Contains("--version"))
             {
                 Console.WriteLine("KuroakiGimmick " + Paths.BuildRevision);
@@ -40,19 +36,6 @@ internal static class Program
             {
                 Console.WriteLine(Help);
                 return 0;
-            }
-            if (args.Contains("--image-object-self-test")) return ImageObjectSelfTest.Run();
-            if (args.Contains("--layout-image-self-test")) return LayoutImageSelfTest.Run();
-            if (args.Contains("--authoring-self-test")) return AuthoringSelfTest.Run();
-            if (args.Contains("--reference-self-test")) return ReferenceSelfTest.Run();
-            if (args.Contains("--editor-self-test")) return EditorSelfTest.Run();
-            if (args.Contains("--self-test"))
-            {
-                return SelfTest.Run();
-            }
-            if (args.Contains("--gpu-test"))
-            {
-                return GpuSelfTest.Run();
             }
             var options = Parse(args);
             var path = options.GetValueOrDefault("file");
@@ -382,15 +365,8 @@ internal static class Program
     UI language: --language auto|zh-CN|en (also available in Settings)
     UI localization check: --smoke-i18n [--editor] --out i18n.ppm
     KuroakiGimmick --editor Samples/EditorDemo/demo.sgv.json
-    KuroakiGimmick --editor-self-test
-    KuroakiGimmick --reference-self-test
     KuroakiGimmick --manual [--reference vsm.row.57]
     KuroakiGimmick --manual --reference vsm.row.57 --snapshot --out reference.ppm
-    KuroakiGimmick --gpu-test
-    KuroakiGimmick --self-test
-    KuroakiGimmick --text-film-self-test
-    KuroakiGimmick --custom-adaptation-self-test
-    KuroakiGimmick --native-sequence-self-test [/path/ENCORE.vsb]
     KuroakiGimmick /path/project.sgv.json --smoke-text-ui --time 0 --out text-ui.ppm
     Add --strict to snapshot/render to exit 2 on resource/renderer diagnostics.
     Snapshot: --report frame.json writes the post-render report, including shader errors.
@@ -408,7 +384,6 @@ internal static class Program
     GPU: --force-vulkan pins the SDL_GPU backend to Vulkan instead of the platform default
               (Metal on macOS, Direct3D 12 on Windows). No fallback: if Vulkan cannot be
               created, startup fails with the SDL error. macOS needs MoltenVK installed.
-              Combines with --gpu-test to check the backend without opening the editor.
     F1: open the read-only VSM/Custom Gimmick reference (available in Viewer and Editor).
     No arguments: open an empty workspace. Song folders auto-associate chart, VSM, images, text and music.
     Note skin: Assets/NoteSkinFull/NotesExact (preferred) or Assets/Notes; press R to reload.

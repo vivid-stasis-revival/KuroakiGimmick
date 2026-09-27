@@ -55,7 +55,7 @@ public sealed class Checkerboard
         if (result.Frames.Length == 0 && chart.Mods.Any(e => e.Name.StartsWith("angelstar_checker_")))
         {
             chart.Diagnostics.Add(new("checker", 0,
-                "Checker logic is available, but original sp_angelstar_checker_0/1/2.png tiles are missing. Run Dump_Gimmick_Extras_Mac.sh into the program folder's Assets/GimmickExtras, then press R. No substitute checker artwork is drawn."));
+                "Checker logic is available, but original sp_angelstar_checker_0/1/2.png tiles are missing. Install the original checker tiles into the program folder's Assets/GimmickExtras, then press R. No substitute checker artwork is drawn."));
         }
         if (timeline.Tracks.TryGetValue(("angelstar_checker_set", -1), out var segments))
         {

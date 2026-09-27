@@ -1,6 +1,6 @@
 # 更新日志
 
-版本以 `KuroakiGimmick.csproj` 为准。16.2 及更早的条目见 [历史归档](docs/history/releases/CHANGELOG.md)，其中的命令、相对路径与验证状态可能已经失效。
+版本以 `KuroakiGimmick.csproj` 为准。16.2 及更早的开发记录可通过 Git 历史查看。
 
 ## v0.1.4 / 17.6.1
 
@@ -174,7 +174,6 @@
 - 新增启动参数 `--force-vulkan`，把 SDL_GPU 后端钉死在 Vulkan 上，不再按平台默认挑（macOS 用 Metal、Windows 先 Direct3D 12）。强制时不做回退：起不来就带着 SDL 的原始错误直接启动失败，否则"强制"没有意义。macOS 经 MoltenVK 走 Vulkan，参数会自己按 `$VULKAN_SDK/lib`、`/opt/homebrew/lib`、`/usr/local/lib` 找 loader 并设上 `SDL_VULKAN_LIBRARY`（已手动设过就不动），因为 Homebrew 的 `/opt/homebrew/lib` 不在 dyld 默认搜索路径里，装了也会被 SDL 报成"不支持"；Windows 上照旧拒绝软件 Vulkan（Dozen / Lavapipe / SwiftShader），强制也不放行。三个平台的失败提示都会说明下一步该装什么或改什么。可与 `--gpu-test` 合用，不开窗口就验后端。
 - `scripts/` 根目录只保留启动、打包与验证入口：`run-editor.command` / `run-editor.ps1` 一键构建并以 `--editor` 打开工程；`verify.sh` / `verify.ps1` 是统一验证入口（`restore --locked-mode` → Release 构建 → 9 项托管自测，`--gpu` 才追加 GPU 自测，任一步失败即停）。
 - 专项 `check-*` / 文档生成 / 画面对比移到 `scripts/dev/`，本地游戏资源提取与导入移到 `scripts/assets/`。
-- 旧 README、打包说明、CHANGELOG、各次 HOTFIX / UPGRADE 与原始哈希清单归档到 `docs/history/releases/`，边界见 `docs/history/README.md`。
 
 ### 范围说明
 

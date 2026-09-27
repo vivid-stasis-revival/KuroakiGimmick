@@ -1,6 +1,0 @@
-$ bash scripts/verify-refactor.sh --gpu
-
-
-.NET 8 SDK is required. No build or runtime tests were executed.
-
-exit_code=127
