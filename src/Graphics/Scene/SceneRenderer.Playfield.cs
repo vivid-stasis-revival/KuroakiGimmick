@@ -159,7 +159,14 @@ public sealed partial class SceneRenderer
             canvas.Quad(nativeSequence.HoldOverlay(session, t) ?? holdOverlay, new(0, 0, 320, 180), Color.White.Alpha(M("holdoverlayalpha")));
             canvas.Clip(null);
         }
-        DrawImages(session, t, 0, 50, field);
+        DrawImages(session, t, 0, 10, field);
+        // Custom 的旧式/具名字幕实例都位于 depth -10：判定覆盖层之后、音符和 cover (-400) 之前。
+        // 放入 application surface，稍后与遮罩一起参与 Custom proxy 采样；不受 drawNotes 开关影响。
+        if (session.Chart.ObjectName == "obj_custom_gimmick")
+        {
+            sceneFont.Draw(canvas, session, t);
+        }
+        DrawImages(session, t, 10, 50, field);
         checker.Draw(session, t, 2, field, RenderWidth, RenderHeight);
         DrawImages(session, t, 50, 350, field);
         if (drawNotes)

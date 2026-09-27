@@ -134,20 +134,24 @@ public static class LegacyCompatibilitySelfTest
             File.Copy(Path.Combine(Paths.Assets, "GameCommon", "pt_diamonddust_0.png"), Path.Combine(pack, "shape.png"));
             var packDefinition = new GimmickDefinition { ObjectName = "obj_case_fixture", ResourcePack = "resources/manifest.json",
                 RoomPreset = "none" };
-            File.WriteAllText(Path.Combine(song, "gimmick-object.json"), JsonSerializer.Serialize(packDefinition, ViewerProject.Json));
+            File.WriteAllText(Path.Combine(song, "gimmick-object.json"), AppJson.Serialize(packDefinition, ViewerProject.Json));
             for (int variant = 0; variant < 2; variant++)
             {
                 string Field(string name) => variant == 0 ? char.ToLowerInvariant(name[0]) + name[1..] : name;
-                var packData = new Dictionary<string, object>
+                var packData = new JsonObject
                 {
                     [Field("Version")] = 1,
                     [Field("Room")] = "fixture_room",
-                    [Field("Sprites")] = new Dictionary<string, GimmickSprite> { ["shape"] = new() { Width = 9, Height = 9,
-                        Frames = ["shape.png"] } },
-                    [Field("Background")] = new Dictionary<string, object> { [Field("Parameters")] = new Dictionary<string,
-                        object> { ["g_TestValue"] = 7 } }
+                    [Field("Sprites")] = JsonNode.Parse(AppJson.Serialize(new Dictionary<string, GimmickSprite>
+                    {
+                        ["shape"] = new() { Width = 9, Height = 9, Frames = ["shape.png"] }
+                    }, ViewerProject.Json)),
+                    [Field("Background")] = new JsonObject
+                    {
+                        [Field("Parameters")] = new JsonObject { ["g_TestValue"] = 7 }
+                    }
                 };
-                File.WriteAllText(Path.Combine(pack, "manifest.json"), JsonSerializer.Serialize(packData, ViewerProject.Json));
+                File.WriteAllText(Path.Combine(pack, "manifest.json"), packData.ToJsonString());
                 var caseProfile = NativeGimmickProfile.Load(new ViewerProject { Chart = chartPath },
                     new Chart { ObjectName = packDefinition.ObjectName });
                 Check(caseProfile.ResourcePackLoaded && caseProfile.Issues.Count == 0 && caseProfile.ResourceRoom == "fixture_room"

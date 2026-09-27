@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using KuroakiGimmick.Graphics;
 using KuroakiGimmick.Native;
 
@@ -28,19 +29,19 @@ public static class GpuSelfTest
         Console.WriteLine("GPU: " + host.Device);
         // 尺寸逐个对照原生 SDL3 头文件里的 sizeof(SDL_GPU*)（64 位）。托管侧结构体一旦多/少一个字段或对齐变化，
         // P/Invoke 传过去的就是垃圾内存，而且往往不会立刻崩，只表现为画面异常——所以在 ABI 层直接拦。
-        var abi = new(Type Type, int Size)[]
+        var abi = new(int Actual, int Expected)[]
         {
-            (typeof(Sdl.GPUViewport), 24), (typeof(Sdl.GPUTextureTransferInfo), 24), (typeof(Sdl.GPUTransferBufferLocation), 16),
-                (typeof(Sdl.GPUTextureRegion), 40), (typeof(Sdl.GPUBufferRegion), 16), (typeof(Sdl.GPUSamplerCreateInfo), 52),
-                (typeof(Sdl.GPUVertexBufferDescription), 16), (typeof(Sdl.GPUVertexAttribute), 16), (typeof(Sdl.GPUVertexInputState), 32),
-                (typeof(Sdl.GPUStencilOpState), 16), (typeof(Sdl.GPUColorTargetBlendState), 32), (typeof(Sdl.GPUShaderCreateInfo), 56),
-                (typeof(Sdl.GPUTextureCreateInfo), 36), (typeof(Sdl.GPUBufferCreateInfo), 12), (typeof(Sdl.GPUTransferBufferCreateInfo), 12),
-                (typeof(Sdl.GPURasterizerState), 28), (typeof(Sdl.GPUMultisampleState), 12), (typeof(Sdl.GPUDepthStencilState), 44),
-                (typeof(Sdl.GPUColorTargetDescription), 36), (typeof(Sdl.GPUGraphicsPipelineTargetInfo), 24),
-                (typeof(Sdl.GPUGraphicsPipelineCreateInfo), 168), (typeof(Sdl.GPUColorTargetInfo), 64), (typeof(Sdl.GPUBufferBinding), 16),
-                (typeof(Sdl.GPUTextureSamplerBinding), 16),
+            (Marshal.SizeOf<Sdl.GPUViewport>(), 24), (Marshal.SizeOf<Sdl.GPUTextureTransferInfo>(), 24), (Marshal.SizeOf<Sdl.GPUTransferBufferLocation>(), 16),
+                (Marshal.SizeOf<Sdl.GPUTextureRegion>(), 40), (Marshal.SizeOf<Sdl.GPUBufferRegion>(), 16), (Marshal.SizeOf<Sdl.GPUSamplerCreateInfo>(), 52),
+                (Marshal.SizeOf<Sdl.GPUVertexBufferDescription>(), 16), (Marshal.SizeOf<Sdl.GPUVertexAttribute>(), 16), (Marshal.SizeOf<Sdl.GPUVertexInputState>(), 32),
+                (Marshal.SizeOf<Sdl.GPUStencilOpState>(), 16), (Marshal.SizeOf<Sdl.GPUColorTargetBlendState>(), 32), (Marshal.SizeOf<Sdl.GPUShaderCreateInfo>(), 56),
+                (Marshal.SizeOf<Sdl.GPUTextureCreateInfo>(), 36), (Marshal.SizeOf<Sdl.GPUBufferCreateInfo>(), 12), (Marshal.SizeOf<Sdl.GPUTransferBufferCreateInfo>(), 12),
+                (Marshal.SizeOf<Sdl.GPURasterizerState>(), 28), (Marshal.SizeOf<Sdl.GPUMultisampleState>(), 12), (Marshal.SizeOf<Sdl.GPUDepthStencilState>(), 44),
+                (Marshal.SizeOf<Sdl.GPUColorTargetDescription>(), 36), (Marshal.SizeOf<Sdl.GPUGraphicsPipelineTargetInfo>(), 24),
+                (Marshal.SizeOf<Sdl.GPUGraphicsPipelineCreateInfo>(), 168), (Marshal.SizeOf<Sdl.GPUColorTargetInfo>(), 64), (Marshal.SizeOf<Sdl.GPUBufferBinding>(), 16),
+                (Marshal.SizeOf<Sdl.GPUTextureSamplerBinding>(), 16),
         };
-        Check(abi.All(x => System.Runtime.InteropServices.Marshal.SizeOf(x.Type) == x.Size),
+        Check(abi.All(x => x.Actual == x.Expected),
             "SDL GPU interop structures match the native 64-bit ABI");
         // 67x9 和 3x2 都是故意取的奇数：67*4=268 字节的行宽不是 256 的倍数，能逼出 D3D12 的行距对齐路径，
         // 而紧密排列的 3x2 上传能验出把行距当成宽度用的错误。source 是两行已知颜色，用来同时检查内容与上下方向。

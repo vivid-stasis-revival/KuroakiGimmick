@@ -40,6 +40,21 @@ public sealed partial class Viewer
         }
     }
 
+    string SuggestedExportPath(string kind, string filename)
+    {
+        string directory = preferences.ExportDirectory(kind);
+        Directory.CreateDirectory(directory);
+        return Path.Combine(directory, filename);
+    }
+
+    void RememberExportDestination(string kind, string path)
+    {
+        preferences.RememberExportDestination(kind, path);
+        try { preferences.Persist(settingsPath); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        { message = L.Get("Settings could not be saved: ") + ex.Message; }
+    }
+
     /// <summary>修改当前项目的预览偏好；字体/音量等设置不应触发谱面解析或重置播放进度。</summary>
     void DrawSettings(int width, int height)
     {

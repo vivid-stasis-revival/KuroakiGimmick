@@ -12,7 +12,7 @@ public sealed partial class Viewer
         bool animations = preferences.UiAnimations, wasSettings = settings, wasEditor = editorMode;
         var session = Current;
         double position = transport.Position;
-        string project = JsonSerializer.Serialize(Current.Project, ViewerProject.Json);
+        string project = AppJson.Serialize(Current.Project, ViewerProject.Json);
         string? vsm = editor?.Vsm.Text;
         preferences.UiAnimations = false;
         try
@@ -71,7 +71,7 @@ public sealed partial class Viewer
                     Draw(size.Item1, size.Item2);
                 }
                 if (!ReferenceEquals(session, Current) || transport.Position != position
-                    || JsonSerializer.Serialize(Current.Project, ViewerProject.Json) != project || editor?.Vsm.Text != vsm)
+                    || AppJson.Serialize(Current.Project, ViewerProject.Json) != project || editor?.Vsm.Text != vsm)
                     throw new InvalidOperationException("Language switching changed the song, playback or editor document.");
             }
         }

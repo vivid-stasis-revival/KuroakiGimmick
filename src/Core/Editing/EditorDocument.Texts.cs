@@ -11,11 +11,11 @@ public sealed partial class EditorDocument
     readonly Dictionary<string, string> texts = new(StringComparer.Ordinal);
     public IReadOnlyDictionary<string, string> TextSources => texts;
     /// <summary>把全部文本源序列化成一个可比较的串。按 key 排序是为了让快照只随内容变化，不随字典插入顺序变化。</summary>
-    string TextSnapshot() => JsonSerializer.Serialize(texts.OrderBy(x => x.Key, StringComparer.Ordinal).ToDictionary(x => x.Key, x => x.Value));
+    string TextSnapshot() => AppJson.Serialize(texts.OrderBy(x => x.Key, StringComparer.Ordinal).ToDictionary(x => x.Key, x => x.Value));
     void RestoreTexts(string value)
     {
         texts.Clear();
-        foreach (var pair in JsonSerializer.Deserialize<Dictionary<string, string>>(value)!) texts.Add(pair.Key, pair.Value);
+        foreach (var pair in AppJson.Deserialize<Dictionary<string, string>>(value)!) texts.Add(pair.Key, pair.Value);
     }
     /// <summary>用编辑中的文本源（而非磁盘上的文件）装载一份 CustomText，保证预览与时间轴看到的都是未保存的当前内容。</summary>
     public CustomText EditableTexts() => CustomText.Load(Project, new Chart(), texts, true);

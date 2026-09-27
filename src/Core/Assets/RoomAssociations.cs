@@ -8,7 +8,7 @@ namespace KuroakiGimmick.Core;
 /// </summary>
 public static class RoomAssociations
 {
-    private sealed class Catalog
+    internal sealed class Catalog
     {
         public Catalog()
         {

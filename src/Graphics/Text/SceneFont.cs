@@ -32,7 +32,7 @@ public sealed class SceneFont : IDisposable
     {
         string root = Path.Combine(Paths.Assets, "SceneFont");
         pages = Directory.GetFiles(root, "page-*.png").Order().Select(p => Texture.Load(gpu, p)).ToArray();
-        glyphs = JsonSerializer.Deserialize<Dictionary<string, Glyph>>(File.ReadAllText(Path.Combine(root, "glyphs.json")))!;
+        glyphs = AppJson.Deserialize<Dictionary<string, Glyph>>(File.ReadAllText(Path.Combine(root, "glyphs.json")))!;
     }
 
     /// <summary>原版图集一旦就绪就整体取代内置图集，不做逐字形混用；缺字退到 '?'，再缺退到空字形（只推进 0 宽度）。</summary>

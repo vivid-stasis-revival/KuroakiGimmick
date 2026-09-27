@@ -201,7 +201,7 @@ public sealed partial class EditorDocument
         jsonProject.TextFiles = p.TextFiles.ToDictionary(x => x.Key, x => Rel(x.Value)!);
         files[vsmPath] = Vsm.Bytes();
         files[windowsPath] = Encoding.UTF8.GetBytes(outputWindows.Serialize());
-        files[path] = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(jsonProject, ViewerProject.Json));
+        files[path] = Encoding.UTF8.GetBytes(AppJson.Serialize(jsonProject, ViewerProject.Json));
         // 写任何一个文件之前把三条禁止项全查一遍：不许盖掉参考谱面；不许盖掉编辑器之外被改过的文件；不许盖掉不是本会话写出的同名伴生文件。
         foreach (string target in files.Keys)
         {
@@ -225,7 +225,13 @@ public sealed partial class EditorDocument
             }
             foreach (var (target, bytes) in backups)
                 if (bytes != null) File.WriteAllBytes(target + ".bak", bytes);
-            File.WriteAllText(journal, JsonSerializer.Serialize(new { token, targets = files.Keys, backupSuffix = ".bak" }, ViewerProject.Json));
+            File.WriteAllText(journal, new System.Text.Json.Nodes.JsonObject
+            {
+                ["token"] = token,
+                ["targets"] = new System.Text.Json.Nodes.JsonArray(files.Keys.Select(target =>
+                    (System.Text.Json.Nodes.JsonNode?)System.Text.Json.Nodes.JsonValue.Create(target)).ToArray()),
+                ["backupSuffix"] = ".bak"
+            }.ToJsonString());
             foreach (var target in files.Keys) { File.Move(target + ".tmp-" + token, target, true); committed.Add(target); }
             File.Delete(journal);
         }

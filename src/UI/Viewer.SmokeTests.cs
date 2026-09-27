@@ -81,22 +81,44 @@ public sealed partial class Viewer
         // 剧情轨要排在设置面板那一段之前：它自带完整的开关编辑器流程，而下面几条断言靠的是查看器自己的布局。
         SmokeEpisodeUi();
         editorMode = false; Draw(1440, 940);
-        // 同理排在设置面板之前：那一段在当前构建里本来就是红的，放在它后面等于永远跑不到。
+        // 拖放测试先完成自己的编辑工作流，再检查设置。
         SmokeShatterDrop();
+        Draw(1440, 940);
+        // 从 editor 的实际设置按钮进入；改变设置必须经过 DrawSettings 消费鼠标点击。
+        OpenEditor();
+        imageSources = textSources = false;
+        editorSourceScroll = 10000;
+        Draw(1440, 940);
+        int settingsY = (int)(editorSourceRect.Y + 35 - editorSourceScroll + 400);
+        Handle(new() { Type = 0x401, Button = 1, X = 80, Y = settingsY });
+        Draw(1440, 940);
+        Handle(new() { Type = 0x402, Button = 1 });
+        Draw(1440, 940);
+        if (!settings) throw new Exception("Editor settings button did not open settings.");
+        int savedAlignment = Current.Project.NoteAlignment;
+        Current.Project.NoteAlignment = 0;
+        Handle(new() { Type = 0x401, Button = 1, X = 900, Y = 192 });
+        Draw(1440, 940);
+        Handle(new() { Type = 0x402, Button = 1 });
+        Draw(1440, 940);
+        if (Current.Project.NoteAlignment != 1) throw new Exception("Editor settings panel did not consume its button click.");
+        settings = false;
+        Current.Project.NoteAlignment = savedAlignment;
+        editorMode = false;
         Draw(1440, 940);
         if (Current.GameUi.Data?.Fonts.ContainsKey(ViewerSettings.MonacoFont) == true)
         {
             string saved = Current.Project.GameUiFont;
             var session = Current;
             OpenSettings();
-            // (900, 172) 命中设置面板的 MONACO 按钮；坐标基于 1440x940 画布，按下后必须补一帧 Draw 才会消费这次点击。
+            // (900, 132) 命中设置面板的 MONACO 按钮；坐标基于 1440x940 画布，按下后必须补一帧 Draw 才会消费这次点击。
             // 面板高度改了就要跟着改：y 取的是 Text Font 那一行在淡入补间两端都覆盖到的重叠区间。
             Handle(new()
             {
                 Type = 0x401,
                 Button = 1,
                 X = 900,
-                Y = 172
+                Y = 132
             });
             Draw(1440, 940);
             Handle(new()
@@ -110,13 +132,13 @@ public sealed partial class Viewer
             {
                 throw new Exception("Monaco setting did not switch in the current session.");
             }
-            // (700, 172) 命中同一行的 DEFAULT 按钮。
+            // (700, 132) 命中同一行的 DEFAULT 按钮。
             Handle(new()
             {
                 Type = 0x401,
                 Button = 1,
                 X = 700,
-                Y = 172
+                Y = 132
             });
             Draw(1440, 940);
             Handle(new()
