@@ -8,14 +8,14 @@
 
 <p align="center">   <a href="#关于-kuroakigimmick">关于</a> ·   <a href="#主要功能">功能</a> ·   <a href="#快速开始">快速开始</a> ·   <a href="#编辑与导出">编辑与导出</a> ·   <a href="#命令行">命令行</a> ·   <a href="#构建">构建</a> ·   <a href="#特别感谢">特别感谢</a> </p>
 
-> [!IMPORTANT]
+> ​	[!IMPORTANT]
 > 本仓库只提供 **KuroakiGimmick 本身的源码、应用资源及可公开分发的第三方组件**。
 >
 > 《vivid/stasis》的游戏素材不会随仓库分发。完整场景预览及部分功能需要用户自行准备合法取得的本地游戏资源。
 
 ## 关于 KuroakiGimmick
 
-**KuroakiGimmick**，简称 **K/G**，是一套为《vivid/stasis》演出制作而设计的预览与编辑工具。
+**KuroakiGimmick**是一套为《vivid/stasis》演出制作而设计的预览与编辑工具。
 
 它可以读取谱面和演出数据，把：
 
@@ -788,13 +788,13 @@ KuroakiGimmick 的源码许可证不会替代或重新授权这些第三方内�
 
 ## 特别感谢
 
-### Dawn Hisomeru
+### [Dawn Hisomeru](https://github.com/MalNEW)
 
 感谢提供的大量**鬼点子**、早期测试反馈，以及关于 Editor 的各种意见和建议。
 
 很多东西能变成现在这个样子，大概有一部分责任确实得算在这里。
 
-### BingShuang412
+### [Bingshuang412](https://github.com/Frollsy)
 
 感谢提供 `custom_episode` 以及更多 gimmick 的**设计思路与方案**。
 
@@ -826,11 +826,9 @@ KuroakiGimmick 的源码许可证不会替代或重新授权这些第三方内�
 
 ### vivid/stasis
 
-KuroakiGimmick 是围绕 **vivid/stasis** 社区内容制作而开发的独立工具。
+感谢 hajimeli 以及参与制作 vivid/stasis 的所有开发者和创作者。
 
-感谢 **Team Vividstasis** 以及参与制作 vivid/stasis 的所有开发者和创作者。
-
-KuroakiGimmick 是非官方社区项目，与 Team Vividstasis **不存在官方隶属、合作或背书关系**。
+KuroakiGimmick 是非官方项目，与 hajimeli **不存在官方隶属、合作或背书关系**。
 
 《vivid/stasis》及其游戏内容的相关权利归各自权利人所有。
 
