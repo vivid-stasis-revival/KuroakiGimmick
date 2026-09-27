@@ -8,7 +8,7 @@
 
 <p align="center">   <a href="#关于-kuroakigimmick">关于</a> ·   <a href="#主要功能">功能</a> ·   <a href="#快速开始">快速开始</a> ·   <a href="#编辑与导出">编辑与导出</a> ·   <a href="#命令行">命令行</a> ·   <a href="#构建">构建</a> ·   <a href="#特别感谢">特别感谢</a> </p>
 
-> ​	[!IMPORTANT]
+> [!IMPORTANT]
 > 本仓库只提供 **KuroakiGimmick 本身的源码、应用资源及可公开分发的第三方组件**。
 >
 > 《vivid/stasis》的游戏素材不会随仓库分发。完整场景预览及部分功能需要用户自行准备合法取得的本地游戏资源。
