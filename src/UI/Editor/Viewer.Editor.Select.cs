@@ -358,6 +358,11 @@ public sealed partial class Viewer
         string first = read(clips[0]);
         return clips.All(c => read(c) == first) ? first : Mixed;
     }
+    static string SharedValue(VsmDocument.Clip[] clips, Func<VsmDocument.Clip, string> read)
+    {
+        string first = read(clips[0]);
+        return clips.All(c => read(c) == first) ? VsmDocument.UiValue(first) : Mixed;
+    }
 
     /// <summary>
     /// 批量参数面板。同一个 mod 时开放全部字段；混选了不同 mod 时只开放与 mod 语义无关的那几项 ——
@@ -387,17 +392,17 @@ public sealed partial class Viewer
             ValueField(name, value, r.X, y, r.W, v => { if (v != Mixed) action(v); });
         }
         if (sameMod) Field(L.Get("Mod"), picked[0].Name, v => EditClips(c => c with { Name = v }, L.Get("Change mod")));
-        Field(L.Get("Beat / first"), VsmDocument.N(first), v =>
+        Field(L.Get("Beat / first"), VsmDocument.Ui(first), v =>
         {
             double delta = VsmDocument.Number(v) - first;
             EditClips(c => c with { Beat = c.Beat + delta, RepeatEnd = c.RepeatEnd + delta }, L.Get("Shift beats"));
         });
-        Field(L.Get("Duration / beat"), Shared(picked, c => VsmDocument.N(c.Duration)), v =>
+        Field(L.Get("Duration / beat"), Shared(picked, c => VsmDocument.Ui(c.Duration)), v =>
         { double d = VsmDocument.Number(v); EditClips(c => c with { Duration = d }, L.Get("Set duration")); });
         if (sameMod)
         {
-            Field(L.Get("From / _"), Shared(picked, c => c.From), v => EditClips(c => c with { From = v }, L.Get("Set from")));
-            Field(L.Get("To / _"), Shared(picked, c => c.To), v => EditClips(c => c with { To = v }, L.Get("Set to")));
+            Field(L.Get("From / _"), SharedValue(picked, c => c.From), v => EditClips(c => c with { From = v }, L.Get("Set from")));
+            Field(L.Get("To / _"), SharedValue(picked, c => c.To), v => EditClips(c => c with { To = v }, L.Get("Set to")));
         }
         Field(L.Get("Ease"), Shared(picked, c => c.Ease), v => { string e = Easings.Normalize(v); EditClips(c => c with { Ease = e }, L.Get("Set ease")); });
         Field(L.Get("Proxy / -1 global"), Shared(picked, c => c.Proxy.ToString(CultureInfo.InvariantCulture)), v =>
