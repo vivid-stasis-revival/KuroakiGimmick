@@ -251,16 +251,16 @@ public sealed partial class Viewer
         if (selectedClip is Guid id && editor.Vsm.Find(id) is { } c)
         {
             Field(L.Get("Mod"), c.Name, v => EditClip(m => m with { Name = v }, L.Get("Change mod")));
-            Field(L.Get("Beat"), VsmDocument.N(c.Beat), v => { double b = VsmDocument.Number(v); EditClip(m => m with { Beat = b, RepeatEnd = m.RepeatEnd + b - m.Beat }, L.Get("Set beat")); });
-            Field(L.Get("Duration / beat"), VsmDocument.N(c.Duration), v => EditClip(m => m with { Duration = VsmDocument.Number(v) }, L.Get("Set duration")));
-            Field(L.Get("From / _"), c.From, v => EditClip(m => m with { From = v }, L.Get("Set from")));
-            Field(L.Get("To / _"), c.To, v => EditClip(m => m with { To = v }, L.Get("Set to")));
+            Field(L.Get("Beat"), VsmDocument.Ui(c.Beat), v => { double b = VsmDocument.Number(v); EditClip(m => m with { Beat = b, RepeatEnd = m.RepeatEnd + b - m.Beat }, L.Get("Set beat")); });
+            Field(L.Get("Duration / beat"), VsmDocument.Ui(c.Duration), v => EditClip(m => m with { Duration = VsmDocument.Number(v) }, L.Get("Set duration")));
+            Field(L.Get("From / _"), VsmDocument.UiValue(c.From), v => EditClip(m => m with { From = v }, L.Get("Set from")));
+            Field(L.Get("To / _"), VsmDocument.UiValue(c.To), v => EditClip(m => m with { To = v }, L.Get("Set to")));
             Field(L.Get("Ease"), c.Ease, v => EditClip(m => m with { Ease = Easings.Normalize(v) }, L.Get("Set ease")));
             Field(L.Get("Proxy / -1 global"), c.Proxy.ToString(), v => { int p = int.Parse(v, CultureInfo.InvariantCulture); if (p >= Current.Chart.Proxies) throw new FormatException(L.Get("Proxy exceeds !proxies.")); EditClip(m => m with { Proxy = p }, L.Get("Set proxy")); });
             if (c.RepeatEnd is double end)
             {
-                Field(L.Get("Repeat end"), VsmDocument.N(end), v => EditClip(m => m with { RepeatEnd = VsmDocument.Number(v) }, L.Get("Set repeat end")));
-                Field(L.Get("Repeat step"), VsmDocument.N(c.RepeatStep), v => EditClip(m => m with { RepeatStep = VsmDocument.Number(v) }, L.Get("Set repeat step")));
+                Field(L.Get("Repeat end"), VsmDocument.Ui(end), v => EditClip(m => m with { RepeatEnd = VsmDocument.Number(v) }, L.Get("Set repeat end")));
+                Field(L.Get("Repeat step"), VsmDocument.Ui(c.RepeatStep), v => EditClip(m => m with { RepeatStep = VsmDocument.Number(v) }, L.Get("Set repeat step")));
             }
             // 谱面内剧情的触发点自己不带时长信息，真正演什么写在 story.json 里，所以额外列出来。
             if (c.Name.Equals(EpisodeScript.ModName, StringComparison.OrdinalIgnoreCase)) DrawEpisodeRows(c, Row);
@@ -269,9 +269,9 @@ public sealed partial class Viewer
         else if (selectedWindowEvent >= 0 && selectedWindowEvent < (editor.Windows.Events?.Count ?? 0) && editor.Windows.Events![selectedWindowEvent] is JsonObject ev)
         {
             double t = Number(ev, "t"), start = Current.Timeline.Bpm.Beat(t), end = Current.Timeline.Bpm.Beat(t + Math.Max(0, Duration(ev)));
-            Field(L.Get("Start / beat"), VsmDocument.N(start), v => EditWindow(e => e["t"] = Current.Timeline.Bpm.Time(VsmDocument.Number(v)), L.Get("Set window start")));
+            Field(L.Get("Start / beat"), VsmDocument.Ui(start), v => EditWindow(e => e["t"] = Current.Timeline.Bpm.Time(VsmDocument.Number(v)), L.Get("Set window start")));
             if (WindowMotionConfig.Text(ev, "op") is "NewWindowDance" or "WindowResize")
-                Field(L.Get("Length / beat"), VsmDocument.N(end - start), v => EditWindow(e => e[WindowMotionConfig.Text(e, "op") == "NewWindowDance" ? "easeDur" : "dur"] = Current.Timeline.Bpm.Time(start + VsmDocument.Number(v)) - t, L.Get("Set window duration")));
+                Field(L.Get("Length / beat"), VsmDocument.Ui(end - start), v => EditWindow(e => e[WindowMotionConfig.Text(e, "op") == "NewWindowDance" ? "easeDur" : "dur"] = Current.Timeline.Bpm.Time(start + VsmDocument.Number(v)) - t, L.Get("Set window duration")));
             foreach (var pair in ev.ToArray())
             {
                 string key = pair.Key;

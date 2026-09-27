@@ -149,8 +149,23 @@ public sealed partial class VsmDocument
         return n;
     }
 
-    /// <summary>G17 往返格式化：新写入的数值再读回来必须得到同一个 double，不允许精度损失。</summary>
-    public static string N(double n) => n.ToString("G17", CultureInfo.InvariantCulture);
+    /// <summary>
+    /// VSM 写回使用 shortest round-trip 格式。<c>R</c> 仍保证再次解析得到同一个 double，
+    /// 但不会像 G17 那样把 1.1 展开成 1.1000000000000001 之类的二进制浮点尾巴。
+    /// </summary>
+    public static string N(double n) => n.ToString("R", CultureInfo.InvariantCulture);
+    /// <summary>
+    /// 编辑器只负责把数值显示得像人写的数。这里不参与序列化，因此可以收掉运算产生的末位噪声，
+    /// 例如 144.49875000000003 显示为 144.49875；真正写回仍走 <see cref="N"/> 保证往返精度。
+    /// </summary>
+    public static string Ui(double n) => n.ToString("G16", CultureInfo.InvariantCulture);
+    /// <summary>编辑器显示 From / To 时也收掉旧文件里由 G17 留下的尾巴；源 token 本身不会因此被改写。</summary>
+    public static string UiValue(string value)
+    {
+        if (value == "_") return value;
+        return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out double n) && double.IsFinite(n)
+            ? Ui(n) : value;
+    }
     /// <summary>573613 是原版表示"沿用当前值"的哨兵值，写回源文件时还原成 "_"。</summary>
     public static string Value(double n) => n == 573613 ? "_" : N(n);
     /// <summary>接受编辑器输入语法；失败时抛 FormatException，由调用方提示用户而不是静默取 0。</summary>
