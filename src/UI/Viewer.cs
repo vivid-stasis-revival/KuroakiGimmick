@@ -278,28 +278,33 @@ public sealed partial class Viewer : IDisposable
     }
 
     /// <summary>编辑器打开时转交 SaveEditor。落盘前把 viewer 侧的 NOTES / FX 开关写回 project，保存的才是当前所见状态。</summary>
-    void SaveProject()
+    void SaveProject(bool saveAs = false)
     {
-        if (editor != null) { SaveEditor(); return; }
+        if (editor != null) { SaveEditor(saveAs); return; }
         if (Busy || Current.IsEmpty)
         {
             return;
         }
-        var suggested = Current.ProjectPath ?? Path.Combine(Path.GetDirectoryName(Current.Project.Chart ?? Current.Project.Gimmick)!,
+        var suggested = Current.ProjectPath ?? Path.Combine(Path.GetDirectoryName(Current.Project.Chart ?? Current.Project.Gimmick) ?? Paths.Output,
             "project.sgv.json");
-        Dialog(true, suggested, paths =>
+        void SaveAt(string path)
         {
-            var path = paths[0];
-            if (!path.EndsWith(".sgv.json", StringComparison.OrdinalIgnoreCase))
+            try
             {
-                path += ".sgv.json";
+                if (!path.EndsWith(".sgv.json", StringComparison.OrdinalIgnoreCase))
+                {
+                    path += ".sgv.json";
+                }
+                Current.Project.Notes = notes;
+                Current.Project.PostProcessing = effects;
+                Current.Save(path);
+                RememberRecentSource(path);
+                message = L.Get("Project saved: ") + path;
             }
-            Current.Project.Notes = notes;
-            Current.Project.PostProcessing = effects;
-            Current.Save(path);
-            RememberRecentSource(path);
-            message = L.Get("Project saved: ") + path;
-        });
+            catch (Exception ex) { message = L.Get("Save failed: ") + ex.Message; }
+        }
+        if (!saveAs && Current.ProjectPath != null) SaveAt(Current.ProjectPath);
+        else Dialog(true, suggested, paths => SaveAt(paths[0]));
     }
 
     /// <summary>

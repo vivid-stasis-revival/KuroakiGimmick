@@ -151,11 +151,11 @@ public sealed class VspDocument
     /// 随工程另存的 VSP 一律使用相对自身目录的路径，因此整份文档要按新目录重算一遍相对路径。
     /// 只复制本次导入的暂存图片，不会把歌曲目录里既有的图片一并搬走；落盘前用 SHA-256 复核暂存文件未被外部改动。
     /// </summary>
-    public string PrepareSave(string directory, string stem, Dictionary<string, byte[]> files)
+    public string PrepareSave(string directory, string stem, Dictionary<string, byte[]> files, IReadOnlyDictionary<string, string>? relocated = null)
     {
         return RewriteResources(path =>
         {
-            string target = path;
+            string target = relocated?.GetValueOrDefault(path) ?? path;
             if (staged.TryGetValue(path, out var image))
             {
                 target = Path.Combine(directory, stem + ".editor-assets", image.Sha256 + Path.GetExtension(path));

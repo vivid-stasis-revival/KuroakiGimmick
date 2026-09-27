@@ -124,7 +124,7 @@ public static class ChartExport
                 { if (!IgnoreFile(file)) Copy(Path.GetRelativePath(root, file), file); }
                 foreach (string child in Directory.EnumerateDirectories(directory).Order(StringComparer.Ordinal))
                 {
-                    if (ToolDirectories.Contains(Path.GetFileName(child)) || Path.GetFileName(child).EndsWith(".editor-assets", StringComparison.OrdinalIgnoreCase) || Path.GetFileName(child).EndsWith(".editor-texts", StringComparison.OrdinalIgnoreCase) || Path.GetFileName(child).StartsWith(".kuroaki-", StringComparison.Ordinal)) continue;
+                    if (Path.GetFileName(child) == ".kuroaki" || ToolDirectories.Contains(Path.GetFileName(child)) || Path.GetFileName(child).EndsWith(".editor-assets", StringComparison.OrdinalIgnoreCase) || Path.GetFileName(child).EndsWith(".editor-texts", StringComparison.OrdinalIgnoreCase) || Path.GetFileName(child).StartsWith(".kuroaki-", StringComparison.Ordinal)) continue;
                     NoLinks(child); Walk(child);
                 }
             }

@@ -193,7 +193,7 @@ public sealed partial class Viewer
         }
         else followWrote = null;
     }
-    /// <summary>另存为一份可编辑副本，绝不就地覆盖导入的源文件。</summary>
+    /// <summary>已保存或重新打开的工程直接覆盖；首次保存和另存为选择路径，歌曲源文件仍由伴生文件隔离。</summary>
     void SaveEditor(bool saveAs = false, Action? after = null)
     {
         if (editor == null || Busy || ImageGestureActive) return;
