@@ -127,6 +127,114 @@ public sealed class VspDocument
         Text = next;
     }
 
+    /// <summary>替换一个 CSV 单元格的实体值，同时保留它两侧原有的对齐空白。</summary>
+    static string ReplaceCell(string token, string value)
+    {
+        int left = token.Length - token.TrimStart().Length, right = token.Length - token.TrimEnd().Length;
+        return token[..left] + value + (right > 0 ? token[^right..] : "");
+    }
+
+    /// <summary>修改图片声明自身的 priority（static/animated 的第 4 列）。这只决定同一 VSP 图层内的实例顺序。</summary>
+    public void SetImagePriority(CustomImages.Item item, double priority)
+    {
+        if (!double.IsFinite(priority) || Math.Abs(priority) > 1e8) throw new FormatException("Image priority must be finite and within 100 million.");
+        int matches = 0;
+        string next = Regex.Replace(Text, @"[^\r\n]+", m =>
+        {
+            string[] fields = m.Value.Split(',');
+            if (fields.Length < 4 || fields[0].Trim() is not ("static" or "animated") ||
+                !string.Equals(fields[1].Trim(), item.Id, StringComparison.OrdinalIgnoreCase)) return m.Value;
+            matches++; fields[3] = ReplaceCell(fields[3], VsmDocument.N(priority));
+            return string.Join(',', fields);
+        });
+        if (matches != 1) throw new InvalidOperationException("Image priority edit requires one unambiguous VSP declaration.");
+        Text = next;
+    }
+
+    /// <summary>修改图片所在 #Layer 的绘制优先级。一个 VSP layer 被多张图片共享时，它们会一起移动，这是源格式本身的语义。</summary>
+    public void SetLayerPriority(CustomImages.Item item, double priority)
+    {
+        if (!double.IsFinite(priority) || priority is < -15999 or > 15999)
+            throw new FormatException("Layer depth must be between -15999 and 15999.");
+        string section = ""; int matches = 0; var output = new StringBuilder(Text.Length + 32);
+        foreach (Match m in Regex.Matches(Text, @"([^\r\n]*)(\r\n|\r|\n|$)"))
+        {
+            if (m.Length == 0) continue;
+            string line = m.Groups[1].Value, ending = m.Groups[2].Value, trimmed = line.Trim();
+            if (trimmed.StartsWith('#')) section = trimmed;
+            else if (section == "#Layer" && trimmed.Length > 0 && !trimmed.StartsWith("//", StringComparison.Ordinal))
+            {
+                string[] fields = line.Split(',');
+                if (fields.Length == 2 && string.Equals(fields[0].Trim(), item.Layer, StringComparison.Ordinal))
+                {
+                    matches++; fields[1] = ReplaceCell(fields[1], VsmDocument.N(priority)); line = string.Join(',', fields);
+                }
+            }
+            output.Append(line).Append(ending);
+        }
+        if (matches != 1) throw new InvalidOperationException("Layer depth edit requires one unambiguous #Layer declaration.");
+        Text = output.ToString();
+    }
+
+    /// <summary>
+    /// 删除一张图片的 VSP 声明。若它是该 layer 的最后一张图，同时移除已经空掉的 Image 标签和 #Layer 声明；
+    /// 其它行逐字保留。这里故意不清 staged：撤销后同一暂存资源仍必须能再次保存。
+    /// </summary>
+    public void Remove(CustomImages.Item item)
+    {
+        var rows = Regex.Matches(Text, @"([^\r\n]*)(\r\n|\r|\n|$)").Cast<Match>()
+            .Where(m => m.Length > 0).Select(m => (Text: m.Groups[1].Value, Ending: m.Groups[2].Value)).ToList();
+        bool[] keep = Enumerable.Repeat(true, rows.Count).ToArray();
+        string section = "", imageLayer = "", targetLayer = ""; int matches = 0;
+        for (int i = 0; i < rows.Count; i++)
+        {
+            string trimmed = rows[i].Text.Trim();
+            if (trimmed.StartsWith('#')) { section = trimmed; imageLayer = ""; continue; }
+            if (section != "#Image" || trimmed.Length == 0 || trimmed.StartsWith("//", StringComparison.Ordinal)) continue;
+            if (trimmed.EndsWith(':')) { imageLayer = trimmed[..^1].Trim(); continue; }
+            string[] fields = trimmed.Split(',').Select(x => x.Trim()).ToArray();
+            if (fields.Length >= 4 && fields[0] is ("static" or "animated") &&
+                string.Equals(fields[1], item.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                matches++; targetLayer = imageLayer; keep[i] = false;
+            }
+        }
+        if (matches != 1 || targetLayer.Length == 0) throw new InvalidOperationException("Image delete requires one unambiguous VSP declaration.");
+
+        bool targetLayerStillUsed = false; section = imageLayer = "";
+        for (int i = 0; i < rows.Count; i++)
+        {
+            if (!keep[i]) continue;
+            string trimmed = rows[i].Text.Trim();
+            if (trimmed.StartsWith('#')) { section = trimmed; imageLayer = ""; continue; }
+            if (section != "#Image" || trimmed.Length == 0 || trimmed.StartsWith("//", StringComparison.Ordinal)) continue;
+            if (trimmed.EndsWith(':')) { imageLayer = trimmed[..^1].Trim(); continue; }
+            string[] fields = trimmed.Split(',').Select(x => x.Trim()).ToArray();
+            if (imageLayer == targetLayer && fields.Length >= 4 && fields[0] is ("static" or "animated"))
+            { targetLayerStillUsed = true; break; }
+        }
+        if (!targetLayerStillUsed)
+        {
+            section = "";
+            for (int i = 0; i < rows.Count; i++)
+            {
+                if (!keep[i]) continue;
+                string trimmed = rows[i].Text.Trim();
+                if (trimmed.StartsWith('#')) { section = trimmed; continue; }
+                if (trimmed.Length == 0 || trimmed.StartsWith("//", StringComparison.Ordinal)) continue;
+                if (section == "#Layer")
+                {
+                    string[] fields = trimmed.Split(',').Select(x => x.Trim()).ToArray();
+                    if (fields.Length == 2 && fields[0] == targetLayer) keep[i] = false;
+                }
+                else if (section == "#Image" && trimmed.EndsWith(':') && trimmed[..^1].Trim() == targetLayer) keep[i] = false;
+            }
+        }
+        var output = new StringBuilder(Text.Length);
+        for (int i = 0; i < rows.Count; i++) if (keep[i]) output.Append(rows[i].Text).Append(rows[i].Ending);
+        Text = output.ToString();
+    }
+
     /// <summary>把每条 static/animated 声明的路径 token 交给 map 改写，其余单元格连同原有空白逐字保留。</summary>
     public string RewriteResources(Func<string, string> map)
     {
