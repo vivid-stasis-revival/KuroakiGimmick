@@ -101,11 +101,11 @@ internal static class LocalizationSelfTest
 
             string file = Path.Combine(directory, "settings.json");
             var project = new ViewerProject();
-            string before = JsonSerializer.Serialize(project, ViewerProject.Json);
+            string before = AppJson.Serialize(project, ViewerProject.Json);
             var settings = new ViewerSettings { UiLanguage = "zh-CN" };
             settings.Save(project, file);
             check(ViewerSettings.Load(file).UiLanguage == "zh-CN", "language preference survives settings save and reload");
-            check(JsonSerializer.Serialize(project, ViewerProject.Json) == before && !before.Contains("uiLanguage", StringComparison.OrdinalIgnoreCase),
+            check(AppJson.Serialize(project, ViewerProject.Json) == before && !before.Contains("uiLanguage", StringComparison.OrdinalIgnoreCase),
                 "language is stored only in device settings, never in chart projects");
             File.WriteAllText(file, "{\"UiTheme\":\"Scarlet\"}");
             check(ViewerSettings.Load(file).UiLanguage == UiLanguage.Auto, "old settings without language follow the system");

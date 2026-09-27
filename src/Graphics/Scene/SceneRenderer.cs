@@ -76,7 +76,7 @@ public sealed partial class SceneRenderer : IDisposable
     /// 每帧只从给定 time 求值。逻辑空间固定 320×180，RenderWidth 仅改变离屏分辨率。
     /// 本方法内的书写顺序就是权威的合成顺序：BeforeRails、BeforePlayfield、FixedJudgment、Gui 四个阶段边界，
     /// 以及穿插其间的 DrawImages(min,max) 优先级窗口都是契约。新歌曲复用已有阶段，不增加曲名阶段；
-    /// Custom 在这些阶段组装完整 application surface 后统一变换 Proxy；原生对象保留分段变换。
+    /// Base / Custom 组装完整 application surface 后统一变换 Proxy；特殊原生对象保留分段变换。
     /// 分辨率变化时先 Flush 再整批缩放全部目标，不允许只缩放其中一个。
     /// </summary>
     public void Render(Session session, double time, bool notes = true, bool effects = true)
@@ -95,9 +95,9 @@ public sealed partial class SceneRenderer : IDisposable
         PrepareImages(session);
         var timeline = session.Timeline;
         double M(string n, int p = -1) => timeline.Get(n, time, p);
-        // Custom Draw_74 samples the complete application_surface, including every VSP layer.
-        // Assemble it first; a layer priority must never decide whether an image follows a proxy.
-        bool customProxy = session.Chart.ObjectName == "obj_custom_gimmick"
+        // Base Draw_64 and Custom Draw_74 both sample the complete application_surface,
+        // including PAUSE, HUD and every VSP layer. Assemble it before transforming proxies.
+        bool applicationProxy = session.Chart.ObjectName is "obj_base_gimmick" or "obj_custom_gimmick"
             && session.Chart.Proxies > 0 && session.Chart.Mods.Any(e => e.Proxy >= 0);
         canvas.Begin(scene, RenderWidth, RenderHeight, 320, 180, new Color(0, 0, 0));
         nativeGimmick.DrawBackground(scene, session, time, effects);
@@ -148,13 +148,13 @@ public sealed partial class SceneRenderer : IDisposable
         customGimmicks.DrawDf(session, time);
         DrawImages(session, time, -250, -200);
         canvas.Flush();
-        // 原生对象在此变换轨道；Custom 先组装未变换画面，稍后统一采样。
-        bool proxyMode = !customProxy && session.Chart.Mods.Any(e => e.Proxy >= 0);
+        // 特殊原生对象保留分段合成；Base / Custom 先组装完整画面再统一采样。
+        bool proxyMode = !applicationProxy && session.Chart.Mods.Any(e => e.Proxy >= 0);
         DrawNotes(session, time, notes);
         CompositeField(session, time, proxyMode, clearFooter: session.NativeGimmick.Data?.ClearProxyFooter ?? true);
-        // 游戏 HUD 位于游玩轨道之上（Custom 稍后会把完整画面一起采样）。
+        // 游戏 HUD 位于源画面的游玩轨道之上；Base / Custom 随完整画面一起采样。
         // 整组画在自己的一遍里，使 hom 只对 HUD 淡出一次，且不会把 PAUSE/标题像素
-        // 复制进原生对象的移动 proxy；全局后处理仍然作用于它。
+        // 复制进特殊原生对象的移动 proxy；全局后处理仍然作用于它。
         canvas.Begin(field, RenderWidth, RenderHeight, 320, 180, new(0, 0, 0, 0));
         gameUi.Draw(session, time);
         DrawComboParticles(session, time);
@@ -175,9 +175,13 @@ public sealed partial class SceneRenderer : IDisposable
         }
         canvas.Begin(scene, RenderWidth, RenderHeight, 320, 180);
         canvas.Flush();
-        sceneFont.Draw(canvas, session, time);
+        // Custom 字幕已在 field 的 depth -10 绘制，不能在 cover 上方重复补画。
+        if (session.Chart.ObjectName != "obj_custom_gimmick")
+        {
+            sceneFont.Draw(canvas, session, time);
+        }
         canvas.Flush();
-        if (customProxy)
+        if (applicationProxy)
         {
             // field is now an opaque snapshot of the complete scene. Clear the destination
             // before copying side strips/proxies so the untransformed source cannot leak through.

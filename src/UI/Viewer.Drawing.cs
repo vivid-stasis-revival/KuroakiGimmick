@@ -437,12 +437,6 @@ public sealed partial class Viewer
             effectiveVolumeDirty = false;
         }
         Text($"{transport.Volume*100:0}%", w - 89, h - 40, 10, white, true);
-        // 关闭后 alpha 仍大于 .001 时继续绘制，让淡出动画播完；期间 Button 由 UiClosingOverlay 拦截。
-        if (settings || settingsAlpha > .001f)
-        {
-            using var fade = Canvas.Opacity(settingsAlpha);
-            DrawSettings(w, h);
-        }
         DrawInfoCard(w, h);
         if ((help || helpAlpha > .001f) && !settings)
         {
@@ -507,6 +501,12 @@ public sealed partial class Viewer
         }
         using (Canvas.Unfaded())
         {
+            // 关闭后 alpha 仍大于 .001 时继续绘制，让淡出动画播完；期间 Button 由 UiClosingOverlay 拦截。
+            if (settings || settingsAlpha > .001f)
+            {
+                using var fade = Canvas.Opacity(settingsAlpha);
+                DrawSettings(w, h);
+            }
             DrawWorkflow(w, h);
             DrawEditorModals(w, h);
             DrawLayout(w, h);

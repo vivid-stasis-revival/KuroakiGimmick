@@ -116,8 +116,8 @@ public sealed class NativeGimmickProfile
                 }
                 if (JsonSchemaMembers.TryGet(root, "sprites", out var sprites))
                 {
-                    var external = sprites.Deserialize<Dictionary<string,
-                        GimmickSprite>>(ViewerProject.Json) ?? throw new InvalidDataException("Resource pack has no sprite dictionary.");
+                    var external = AppJson.Deserialize<Dictionary<string,
+                        GimmickSprite>>(sprites, ViewerProject.Json) ?? throw new InvalidDataException("Resource pack has no sprite dictionary.");
                     if (external.Count > 64)
                     {
                         throw new InvalidDataException("Resource pack exceeds 64 sprite groups.");

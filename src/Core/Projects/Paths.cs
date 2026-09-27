@@ -8,8 +8,8 @@ namespace KuroakiGimmick.Core;
 public static class Paths
 {
     public const string Version = "0.1.4";
-    public const string BuildNumber = "17.5";
-    public const string BuildRevision = "v0.1.4 / 17.5";
+    public const string BuildNumber = "17.6.1";
+    public const string BuildRevision = "v0.1.4 / 17.6.1";
     /// <summary>资源根目录：优先用可执行文件旁的 Assets，找不到才回退到 bundle 外的共享副本；返回值不保证存在。</summary>
     public static string Assets
     {
@@ -38,4 +38,3 @@ public static class Paths
     public static string LogDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KuroakiGimmick");
     public static string SharedAssetDirectory(string name) => Path.Combine(Assets, name);
 }
-

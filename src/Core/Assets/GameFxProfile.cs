@@ -188,7 +188,7 @@ public sealed class GameFxProfile
         {
             try
             {
-                var layer = entry.Deserialize<Layer>(ViewerProject.Json) ?? throw new InvalidDataException("Empty FX layer.");
+                var layer = AppJson.Deserialize<Layer>(entry, ViewerProject.Json) ?? throw new InvalidDataException("Empty FX layer.");
                 if (layer.Parameters == null)
                 {
                     throw new InvalidDataException("Missing FX parameters object.");
@@ -411,7 +411,7 @@ public sealed class GameFxProfile
                         }
                         // InitDistortBG 在深度 700 的 LBG 上创建这个滤镜。
                         // 保留内嵌定义里的真实默认值；谱面的 scale/amount 在绘制时才覆盖。
-                        var entry = JsonSerializer.SerializeToElement(new Layer
+                        var entry = AppJson.SerializeToElement(new Layer
                         {
                             Name = "LBG",
                             Filter = "_filter_heathaze",

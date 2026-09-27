@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace KuroakiGimmick.Core;
 
@@ -519,47 +520,38 @@ public sealed class NoteSkinProfile
         return result;
     }
 
-    public static object Report(string assetsRoot)
+    public static JsonObject Report(string assetsRoot)
     {
         try
         {
             var p = Load(assetsRoot);
             var b = p.Bumper(0) !;
-            return new
+            return new JsonObject
             {
-                format = p.Format,
-                root = p.Root,
-                exactLaneFrames = p.ExactLaneFrames,
-                skins = p.SkinNames,
-                warnings = p.Warnings,
-                bumper = new
+                ["format"] = p.Format,
+                ["root"] = p.Root,
+                ["exactLaneFrames"] = p.ExactLaneFrames,
+                ["skins"] = AppJson.Node(p.SkinNames.ToArray()),
+                ["warnings"] = AppJson.Node(p.Warnings.ToArray()),
+                ["bumper"] = new JsonObject
                 {
-                    drawWidth = b.Width,
-                    drawHeight = b.Height,
-                    localX = b.LocalX,
-                    localY = b.LocalY,
-                    uv = new[]
-                    {
-                        b.UvX,
-                        b.UvY,
-                        b.UvW,
-                        b.UvH
-                    }
+                    ["drawWidth"] = b.Width,
+                    ["drawHeight"] = b.Height,
+                    ["localX"] = b.LocalX,
+                    ["localY"] = b.LocalY,
+                    ["uv"] = AppJson.Node(new[] { b.UvX, b.UvY, b.UvW, b.UvH })
                 }
             };
         }
         catch (Exception ex)
         {
-            return new
+            return new JsonObject
             {
-                format = "unavailable",
-                root = (string?) null,
-                exactLaneFrames = false,
-                skins = (IReadOnlyList<string>) [],
-                warnings = new[]
-                {
-                    ex.GetBaseException().Message
-                }
+                ["format"] = "unavailable",
+                ["root"] = null,
+                ["exactLaneFrames"] = false,
+                ["skins"] = new JsonArray(),
+                ["warnings"] = AppJson.Node(new[] { ex.GetBaseException().Message })
             };
         }
     }
@@ -580,4 +572,3 @@ public sealed class NoteSkinProfile
         && v.TryGetSingle(out float n) ? n : throw new InvalidDataException("Missing number " + name + ".");
     static int Integer(JsonElement o, string name, int fallback) => o.TryGetProperty(name, out var v) && v.TryGetInt32(out int n) ? n : fallback;
 }
-

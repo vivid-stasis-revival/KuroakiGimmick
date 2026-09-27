@@ -149,7 +149,7 @@ public static class AuthoringSelfTest
             Check(!File.Exists(Path.Combine(folder, ".DS_Store")) && !Directory.Exists(Path.Combine(folder, "bin")), "cache and Finder files excluded");
             Check(Directory.GetFiles(Path.Combine(folder, "resources")).Single().EndsWith("_external.png"), "external VSP resource collected");
             Check(File.ReadAllText(Path.Combine(folder, "ENCORE.vsp")).Contains("resources/") && !File.ReadAllText(Path.Combine(folder, "ENCORE.vsp")).Contains("../"), "known VSP resource reference rebased");
-            var reopenedProject = JsonSerializer.Deserialize<ViewerProject>(File.ReadAllText(Path.Combine(folder, "Kuroaki.sgv.json")), ViewerProject.Json)!;
+            var reopenedProject = AppJson.Deserialize<ViewerProject>(File.ReadAllText(Path.Combine(folder, "Kuroaki.sgv.json")), ViewerProject.Json)!;
             Check(reopenedProject.Gimmick == "ENCORE.vsm" && reopenedProject.EditorMarkers.Single().Id == marker, "folder project uses relative companions and editor markers");
             // 文件夹导出永远不与已存在的目标合并（避免留下上一次的残余文件），也不许把目标放进源目录里递归自吞。
             Reject(() => ChartExport.Prepare(input, ChartExportKind.ChartFolder, folder), "folder export never merges an existing destination");

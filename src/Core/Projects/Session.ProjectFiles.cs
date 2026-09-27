@@ -24,7 +24,7 @@ public sealed partial class Session
         path = Path.GetFullPath(path);
         if (path.EndsWith(".sgv.json", StringComparison.OrdinalIgnoreCase))
         {
-            var p = JsonSerializer.Deserialize<ViewerProject>(File.ReadAllText(path),
+            var p = AppJson.Deserialize<ViewerProject>(File.ReadAllText(path),
                 ViewerProject.Json) ?? throw new InvalidDataException("Empty project.");
             if (p.Version != 1)
             {
@@ -128,6 +128,6 @@ public sealed partial class Session
         p.GameUi = Rel(p.GameUi);
         p.GimmickAssets = Rel(p.GimmickAssets);
         p.GimmickDefinition = Rel(p.GimmickDefinition);
-        File.WriteAllText(path, JsonSerializer.Serialize(p, ViewerProject.Json));
+        File.WriteAllText(path, AppJson.Serialize(p, ViewerProject.Json));
     }
 }

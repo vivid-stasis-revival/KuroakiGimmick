@@ -2,6 +2,17 @@
 
 版本以 `KuroakiGimmick.csproj` 为准。16.2 及更早的条目见 [历史归档](docs/history/releases/CHANGELOG.md)，其中的命令、相对路径与验证状态可能已经失效。
 
+## v0.1.4 / 17.6.1
+
+- 修复基础 gimmick 的 Proxy HUD 合成顺序：先采样包含 PAUSE 的完整画面，再应用裁剪、位移和透明度。
+- 修复 Editor 设置按钮打开后不显示面板的问题。
+- 按导出类型记住上次选择的目录，重启后仍可复用；目录失效时回退到默认位置。
+
+## v0.1.4 / 17.6
+
+- 修复 Custom 字幕绘制层级：旧式和具名 text 按原版 depth -10 绘制，`cover1/2/3` 能正确遮住字幕。预览与视频导出共用此顺序，字幕与遮罩一起参与 Proxy 采样。
+- 新增 GPU 像素回归，覆盖三种 cover、透明度动画、倒拖及 Proxy 移动。
+
 ## v0.1.4 / 17.5
 
 ### 谱面内剧情（Custom Episodes 的 `custom_episode`）

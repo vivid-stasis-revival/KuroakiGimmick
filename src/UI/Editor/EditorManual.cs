@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using KuroakiGimmick.Core;
 
 namespace KuroakiGimmick.UI;
 
@@ -61,7 +62,7 @@ internal static class EditorManual
             using var stream = Assembly.GetExecutingAssembly()
                 .GetManifestResourceStream("KuroakiGimmick.EditorManual.json")
                 ?? throw new InvalidDataException("Missing embedded VSM manual.");
-            var data = JsonSerializer.Deserialize<Data>(stream)
+            var data = AppJson.Deserialize<Data>(stream)
                 ?? throw new InvalidDataException("Empty VSM manual.");
             if (data.Schema != 1 || data.Entries.Length == 0 ||
                 data.Entries.Select(e => e.Id).Distinct(StringComparer.Ordinal).Count() != data.Entries.Length)

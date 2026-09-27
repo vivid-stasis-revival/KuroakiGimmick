@@ -62,7 +62,8 @@ public sealed class ViewerProject
     public static readonly JsonSerializerOptions Json = new()
     {
         WriteIndented = true,
-        PropertyNameCaseInsensitive = true
+        PropertyNameCaseInsensitive = true,
+        TypeInfoResolver = AppJson.Resolver
     };
     /// <summary>浅拷贝：集合字段单独复制以免共享可变状态；已加载的音频、纹理等资源不复制。</summary>
     public ViewerProject Copy()

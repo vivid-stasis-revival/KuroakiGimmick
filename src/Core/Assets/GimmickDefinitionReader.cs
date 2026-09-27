@@ -15,7 +15,7 @@ public static class GimmickDefinitionReader
     /// </summary>
     public static GimmickDefinition Read(string json, List<string>? migrations = null, Action<string, string>? fail = null)
     {
-        var definition = JsonSerializer.Deserialize<GimmickDefinition>(json,
+        var definition = AppJson.Deserialize<GimmickDefinition>(json,
             ViewerProject.Json) ?? throw new InvalidDataException("Empty object definition.");
         using var document = JsonDocument.Parse(json);
         if (!JsonSchemaMembers.TryGet(document.RootElement, "perFrameFunctions", out var functions))
@@ -28,7 +28,7 @@ public static class GimmickDefinitionReader
         }
         definition.PerFrameBindings ??= [];
         using Stream stream = typeof(GimmickDefinitionReader).Assembly.GetManifestResourceStream("KuroakiGimmick.LegacyPerFrameBindings.json") ?? throw new InvalidDataException("Embedded legacy expression templates are missing.");
-        var templates = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, GimmickScalar>>>(stream,
+        var templates = AppJson.Deserialize<Dictionary<string, Dictionary<string, GimmickScalar>>>(stream,
             ViewerProject.Json) ?? throw new InvalidDataException("Empty legacy expression templates.");
         foreach (var function in functions.EnumerateArray())
         {

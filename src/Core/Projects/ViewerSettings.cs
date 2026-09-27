@@ -59,6 +59,15 @@ public sealed class ViewerSettings
     public double VisualDelayMs { get; set; }
     /// <summary>设备本地最近打开的工程、谱面或歌曲文件夹；不属于任何 .sgv.json 工程。</summary>
     public List<string> RecentProjects { get; set; } = [];
+    /// <summary>设备本地的导出目录；不同导出类型各自记忆，不写入工程。</summary>
+    public Dictionary<string, string> ExportDirectories { get; set; } = new();
+    public string ExportDirectory(string kind) => ExportDirectories != null &&
+        ExportDirectories.TryGetValue(kind, out var directory) && Directory.Exists(directory) ? directory : Paths.Output;
+    public void RememberExportDestination(string kind, string path)
+    {
+        string directory = Path.GetDirectoryName(Path.GetFullPath(path))!;
+        (ExportDirectories ??= new())[kind] = directory;
+    }
     public const int MaxRecentProjects = 10;
     static StringComparer RecentPathComparer => OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
     public void NormalizeRecentProjects()
@@ -118,12 +127,12 @@ public sealed class ViewerSettings
                 {
                     var safe = new JsonArray();
                     foreach (var entry in list)
-                        if (entry is JsonValue value && value.TryGetValue<string>(out string? item)) safe.Add(item);
+                        if (entry is JsonValue value && value.TryGetValue<string>(out string? item)) safe.Add((JsonNode?)JsonValue.Create(item));
                     obj[recentKey] = safe;
                 }
                 else obj.Remove(recentKey);
             }
-            var settings = JsonSerializer.Deserialize<ViewerSettings>(data?.ToJsonString() ?? "null", ViewerProject.Json) ?? new();
+            var settings = AppJson.Deserialize<ViewerSettings>(data?.ToJsonString() ?? "null", ViewerProject.Json) ?? new();
             settings.Workspace ??= new(); settings.Workspace.Normalize(); settings.UiTheme = ValidTheme(settings.UiTheme);
             settings.UiLanguage = Core.UiLanguage.Normalize(settings.UiLanguage);
             settings.NormalizeRecentProjects();
@@ -181,7 +190,7 @@ public sealed class ViewerSettings
         path ??= SettingsPath;
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         string temporary = path + ".tmp";
-        File.WriteAllText(temporary, JsonSerializer.Serialize(this, ViewerProject.Json));
+        File.WriteAllText(temporary, AppJson.Serialize(this, ViewerProject.Json));
         File.Move(temporary, path, true);
     }
 }

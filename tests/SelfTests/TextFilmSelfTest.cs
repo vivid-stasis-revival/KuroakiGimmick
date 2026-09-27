@@ -144,7 +144,64 @@ public static class TextFilmSelfTest
                 !Enumerable.Range(0, textPixels.Length / 4).Any(i => textPixels[i * 4] != 16 || textPixels[i * 4 + 1] != 24 || textPixels[i * 4 + 2] != 32))
                 throw new InvalidOperationException("Text canvas failed to draw production glyphs and selection bounds.");
             Console.WriteLine("PASS text canvas glyphs/bounds and film enable/disable/animation/deterministic seek on GPU");
+            CheckTextCovers(canvas, renderer, temporary, chart);
         }
         finally { Directory.Delete(temporary, true); }
+    }
+
+    static void CheckTextCovers(Canvas canvas, SceneRenderer renderer, string directory, string chart)
+    {
+        string text = Path.Combine(directory, "cover-text.txt");
+        File.WriteAllText(text, "0,But she refused to die\n");
+        using var covers = new CustomGimmickRenderer(canvas);
+        using var expected = new Target(canvas.Gpu, 320, 180);
+        const string header = "!obj:obj_custom_gimmick\n!proxies:1\n";
+        string Mod(string name, double value, int proxy = -1) => $"0,0,linear,{value},{value},{name},{proxy}\n";
+        byte[] Render(Session session, double time)
+        {
+            renderer.Render(session, time, notes: false, effects: false);
+            return canvas.Read(renderer.Final);
+        }
+        foreach (bool legacy in new[] { false, true })
+        {
+            string id = legacy ? "" : "test", suffix = legacy ? "" : "_test";
+            var project = new ViewerProject { Chart = chart, GameUiEnabled = false, RenderWidth = 320,
+                TextFiles = new() { [id] = text } };
+            string pose = Mod("textX" + suffix, 160) + Mod("textY" + suffix, 80)
+                + Mod("textscale" + suffix, 2) + Mod("textalignh" + suffix, 1)
+                + Mod("particle_alpha", 0);
+            var baselineSession = new Session(project.Copy(), editedVsm: header + pose);
+            var baseline = Render(baselineSession, 1);
+            foreach (string cover in new[] { "cover1", "cover2", "cover3" })
+            {
+                // 0 -> 1 over four beats: sample fully off, halfway, on, then seek backward.
+                var session = new Session(project.Copy(), editedVsm: header + pose + $"0,4,linear,0,1,{cover},-1\n");
+                foreach (double time in new[] { 0, 1, 2, 1, 0 })
+                {
+                    Render(baselineSession, time);
+                    canvas.Pass(expected, renderer.Final.Texture, canvas.Basic);
+                    canvas.Begin(expected, 320, 180, 320, 180);
+                    covers.DrawCovers(session, time);
+                    var reference = canvas.Read(expected);
+                    var actual = Render(session, time);
+                    if (!reference.SequenceEqual(actual))
+                        throw new InvalidOperationException($"{cover} must mask {(legacy ? "legacy" : "named")} text at time {time}.");
+                    if (time > 0 && baseline.SequenceEqual(actual))
+                        throw new InvalidOperationException($"{cover} fixture did not overlap visible text.");
+                }
+                // The covered application surface must move as a unit when a Custom proxy samples it.
+                var raw = Render(session, 2);
+                var moved = new Session(project.Copy(), editedVsm: header + pose + Mod(cover, 1)
+                    + Mod("pra", 1, 0) + Mod("prx", 32, 0) + Mod("prcl", 0, 0)
+                    + Mod("prcr", 320, 0) + Mod("prct", 0, 0));
+                var shifted = Render(moved, 2);
+                for (int y = 70; y < 110; y++)
+                    for (int x = 120; x < 230; x++)
+                        for (int channel = 0; channel < 4; channel++)
+                            if (raw[(y * 320 + x - 32) * 4 + channel] != shifted[(y * 320 + x) * 4 + channel])
+                                throw new InvalidOperationException($"{cover} and text did not move together with the Custom proxy.");
+            }
+        }
+        Console.WriteLine("PASS cover1/2/3 mask named/legacy text with animated alpha, backward seek and Custom proxy movement");
     }
 }

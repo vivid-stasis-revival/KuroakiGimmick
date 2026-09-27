@@ -133,8 +133,8 @@ public static class EditorSelfTest
                 var motion = WindowMotionConfig.Empty(); motion.EnsureCount(2);
                 var e = WindowMotionConfig.NewEvent("NewWindowDance", 1, .5, 1);
                 e["preset"] = preset; e["x"] = .3; e["y"] = .6; e["ax"] = .05; e["ay"] = .07; e["freq"] = 2; e["speed"] = .1;
-                motion.EnsureEvents().Add(e);
-                motion.EnsureEvents().Add(WindowMotionConfig.NewEvent("HideWindow", 1, 0, 1));
+                motion.EnsureEvents().Add((JsonNode)e);
+                motion.EnsureEvents().Add((JsonNode)WindowMotionConfig.NewEvent("HideWindow", 1, 0, 1));
                 var timeline = new WindowMotionTimeline(motion);
                 var forward = timeline.At(2.75).Single(p => p.Id == 100);
                 timeline.At(20); timeline.At(.25);
