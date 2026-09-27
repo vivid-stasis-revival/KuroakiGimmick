@@ -6,6 +6,24 @@ namespace KuroakiGimmick.Core.Editing;
 /// <summary>mod 选择器与文档右键菜单共用的一套校验与事件构造，两处入口必须走同一份规则，否则同一操作会写出不同的事件。</summary>
 internal static class GimmickAuthoring
 {
+    static readonly VsmReference.Entry[] extraGimmicks =
+    [
+        new() { Id = "frollsy.lr_slash", Kind = "mod", Name = "lr_slash", Scope = "custom",
+            Category = "Frollsy's Extra Gimmicks", Summary = "竖向斜线：value1 为条数（_ = 1，最多 64），value2 为 GameMaker 颜色（_ = 当前色）。" },
+        new() { Id = "frollsy.lr_slash_color", Kind = "mod", Name = "lr_slash_color", Scope = "custom",
+            Category = "Frollsy's Extra Gimmicks", Summary = "设置后续竖向斜线颜色：value2 为 GameMaker 颜色，_ 不改变当前色。" }
+    ];
+
+    public static VsmReference.Entry? Entry(string name) => extraGimmicks.FirstOrDefault(e => e.Name == name)
+        ?? VsmReference.Shared.MatchMod(name).FirstOrDefault()?.Entry;
+
+    public static VsmReference.Entry[] Search(string query)
+    {
+        string[] words = query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return VsmReference.Shared.Search(query, "mod").Concat(extraGimmicks.Where(e =>
+            words.All(word => (e.Name + " " + e.Category + " " + e.Summary).Contains(word, StringComparison.OrdinalIgnoreCase)))).ToArray();
+    }
+
     /// <summary>
     /// 按 mod 的作用域推荐 proxy 目标：proxy 级钳到 0..count-1，global 与 custom 级固定 -1（GLOBAL），其余允许 -1..count-1。
     /// 这里只是给 UI 一个合理初值，真正的合法性由 <see cref="Create"/> 强制。
@@ -34,7 +52,7 @@ internal static class GimmickAuthoring
         if (template is { MatchPattern.Length: > 0 } &&
             !new Regex(template.MatchPattern, RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100)).IsMatch(name))
             throw new FormatException("The name does not match the selected template (check identifier / lane range).");
-        var info = template ?? VsmReference.Shared.MatchMod(name).FirstOrDefault()?.Entry;
+        var info = template ?? Entry(name);
         if (info?.Scope == "global" && proxy != -1) throw new FormatException("This mod requires GLOBAL (-1).");
         if (info?.Scope == "proxy" && proxy < 0) throw new FormatException("This mod requires a proxy target.");
         ease = Easings.Normalize(ease.Trim());

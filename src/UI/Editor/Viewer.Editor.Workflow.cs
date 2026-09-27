@@ -71,9 +71,10 @@ public sealed partial class Viewer
         help = settings = false; workflow = displayedWorkflow = "add"; workflowError = "";
         addBeat = beat; addDuration = 1; addFrom = "_"; addTo = "1"; addEase = "linear";
         addQuery = ""; addListScroll = 0; addSwitchObject = false;
-        addTemplate = entry ?? VsmReference.Shared.MatchMod(customMod).FirstOrDefault()?.Entry;
+        addTemplate = entry ?? GimmickAuthoring.Entry(customMod);
         addName = entry?.Name ?? customMod;
         addProxy = GimmickAuthoring.SuggestedProxy(addTemplate, newProxy, Current.Chart.Proxies);
+        SetExtraGimmickDefaults();
         transport.SetPlaying(false); held = click = editorScrub = false;
         motion.Snap("workflow", 0);
     }
@@ -81,9 +82,17 @@ public sealed partial class Viewer
     {
         addTemplate = entry; addName = entry.Name; addSwitchObject = false; workflowError = "";
         addProxy = GimmickAuthoring.SuggestedProxy(entry, newProxy, Current.Chart.Proxies);
+        SetExtraGimmickDefaults();
+    }
+    void SetExtraGimmickDefaults()
+    {
+        if (addName is not ("lr_slash" or "lr_slash_color")) return;
+        addDuration = 0; addEase = "linear"; addFrom = "_";
+        addTo = addName == "lr_slash" ? "_" : "16777215";
+        addProxy = -1;
     }
     /// <summary>某些文档条目只在 obj_custom_gimmick 下有意义；谱面对象不匹配时必须由用户显式确认切换，而不是自动改 header。</summary>
-    bool NeedsCustomObject => (addTemplate ?? VsmReference.Shared.MatchMod(addName).FirstOrDefault()?.Entry)?.Scope == "custom" &&
+    bool NeedsCustomObject => (GimmickAuthoring.Entry(addName) ?? addTemplate)?.Scope == "custom" &&
         Current.Chart.ObjectName != "obj_custom_gimmick";
     /// <summary>
     /// 提交新 gimmick。改 obj header 和加片段在同一个撤销步骤里，撤销不会留下"对象已换但片段没了"的中间态。
@@ -241,7 +250,7 @@ public sealed partial class Viewer
         float split = box.X + Math.Min(305, box.W * .34f), x = split + 20, rightWidth = box.X + box.W - 24 - x;
         if (WorkflowButton(addQuery.Length == 0 ? L.Get("SEARCH / Ctrl+F") : addQuery, new(box.X + 24, box.Y + 65, split - box.X - 40, 34)))
             OpenValue(L.Get("Search name or description"), addQuery, value => { addQuery = value; addListScroll = 0; });
-        var results = VsmReference.Shared.Search(addQuery, "mod");
+        var results = GimmickAuthoring.Search(addQuery);
         addListRect = new(box.X + 24, box.Y + 110, split - box.X - 40, box.H - 175);
         int visible = Math.Max(1, (int)(addListRect.H / 34));
         addListScroll = Math.Clamp(addListScroll, 0, Math.Max(0, results.Length - visible));

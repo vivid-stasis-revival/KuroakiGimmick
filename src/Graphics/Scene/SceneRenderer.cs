@@ -144,6 +144,7 @@ public sealed partial class SceneRenderer : IDisposable
         nativeGimmick.DrawStage(session, time, GimmickStages.BeforePlayfield, notes);
         DrawImages(session, time, -260, -255);
         DrawSlashes(session, time);
+        DrawLoreleiSlashes(session, time);
         DrawImages(session, time, -255, -250);
         customGimmicks.DrawDf(session, time);
         DrawImages(session, time, -250, -200);
