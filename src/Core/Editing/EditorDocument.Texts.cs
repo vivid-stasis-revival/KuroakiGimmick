@@ -70,7 +70,7 @@ public sealed partial class EditorDocument
         string next;
         if (matches.FirstOrDefault() is { } match)
             next = raw[..match.Index] + (content == null ? "" : encoded + match.Groups[2].Value) + raw[(match.Index + match.Length)..];
-        else if (content == null) return;
+        else if (content == null) throw new InvalidOperationException("No text cue exists at the selected beat.");
         else next = raw + (raw.Length > 0 && !raw.EndsWith('\n') && !raw.EndsWith('\r') ? ending : "") + encoded + ending;
         if (Encoding.UTF8.GetByteCount(next) > 4 * 1024 * 1024) throw new InvalidDataException("Text file exceeds 4 MiB.");
         texts[id] = next;
@@ -80,11 +80,15 @@ public sealed partial class EditorDocument
     /// <summary>移动一条 cue = 先删原位再写新位，合成一次撤销操作。目标拍已有 cue 则拒绝，避免两条内容被并成一条。</summary>
     public void MoveTextCue(string id, double from, double to)
     {
-        TextBeat(to);
+        TextBeat(from); TextBeat(to);
         if (Math.Abs(from - to) < 1e-9) return;
-        var track = EditableTexts().Tracks.Single(t => t.Id == id);
+        var track = EditableTexts().Tracks.FirstOrDefault(t => t.Id == id)
+            ?? throw new InvalidOperationException("Text object no longer exists.");
+        var source = track.Cues.Where(c => Math.Abs(c.Beat - from) < 1e-9).ToArray();
+        if (source.Length == 0) throw new InvalidOperationException("No text cue exists at the selected beat.");
+        if (source.Length > 1) throw new InvalidOperationException("Duplicate text cue times: resolve the source rows before moving this cue.");
         if (track.Cues.Any(c => Math.Abs(c.Beat - to) < 1e-9)) throw new InvalidOperationException("A text cue already exists at the target beat.");
-        string content = track.Cues.Single(c => Math.Abs(c.Beat - from) < 1e-9).Text;
+        string content = source[0].Text;
         Change("Move text cue", () => { WriteTextCue(id, from, null); WriteTextCue(id, to, content); });
     }
     /// <summary>文本对象出场的那一拍：取其属性事件与 cue 里最早的一个，都没有则为 0。</summary>

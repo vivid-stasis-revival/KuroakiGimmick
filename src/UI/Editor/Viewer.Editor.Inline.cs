@@ -66,7 +66,13 @@ public sealed partial class Viewer
     void AcceptInline()
     {
         if (inlineAccept is not { } accept) { CloseInline(); return; }
-        try { accept(inlineTrim ? inlineValue.Trim() : inlineValue); CloseInline(); }
+        string value = inlineTrim ? inlineValue.Trim() : inlineValue;
+        string original = inlineTrim ? inlineOriginal.Trim() : inlineOriginal;
+        // UI fields may intentionally display a shortened numeric representation (for example G16).
+        // Merely focusing and committing that unchanged text must not feed the shortened string back into
+        // the document and silently replace the higher-precision value that was only hidden for display.
+        if (value == original) { CloseInline(); return; }
+        try { accept(value); CloseInline(); }
         catch (Exception e) { inlineError = e.Message; }
     }
 
@@ -267,10 +273,36 @@ public sealed partial class Viewer
         double since = uptime.Elapsed.TotalSeconds - inlineBlinkFrom;
         if (since < .5 || since % 1.06 < .64) Canvas.Fill(new(Canvas.SnapX(origin + caret), box.Y + 4, 1.5f, 19), white);
         Canvas.Clip(null);
-        // 校验失败的提示压在下一行上方。焦点没走，值也还在框里，改完接着按 Enter 就行。
+        // 校验失败时画一个完整的浮动提示。旧实现把异常硬塞进与输入框等宽的 18px 单行，
+        // 稍长一点的消息就会被截成 "Sequence contains no matching e"，用户连错误是什么都看不全。
         if (inlineError.Length == 0) return;
-        var tip = new Rect(box.X, box.Y + 28, box.W, 18);
+        const float errorSize = 10, pad = 5, lineHeight = 14;
+        float available = Math.Max(box.W, editorInspectorRect.W);
+        float wanted = fonts.Measure(inlineError, errorSize, true) + pad * 2;
+        float tipWidth = Math.Min(available, Math.Max(box.W, wanted));
+        float tipX = Math.Clamp(box.X, editorInspectorRect.X, Math.Max(editorInspectorRect.X, editorInspectorRect.X + editorInspectorRect.W - tipWidth));
+        var lines = new List<string>();
+        string rest = inlineError.Replace('\r', ' ').Replace('\n', ' ');
+        while (rest.Length > 0)
+        {
+            int take = rest.Length;
+            while (take > 1 && fonts.Measure(rest[..take], errorSize, true) > tipWidth - pad * 2) take--;
+            if (take < rest.Length)
+            {
+                int space = rest.LastIndexOf(' ', take - 1, take);
+                if (space > 0) take = space;
+            }
+            string line = rest[..take].Trim();
+            if (line.Length == 0) { take = Math.Min(rest.Length, Math.Max(1, take)); line = rest[..take]; }
+            lines.Add(line);
+            rest = rest[take..].TrimStart();
+        }
+        if (lines.Count == 0) lines.Add(inlineError);
+        float tipHeight = pad * 2 + lines.Count * lineHeight;
+        float tipY = box.Y + 28;
+        if (tipY + tipHeight > editorInspectorRect.Y + editorInspectorRect.H) tipY = Math.Max(editorInspectorRect.Y, box.Y - tipHeight - 2);
+        var tip = new Rect(tipX, tipY, tipWidth, tipHeight);
         Canvas.Fill(tip, Color.Hex(0x2A0E16)); Canvas.Border(tip, red);
-        Text(inlineError, tip.X + 5, tip.Y + 4, 10, red, max: tip.W - 10);
+        for (int i = 0; i < lines.Count; i++) Text(lines[i], tip.X + pad, tip.Y + pad + i * lineHeight, errorSize, red, max: tip.W - pad * 2);
     }
 }

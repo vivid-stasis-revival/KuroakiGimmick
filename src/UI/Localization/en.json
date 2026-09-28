@@ -847,5 +847,6 @@
   "时长 / 缓动 / 取值都不参与判定：这是一个触发点，不是数值渐变。": "Duration / easing / values are all ignored: this is a trigger, not a value ramp.",
   "演多久由 story.json 的字数与打字速度决定，在轨道上画成琥珀色区间。": "Length comes from the character count and typing speed in story.json; the track draws it as an amber span.",
   "下一次触发会当场顶掉正在播的那一段；被切掉几句写在区间标签上。": "The next trigger cuts off whatever is still playing; the span label says how many lines were lost.",
-  "立绘 / CG / 转场只在剧情房间可用，谱面内会被模组静默跳过。": "Portraits / CGs / transitions only work in the story room; inside a chart the mod skips them silently."
+  "立绘 / CG / 转场只在剧情房间可用，谱面内会被模组静默跳过。": "Portraits / CGs / transitions only work in the story room; inside a chart the mod skips them silently.",
+  "No text cue exists at or before the target beat.": "No text cue exists at or before the target beat."
 }
