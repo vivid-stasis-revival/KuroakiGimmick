@@ -334,7 +334,7 @@ public sealed partial class Viewer : IDisposable
                 3840
             }
             [resolution];
-            export = new(Canvas, Renderer, Current, new(path, rangeIn, rangeOut, fps, width, width * 9 / 16, notes, effects));
+            export = new(Canvas, Renderer, Current, new(path, rangeIn, rangeOut, fps, width, width * 9 / 16, notes, effects, preferences.OverwriteExports));
             message = L.Get("Rendering video...");
         });
     }
@@ -343,7 +343,7 @@ public sealed partial class Viewer : IDisposable
     {
         Directory.CreateDirectory(Paths.Output);
         var path = Path.Combine(Paths.Output, "compatibility_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".json");
-        File.WriteAllText(path, Current.Report(transport.Position));
+        ExportFiles.WriteText(path, Current.Report(transport.Position), preferences.OverwriteExports);
         message = L.Get("Report saved: ") + path;
     }
 

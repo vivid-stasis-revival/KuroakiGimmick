@@ -7,11 +7,12 @@ public sealed class ChartExportPlan
     public sealed record Item(string Name, string? Source, byte[]? Data, long Length, string Sha256);
     public ChartExportKind Kind { get; }
     public string Destination { get; }
+    public bool Overwrite { get; }
     public IReadOnlyList<Item> Files { get; }
     public IReadOnlyList<string> Warnings { get; }
     /// <summary>计划内全部输出项的总字节数，用于写盘前估算空间与显示进度。</summary>
     public long TotalBytes => Files.Sum(f => f.Length);
     /// <summary>入参立即定型成数组，计划一旦生成就不再变；提交阶段只照着它执行，不会再回头重新规划。</summary>
-    public ChartExportPlan(ChartExportKind kind, string destination, IEnumerable<Item> files, IEnumerable<string> warnings)
-    { Kind = kind; Destination = destination; Files = files.ToArray(); Warnings = warnings.ToArray(); }
+    public ChartExportPlan(ChartExportKind kind, string destination, IEnumerable<Item> files, IEnumerable<string> warnings, bool overwrite = false)
+    { Kind = kind; Destination = destination; Files = files.ToArray(); Warnings = warnings.ToArray(); Overwrite = overwrite; }
 }

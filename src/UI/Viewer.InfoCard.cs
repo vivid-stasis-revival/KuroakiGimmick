@@ -157,7 +157,7 @@ public sealed partial class Viewer
                 var png = RenderCardPng();
                 if (png == null) { message = L.Get("Info card unavailable: ") + L.Get("no chart loaded"); return; }
                 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-                File.WriteAllBytes(path, png);
+                ExportFiles.WriteBytes(path, png, preferences.OverwriteExports);
                 message = L.Get("Info card saved: ") + path;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
@@ -193,11 +193,11 @@ public sealed partial class Viewer
     /// 命令行用：直接把当前难度的卡片写成 PNG，不经界面。<paramref name="width"/> 覆盖设置里的导出尺寸。
     /// 调用方负责保证在窗口线程上；装配失败按异常抛出，由 Program 统一报错，不静默写出一张空图。
     /// </summary>
-    public void SaveInfoCardTo(string path, int? width = null)
+    public void SaveInfoCardTo(string path, int? width = null, bool? overwrite = null)
     {
         var png = RenderCardPng(width) ?? throw new InvalidDataException("No chart loaded: nothing to put on an info card.");
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-        File.WriteAllBytes(path, png);
+        ExportFiles.WriteBytes(path, png, overwrite ?? preferences.OverwriteExports);
     }
 
     /// <summary>文件名里去掉路径分隔符与控制字符，只保留能安全落盘的部分；空串退回 card。</summary>
