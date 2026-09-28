@@ -226,8 +226,20 @@ public sealed partial class Viewer
             var selected = cue;
             Button(L.Get("CUE @ ") + VsmDocument.Ui(cue.Beat) + " / " + ImageShortText(cue.Text.Replace('\n', ' '), r.W * .45f, 11), () => { textAnimation = null; textAt = selected.Beat; transport.Seek(Current.Timeline.Bpm.Time(textAt)); inspectorScroll = 0; });
         }
-        Field(L.Get("Move cue to"), VsmDocument.Ui(textAt), value => { double beat = VsmDocument.Number(value); editor.MoveTextCue(id, textAt, beat); textAt = beat; transport.Seek(Current.Timeline.Bpm.Time(beat)); });
-        Button(L.Get("DELETE CUE AT TARGET"), () => editor.DeleteTextCue(id, textAt));
+        // Content 显示的是目标拍之前最后一条仍然生效的 cue。移动/删除也必须针对同一条，
+        // 不能拿任意 textAt 去做精确浮点查找；否则面板明明显示着字幕，按钮却会 no-op 或抛 Single() 的通用异常。
+        var activeCue = track.Cues.LastOrDefault(c => c.Beat <= textAt + 1e-9);
+        Field(L.Get("Move cue to"), VsmDocument.Ui(textAt), value =>
+        {
+            if (activeCue == null) throw new InvalidOperationException(L.Get("No text cue exists at or before the target beat."));
+            double beat = VsmDocument.Number(value);
+            editor.MoveTextCue(id, activeCue.Beat, beat); textAt = beat; transport.Seek(Current.Timeline.Bpm.Time(beat));
+        });
+        Button(L.Get("DELETE CUE AT TARGET"), () =>
+        {
+            if (activeCue == null) throw new InvalidOperationException(L.Get("No text cue exists at or before the target beat."));
+            editor.DeleteTextCue(id, activeCue.Beat);
+        });
         inspectorScroll = Math.Clamp(inspectorScroll, 0, Math.Max(0, rows - visible));
         Text(transport.Playing ? L.Get("Pause to edit text.") : L.Get("Drag: move / corner: scale / top: rotate"), r.X, r.Y + r.H - 17, 10, muted, max: r.W);
     }
