@@ -2,7 +2,7 @@ using KuroakiGimmick.Core;
 
 namespace KuroakiGimmick.Graphics;
 
-/// <summary>Custom 对象的 star / cover / DF / unravel 精灵。纹理按精灵名缓存，失败的名字只报一次诊断，不每帧重试。</summary>
+/// <summary>Custom 对象的 star / cover / DF / sides 精灵。纹理按精灵名缓存，失败的名字只报一次诊断，不每帧重试。</summary>
 public sealed class CustomGimmickRenderer : IDisposable
 {
     readonly Canvas canvas;
@@ -84,31 +84,47 @@ public sealed class CustomGimmickRenderer : IDisposable
             canvas.Quad(grid, new(0, top, 320, bottom - top), Color.White.Alpha(M("df_grid_alpha")), new(0, top / 180, 1, (bottom - top) / 180));
     }
     /// <summary>
-    /// 侧边展开演出。粒子按 .0067 秒的间隔逐个“出生”，可见绘制寿命 0.3875 秒，比回调占用的时间轴尾部（0.4 秒）短，两者不可统一。
+    /// 侧边展开演出。Unravel/Astellion 侧条寿命 .3875 秒，Apocalypse 侧条寿命 1/3 秒。
+    /// 拖尾粒子每 .0067 秒出生、存活 .6 秒；时间轴给回调留 1 秒，包含侧条消失后的粒子。
     /// 位置与色相全部来自 Timeline.Hash(seed)，同一 e.Index 每次重放结果相同，不使用运行时随机数。
     /// </summary>
-    public void DrawUnravelSides(Session session, double time)
+    public void DrawSides(Session session, double time)
     {
         if (session.Chart.ObjectName != "obj_custom_gimmick") return;
-        foreach (var e in session.Timeline.Callbacks.Where(e => e.Name is "unraveling_sidething" or "sides" && e.Time <= time && e.Time + 1 >= time))
+        foreach (var e in session.Timeline.Callbacks.Where(e => CustomCompatibility.IsSideCallback(e.Name) && e.Time <= time && e.Time + 1 >= time))
         {
             double age = time - e.Time;
+            bool apocalypse = e.Name == "apocalypse_sidething", astellion = e.Name == "astellion_sidething";
+            // Apocalypse starts opaque, decelerates at 1800 px/s² and fades at 3/s.
+            double sideLife = apocalypse ? 1.0 / 3 : .3875;
+            double Distance(double t) => 800 * t - (apocalypse ? 900 * t * t : 0);
             foreach (int dir in new[] { 1, -1 })
             {
                 double startX = dir == 1 ? 150 : 170;
-                if (Image(session, "sp_particle_0") is { } particle)
-                    for (int i = 0; i * .0067 < .3875 && i * .0067 <= age; i++)
+                // Astellion has no unravel trail; InitSides creates one expanding spark per side.
+                if (astellion && age < .25 && Image(session, "sp_ast_particle_0") is { } spark)
+                {
+                    uint seed = unchecked((uint)e.Index * 47 + (dir == 1 ? 9127u : 19213u));
+                    float x = (dir == 1 ? 0 : 200) + MathF.Floor(Timeline.Hash(seed) * 121);
+                    float y = MathF.Floor(Timeline.Hash(seed + 1) * 181);
+                    float size = 34 * (float)Math.Min(1, age / .125);
+                    double alpha = age <= .125 ? 1 : 1 - (age - .125) / .125;
+                    canvas.Quad(spark, new(x - size / 2, y - size / 2, size, size), Color.Hsv(Timeline.Hash(seed + 2), 1).Alpha(alpha));
+                }
+                if (!astellion && Image(session, "sp_particle_0") is { } particle)
+                    for (int i = 0; i * .0067 < sideLife && i * .0067 <= age; i++)
                     {
                         double birth = i * .0067, elapsed = age - birth; if (elapsed >= .6) continue;
                         uint seed = unchecked((uint)e.Index * 65537 + (uint)i * 41 + (dir == 1 ? 7301u : 9413u));
-                        float x = (float)(startX - 800 * dir * birth), y = Math.Min(160, MathF.Floor(Timeline.Hash(seed) * 141) + 20) - (float)(elapsed * 30);
+                        float x = (float)(startX - Distance(birth) * dir), y = Math.Min(160, MathF.Floor(Timeline.Hash(seed) * 141) + 20) - (float)(elapsed * 30);
                         float size = (float)((.3 + .2 * Timeline.Hash(seed + 1)) * (1 - .5 * elapsed / .6) * 32);
-                        float hue = (dir == 1 ? 128 + MathF.Floor(Timeline.Hash(seed + 2) * 43) : 192 + MathF.Floor(Timeline.Hash(seed + 2) * 33)) / 255;
+                        float hue = (dir == 1 ? (apocalypse ? 16 : 128) + MathF.Floor(Timeline.Hash(seed + 2) * (apocalypse ? 25 : 43)) : 192 + MathF.Floor(Timeline.Hash(seed + 2) * 33)) / 255;
                         double alpha = .6 * Math.Min(elapsed / .06, (1 - elapsed / .6) / .9);
                         canvas.Quad(particle, new(x - size / 2, y - size / 2, size, size), Color.Hsv(hue, 1).Alpha(alpha), angle: (float)(-540 * elapsed * dir));
                     }
-                if (age <= .3875 && Image(session, "sp_sidebar3_0") is { } side)
-                    canvas.Quad(side, new((float)(startX - 800 * dir * age) - 60 * dir, 0, 120 * dir, 180), Color.White.Alpha(.4));
+                if (age <= sideLife && Image(session, astellion ? "sp_sidebar4_0" : "sp_sidebar3_0") is { } side)
+                    canvas.Quad(side, new((float)(startX - Distance(age) * dir) - 60 * dir, 0, 120 * dir, 180),
+                        Color.White.Alpha(apocalypse ? Math.Max(0, 1 - 3 * age) : .4));
             }
         }
     }

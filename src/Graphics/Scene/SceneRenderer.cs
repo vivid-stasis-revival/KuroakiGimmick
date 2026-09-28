@@ -139,7 +139,7 @@ public sealed partial class SceneRenderer : IDisposable
         DrawImages(session, time, -301, -300);
         nativeGimmick.DrawStage(session, time, GimmickStages.BeforeRails, notes);
         DrawImages(session, time, -300, -260);
-        customGimmicks.DrawUnravelSides(session, time);
+        customGimmicks.DrawSides(session, time);
         nativeSequence.Slashes(session, time);
         nativeGimmick.DrawStage(session, time, GimmickStages.BeforePlayfield, notes);
         DrawImages(session, time, -260, -255);
