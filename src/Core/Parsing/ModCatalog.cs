@@ -31,6 +31,8 @@ public static class ModCatalog
         // 实时绘制走 obj_note_rendering，它用的是 drawuntil。cc 的 Create 里连 mod_drawdist 都没初始化，
         // 可见原版自己也读不到。这里登记名字让它别报成未知 mod，效果则如实为零，详见 Timeline 的诊断。
         Supported.Add("drawdist");
+        Supported.Add("apocalypse_sidething");
+        Supported.Add("astellion_sidething");
         foreach (string name in "fx_edge static df_sideline df_sideline_alpha df_grid_alpha df_grid_top df_grid_bottom unraveling_sidething sides jumpto_beat jumpto_s".Split(' ')) Supported.Add(name);
         foreach (string name in CustomCompatibility.Stars) Supported.Add(name);
         foreach (string name in new[]

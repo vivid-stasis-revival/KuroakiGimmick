@@ -2,6 +2,12 @@
 
 版本以 `KuroakiGimmick.csproj` 为准。16.2 及更早的开发记录可通过 Git 历史查看。
 
+## 未发布
+
+- 支持 Custom Gimmicks 的 `apocalypse_sidething`（减速、淡出及双色拖尾）和 `astellion_sidething`（侧条及两枚彩色扩散粒子），按事件起点触发，拖动时间轴与导出使用同一套确定性动画。
+- 将裸写的 `imgalp` 标记为原版未注册的忽略项；具名 `imgalp_<图片 ID>` 保持原有行为。
+- Astellion 侧边效果需要本地 `Assets/CustomGimmicks/sp_sidebar4_0.png` 和 `sp_ast_particle_0.png`；游戏素材仍不随源码仓库分发。
+
 ## v0.1.4 / 17.6.1
 
 - 修复基础 gimmick 的 Proxy HUD 合成顺序：先采样包含 PAUSE 的完整画面，再应用裁剪、位移和透明度。

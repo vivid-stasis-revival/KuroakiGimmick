@@ -89,7 +89,7 @@ public sealed partial class Timeline
                 else { Callbacks.Add(new(start, e.Name, count, Callbacks.Count)); End = Math.Max(End, start + 1); }
                 continue;
             }
-            if (c.ObjectName == "obj_custom_gimmick" && e.Name is "unraveling_sidething" or "sides")
+            if (c.ObjectName == "obj_custom_gimmick" && CustomCompatibility.IsSideCallback(e.Name))
             { Callbacks.Add(new(start, e.Name, e.To, Callbacks.Count)); End = Math.Max(End, start + 1); continue; }
             End = Math.Max(End, start + span);
             // v1.12.7 的 updateMods 会跳过未注册的 ID。只有这一个经过核实的
