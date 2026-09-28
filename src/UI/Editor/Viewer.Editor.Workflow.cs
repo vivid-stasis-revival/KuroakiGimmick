@@ -136,13 +136,14 @@ public sealed partial class Viewer
             string location = SuggestedExportPath(kind.ToString(), kind == ChartExportKind.ChartFolder
                 ? name + "_chart_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") : name + ".vsm");
             // 保存对话框接受新路径。Chart Folder 会把选中的路径建成一个目录，绝不建成占位文件；
-            // 选中已存在的目录会在开始复制之前被拒绝。
+            // 同名输出由设置开关控制，准备时将开关值冻结进计划。
             Dialog(true, location, paths =>
             {
                 RememberExportDestination(kind.ToString(), paths[0]);
                 chartExportCancellation?.Dispose(); chartExportCancellation = new();
                 var token = chartExportCancellation.Token;
-                chartExportPrepare = Task.Run(() => ChartExport.Prepare(input, kind, paths[0], token), token);
+                bool overwrite = preferences.OverwriteExports;
+                chartExportPrepare = Task.Run(() => ChartExport.Prepare(input, kind, paths[0], token, overwrite), token);
                 message = L.Get("Preparing export...");
             });
         }
@@ -298,6 +299,7 @@ public sealed partial class Viewer
             Text(L.Get("DESTINATION"), box.X + 24, y, 12, muted);
             Text(plan.Destination, box.X + 24, y + 23, 14, white, max: box.W - 48);
             Text(L.Format($"{plan.Files.Count} files / {plan.TotalBytes / 1048576.0:0.00} MiB"), box.X + 24, y + 52, 14, soft);
+            Text(L.Get("Overwrite exports") + ": " + L.Get(plan.Overwrite ? "ON" : "OFF"), box.X + box.W - 260, y + 52, 12, muted, max: 236);
             int shown = Math.Min(7, plan.Files.Count);
             for (int i = 0; i < shown; i++) Text(plan.Files[i].Name, box.X + 24, y + 87 + i * 22, 13, white, max: box.W - 48);
             if (plan.Files.Count > shown) Text(L.Format($"... {plan.Files.Count - shown} more files"), box.X + 24, y + 87 + shown * 22, 13, muted);
@@ -308,8 +310,8 @@ public sealed partial class Viewer
         }
         else
         {
-            Text(L.Get("Choose an export type, then select a NEW output path."), box.X + 24, y, 16, white, max: box.W - 48);
-            Text(L.Get("Chart Folder: enter a new folder name in the save dialog."), box.X + 24, y + 38, 14, muted, max: box.W - 48);
+            Text(L.Get(preferences.OverwriteExports ? "Choose an export type, then select an output path." : "Choose an export type, then select a NEW output path."), box.X + 24, y, 16, white, max: box.W - 48);
+            Text(L.Get(preferences.OverwriteExports ? "Chart Folder: matching files are replaced; other files are kept." : "Chart Folder: enter a new folder name in the save dialog."), box.X + 24, y + 38, 14, muted, max: box.W - 48);
             Text(L.Get("Source files are never overwritten. Unsaved edits are included."), box.X + 24, y + 70, 14, muted, max: box.W - 48);
         }
         if (ChartExportBusy) Text(message, box.X + 24, box.Y + box.H - 78, 13, white, max: box.W - 48);

@@ -4,6 +4,7 @@
 
 ## 未发布
 
+- 新增“允许导出覆盖文件”设置，默认关闭并跨启动保存，适用于视频、谱面、配置、谱面文件夹、信息卡片、截图及报告；命令行可用 `--overwrite` 开启。文件夹只替换同名文件，保留其他文件；输出先暂存，谱面批量替换失败时恢复旧文件。
 - 支持 Custom Gimmicks 的 `apocalypse_sidething`（减速、淡出及双色拖尾）和 `astellion_sidething`（侧条及两枚彩色扩散粒子），按事件起点触发，拖动时间轴与导出使用同一套确定性动画。
 - 将裸写的 `imgalp` 标记为原版未注册的忽略项；具名 `imgalp_<图片 ID>` 保持原有行为。
 - Astellion 侧边效果需要本地 `Assets/CustomGimmicks/sp_sidebar4_0.png` 和 `sp_ast_particle_0.png`；游戏素材仍不随源码仓库分发。

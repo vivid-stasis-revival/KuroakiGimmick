@@ -38,6 +38,7 @@ internal static class Program
                 return 0;
             }
             var options = Parse(args);
+            bool overwriteExports = options.ContainsKey("overwrite") || ViewerSettings.Load().OverwriteExports;
             var path = options.GetValueOrDefault("file");
             string? projectPath = null;
             // ReadProject 只解析工程并把相对路径解析成绝对路径（基准是工程文件所在目录，不是当前工作目录）；此处还没有任何资源被加载。
@@ -111,7 +112,7 @@ internal static class Program
                 int width = (int) Number("width", 1920);
                 var exportOptions = new ExportOptions(Path.GetFullPath(output), Number("start", 0), Number("end", session.Duration),
                     (int) Number("fps", 60), width, width * 9 / 16, session.Project.Notes && !options.ContainsKey("no-notes"),
-                    session.Project.PostProcessing && !options.ContainsKey("no-fx"));
+                    session.Project.PostProcessing && !options.ContainsKey("no-fx"), overwriteExports);
                 using var job = new VideoExport(canvas, renderer, session, exportOptions);
                 ConsoleCancelEventHandler cancel = (_, e) =>
                 {
@@ -207,7 +208,7 @@ internal static class Program
                     Path.Combine(Paths.Output, "card.png")));
                 int? width = options.TryGetValue("width", out var cardWidth)
                     ? int.Parse(cardWidth, CultureInfo.InvariantCulture) : null;
-                viewer.SaveInfoCardTo(output, width);
+                viewer.SaveInfoCardTo(output, width, overwriteExports);
                 Console.WriteLine(output);
                 return options.ContainsKey("strict") && session.Chart.Diagnostics.Any(d => d.Error) ? 2 : 0;
             }
@@ -219,12 +220,13 @@ internal static class Program
                 viewer.Draw(1440, 940);
                 string output = Path.GetFullPath(options.GetValueOrDefault("out", "KuroakiGimmick.ppm"));
                 // --scene 取渲染器离屏结果，否则取带 GUI 覆盖层的界面目标；两者不是同一张图。
-                viewer.Canvas.SavePpm(options.ContainsKey("scene") ? viewer.Renderer.Final : viewer.UiTarget, output);
+                ExportFiles.Write(output, overwriteExports,
+                    temporary => viewer.Canvas.SavePpm(options.ContainsKey("scene") ? viewer.Renderer.Final : viewer.UiTarget, temporary));
                 Console.WriteLine(output);
                 if (options.ContainsKey("report"))
                 {
                     // 必须在 Draw 之后写：只有绘制后的报告才可能包含真实的 shader 编译与纹理错误。
-                    File.WriteAllText(Path.GetFullPath(options["report"]), session.Report(time));
+                    ExportFiles.WriteText(Path.GetFullPath(options["report"]), session.Report(time), overwriteExports);
                 }
                 return options.ContainsKey("strict") && session.Chart.Diagnostics.Any(d => d.Error) ? 2 : 0;
             }
@@ -269,6 +271,7 @@ internal static class Program
             "editor",
             "manual",
             "strict",
+            "overwrite",
             "inspect",
             "render",
             "snapshot",
@@ -369,6 +372,7 @@ internal static class Program
     KuroakiGimmick --manual --reference vsm.row.57 --snapshot --out reference.ppm
     KuroakiGimmick /path/project.sgv.json --smoke-text-ui --time 0 --out text-ui.ppm
     Add --strict to snapshot/render to exit 2 on resource/renderer diagnostics.
+    Add --overwrite to allow replacing existing exports (also available in Settings).
     Snapshot: --report frame.json writes the post-render report, including shader errors.
     Inspect: --time SECONDS also evaluates foreground FX visibility at that time.
 

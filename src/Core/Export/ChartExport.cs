@@ -10,7 +10,7 @@ namespace KuroakiGimmick.Core;
 
 /// <summary>
 /// 谱面导出：写出 VSM、VSM + cgmk 配置，或整个谱面文件夹。先 Prepare 出完整计划（含哈希）再 Write，
-/// 全程只读源素材、不修改也不安装任何游戏文件；已存在的输出一律拒绝覆盖。
+/// 全程只读源素材、不修改也不安装任何游戏文件；同名输出是否覆盖由导出计划决定。
 /// </summary>
 public static class ChartExport
 {
@@ -36,7 +36,8 @@ public static class ChartExport
         // 连父目录一起检查：链接目录下的普通子项同样会把写入引到预定导出根之外。
         FileSystemInfo? item = File.Exists(path) ? new FileInfo(path) : new DirectoryInfo(path);
         for (; item != null; item = item is FileInfo file ? file.Directory : ((DirectoryInfo)item).Parent)
-            if ((item.Attributes & FileAttributes.ReparsePoint) != 0) throw new IOException("Linked paths are not exported: " + item.FullName);
+            if (item.LinkTarget != null || item.Exists && (item.Attributes & FileAttributes.ReparsePoint) != 0)
+                throw new IOException("Linked paths are not exported: " + item.FullName);
     }
     /// <summary>
     /// 校验并归一化输出内相对路径：拒绝绝对路径、. 与 ..、控制字符、Windows 非法字符、结尾空格或点，以及 CON/PRN/LPT1 等保留名。
@@ -65,10 +66,10 @@ public static class ChartExport
 
     /// <summary>
     /// 只做规划：确定每个输出项的字节来源、长度和 SHA-256，并收集需要呈现给用户的警告，不写任何文件。
-    /// 任何冲突（同名映射、目标已存在、要覆盖源文件、路径不可移植、含符号链接）都在这里抛出，让 Write 阶段没有意外。
+    /// 任何冲突（同名映射、未允许覆盖的目标、要覆盖源文件、路径不可移植、含符号链接）都在这里抛出，让 Write 阶段没有意外。
     /// </summary>
     public static ChartExportPlan Prepare(ChartExportInput input, ChartExportKind kind, string destination,
-        CancellationToken cancellation = default)
+        CancellationToken cancellation = default, bool overwrite = false)
     {
         destination = Path.GetFullPath(destination);
         var warnings = new List<string>();
@@ -197,20 +198,21 @@ public static class ChartExport
             ((config[WindowMotionConfig.EventsKey] as JsonArray)?.Count > 0 || (config[WindowMotionConfig.BindingsKey] as JsonArray)?.Count > 0))
             warnings.Add("Window choreography requires the matching ExtCustomGimmick installation in the game.");
         string baseDir = kind == ChartExportKind.ChartFolder ? destination : Path.GetDirectoryName(destination)!;
-        if (kind == ChartExportKind.ChartFolder && (Directory.Exists(destination) || File.Exists(destination)))
+        NoLinks(destination);
+        if (kind == ChartExportKind.ChartFolder && (File.Exists(destination) || !overwrite && Directory.Exists(destination)))
             throw new IOException("Chart Folder destination already exists. Choose a new folder name.");
         foreach (var item in files.Values)
         {
             string output = Path.GetFullPath(item.Name, baseDir);
             // ProtectedPaths 是当前会话正在使用的源文件；导出绝不能就地覆盖它们。
             if (input.ProtectedPaths.Any(p => output.Equals(p, PathComparison))) throw new IOException("Refusing to overwrite a source file: " + output);
-            if (kind != ChartExportKind.ChartFolder && (File.Exists(output) || Directory.Exists(output)))
-                throw new IOException("Output already exists; choose a new filename: " + output);
+            NoLinks(output);
+            ExportFiles.Validate(output, overwrite);
         }
-        return new(kind, destination, files.Values.OrderBy(f => f.Name, StringComparer.Ordinal), warnings);
+        return new(kind, destination, files.Values.OrderBy(f => f.Name, StringComparer.Ordinal), warnings, overwrite);
     }
 
-    /// <summary>先全部写入暂存目录并逐项校验字节，再发布。已存在的文件永不覆盖。</summary>
+    /// <summary>先暂存并校验全部字节，再发布；覆盖时备份旧文件，失败则回滚。</summary>
     public static void Write(ChartExportPlan plan, CancellationToken cancellation = default, Action<string>? progress = null)
     {
         bool folder = plan.Kind == ChartExportKind.ChartFolder;
@@ -218,7 +220,11 @@ public static class ChartExport
         Directory.CreateDirectory(parent); NoLinks(parent);
         string stage = Path.Combine(parent, ".kuroaki-export-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(stage);
-        var committed = new List<string>();
+        var committed = new List<(string Path, ChartExportPlan.Item Item)>();
+        var backups = new Dictionary<string, string>();
+        var createdDirectories = new List<string>();
+        string backupRoot = Path.Combine(parent, ".kuroaki-export-backup-" + Guid.NewGuid().ToString("N"));
+        bool succeeded = false;
         try
         {
             for (int i = 0; i < plan.Files.Count; i++)
@@ -247,36 +253,76 @@ public static class ChartExport
                     throw new IOException("Source changed while exporting; no output committed: " + item.Name);
             }
             cancellation.ThrowIfCancellationRequested();
-            if (folder)
+            if (folder && !Directory.Exists(plan.Destination))
             {
-                // 同一文件系统内的重命名：已存在的目录既不会被合并，也不会被删除。
+                NoLinks(plan.Destination);
                 Directory.Move(stage, plan.Destination);
             }
             else
             {
+                if (folder && !plan.Overwrite) throw new IOException("Chart Folder destination already exists.");
+                string root = folder ? plan.Destination : parent;
                 foreach (var item in plan.Files)
                 {
-                    string target = Path.Combine(parent, item.Name);
-                    if (File.Exists(target) || Directory.Exists(target)) throw new IOException("Output appeared during export: " + target);
+                    string target = Path.Combine(root, item.Name);
+                    NoLinks(target); ExportFiles.Validate(target, plan.Overwrite);
                 }
-                // 两个文件无法一起原子提交。失败时只回滚本次新建的输出。
+                // 已有目录按文件合并，不删除未包含在本次计划中的文件。
                 foreach (var item in plan.Files)
                 {
-                    string target = Path.Combine(parent, item.Name);
-                    File.Move(Path.Combine(stage, item.Name), target, false); committed.Add(target);
+                    progress?.Invoke($"Publishing {committed.Count + 1}/{plan.Files.Count}: {item.Name}");
+                    cancellation.ThrowIfCancellationRequested();
+                    string target = Path.Combine(root, item.Name);
+                    NoLinks(target);
+                    ExportFiles.Validate(target, plan.Overwrite);
+                    var missing = new Stack<string>();
+                    for (string? dir = Path.GetDirectoryName(target); dir != null && !Directory.Exists(dir); dir = Path.GetDirectoryName(dir))
+                        missing.Push(dir);
+                    while (missing.TryPop(out var dir)) { Directory.CreateDirectory(dir); createdDirectories.Add(dir); }
+                    if (plan.Overwrite && File.Exists(target))
+                    {
+                        Directory.CreateDirectory(backupRoot);
+                        string backup = Path.Combine(backupRoot, backups.Count.ToString());
+                        File.Move(target, backup, false);
+                        backups.Add(target, backup);
+                    }
+                    // 移走旧文件后仍使用 no-overwrite，避免覆盖提交期间外部新建的文件。
+                    File.Move(Path.Combine(stage, item.Name), target, false);
+                    committed.Add((target, item));
                 }
             }
+            succeeded = true;
         }
-        catch
+        catch (Exception failure)
         {
-            foreach (string path in committed)
+            var rollbackErrors = new List<Exception>();
+            foreach (var (path, item) in committed.AsEnumerable().Reverse())
             {
-                // 绝不删除本导出器创建后又被其它进程改动过的文件：哈希不符就原样留下。
-                var item = plan.Files.First(f => Path.GetFileName(path) == f.Name);
-                try { if (File.Exists(path) && HashFile(path) == item.Sha256) File.Delete(path); } catch (IOException) { }
+                try
+                {
+                    if (File.Exists(path) && HashFile(path) == item.Sha256) File.Delete(path);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { rollbackErrors.Add(ex); }
             }
+            foreach (var (target, backup) in backups)
+            {
+                try { File.Move(backup, target, false); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { rollbackErrors.Add(ex); }
+            }
+            foreach (string dir in createdDirectories.AsEnumerable().Reverse())
+            {
+                try { if (!Directory.EnumerateFileSystemEntries(dir).Any()) Directory.Delete(dir); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { rollbackErrors.Add(ex); }
+            }
+            if (rollbackErrors.Count > 0)
+                throw new AggregateException("Export failed; recovery files retained at " + backupRoot, new[] { failure }.Concat(rollbackErrors));
             throw;
         }
-        finally { if (Directory.Exists(stage)) Directory.Delete(stage, true); }
+        finally
+        {
+            if (Directory.Exists(stage)) Directory.Delete(stage, true);
+            if (Directory.Exists(backupRoot) && (succeeded || !Directory.EnumerateFileSystemEntries(backupRoot).Any()))
+                Directory.Delete(backupRoot, true);
+        }
     }
 }

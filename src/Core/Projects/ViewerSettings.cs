@@ -33,6 +33,8 @@ public sealed class ViewerSettings
     /// true = 始终 follow，平移只是暂时的，松手后仍然滑回播放头。缩放和跳转都不算手动平移。
     /// </summary>
     public bool AlwaysFollow { get; set; }
+    /// <summary>所有导出共用的同名文件覆盖开关，默认关闭；不影响工程保存。</summary>
+    public bool OverwriteExports { get; set; }
     public string UiTheme { get; set; } = "Nekomiya";
     public static readonly string[] UiThemes = ["Nekomiya", "Scarlet", "Kuroaki"];
     public static string ValidTheme(string? value) => UiThemes.FirstOrDefault(x => string.Equals(x, value, StringComparison.OrdinalIgnoreCase)) ?? "Nekomiya";

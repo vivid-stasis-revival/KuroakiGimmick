@@ -36,6 +36,9 @@ public sealed class VideoExport : IDisposable
     public VideoExport(Canvas c, SceneRenderer r, Session s, ExportOptions options)
     {
         options.Validate();
+        if (s.Project.Audio != null && System.IO.Path.GetFullPath(options.Path).Equals(
+            System.IO.Path.GetFullPath(s.Project.Audio), StringComparison.OrdinalIgnoreCase))
+            throw new IOException("Refusing to overwrite the source audio.");
         canvas = c;
         renderer = r;
         session = s;
@@ -173,8 +176,8 @@ public sealed class VideoExport : IDisposable
             {
                 throw new IOException(stderr.GetAwaiter().GetResult());
             }
-            // overwrite: false —— 导出期间若目标位置出现同名文件，宁可失败也不覆盖。
-            File.Move(temporary, Options.Path, false);
+            // 编码及混流全部完成后才替换目标；取消或失败时原视频保持完整。
+            ExportFiles.Publish(temporary, Options.Path, Options.Overwrite);
             finalized = true;
             Completed = true;
         }
