@@ -161,7 +161,9 @@ public sealed partial class Viewer
         if (editor != null && editorBuild == null && editor.Revision != renderedRevision && !Busy && editDrag == null && !ImageGestureActive)
         {
             compilingDocument = editor; compilingRevision = editor.Revision;
-            string text = editor.Vsm.Text, imageText = editor.Images.Text, imageRoot = editor.Images.ResourceRoot;
+            // 实时预览和最终保存/导出必须消费同一份 canonical VSM；否则 inspector 已显示 14.125，
+            // renderer 仍可能从未规范化源文本重新读回 14.1250138333。
+            string text = editor.Vsm.NormalizedText, imageText = editor.Images.Text, imageRoot = editor.Images.ResourceRoot;
             var windows = editor.CompiledWindows(); var p = editor.Project.Copy();
             var textSources = editor.TextSources.ToDictionary(x => x.Key, x => x.Value);
             p.RenderWidth = Current.Project.RenderWidth; p.PreviewVolume = Current.Project.PreviewVolume;
