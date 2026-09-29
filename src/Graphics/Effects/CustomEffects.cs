@@ -437,7 +437,7 @@ public sealed class CustomEffects : IDisposable
         {
             // 文档里的 FX_red 用的就是同一个 colourise 滤镜。外部房间 profile 会给出它真实的深度；
             // 没有 profile 时保持已报告的顺序。
-            if (session.Fx.Find("FX_red") == null && M("fx_red") >= .5)
+            if (session.Fx.Find("FX_red") == null && RoomFxState.Enabled(M("fx_red")))
             {
                 var target = Next();
                 canvas.Pass(target, input, colourise, s =>

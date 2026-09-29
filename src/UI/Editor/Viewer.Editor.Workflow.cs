@@ -31,7 +31,8 @@ public sealed partial class Viewer
     bool WorkflowVisible => workflow.Length > 0 || workflowAlpha > .001f;
 
     /// <summary>新事件的插入拍：有目标标记时用标记的拍，否则用播放头位置（秒）换算出的拍。</summary>
-    double InsertionBeat => editor?.Markers.FirstOrDefault(m => m.Id == activeMarker)?.Beat ?? Current.Timeline.Bpm.Beat(transport.Position);
+    double InsertionBeat => VsmDocument.Canonical(editor?.Markers.FirstOrDefault(m => m.Id == activeMarker)?.Beat
+        ?? Current.Timeline.Bpm.Beat(transport.Position));
     /// <summary>E 键：在当前播放位置打一个标记并设为目标，把插入点钉在这里，直到 CLEAR TARGET 为止。拖拽进行中不受理。</summary>
     void MarkTimestamp()
     {

@@ -137,7 +137,7 @@ public sealed partial class Viewer
             editor.SetTextProperties(selectedTextId, textAt, values, Current.Timeline.Bpm, duration, textEase);
             if (duration > 0)
             {
-                var clip = editor.Vsm.Clips.First(c => c.Name == TextValueSampler.Name(values.Keys.First(), selectedTextId) && c.Beat == textAt);
+                var clip = editor.Vsm.Clips.First(c => c.Name == TextValueSampler.Name(values.Keys.First(), selectedTextId) && VsmDocument.NearlyEqual(c.Beat, textAt));
                 SelectTextAnimation(clip, true);
             }
         }

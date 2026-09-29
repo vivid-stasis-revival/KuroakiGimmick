@@ -71,7 +71,7 @@ public static class ImageObjectModel
                 return "Time-linked layer: use raw events for transforms.";
             // 斜切不为 0 时画出来的是平行四边形，而手柄与命中测试都基于 Matrix3x2 的轴对齐矩形，拖动结果必然和画面不符。
             if (id == item.Id && (property is "imgskewx" or "imgskewy") &&
-                (!Fixed(c.From) || !Fixed(c.To) || VsmDocument.Number(c.From) != 0 || VsmDocument.Number(c.To) != 0))
+                (!Fixed(c.From) || !Fixed(c.To) || !VsmDocument.NearlyEqual(VsmDocument.Number(c.From), 0) || !VsmDocument.NearlyEqual(VsmDocument.Number(c.To), 0)))
                 return "Skewed image: use raw events for transforms.";
         }
         return "";

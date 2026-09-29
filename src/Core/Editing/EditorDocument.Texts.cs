@@ -156,9 +156,9 @@ public sealed partial class EditorDocument
             {
                 string name = TextValueSampler.Name(kind, id);
                 var channel = Vsm.Clips.Where(c => c.Name == name).ToArray();
-                if (channel.Count(c => c.Beat == selected.Beat) > 1 || channel.Any(c => c.RepeatEnd != null || c.From is "_" or "573613" || c.To is "_" or "573613"))
+                if (channel.Count(c => VsmDocument.NearlyEqual(c.Beat, selected.Beat)) > 1 || channel.Any(c => c.RepeatEnd != null || c.From is "_" or "573613" || c.To is "_" or "573613"))
                     throw new InvalidOperationException("Conflicting or dynamic text channel: use its raw events.");
-                var candidates = channel.Where(c => c.Beat == selected.Beat && c.Duration == selected.Duration && c.Ease == selected.Ease).ToArray();
+                var candidates = channel.Where(c => VsmDocument.NearlyEqual(c.Beat, selected.Beat) && VsmDocument.NearlyEqual(c.Duration, selected.Duration) && c.Ease == selected.Ease).ToArray();
                 if (candidates.Length != 1 || candidates[0].RepeatEnd != null || candidates[0].Proxy != -1 ||
                     candidates[0].From is "_" or "573613" || candidates[0].To is "_" or "573613")
                     throw new InvalidOperationException("This property is not a simple channel of the selected animation. Use KEY HERE or raw events.");

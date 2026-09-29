@@ -212,6 +212,8 @@ public sealed partial class SceneRenderer : IDisposable
                 CompositeField(session, time, true, clearFooter: false);
             }
         }
+        // 到这里 scene 已包含 PAUSE / score、固定 HUD 与全部 VSP 图片，因此 fx_red 等公共后处理会覆盖它们；
+        // combo / judgement 刻意留在 Final 之后的 GUI pass，不受 fx_red 影响。这个边界同时是 #9 / #11 的契约。
         // 后处理的回退优先级：关闭 effects 时只做一次 Basic 复制；对象有 post mode 时由对象链负责，
         // 并按 UseCommonPostProcessing 决定是否再套一层公共链；两者都没有时同样退回 Basic 复制。
         // 任何一条分支都必须把 scene 写进 Final，不能让 Final 留着上一帧内容。

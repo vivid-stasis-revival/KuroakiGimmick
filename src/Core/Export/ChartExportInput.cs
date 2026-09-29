@@ -27,12 +27,14 @@ public sealed record ChartExportInput(ViewerProject Project, string? Images, str
         foreach (var pair in windows.Root) config[pair.Key] = pair.Value?.DeepClone();
         // 事件已经内嵌，旧的 FILE 外链必须移除，否则游戏会去读那份过期文件。
         if (config[WindowMotionConfig.EventsKey] is JsonArray) config.Remove("ECG_WINDOW_MOVEMENT_FILE");
-        var check = new Chart(); VsmReader.ReplaceModsText(check, document.Vsm.Text, "export.vsm");
+        string normalizedVsm = document.Vsm.NormalizedText;
+        byte[] normalizedVsmBytes = document.Vsm.NormalizedBytes();
+        var check = new Chart(); VsmReader.ReplaceModsText(check, normalizedVsm, "export.vsm");
         // 结构化编辑在提交时已校验过。导入的不透明行必须能逐字导出：
-        // 报出它们的解析提示，而不是悄悄删掉。
-        if (document.Vsm.Bytes().LongLength > 64L * 1024 * 1024)
+        // 报出它们的解析提示，而不是悄悄删掉。可解析事件则统一 canonicalize，成品里不保留浮点运算尾巴。
+        if (normalizedVsmBytes.LongLength > 64L * 1024 * 1024)
             throw new InvalidDataException("VSM exceeds 64 MiB.");
-        return new(project, document.Images.HasContent ? document.Images.SourcePath : null, document.Vsm.Text, document.Vsm.Bytes(),
+        return new(project, document.Images.HasContent ? document.Images.SourcePath : null, normalizedVsm, normalizedVsmBytes,
             config.ToJsonString(ViewerProject.Json), document.ImportedPaths.Concat(new[] { project.Chart, project.Gimmick, project.WindowMotion }
                 .Where(p => p != null).Select(p => Path.GetFullPath(p!))).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
             session.Chart.Diagnostics.Concat(check.Diagnostics).Select(d => d.Message).Distinct().ToArray(),

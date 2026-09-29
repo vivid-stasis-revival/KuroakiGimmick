@@ -179,8 +179,11 @@ public sealed partial class EditorDocument
         string windowsPath = Path.Combine(working, stem + ".editor_cgmk_config.json");
         var outputWindows = CompiledWindows().AsInlineGameConfig();
         var p = Project.Copy(); p.EditorMarkers = markers.ToList(); p.Gimmick = vsmPath; p.WindowMotion = windowsPath;
+        // 保存/导出的 VSM 一律使用 canonical 作者数值；编辑会话本身仍保留未触碰源行，避免无关改动污染撤销历史。
+        string normalizedVsm = Vsm.NormalizedText;
+        byte[] normalizedVsmBytes = Vsm.NormalizedBytes();
         // 用正式的读取器把生成的 VSM 文本再解一遍，任何源文件落盘之前先确认它读得回来；解析成功不等于渲染成功，但解析失败一定不该写出去。
-        var check = new Chart(); VsmReader.ReplaceModsText(check, Vsm.Text, vsmPath);
+        var check = new Chart(); VsmReader.ReplaceModsText(check, normalizedVsm, vsmPath);
         if (check.Mods.Count == 0 && Vsm.Clips.Any()) throw new InvalidDataException("Generated VSM could not be read.");
         var files = new Dictionary<string, byte[]>();
         foreach (string file in ProjectBackups.LegacyFiles(path))
@@ -218,7 +221,7 @@ public sealed partial class EditorDocument
         jsonProject.FxProfile = Rel(p.FxProfile); jsonProject.GameUi = Rel(p.GameUi); jsonProject.GimmickAssets = Rel(p.GimmickAssets);
         jsonProject.GimmickDefinition = Rel(p.GimmickDefinition);
         jsonProject.TextFiles = p.TextFiles.ToDictionary(x => x.Key, x => Rel(x.Value)!);
-        files[vsmPath] = Vsm.Bytes();
+        files[vsmPath] = normalizedVsmBytes;
         files[windowsPath] = Encoding.UTF8.GetBytes(outputWindows.Serialize());
         files[path] = Encoding.UTF8.GetBytes(AppJson.Serialize(jsonProject, ViewerProject.Json));
         // 写任何一个文件之前把三条禁止项全查一遍：不许盖掉参考谱面；不许盖掉编辑器之外被改过的文件；不许盖掉不是本会话写出的同名伴生文件。

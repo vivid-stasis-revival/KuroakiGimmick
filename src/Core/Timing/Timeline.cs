@@ -54,6 +54,13 @@ public sealed partial class Timeline
             // 拍 → 秒：起点查 BPM map，时长按事件起点所在分段的 BPM 折算。
             // 与原版一致，跨变速点的 tween 不重新积分，整段沿用起点的 BPM。
             double start = Bpm.Time(e.Beat), span = e.Duration * 60 / Bpm.BpmAtBeat(e.Beat);
+            if (e.Name is "fx_underwater" or "fx_chroma_distort")
+            {
+                bool lowFrom = e.From != 573613 && e.From < .01, lowTo = e.To != 573613 && e.To < .01;
+                if (lowFrom || lowTo)
+                    c.Diagnostics.Add(new("fx", e.SourceLine,
+                        $"{e.Name}: values below 0.01 black out the original game; preview and saved/exported VSM clamp them to 0.01."));
+            }
             if (e.Name is "lr_slash" or "lr_slash_color")
             {
                 if (c.ObjectName != "obj_custom_gimmick")
