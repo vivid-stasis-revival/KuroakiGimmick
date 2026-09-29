@@ -42,6 +42,23 @@ public sealed class VspDocument
         foreach (Match m in Regex.Matches(Text, @"(?m)^\s*(?:static|animated)\s*,\s*([^,\r\n]+)")) ids.Add(m.Groups[1].Value.Trim());
         return ids;
     }
+    /// <summary>
+    /// 暂存图片的原始文件名快照。Chart Folder 导出只拿这份不可变映射恢复用户拖进来的名字，
+    /// 不把 image-imports/0.png 或 .editor-assets/哈希.png 之类编辑器内部路径泄漏到成品 VSP。
+    /// </summary>
+    public IReadOnlyDictionary<string, string> OriginalResourceNames()
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in staged) result[Path.GetFullPath(pair.Key)] = OriginalFileName(pair.Value);
+        return result;
+    }
+    static string OriginalFileName(ImageImportBatch.Image image)
+    {
+        string name = Path.GetFileName(image.OriginalPath);
+        if (string.IsNullOrWhiteSpace(name) || name.IndexOfAny([',', '\r', '\n']) >= 0)
+            throw new IOException("Original image filename cannot be represented by VSP: " + image.OriginalPath);
+        return name;
+    }
     /// <summary>由文件名生成合法且唯一的 ID：非字母数字替换为下划线、截到 40 字符、数字开头加前缀，冲突时追加序号。</summary>
     public string UniqueId(string original, IEnumerable<string> reserved)
     {
@@ -240,15 +257,20 @@ public sealed class VspDocument
     {
         return Rewrite(Text, token => map(Path.GetFullPath(token.Replace('\\', Path.DirectorySeparatorChar), ResourceRoot)));
     }
-    /// <summary>非声明行原样返回；改写结果含逗号或换行就抛错，因为 VSP 是无转义的 CSV，写进去等于把这行拆成两个字段。</summary>
-    public static string Rewrite(string text, Func<string, string> map)
+    /// <summary>非声明行原样返回；改单元格时同时提供图片 ID，导出可用它给旧版哈希资源生成可读的回退文件名。</summary>
+    public static string Rewrite(string text, Func<string, string> map) => Rewrite(text, (_, token) => map(token));
+    /// <summary>
+    /// 非声明行原样返回；改写结果含逗号或换行就抛错，因为 VSP 是无转义的 CSV，写进去等于把这行拆成两个字段。
+    /// map 的第一个参数是图片 ID，第二个参数是原路径 token。
+    /// </summary>
+    public static string Rewrite(string text, Func<string, string, string> map)
     {
         return Regex.Replace(text, @"[^\r\n]+", m =>
         {
             string[] cells = m.Value.Split(',');
             if (cells[0].Trim() is not ("static" or "animated")) return m.Value;
             if (cells.Length < (cells[0].Trim() == "animated" ? 5 : 4)) throw new InvalidDataException("Malformed VSP image declaration.");
-            string token = cells[2], result = map(token.Trim()).Replace('\\', '/');
+            string id = cells[1].Trim(), token = cells[2], result = map(id, token.Trim()).Replace('\\', '/');
             if (result.Contains(',') || result.Contains('\n') || result.Contains('\r')) throw new IOException("Image path cannot be represented by VSP CSV.");
             int left = token.Length - token.TrimStart().Length, right = token.Length - token.TrimEnd().Length;
             cells[2] = token[..left] + result + (right > 0 ? token[^right..] : "");
@@ -266,10 +288,14 @@ public sealed class VspDocument
             string target = relocated?.GetValueOrDefault(path) ?? path;
             if (staged.TryGetValue(path, out var image))
             {
-                target = Path.Combine(directory, stem + ".editor-assets", image.Sha256 + Path.GetExtension(path));
+                // 工程内部仍放 editor-assets，但文件名保留用户拖入时的原名。这样工程重开后导出仍能恢复
+                // dawn_hd_gloom.png，而不是只能看到 SHA-256 或 image-imports/0.png。
+                target = Path.Combine(directory, stem + ".editor-assets", OriginalFileName(image));
                 byte[] data = File.ReadAllBytes(path);
                 string sha = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(data)).ToLowerInvariant();
                 if (sha != image.Sha256) throw new IOException("Staged image changed: " + image.OriginalPath);
+                if (files.TryGetValue(target, out var prior) && !prior.AsSpan().SequenceEqual(data))
+                    throw new IOException("Two imported images use the same original filename with different contents: " + Path.GetFileName(target));
                 files[target] = data;
             }
             return Path.GetRelativePath(directory, target);

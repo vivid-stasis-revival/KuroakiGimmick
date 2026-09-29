@@ -144,7 +144,8 @@ public sealed partial class Viewer
                 chartExportCancellation?.Dispose(); chartExportCancellation = new();
                 var token = chartExportCancellation.Token;
                 bool overwrite = preferences.OverwriteExports;
-                chartExportPrepare = Task.Run(() => ChartExport.Prepare(input, kind, paths[0], token, overwrite), token);
+                bool putImagesInAssets = preferences.PutImageGimmickIntoAssetsFolder;
+                chartExportPrepare = Task.Run(() => ChartExport.Prepare(input, kind, paths[0], token, overwrite, putImagesInAssets), token);
                 message = L.Get("Preparing export...");
             });
         }

@@ -2,6 +2,7 @@
   "Choose an export type, then select an output path.": "选择导出类型，然后选择输出路径。",
   "Chart Folder: matching files are replaced; other files are kept.": "谱面文件夹：替换同名文件，保留其他文件。",
   "Overwrite exports": "允许导出覆盖文件",
+  "Put Image Gimmick Into Assets folder": "将图片 Gimmick 放入 Assets 文件夹",
   "OPEN PROJECT": "打开工程",
   "OPEN PROJECT / FILE": "打开工程 / 文件",
   "RECENT PROJECTS": "最近工程",
