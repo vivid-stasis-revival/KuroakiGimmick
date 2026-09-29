@@ -5,6 +5,13 @@ namespace KuroakiGimmick.Core;
 /// </summary>
 public sealed partial class Timeline
 {
+    /// <summary>
+    /// 这两个原版 filter 的 0/负值会把画面打黑。K/G 作为作者工具把运行值钳到安全下限，
+    /// 源文件仍保留作者输入并由构造阶段给出 warning。其它连续 mod 不在这里统一舍入。
+    /// </summary>
+    static double SafeModValue(string name, double value) =>
+        name is "fx_underwater" or "fx_chroma_distort" ? Math.Max(.01, value) : value;
+
     /// <summary>读取基础轨道后应用声明式别名、逐帧覆盖与回调淡入；不修改时间轴状态。</summary>
     public double Get(string name, double t, int proxy = -1)
     {
@@ -16,7 +23,7 @@ public sealed partial class Timeline
             // 别名与逐帧输出绑定在加载时已按 DAG 校验过，这里的递归不会成环爆栈。
             if (definition.ModAliases.TryGetValue(name, out var alias))
             {
-                return Get(alias, t);
+                return SafeModValue(name, Get(alias, t));
             }
             if (frameBindings.TryGetValue(name, out var bindings))
             {
@@ -26,7 +33,7 @@ public sealed partial class Timeline
                 {
                     if (beat > binding.StartBeat && beat < binding.EndBeat)
                     {
-                        return binding.Value.Value(this, t);
+                        return SafeModValue(name, binding.Value.Value(this, t));
                     }
                 }
             }
@@ -35,23 +42,23 @@ public sealed partial class Timeline
             {
                 if (!firstCallbacks.TryGetValue(fade.Callback, out double start) || t < start)
                 {
-                    return fade.From;
+                    return SafeModValue(name, fade.From);
                 }
                 // fade 的 Duration 与 t 都是秒，不是拍：这里不经过 BPM map。
                 double completion = start + fade.Duration;
                 if (t < completion)
                 {
-                    return fade.From + (fade.To - fade.From) * Easings.Eval(fade.Ease, (t - start) / fade.Duration);
+                    return SafeModValue(name, fade.From + (fade.To - fade.From) * Easings.Eval(fade.Ease, (t - start) / fade.Duration));
                 }
                 // 隐式的房间写入会盖掉更早、已经结束的轨道，但盖不掉更晚或仍在进行中的轨道。
                 if (list == null || !list.Any(segment => segment.Time <= t && (segment.Time >= completion
                     || segment.Time + segment.Duration > completion)))
                 {
-                    return fade.To;
+                    return SafeModValue(name, fade.To);
                 }
             }
         }
-        return v;
+        return SafeModValue(name, v);
     }
 
     /// <summary>二分选择已经开始的最后一个事件；同一时间的后声明事件覆盖先声明事件。</summary>

@@ -146,7 +146,7 @@ public static class ModCatalog
             "parttimer" => 2,
             "fx_posterize" => 32,
             "fx_particleglow" => .5,
-            "fx_underwater" => .01,
+            "fx_underwater" or "fx_chroma_distort" => .01,
             "particle_alpha" or "pburstspeed" => 1,
             "plaudite_jacket" => 11,
             "fx_contrast" or "fx_red_intensity" or "fx_hue_saturation" or "fx_colorise_col_alpha" or "sinp" or "tanp" or "rotdir" => 1,

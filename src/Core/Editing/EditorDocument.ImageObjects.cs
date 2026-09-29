@@ -71,7 +71,7 @@ public sealed partial class EditorDocument
                 CheckImageSpan(name, beat, beat, map, at.Select(c => c.Id).ToHashSet());
                 var key = keys.FirstOrDefault(); var next = outgoing.FirstOrDefault();
                 // 关键帧的终值与出发动画的起值本来就对不上，说明作者是故意要一个跳变，这里不替他决定该改哪一边。
-                if (key != null && next != null && VsmDocument.Number(key.To) != VsmDocument.Number(next.From))
+                if (key != null && next != null && !VsmDocument.NearlyEqual(VsmDocument.Number(key.To), VsmDocument.Number(next.From)))
                     throw new InvalidOperationException("Initial pose and animation intentionally differ: " + name + ". Edit START instead.");
                 string value = VsmDocument.N(pose.Get(p));
                 if (key != null) Vsm.Replace(key with { From = value, To = value });
@@ -159,8 +159,8 @@ public sealed partial class EditorDocument
                 if (!linkNeighbors || c.Duration <= 0) continue;
                 // 只有唯一一条、本来就与旧值严丝合缝相接的邻居才跟着改。命中多条或值对不上，说明那处跳变是作者有意为之，不动。
                 var neighbor = Vsm.Clips.Where(n => n.Name == c.Name && !ids.Contains(n.Id) && ImageObjectModel.Simple(n) &&
-                    (end ? Math.Abs(n.Beat - group.End(map)) < 1e-9 && VsmDocument.Number(n.From) == VsmDocument.Number(before)
-                        : Math.Abs(map.Beat(map.Time(n.Beat) + n.Duration * 60 / map.BpmAtBeat(n.Beat)) - c.Beat) < 1e-9 && VsmDocument.Number(n.To) == VsmDocument.Number(before))).ToArray();
+                    (end ? Math.Abs(n.Beat - group.End(map)) < 1e-9 && VsmDocument.NearlyEqual(VsmDocument.Number(n.From), VsmDocument.Number(before))
+                        : Math.Abs(map.Beat(map.Time(n.Beat) + n.Duration * 60 / map.BpmAtBeat(n.Beat)) - c.Beat) < 1e-9 && VsmDocument.NearlyEqual(VsmDocument.Number(n.To), VsmDocument.Number(before)))).ToArray();
                 if (neighbor.Length == 1)
                 {
                     var n = neighbor[0];

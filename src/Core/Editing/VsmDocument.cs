@@ -150,16 +150,23 @@ public sealed partial class VsmDocument
     }
 
     /// <summary>
-    /// VSM 写回使用 shortest round-trip 格式。<c>R</c> 仍保证再次解析得到同一个 double，
-    /// 但不会像 G17 那样把 1.1 展开成 1.1000000000000001 之类的二进制浮点尾巴。
+    /// VSM 是给人维护的作者格式，不是 double 的二进制状态转储。所有由编辑器生成/改写的数字统一压到
+    /// 12 位有效数字：足以覆盖拍号、坐标和 shader 参数的实际精度，同时消掉
+    /// 0.30000000000000004 / 7.9125085600016067 这类运算尾巴。-0 也统一写成 0。
     /// </summary>
-    public static string N(double n) => n.ToString("R", CultureInfo.InvariantCulture);
-    /// <summary>
-    /// 编辑器只负责把数值显示得像人写的数。这里不参与序列化，因此可以收掉运算产生的末位噪声，
-    /// 例如 144.49875000000003 显示为 144.49875；真正写回仍走 <see cref="N"/> 保证往返精度。
-    /// </summary>
-    public static string Ui(double n) => n.ToString("G16", CultureInfo.InvariantCulture);
-    /// <summary>编辑器显示 From / To 时也收掉旧文件里由 G17 留下的尾巴；源 token 本身不会因此被改写。</summary>
+    public static string N(double n)
+    {
+        if (!double.IsFinite(n)) throw new FormatException("A finite number is required.");
+        if (n == 0) return "0";
+        return n.ToString("G12", CultureInfo.InvariantCulture);
+    }
+    /// <summary>把一个作者数值收敛到与 VSM 最终文本完全一致的 double，避免拖拽后内存里继续带着隐藏尾巴。</summary>
+    public static double Canonical(double n) => double.Parse(N(n), NumberStyles.Float, CultureInfo.InvariantCulture);
+    /// <summary>作者时间/值的语义相等比较。用于对象匹配，绝不能再拿 UI 格式化后的 double 做裸 ==。</summary>
+    public static bool NearlyEqual(double a, double b, double epsilon = 1e-9) => Math.Abs(a - b) <= epsilon;
+    /// <summary>编辑器显示与最终 VSM 使用同一套人类可读数值规则；UI 与导出因此不会再各说各话。</summary>
+    public static string Ui(double n) => N(n);
+    /// <summary>编辑器显示 From / To 时也收掉旧文件里已有的浮点尾巴；源 token 本身不会因此被改写。</summary>
     public static string UiValue(string value)
     {
         if (value == "_") return value;
@@ -201,6 +208,89 @@ public sealed partial class VsmDocument
         byte[] body = Encoding.GetBytes(Text), result = new byte[Preamble.Length + body.Length];
         Preamble.CopyTo(result, 0); body.CopyTo(result, Preamble.Length); return result;
     }
+    /// <summary>
+    /// 成品 VSM 文本。所有能够结构化解析的七字段事件与 mpf 时间都重新写成 canonical 数字；
+    /// 注释、缩进、换行与无法识别的透明保留行完全不碰。这样旧文件里已经存在的雷霆尾巴也不会继续混进导出物。
+    /// </summary>
+    public string NormalizedText
+    {
+        get
+        {
+            var output = new StringBuilder();
+            bool perFrame = false;
+            foreach (var line in Lines)
+            {
+                string meaningful = Body(line.Text).Trim();
+                if (meaningful == "mpf")
+                {
+                    perFrame = true; output.Append(line.Text).Append(line.Ending); continue;
+                }
+                output.Append(perFrame ? NormalizedPerFrameLine(line) : NormalizedLine(line));
+            }
+            return output.ToString();
+        }
+    }
+    string NormalizedLine(Line line)
+    {
+        if (line.Event is not { } parsed) return line.Text + line.Ending;
+        var canonical = Canonicalize(parsed, true);
+        if (canonical.Name is "fx_underwater" or "fx_chroma_distort")
+        {
+            string Safe(string value) => value == "_" ? value : N(Math.Max(.01, Number(value)));
+            canonical = canonical with { From = Safe(canonical.From), To = Safe(canonical.To) };
+        }
+        return RewriteTokens(line, Fields(canonical));
+    }
+    string NormalizedPerFrameLine(Line line)
+    {
+        string body = Body(line.Text), meaningful = body.Trim();
+        if (meaningful.Length == 0 || meaningful[0] is '#' or ';' || meaningful.StartsWith("//", StringComparison.Ordinal))
+            return line.Text + line.Ending;
+        string[] raw = body.Split(',');
+        if (raw.Length != 3) return line.Text + line.Ending;
+        try
+        {
+            string[] values = [N(SourceNumber(raw[0].Trim())), N(SourceNumber(raw[1].Trim())), raw[2].Trim()];
+            return RewriteTokens(line, values);
+        }
+        catch (Exception ex) when (ex is FormatException or OverflowException)
+        {
+            return line.Text + line.Ending;
+        }
+    }
+    static string RewriteTokens(Line line, string[] values)
+    {
+        string body = Body(line.Text), suffix = line.Text[body.Length..];
+        string[] parts = body.Split(',');
+        if (parts.Length != values.Length) return line.Text + line.Ending;
+        for (int i = 0; i < parts.Length; i++)
+        {
+            string token = parts[i];
+            int left = token.Length - token.TrimStart().Length, right = token.Length - token.TrimEnd().Length;
+            parts[i] = token[..left] + values[i] + (right > 0 ? token[^right..] : "");
+        }
+        return string.Join(',', parts) + suffix + line.Ending;
+    }
+    /// <summary>按源编码/BOM 输出 canonical VSM，供保存副本与所有正式导出统一使用。</summary>
+    public byte[] NormalizedBytes()
+    {
+        byte[] body = Encoding.GetBytes(NormalizedText), result = new byte[Preamble.Length + body.Length];
+        Preamble.CopyTo(result, 0); body.CopyTo(result, Preamble.Length); return result;
+    }
+
+    /// <summary>
+    /// 结构化事件进入文档时统一收敛作者数值。From/To 只有在 normalizeValues=true 时才重写，
+    /// 普通编辑仍可保留未触碰字段的原始 token；成品导出则会把所有可解析事件彻底清理。
+    /// </summary>
+    static Clip Canonicalize(Clip c, bool normalizeValues) => c with
+    {
+        Beat = Canonical(c.Beat),
+        Duration = Canonical(c.Duration),
+        RepeatEnd = c.RepeatEnd is double end ? Canonical(end) : null,
+        RepeatStep = Canonical(c.RepeatStep),
+        From = normalizeValues && c.From != "_" ? N(Number(c.From)) : c.From,
+        To = normalizeValues && c.To != "_" ? N(Number(c.To)) : c.To
+    };
 
     /// <summary>重复区间写回时保留源文件用的是括号形式还是裸 start:end:step 形式，不统一成其中一种。</summary>
     static string[] Fields(Clip c) => [c.RepeatEnd is double end ? c.ParenthesizedRepeat
@@ -234,8 +324,8 @@ public sealed partial class VsmDocument
         int i = Lines.FindIndex(l => l.Event?.Id == next.Id);
         if (i < 0) throw new InvalidOperationException("The source event no longer exists.");
         var line = Lines[i]; var previous = line.Event!;
-        // 只对新输入的值做规范化。改时间不应该顺手把没动过的数值 token 重新格式化。
-        next = next with
+        // 拍/时长是编辑器自己算出来的，提交边界必须先 canonicalize；From/To 仍只改用户真正碰过的字段。
+        next = Canonicalize(next, false) with
         {
             From = next.From == previous.From || next.From == "_" ? next.From : N(Number(next.From)),
             To = next.To == previous.To || next.To == "_" ? next.To : N(Number(next.To))
@@ -249,11 +339,13 @@ public sealed partial class VsmDocument
         var previous = line.Event!;
         string body = Body(line.Text), suffix = line.Text[body.Length..];
         string[] parts = body.Split(','), oldFields = Fields(previous), values = Fields(next);
-        // 保留每个未修改字段，包括它原本的数值写法。
+        // 非数值字段仍按原样保留；作者数值一旦经过结构化编辑就必须与 canonical Event 保持一致。
         for (int f = 0; f < 7; f++)
         {
-            if (oldFields[f] == values[f]) continue;
             string token = parts[f];
+            // 事件一旦被编辑，已经带着二进制尾巴的旧 token 也同步收敛到 canonical 形式；
+            // 否则 Event 已经是 7.91250856，Text 却还留着 7.9125085600016067，预览重建会再次把尾巴读回来。
+            if (oldFields[f] == values[f] && token.Trim() == values[f]) continue;
             // 只替换 token 的实体部分，两侧原有的对齐空白原样保留。
             int left = token.Length - token.TrimStart().Length, right = token.Length - token.TrimEnd().Length;
             parts[f] = token[..left] + values[f] + (right > 0 ? token[^right..] : "");
@@ -268,7 +360,7 @@ public sealed partial class VsmDocument
     /// </summary>
     public void Add(Clip clip)
     {
-        clip = clip with { From = clip.From == "_" ? "_" : N(Number(clip.From)), To = clip.To == "_" ? "_" : N(Number(clip.To)) };
+        clip = Canonicalize(clip, true);
         Validate(clip);
         if (Lines.Count > 0 && Lines[^1].Ending.Length == 0) Lines[^1] = Lines[^1] with { Ending = NewLine };
         int mpf = Lines.FindIndex(line => Body(line.Text).Trim() == "mpf");
