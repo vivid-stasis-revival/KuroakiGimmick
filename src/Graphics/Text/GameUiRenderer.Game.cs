@@ -4,7 +4,7 @@ using KuroakiGimmick.Core;
 namespace KuroakiGimmick.Graphics;
 
 /// <summary>
-/// 固定游戏 HUD 的绘制。HUD 不复制进运动代理；文字和控件优先使用原版资源，图像内的文字不再绘制一次。
+/// Combo / judgement 等固定 GUI HUD。它们不进入 application proxy，并保持各自独立的显隐语义。
 /// </summary>
 // 对应 o_combodisplay、o_judgement_ingame 与 obj_judgement_display 三个独立对象。
 // 它们在原版里各自带状态（补间进度、上次判定、淡出计时），这里统一改写成"距上次判定多久"的闭式，
@@ -111,9 +111,9 @@ public sealed partial class GameUiRenderer
     /// 说明这串数字视觉上是落在 160 上的；这里直接按墨迹范围居中到 160，不去复刻 GameMaker 文字引擎的起笔偏移。
     /// y 的补间原版跟的是真实帧时间，这里换成曲目时间，否则拖动时间轴后数字会卡在补间半路。
     /// </summary>
-    void DrawCombo(Session session, double time, double alpha)
+    void DrawCombo(Session session, double time)
     {
-        if (session.Project.GameUiCombo <= 0)
+        if (session.Project.GameUiCombo <= 0 || session.Timeline.Get("hide_combo", time) != 0)
         {
             return;
         }
@@ -123,7 +123,7 @@ public sealed partial class GameUiRenderer
             return;
         }
         double y = ComboY + 3 * (1 - Easings.Eval("outQuint", SinceHit(session, time) / ComboTween));
-        SpriteText(ComboFont, text, 160 - (m.Left + m.Right) / 2, (float) y + ComboBaseline, Color.White.Alpha(alpha));
+        SpriteText(ComboFont, text, 160 - (m.Left + m.Right) / 2, (float) y + ComboBaseline, Color.White);
     }
 
     /// <summary>
@@ -131,7 +131,7 @@ public sealed partial class GameUiRenderer
     /// 这里合并成一个四档设置，因为预览面板放不下两个独立开关。
     /// 精灵档位在首次判定前是空白帧（image_index = arg0 + 1，第 0 帧是空的），所以没有判定时直接不画。
     /// </summary>
-    void DrawJudgement(Session session, double time, double alpha, string font)
+    void DrawJudgement(Session session, double time, string font)
     {
         int mode = session.Project.GameUiJudgement;
         if (mode <= 0 || session.Score.LastHit(time) == null)
@@ -139,7 +139,7 @@ public sealed partial class GameUiRenderer
             return;
         }
         double age = SinceHit(session, time), ease = Easings.Eval("outQuint", age / JudgementTween);
-        var white = Color.White.Alpha(alpha);
+        var white = Color.White;
         switch (mode)
         {
             case 1:
@@ -153,7 +153,7 @@ public sealed partial class GameUiRenderer
             default:
                 // 底部描边文字：alph 是从 13 开始按曲目时间掉的，画的时候被 draw_set_alpha 夹在 1，
                 // 所以看起来是"停 2 秒再瞬间淡掉"。draw_text_outlined 先 y - 4，draw_text_o 再 y - 1。
-                double fade = Math.Clamp(JudgementTextAlpha - JudgementTextFade * age, 0, 1) * alpha;
+                double fade = Math.Clamp(JudgementTextAlpha - JudgementTextFade * age, 0, 1);
                 if (fade <= 0)
                 {
                     return;
@@ -177,7 +177,8 @@ public sealed partial class GameUiRenderer
     public float? ComboDustOffset(Session session, double time)
     {
         Use(session.GameUi);
-        if (!session.Project.GameUiEnabled || session.Project.GameUiCombo <= 0 || current?.Data == null)
+        if (!session.Project.GameUiEnabled || session.Project.GameUiCombo <= 0 || current?.Data == null
+            || session.Timeline.Get("hide_combo", time) != 0)
         {
             return null;
         }

@@ -3,7 +3,8 @@ using KuroakiGimmick.Core;
 namespace KuroakiGimmick.Graphics;
 
 /// <summary>
-/// 固定游戏 HUD 的绘制。HUD 不复制进运动代理；文字和控件优先使用原版资源，图像内的文字不再绘制一次。
+/// 游戏 HUD 的分层绘制。PAUSE / Escape / score 可进入 application proxy；固定 HUD 与 GUI HUD 单独合成。
+/// 文字和控件优先使用原版资源，图像内的文字不再绘制一次。
 /// </summary>
 // 对应 cc Draw_0 的共用游戏 HUD。美术与度量全部来自用户自己导出的、未经修改的游戏资源包，
 // 绝不从截图里重新描一份。
@@ -111,10 +112,8 @@ public sealed partial class GameUiRenderer : IDisposable
         }
     }
 
-    /// <summary>
-    /// 固定 HUD：所有坐标都是原版 320×180 逻辑空间里的常量，不随窗口缩放改写。
-    /// 时间轴的 uialpha 统一控制整块 HUD 的透明度，为 0 时直接跳过而不是画全透明四边形。
-    /// </summary>
+    /// <summary>原版游玩区与底栏的分界。Proxy 只采样上方游玩区；底栏始终固定在屏幕上。</summary>
+    const float GameplayFooterY = 165;
     /// <summary>
     /// 在任意位置按任意倍率画一枚难度徽章，供信息卡片复用。相对位置与帧序同 HUD：
     /// 指示框在原点，LEVEL 字样偏移 (3,3)、数字偏移 (26,2)，各自在 +1 像素处先压一层三成黑作为阴影。
@@ -263,7 +262,11 @@ public sealed partial class GameUiRenderer : IDisposable
         return bounds;
     }
 
-    public void Draw(Session session, double time)
+    /// <summary>
+    /// 会进入 application proxy 的 HUD。实机行为只有 PAUSE / Escape 与两组分数跟随 proxy；
+    /// 顶部 combo、判定显示、歌曲信息与难度都不属于这一层。
+    /// </summary>
+    public void DrawProxyHud(Session session, double time)
     {
         Use(session.GameUi);
         if (!session.Project.GameUiEnabled || current?.Data == null)
@@ -278,7 +281,13 @@ public sealed partial class GameUiRenderer : IDisposable
         var white = Color.White.Alpha(alpha);
         var p = session.Project;
         string font = current.Data.Fonts.ContainsKey(p.GameUiFont) ? p.GameUiFont : "fnt_monacovs";
+
+        // sp_gameplayoverlay2024 同时包含顶部 PAUSE 与底部固定黑栏。这里只允许游玩区进入 proxy，
+        // 否则自定义 prct/prcb 把采样范围扩到底部时，歌曲信息与 footer 会被一起搬走。
+        canvas.Clip(new(0, 0, 320, GameplayFooterY));
         Sprite("sp_gameplayoverlay2024", 0, 0, 0, white);
+        canvas.Clip(null);
+
         // 原版这两块底框是常驻的，这里跟着各自的数字一起开关：设置项叫"分数显示"，只留一个空框没有意义。
         if (p.GameUiScore)
         {
@@ -291,8 +300,34 @@ public sealed partial class GameUiRenderer : IDisposable
             Text(font, Whole(session.Score.ExScore(time)), 295, 19, white, white, true);
         }
         Text(font, "Escape", 38, 4, white, white);
-        DrawCombo(session, time, alpha);
-        DrawJudgement(session, time, alpha, font);
+    }
+
+    /// <summary>
+    /// 固定在 application surface 上、但仍受 uialpha 控制的 HUD。底部黑栏本体不跟 uialpha 消失；
+    /// uialpha=0 时只隐藏歌曲信息与难度，这一点与实机一致。
+    /// </summary>
+    public void DrawFixedHud(Session session, double time)
+    {
+        Use(session.GameUi);
+        if (!session.Project.GameUiEnabled || current?.Data == null)
+        {
+            return;
+        }
+
+        // footer 是固定背景，不随 uialpha 淡出。只画底部 15px，避免再次把 PAUSE 叠到 proxy 之外。
+        canvas.Clip(new(0, GameplayFooterY, 320, 180 - GameplayFooterY));
+        Sprite("sp_gameplayoverlay2024", 0, 0, 0, Color.White);
+        canvas.Clip(null);
+
+        double alpha = session.Timeline.Get("uialpha", time);
+        if (alpha <= 0)
+        {
+            return;
+        }
+
+        var white = Color.White.Alpha(alpha);
+        var p = session.Project;
+        string font = current.Data.Fonts.ContainsKey(p.GameUiFont) ? p.GameUiFont : "fnt_monacovs";
         var info = session.Song;
         Text(font, info.Name, 3, 168, Color.Hex(0xFF006E).Alpha(alpha), Color.Hex(0xD800FF).Alpha(alpha));
         if (info.Artist.Length > 0)
@@ -315,6 +350,31 @@ public sealed partial class GameUiRenderer : IDisposable
         {
             Text(font, info.Level, 300, 168, white, white);
         }
+    }
+
+    /// <summary>
+    /// 真正的 GUI HUD：顶部 combo 与判定显示固定在屏幕上，不进入 proxy，也不受 uialpha 影响。
+    /// hide_combo 只控制 combo 本身；判定显示保持独立对象语义。
+    /// </summary>
+    public void DrawGuiHud(Session session, double time)
+    {
+        Use(session.GameUi);
+        if (!session.Project.GameUiEnabled || current?.Data == null)
+        {
+            return;
+        }
+        var p = session.Project;
+        string font = current.Data.Fonts.ContainsKey(p.GameUiFont) ? p.GameUiFont : "fnt_monacovs";
+        DrawCombo(session, time);
+        DrawJudgement(session, time, font);
+    }
+
+    /// <summary>兼容旧调用点：按新的三阶段顺序绘制完整 HUD。</summary>
+    public void Draw(Session session, double time)
+    {
+        DrawProxyHud(session, time);
+        DrawFixedHud(session, time);
+        DrawGuiHud(session, time);
     }
 
     /// <summary>换包时会被 Use 复用，所以释放后必须保持对象可继续使用：清空缓存并把 current 置空即可。</summary>
