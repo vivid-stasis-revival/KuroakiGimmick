@@ -150,21 +150,23 @@ public sealed partial class VsmDocument
     }
 
     /// <summary>
-    /// VSM 是给人维护的作者格式，不是 double 的二进制状态转储。所有由编辑器生成/改写的数字统一压到
-    /// 12 位有效数字：足以覆盖拍号、坐标和 shader 参数的实际精度，同时消掉
-    /// 0.30000000000000004 / 7.9125085600016067 这类运算尾巴。-0 也统一写成 0。
+    /// VSM 是给人维护的作者格式，不是 double 的二进制状态转储。所有作者可见数值最多保留
+    /// 4 位小数：编辑器显示、结构化编辑、工程保存、实时预览与正式导出统一使用同一表示，
+    /// 不允许 14.1250138333 / 7.9125085600016067 这类运算尾巴重新泄漏出来。-0 也统一写成 0。
     /// </summary>
     public static string N(double n)
     {
         if (!double.IsFinite(n)) throw new FormatException("A finite number is required.");
-        if (n == 0) return "0";
-        return n.ToString("G12", CultureInfo.InvariantCulture);
+        double rounded = Math.Round(n, 4, MidpointRounding.AwayFromZero);
+        if (rounded == 0) return "0";
+        return rounded.ToString("0.####", CultureInfo.InvariantCulture);
     }
     /// <summary>把一个作者数值收敛到与 VSM 最终文本完全一致的 double，避免拖拽后内存里继续带着隐藏尾巴。</summary>
     public static double Canonical(double n) => double.Parse(N(n), NumberStyles.Float, CultureInfo.InvariantCulture);
-    /// <summary>作者时间/值的语义相等比较。用于对象匹配，绝不能再拿 UI 格式化后的 double 做裸 ==。</summary>
-    public static bool NearlyEqual(double a, double b, double epsilon = 1e-9) => Math.Abs(a - b) <= epsilon;
-    /// <summary>编辑器显示与最终 VSM 使用同一套人类可读数值规则；UI 与导出因此不会再各说各话。</summary>
+    /// <summary>作者时间/值按最终 VSM 语义比较，同时保留原先的微小 epsilon 容差；绝不能再拿 raw double 做裸 ==。</summary>
+    public static bool NearlyEqual(double a, double b, double epsilon = 1e-9) =>
+        Canonical(a) == Canonical(b) || Math.Abs(a - b) <= epsilon;
+    /// <summary>编辑器显示与最终 VSM 使用同一套最多 4 位小数的作者数值规则；UI 与导出因此不会再各说各话。</summary>
     public static string Ui(double n) => N(n);
     /// <summary>编辑器显示 From / To 时也收掉旧文件里已有的浮点尾巴；源 token 本身不会因此被改写。</summary>
     public static string UiValue(string value)
