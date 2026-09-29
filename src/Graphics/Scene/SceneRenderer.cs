@@ -95,8 +95,8 @@ public sealed partial class SceneRenderer : IDisposable
         PrepareImages(session);
         var timeline = session.Timeline;
         double M(string n, int p = -1) => timeline.Get(n, time, p);
-        // Base Draw_64 and Custom Draw_74 both sample the complete application_surface,
-        // including PAUSE, HUD and every VSP layer. Assemble it before transforming proxies.
+        // Base Draw_64 and Custom Draw_74 sample the gameplay application surface, but not every HUD object.
+        // PAUSE / Escape / score belong to the sampled source; combo、判定与底部信息在 proxy 之后按各自层级补画。
         bool applicationProxy = session.Chart.ObjectName is "obj_base_gimmick" or "obj_custom_gimmick"
             && session.Chart.Proxies > 0 && session.Chart.Mods.Any(e => e.Proxy >= 0);
         canvas.Begin(scene, RenderWidth, RenderHeight, 320, 180, new Color(0, 0, 0));
@@ -153,13 +153,15 @@ public sealed partial class SceneRenderer : IDisposable
         bool proxyMode = !applicationProxy && session.Chart.Mods.Any(e => e.Proxy >= 0);
         DrawNotes(session, time, notes);
         CompositeField(session, time, proxyMode, clearFooter: session.NativeGimmick.Data?.ClearProxyFooter ?? true);
-        // 游戏 HUD 位于源画面的游玩轨道之上；Base / Custom 随完整画面一起采样。
-        // 整组画在自己的一遍里，使 hom 只对 HUD 淡出一次，且不会把 PAUSE/标题像素
-        // 复制进特殊原生对象的移动 proxy；全局后处理仍然作用于它。
+        // Base / Custom 只把 PAUSE / Escape / score 放进 application proxy。
+        // 其它对象保持固定：非 application proxy 仍在这里按旧顺序绘制；application proxy 稍后补画。
         canvas.Begin(field, RenderWidth, RenderHeight, 320, 180, new(0, 0, 0, 0));
-        gameUi.Draw(session, time);
-        DrawComboParticles(session, time);
-        nativeSequence.Hud(session, time);
+        gameUi.DrawProxyHud(session, time);
+        if (!applicationProxy)
+        {
+            gameUi.DrawFixedHud(session, time);
+            nativeSequence.Hud(session, time);
+        }
         canvas.Flush();
         canvas.Begin(scene, RenderWidth, RenderHeight, 320, 180);
         canvas.Quad(field.Texture, new(0, 0, 320, 180), Color.White.Alpha(proxyMode ? 1 - M("hom") : 1), shader : fieldComposite);
@@ -167,7 +169,7 @@ public sealed partial class SceneRenderer : IDisposable
         // 优先级 >= 1000 的图片可以同时盖住音符与固定 HUD。
         // 它们仍然走原本的 proxy 变换，不要把谱面美术（包括伪造的 PAUSE/标题图片）
         // 变成固定在屏幕上的覆盖层。
-        if (session.Images.Items.Any(item => item.LayerPriority >= 1000))
+        if (!applicationProxy && session.Images.Items.Any(item => item.LayerPriority >= 1000))
         {
             canvas.Begin(field, RenderWidth, RenderHeight, 320, 180, new(0, 0, 0, 0));
             DrawImages(session, time, 1000, double.PositiveInfinity, field);
@@ -184,11 +186,31 @@ public sealed partial class SceneRenderer : IDisposable
         canvas.Flush();
         if (applicationProxy)
         {
-            // field is now an opaque snapshot of the complete scene. Clear the destination
-            // before copying side strips/proxies so the untransformed source cannot leak through.
+            // field 现在只包含允许随 proxy 移动的 application source。清空目标后重建固定侧边与 proxy，
+            // 防止未变换的中央轨道泄漏出来。
             canvas.Pass(field, scene.Texture, canvas.Basic);
             canvas.Begin(scene, RenderWidth, RenderHeight, 320, 180, Color.Hex(0));
             CompositeField(session, time, true, clearFooter: true);
+
+            // Combo / judgement 属于 Draw GUI，留到 Final；歌曲信息、难度与 sequence HUD 仍参加后处理，
+            // 但不进入 proxy。保留原来 fixed HUD 对 hom 的淡出语义。
+            canvas.Begin(scene, RenderWidth, RenderHeight, 320, 180);
+            using (canvas.Opacity((float) Math.Clamp(1 - M("hom"), 0, 1)))
+            {
+                gameUi.DrawFixedHud(session, time);
+                nativeSequence.Hud(session, time);
+            }
+            canvas.Flush();
+
+            // 高优先级图片仍必须盖住固定 HUD，同时继续使用谱面自己的 proxy 变换。
+            // 把这一层从 application snapshot 中拿出来单独合成，避免为了保留层级又把固定 HUD 捕获回去。
+            if (session.Images.Items.Any(item => item.LayerPriority >= 1000))
+            {
+                canvas.Begin(field, RenderWidth, RenderHeight, 320, 180, new(0, 0, 0, 0));
+                DrawImages(session, time, 1000, double.PositiveInfinity, field);
+                canvas.Flush();
+                CompositeField(session, time, true, clearFooter: false);
+            }
         }
         // 后处理的回退优先级：关闭 effects 时只做一次 Basic 复制；对象有 post mode 时由对象链负责，
         // 并按 UseCommonPostProcessing 决定是否再套一层公共链；两者都没有时同样退回 Basic 复制。
@@ -218,6 +240,9 @@ public sealed partial class SceneRenderer : IDisposable
             canvas.Pass(Final, scene.Texture, canvas.Basic);
         }
         canvas.Begin(Final, RenderWidth, RenderHeight, 320, 180);
+        // o_combodisplay / judgement 属于固定 GUI，不进入 application proxy，也不跟 uialpha 淡出。
+        gameUi.DrawGuiHud(session, time);
+        DrawComboParticles(session, time);
         if (session.NativeGimmick.Data != null)
         {
             nativeGimmick.DrawGui(session, time, notes);

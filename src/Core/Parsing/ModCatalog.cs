@@ -15,7 +15,7 @@ public static class ModCatalog
         Supported.Add("playspeed");
         Supported.Add("prtrX");
         Supported.Add("prtrY");
-        // 保留这个谱面控制项但不报警告：Viewer 有意不绘制连击数字，所以它没有可见效果。
+        // o_combodisplay 的显隐开关；只控制 combo 数字及其命中钻尘，不影响独立的判定显示。
         Supported.Add("hide_combo");
         // Custom Episodes 模组注册的全局 mod：到点在谱面上浮出一段对白（story.json），
         // 不影响判定也不改任何演出参数。value1/value2 用不到，作者写 _ 即可。
