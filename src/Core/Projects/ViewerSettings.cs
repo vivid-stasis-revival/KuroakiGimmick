@@ -35,6 +35,8 @@ public sealed class ViewerSettings
     public bool AlwaysFollow { get; set; }
     /// <summary>所有导出共用的同名文件覆盖开关，默认关闭；不影响工程保存。</summary>
     public bool OverwriteExports { get; set; }
+    /// <summary>Chart Folder 导出时把 VSP 图片集中到 Assets/；默认关闭，关闭时图片直接放在谱面根目录。</summary>
+    public bool PutImageGimmickIntoAssetsFolder { get; set; }
     public string UiTheme { get; set; } = "Nekomiya";
     public static readonly string[] UiThemes = ["Nekomiya", "Scarlet", "Kuroaki"];
     public static string ValidTheme(string? value) => UiThemes.FirstOrDefault(x => string.Equals(x, value, StringComparison.OrdinalIgnoreCase)) ?? "Nekomiya";

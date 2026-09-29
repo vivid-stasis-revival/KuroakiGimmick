@@ -69,7 +69,7 @@ public static class ChartExport
     /// 任何冲突（同名映射、未允许覆盖的目标、要覆盖源文件、路径不可移植、含符号链接）都在这里抛出，让 Write 阶段没有意外。
     /// </summary>
     public static ChartExportPlan Prepare(ChartExportInput input, ChartExportKind kind, string destination,
-        CancellationToken cancellation = default, bool overwrite = false)
+        CancellationToken cancellation = default, bool overwrite = false, bool putImageGimmickIntoAssetsFolder = false)
     {
         destination = Path.GetFullPath(destination);
         var warnings = new List<string>();
@@ -147,13 +147,44 @@ public static class ChartExport
                     Bytes(name, Encoding.UTF8.GetBytes(pair.Value)); project.TextFiles.Add(pair.Key, name);
                 }
             }
-            // 源目录内的资源保持相对路径；目录外的资源改名到 resources/ 下，前缀取完整路径哈希的前 12 位以避免同名冲突。
+            // 非 VSP 资源保留原目录语义；VSP 图片单独走 ImageResource，绝不再把 .kuroaki、暂存目录或路径哈希泄漏到成品。
             string Resource(string path)
             {
                 path = Path.GetFullPath(path);
                 string name = Inside(path, root) ? Path.GetRelativePath(root, path).Replace('\\', '/') :
                     "resources/" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(path)))[..12].ToLowerInvariant() + "_" + Path.GetFileName(path);
                 Copy(name, path); return name;
+            }
+            bool legacyImageNameFallback = false;
+            static bool EditorAssetPath(string path) => path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                .Any(part => part.EndsWith(".editor-assets", StringComparison.OrdinalIgnoreCase));
+            string ImageResource(string id, string path)
+            {
+                path = Path.GetFullPath(path);
+                string fileName;
+                if (input.ImageOriginalNames != null && input.ImageOriginalNames.TryGetValue(path, out string? original) && !string.IsNullOrWhiteSpace(original))
+                    fileName = Path.GetFileName(original);
+                else
+                {
+                    fileName = Path.GetFileName(path);
+                    // 旧工程把导入图片保存成 64 位 SHA 文件名，原始文件名已经不可恢复。至少用稳定的 VSP ID 代替哈希，
+                    // 新工程则由 VspDocument.PrepareSave 保留真正的原始文件名，不会再走这里。
+                    string basis = Path.GetFileNameWithoutExtension(fileName);
+                    if (EditorAssetPath(path) && basis.Length == 64 && basis.All(Uri.IsHexDigit))
+                    {
+                        fileName = id + Path.GetExtension(fileName);
+                        legacyImageNameFallback = true;
+                    }
+                }
+                fileName = Portable(fileName);
+                if (fileName.Contains('/')) throw new IOException("Image gimmick filename must be a single file name: " + fileName);
+                string name = putImageGimmickIntoAssetsFolder ? "Assets/" + fileName : fileName;
+                try { Copy(name, path); }
+                catch (IOException ex) when (ex.Message.StartsWith("Two resources map to the same output name:", StringComparison.Ordinal))
+                {
+                    throw new IOException("Two image gimmick resources have the same original filename. Rename one before export: " + fileName, ex);
+                }
+                return name;
             }
             if (input.ImageText != null || input.Images != null)
             {
@@ -165,13 +196,19 @@ public static class ChartExport
                     if (!File.Exists(source)) throw new FileNotFoundException("VSP dependency missing.", source);
                     NoLinks(source); body = File.ReadAllText(source);
                 }
-                // VSP 里的图片路径基准：ImagePathsRelativeToVsp 时用 VSP 自身目录，否则用谱面目录。选错基准会把图片解析到别处。
+                // VSP 里的图片路径基准：ImagePathsRelativeToVsp 时用 VSP 自身目录，否则用谱面目录。成品一律重新
+                // 写成“项目根/原文件名”或“Assets/原文件名”，因此 VSP 永远只含相对谱面根的干净路径。
                 string imageRoot = input.ImageRoot ?? (input.Project.ImagePathsRelativeToVsp && input.Images != null
                     ? Path.GetDirectoryName(input.Images)! : root);
-                // 只改写路径 token，其余源文本逐字保留；重写后路径已相对新的谱面根，因此关闭 ImagePathsRelativeToVsp。
-                body = VspDocument.Rewrite(body, token => Resource(Path.GetFullPath(token.Replace('\\', Path.DirectorySeparatorChar), imageRoot)));
+                body = VspDocument.Rewrite(body, (id, token) => ImageResource(id,
+                    Path.GetFullPath(token.Replace('\\', Path.DirectorySeparatorChar), imageRoot)));
                 project.Images = stem + ".vsp"; project.ImagePathsRelativeToVsp = false;
                 Bytes(project.Images, Encoding.UTF8.GetBytes(body));
+                warnings.Add(putImageGimmickIntoAssetsFolder
+                    ? "Image gimmick resources are exported as Assets/<original filename>."
+                    : "Image gimmick resources are exported at the chart root with their original filenames.");
+                if (legacyImageNameFallback)
+                    warnings.Add("Legacy hashed editor image names were exported using their VSP image IDs because older projects did not preserve the original filenames.");
             }
             else { project.Images = null; project.ImagePathsRelativeToVsp = false; }
             string? OptionalResource(string? path) => path == null ? null : Resource(path);

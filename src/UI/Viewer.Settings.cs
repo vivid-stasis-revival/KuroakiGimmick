@@ -217,6 +217,13 @@ public sealed partial class Viewer
                 }
             }
             Text(L.Format($"Exported info cards are {CardWidth} x {CardWidth * 9 / 16}, always 16:9."), label, r.Y + 733, 11, muted, max: r.W - 60);
+            Text(L.Get("Put Image Gimmick Into Assets folder"), label + 220, r.Y + 750, 11, white, max: 160);
+            if (Button(preferences.PutImageGimmickIntoAssetsFolder ? L.Get("ON") : L.Get("OFF"), new(label + 385, r.Y + 740, 70, 30),
+                active: preferences.PutImageGimmickIntoAssetsFolder, key: "settings-image-assets-folder"))
+            {
+                preferences.PutImageGimmickIntoAssetsFolder = !preferences.PutImageGimmickIntoAssetsFolder;
+                SaveSettings();
+            }
             Text(L.Get("Overwrite exports"), label + 220, r.Y + 782, 12, white, max: 155);
             if (Button(preferences.OverwriteExports ? L.Get("ON") : L.Get("OFF"), new(label + 385, r.Y + 772, 70, 34),
                 active: preferences.OverwriteExports, key: "settings-overwrite-exports"))
@@ -230,6 +237,7 @@ public sealed partial class Viewer
                 preferences.ModalValueEditor = false;
                 preferences.AlwaysFollow = false;
                 preferences.OverwriteExports = false;
+                preferences.PutImageGimmickIntoAssetsFolder = false;
                 preferences.UiTheme = "Nekomiya";
                 preferences.CardWidth = new ViewerSettings().CardWidth;
                 SetUiLanguage(UiLanguage.Auto, persist: false);
