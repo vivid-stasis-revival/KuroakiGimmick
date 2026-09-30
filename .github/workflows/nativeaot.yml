@@ -50,7 +50,7 @@ jobs:
           should_build=false
 
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            # Manual run always builds the selected commit.
+            # Manual runs always build the selected commit.
             should_build=true
           elif [[ "$is_release" == true ]]; then
             # Stable releases always rebuild from the triggering commit,
@@ -158,7 +158,10 @@ jobs:
           test ! -f 'artifacts/${{ matrix.rid }}/KuroakiGimmick.runtimeconfig.json'
           test ! -f 'artifacts/${{ matrix.rid }}/KuroakiGimmick.deps.json'
 
-          actual="$('artifacts/${{ matrix.rid }}/${{ matrix.executable }}' --version | sed 's/^KuroakiGimmick //')"
+          actual="$(
+            'artifacts/${{ matrix.rid }}/${{ matrix.executable }}' --version \
+              | sed 's/^KuroakiGimmick //'
+          )"
 
           if [[ "$actual" != "$BUILD_LABEL" ]]; then
             echo "Version mismatch: '$actual' != '$BUILD_LABEL'" >&2
@@ -181,15 +184,17 @@ jobs:
             -LiteralPath 'artifacts/${{ matrix.rid }}' `
             -DestinationPath 'artifacts/KuroakiGimmick-${{ matrix.rid }}.zip'
 
-      # archive: false makes upload-artifact use the uploaded filename itself
-      # as the Actions artifact name, so do not set a misleading custom name.
+      # Keep the release .zip INSIDE a normal Actions artifact wrapper.
+      # download-artifact extracts only this outer wrapper, leaving the
+      # KuroakiGimmick-*.zip release archive intact for gh release upload.
       - name: Upload release archive
         uses: actions/upload-artifact@v7
         with:
+          name: nativeaot-${{ matrix.rid }}
           path: artifacts/KuroakiGimmick-${{ matrix.rid }}.zip
-          archive: false
           if-no-files-found: error
           retention-days: 14
+          compression-level: 0
 
   release:
     name: Publish GitHub release
@@ -201,13 +206,10 @@ jobs:
       contents: write
 
     steps:
-      # With archive:false above, the real Actions artifact names are:
-      #   KuroakiGimmick-win-x64.zip
-      #   KuroakiGimmick-osx-arm64.zip
       - name: Download release archives
         uses: actions/download-artifact@v7
         with:
-          pattern: 'KuroakiGimmick-*.zip'
+          pattern: 'nativeaot-*'
           path: release-assets
           merge-multiple: true
 
@@ -217,10 +219,20 @@ jobs:
           set -euo pipefail
 
           echo "Downloaded release assets:"
-          find release-assets -type f -print | sort
+          find release-assets -maxdepth 1 -type f -print | sort
 
           test -f release-assets/KuroakiGimmick-win-x64.zip
           test -f release-assets/KuroakiGimmick-osx-arm64.zip
+
+          mapfile -t assets < <(
+            find release-assets -maxdepth 1 -type f -name 'KuroakiGimmick-*.zip' -print | sort
+          )
+
+          if (( ${#assets[@]} != 2 )); then
+            echo "Expected exactly 2 release archives, found ${#assets[@]}." >&2
+            printf 'Found: %s\n' "${assets[@]:-<none>}" >&2
+            exit 1
+          fi
 
       - name: Publish Nightly or stable Release
         shell: bash
@@ -236,7 +248,7 @@ jobs:
           set -euo pipefail
 
           mapfile -t assets < <(
-            find release-assets -type f -name 'KuroakiGimmick-*.zip' -print | sort
+            find release-assets -maxdepth 1 -type f -name 'KuroakiGimmick-*.zip' -print | sort
           )
 
           if (( ${#assets[@]} != 2 )); then
