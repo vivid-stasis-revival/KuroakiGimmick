@@ -4,7 +4,7 @@
 
 <p align="center">   面向《vivid/stasis》的谱面演出预览与编辑工具。<br>   在同一条时间轴上编排 gimmick、图片、字幕、场景效果与窗口运动，并直接检查它们在实际歌曲场景中的表现。 </p>
 
-<p align="center">   <img src="https://img.shields.io/badge/version-0.1.4_%2F_17.6.2-94cddd?style=flat-square" alt="v0.1.4 / Build 17.6.2">   <img src="https://img.shields.io/badge/C%23-.NET_8-b5a3e8?style=flat-square" alt="C# / .NET 8">   <img src="https://img.shields.io/badge/renderer-SDL3_GPU-94cddd?style=flat-square" alt="SDL3 GPU">   <img src="https://img.shields.io/badge/UI-中文_%2F_English-e8a4bd?style=flat-square" alt="中文 / English"> </p>
+<p align="center">   <img src="https://img.shields.io/badge/version-0.1.4_%2F_17.7-94cddd?style=flat-square" alt="v0.1.4 / Build 17.7">   <img src="https://img.shields.io/badge/C%23-.NET_8-b5a3e8?style=flat-square" alt="C# / .NET 8">   <img src="https://img.shields.io/badge/renderer-SDL3_GPU-94cddd?style=flat-square" alt="SDL3 GPU">   <img src="https://img.shields.io/badge/UI-中文_%2F_English-e8a4bd?style=flat-square" alt="中文 / English"> </p>
 
 <p align="center">   <a href="#关于-kuroakigimmick">关于</a> ·   <a href="#主要功能">功能</a> ·   <a href="#快速开始">快速开始</a> ·   <a href="#编辑与导出">编辑与导出</a> ·   <a href="#命令行">命令行</a> ·   <a href="#构建">构建</a> ·   <a href="#特别感谢">特别感谢</a> </p>
 
@@ -339,6 +339,8 @@ SAVE AS
 
 SGV 可以引用外部资源，因此移动工程时请同时保留对应文件及相对路径结构。
 
+在 **GAME SCENE** 中可以直接双击图片或文本对象进行选择；选中后拖动即可修改当前拍的 X/Y。拖拽只在松手时提交一次，因此一次移动对应一个 Undo。编辑手柄位于最终后处理之上，不会被 `uialpha`、Proxy 或屏幕 FX 一起隐藏。
+
 ### 4. 检查并导出
 
 使用：
@@ -363,9 +365,14 @@ KuroakiGimmick 不会无提示覆盖已有导出目录。
 | --------------------- | ---------------------------------------- |
 | **VSM**               | 当前演出文本                             |
 | **VSM + cgmk config** | VSM 与对应窗口配置                       |
+| **VSP + assets**      | 单独导出 VSP 与其引用的图片资源          |
 | **Chart Folder**      | 当前难度演出及 VSP、图片、字幕等所需资源 |
 | **Info Card**         | 当前难度的 16:9 乐曲信息卡片             |
 | **Video**             | H.264 / AAC MP4                          |
+
+### VSP + assets
+
+VSP + assets 只打包当前图片声明与它实际引用的图片。导出的 VSP 会改写为可移动的相对路径；可以按设置把图片放在 VSP 同目录，或统一放进 `Assets/`。不会额外夹带 VSM、音频、字幕或整个谱面目录。
 
 ### Chart Folder
 
@@ -506,7 +513,7 @@ dotnet run -c Release --no-build -- \
 
 当前版本：
 
-**v0.1.4 / Build 17.6.2**
+**v0.1.4 / Build 17.7**
 
 实际版本号以：
 
@@ -540,7 +547,7 @@ bash scripts/publish-win.sh x64
 
 ```
 dist/
-└── KuroakiGimmick-v0.1.4-<RID>-17.6.2-<timestamp>/
+└── KuroakiGimmick-v0.1.4-<RID>-17.7-<timestamp>/
 ```
 
 并生成对应 ZIP。

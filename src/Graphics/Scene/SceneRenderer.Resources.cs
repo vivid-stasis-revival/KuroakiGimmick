@@ -63,7 +63,10 @@ public sealed partial class SceneRenderer
         canvas.Blend(BlendFactor.DestinationColor, BlendFactor.Zero);
         var tint = session.DistortBgEnabled? Color.Hex((uint) Math.Clamp(session.Timeline.Get("ditortedBG_col_rgb", time), 0,
             16777215)) : Color.White;
-        canvas.Quad(jacketTexture, jackets.CustomLayout? new(0, 0, 320, 180) : new(-50, -50, 420, 268), tint);
+        int frames = path == jackets.DefaultPath && jackets.Animated ? Math.Max(1, jackets.AnimatedFrames) : 1;
+        int frame = frames <= 1 ? 0 : (int)Math.Floor(Math.Max(0, time) * 60) % frames;
+        canvas.Quad(jacketTexture, jackets.CustomLayout? new(0, 0, 320, 180) : new(-50, -50, 420, 268), tint,
+            new(frame / (float)frames, 0, 1f / frames, 1));
         canvas.Blend(BlendFactor.SourceAlpha, BlendFactor.InverseSourceAlpha);
     }
 

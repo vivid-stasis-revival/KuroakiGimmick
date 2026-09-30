@@ -29,10 +29,13 @@ public static class VscReader
             }
             try
             {
-                var parts = value.Split(',', 4);
+                var parts = value.Split(',', 5);
+                // CSM 3.4.0 才定义第五列 modExtra。只按源文本实际出现的第五列识别格式；
+                // 没出现就保持 Legacy，绝不因为 K/G 自己支持 3.4 而替旧谱“升级”格式。
+                if (parts.Length >= 5) chart.VscDialect = VscDialect.Csm340;
                 if (parts.Length < 3)
                 {
-                    throw new FormatException("Expected time_ms,type,lane[,extra].");
+                    throw new FormatException("Expected time_ms,type,lane[,extra[,modExtra]].");
                 }
                 // 第一列是毫秒，除以 1000 后 Note 内部统一是秒。
                 double time = Number(parts[0]) / 1000;
@@ -46,10 +49,15 @@ public static class VscReader
                     throw new FormatException("Invalid note lane.");
                 }
                 var extra = new Dictionary<int, object>();
+                Dictionary<string, string?>? modExtra = null;
+                if (parts.Length >= 5 && parts[4].Length > 0)
+                {
+                    modExtra = ParseModExtra(parts[4]);
+                }
                 double end = time;
                 if (type == 2)
                 {
-                    if (parts.Length != 4)
+                    if (parts.Length < 4)
                     {
                         throw new FormatException("Hold requires absolute end time in milliseconds.");
                     }
@@ -63,7 +71,7 @@ public static class VscReader
                 }
                 else if (type == 3)
                 {
-                    if (parts.Length != 4)
+                    if (parts.Length < 4)
                     {
                         throw new FormatException("Timing row requires b:BPM metadata.");
                     }
@@ -97,7 +105,7 @@ public static class VscReader
                         }
                     }
                 }
-                chart.Notes.Add(new(time, type, lane, end, extra));
+                chart.Notes.Add(new(time, type, lane, end, extra, modExtra));
                 if (chart.Notes.Count > 2_000_000)
                 {
                     throw new InvalidDataException("Too many VSC notes.");
@@ -112,6 +120,25 @@ public static class VscReader
         // 同上：排序稳定，同一时刻的音符保留源文件里的先后。
         chart.Notes.StableSortByTime();
         return chart;
+    }
+
+    /// <summary>
+    /// CSM 3.4.0 的第五列：key:value|key2:value2。与原脚本一致，只取冒号后的第一段；
+    /// undefined 保留为 null，未知键和值原样保存，K/G 不替第三方 mod 猜语义。
+    /// </summary>
+    static Dictionary<string, string?> ParseModExtra(string text)
+    {
+        var result = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (string field in text.Split('|'))
+        {
+            var parts = field.Split(':');
+            if (parts.Length < 2) continue;
+            string key = parts[0].Trim();
+            if (key.Length == 0) continue;
+            string raw = parts[1];
+            result[key] = raw == "undefined" ? null : raw.Trim();
+        }
+        return result;
     }
 
     static double Number(string text)

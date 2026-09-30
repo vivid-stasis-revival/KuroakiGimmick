@@ -134,8 +134,13 @@ public sealed partial class Viewer
         {
             var input = ChartExportInput.Capture(editor, Current);
             string name = ChartExportInput.Stem(input.Project);
-            string location = SuggestedExportPath(kind.ToString(), kind == ChartExportKind.ChartFolder
-                ? name + "_chart_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") : name + ".vsm");
+            string filename = kind switch
+            {
+                ChartExportKind.ChartFolder => name + "_chart_" + DateTime.Now.ToString("yyyyMMdd_HHmmss"),
+                ChartExportKind.VspAndAssets => name + ".vsp",
+                _ => name + ".vsm"
+            };
+            string location = SuggestedExportPath(kind.ToString(), filename);
             // 保存对话框接受新路径。Chart Folder 会把选中的路径建成一个目录，绝不建成占位文件；
             // 同名输出由设置开关控制，准备时将开关值冻结进计划。
             Dialog(true, location, paths =>
@@ -289,12 +294,19 @@ public sealed partial class Viewer
     void DrawChartExport(Rect box)
     {
         Text(L.Get("EXPORT"), box.X + 24, box.Y + 20, 24, white);
-        Text("v0.1.2 / 16.0", box.X + box.W - 174, box.Y + 26, 13, muted);
-        string[] labels = ["VSM", L.Get("VSM + cgmk config"), L.Get("Chart Folder")];
-        float buttonWidth = (box.W - 64) / 3;
-        for (int i = 0; i < labels.Length; i++)
-            if (WorkflowButton(labels[i], new(box.X + 24 + i * (buttonWidth + 8), box.Y + 67, buttonWidth, 40), active: chartExportPlan != null && (int)exportKind == i))
-                ChooseChartExport((ChartExportKind)i);
+        Text(Paths.BuildRevision, box.X + box.W - 210, box.Y + 26, 13, muted, max: 186);
+        (ChartExportKind Kind, string Label)[] choices =
+        [
+            (ChartExportKind.Vsm, "VSM"),
+            (ChartExportKind.VsmAndConfig, L.Get("VSM + cgmk config")),
+            (ChartExportKind.VspAndAssets, L.Get("VSP + assets")),
+            (ChartExportKind.ChartFolder, L.Get("Chart Folder"))
+        ];
+        float buttonWidth = (box.W - 72) / choices.Length;
+        for (int i = 0; i < choices.Length; i++)
+            if (WorkflowButton(choices[i].Label, new(box.X + 24 + i * (buttonWidth + 8), box.Y + 67, buttonWidth, 40),
+                active: chartExportPlan != null && exportKind == choices[i].Kind))
+                ChooseChartExport(choices[i].Kind);
         float y = box.Y + 128;
         if (chartExportPlan is { } plan)
         {

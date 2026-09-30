@@ -39,6 +39,7 @@ public sealed partial class Viewer
     /// <summary>换谱面时清空全部文本编辑状态。若正拖着要先释放鼠标捕获，否则新谱面里鼠标还被 SDL 锁着。</summary>
     void ResetTextObjects()
     {
+        CancelSceneDirectGesture();
         if (textDrag != null) Sdl.SDL_CaptureMouse(false);
         textDrag = null; textDragValues = null; selectedTextId = null; textCache = null; textRevision = -1; textAnimation = null; pendingTextAdd = false;
         textSources = textInspector = textCanvas = false; textListScroll = 0; textZoom = 1;
@@ -69,14 +70,14 @@ public sealed partial class Viewer
     /// 选中一个文本对象，并把 image 侧的选择和桌面预览一并关掉——两套检视面板共用同一块区域，不能同时开。
     /// 同时停播并跳到该文本的初始拍，再把时间轴滚到对应轨道并 Snap 掉滚动补间，避免选中后还在慢慢滑过去。
     /// </summary>
-    void SelectText(string id)
+    void SelectText(string id, bool canvas = true, double? atBeat = null)
     {
         if (editor == null) return;
-        EnsureTexts(); selectedTextId = id; textSources = textInspector = textCanvas = true;
+        EnsureTexts(); selectedTextId = id; textSources = textInspector = true; textCanvas = canvas;
         imageSources = imageInspector = imageCanvas = desktopPreview = false;
         selectedImageId = null; selectedImageGroup = null;
         selectedClip = null; textAnimation = null; selectedWindowEvent = -1; inspectorScroll = 0;
-        textAt = editor.InitialTextBeat(id); transport.SetPlaying(false); transport.Seek(Current.Timeline.Bpm.Time(textAt));
+        textAt = atBeat ?? editor.InitialTextBeat(id); transport.SetPlaying(false); transport.Seek(Current.Timeline.Bpm.Time(textAt));
         layoutRevision = -1; RebuildEditTracks();
         trackScroll = Math.Max(0, editTracks.FindIndex(t => t.TextId == id));
         motion.Snap("timeline-track-scroll", trackScroll);

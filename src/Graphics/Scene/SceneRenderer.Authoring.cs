@@ -9,4 +9,9 @@ public sealed partial class SceneRenderer
     public void DrawAuthoringTexts(Session session, double time, System.Numerics.Matrix3x2 projection,
         Func<string, double> values, string? selectedId, Action<string, System.Numerics.Vector2[]> bounds) =>
         sceneFont.Draw(canvas, session, time, projection, values, selectedId, bounds);
+
+    /// <summary>只走与场景相同的文字布局并返回包围框，不向当前渲染目标重复画一份文字。</summary>
+    public void MeasureAuthoringTexts(Session session, double time, System.Numerics.Matrix3x2 projection,
+        Func<string, double> values, Action<string, System.Numerics.Vector2[]> bounds) =>
+        sceneFont.Draw(canvas, session, time, projection, values, null, bounds, render: false);
 }

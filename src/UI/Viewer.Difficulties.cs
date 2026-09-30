@@ -35,8 +35,16 @@ public sealed partial class Viewer
             {
                 File.WriteAllText(Path.Combine(dir, level + ".vsc"), "0,3,0,b:245|t:0|v:undefined|s:undefined\n1000,0,0\n");
             }
+            // CSM treats SHATTER as an independent song entry. Even when info.json explicitly points at main-song media,
+            // a SHATTER file that omits those fields must fall back to the directory defaults rather than inherit them.
+            File.WriteAllText(Path.Combine(dir, "info.json"),
+                "{\"audio_id\":\"main.ogg\",\"jacket\":\"main.png\",\"preview_id\":\"main-preview.ogg\",\"jacket_animated\":true}");
             string file = Path.Combine(dir, SongInfo.ShatterFile);
             File.WriteAllText(file, "{\"name\":\"Drop Song [Shatter]\",\"difficulty_number\":\"15+\",\"note_designer\":\"drop\"}");
+            var shatterView = SongInfo.Read(dir)?.Effective("SHATTER")
+                ?? throw new InvalidOperationException("SHATTER song info was not readable.");
+            if (shatterView.AudioId != null || shatterView.Jacket != null || shatterView.PreviewId != null || shatterView.JacketAnimated)
+                throw new InvalidOperationException("SHATTER incorrectly inherited main-song media metadata.");
             data = Marshal.StringToCoTaskMemUTF8(file);
             Handle(new() { Type = 0x1000, DropData = data });
             if (loading == null)

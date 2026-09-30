@@ -2,6 +2,15 @@
 
 版本以 `KuroakiGimmick.csproj` 为准。16.2 及更早的开发记录可通过 Git 历史查看。
 
+## v0.1.4 / 17.7
+
+- 实现 #20：GAME SCENE 支持直接操作图片/文本 gimmick。双击最终预览中的对象即可选择，随后直接拖动 X/Y；图片与文本沿用各自现有编辑模型，拖拽松手只提交一个 Undo 事务。选择框作为作者层覆盖在最终后处理之后，不会因为 `uialpha`、Proxy 或屏幕 FX 而失去可操作性。
+- 实现 #22：新增 **VSP + assets** 独立导出。只输出当前 VSP 与实际引用的图片资源，自动重写为可移动的相对路径，并复用原始文件名/`Assets/` 放置设置；不再需要为了拿 VSP 图片顺手复制整个 Chart Folder。
+- 对齐 Custom Songs Mod 3.4.0：VSC 接受第五列 `modExtra`（`key:value|...`），以不透明键值元数据保留而不擅自执行第三方 mod 语义；`GLOBAL.vsm` 继续作为难度 VSM 缺失时的共享回落。VSC 格式严格跟随源工程：只有源文件实际出现第五列才标记为 CSM 3.4；旧式 VSC 保持 Legacy。Chart Folder 对两种格式都逐字节复制源 VSC，绝不因为 K/G 支持 3.4 就自动给旧谱补第五列。
+- 支持 CSM 3.4.0 的 `jacket_animated`：主曲、BACKSTAGE/ENCORE 与 SHATTER 都读取该标记。BACKSTAGE 的 `audio_id` / `jacket` 缺项回落主曲，`preview_id` 缺项则按 CSM 规则回落到该 BACKSTAGE 实际使用的音频；SHATTER 作为独立 song entry，只读取 `shatterinfo.json` 的资源字段，缺项时由目录默认的 `music.ogg` / `jacket.*` 接管，不会错误继承 `info.json` 的主曲资源。横向方形帧条在场景 jacket 乘色中按帧播放，信息卡片使用第 0 帧而不再把整条 sprite sheet 拉成超宽图片。
+- 修正 NativeAOT Release artifact 传递：最终发布 ZIP 放在普通 Actions artifact 外壳内，下载阶段只解 transport 层，Windows/macOS ZIP 保持原样交给 GitHub Release。
+- 正式版本更新为 `v0.1.4 / 17.7`。commit message 含 `release: v0.1.4 / 17.7` 时由 Actions 发布正式 Release；普通代码提交仍发布 `Nightly / <short SHA>` Pre-release。
+
 ## v0.1.4 / 17.6.2
 
 - 修复 M 键静音状态：静音不再把项目音量改成 0，取消静音会精确恢复此前设定的音量，而不是固定跳回 80%。

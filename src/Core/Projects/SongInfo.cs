@@ -35,8 +35,12 @@ public sealed class SongInfo
     public string? Artist { get; private init; }
     public string? BpmDisplay { get; private init; }
     public string? JacketArtist { get; private init; }
+    public string? AudioId { get; private init; }
+    public string? Jacket { get; private init; }
+    public string? PreviewId { get; private init; }
     public string? Version { get; private init; }
     public bool HasEncore { get; private init; }
+    public bool JacketAnimated { get; private init; }
     /// <summary>enc_data 的原始内容；缺失时为 null，此时任何难度都不套用 backstage 语义。</summary>
     public EncoreData? Encore { get; private init; }
     Dictionary<int, SlotData> slots = [];
@@ -52,8 +56,8 @@ public sealed class SongInfo
     /// 等级与谱师只能从这里取；这类谱包多半连 info.json 都没有，曲名、曲师那些全曲字段也一并写在这里。
     /// </summary>
     public sealed record ShatterData(string Path, string? DifficultyName, string? ChartId, string? Name,
-        string? FormattedName, string? Artist, string? BpmDisplay, string? JacketArtist, string? Version,
-        string? Level, string? Designer);
+        string? FormattedName, string? Artist, string? BpmDisplay, string? JacketArtist, string? AudioId,
+        string? Jacket, string? PreviewId, string? Version, string? Level, string? Designer, bool JacketAnimated);
 
     public const string ShatterFile = "shatterinfo.json";
 
@@ -69,15 +73,16 @@ public sealed class SongInfo
     /// song_get_info 的 BACKSTAGE 标签规则一致，谱面文件叫 ENCORE 而 UI 叫 BACKSTAGE 是正常的。
     /// </summary>
     public sealed record EncoreData(int? SongId, string? Name, string? FormattedName, string? AudioId,
-        string? Jacket, string? PreviewId, string? BpmDisplay, string? Artist, string? JacketArtist, bool HideBackstage);
+        string? Jacket, string? PreviewId, string? BpmDisplay, string? Artist, string? JacketArtist, bool HideBackstage, bool JacketAnimated);
 
     /// <summary>
-    /// 某个难度实际生效的显示信息。<c>AudioId</c> 与 <c>Jacket</c> 只在 info.json 明确写出时才有值；
-    /// 没写就保持 null，由调用方沿用原有的同目录候选顺序，绝不在这里猜文件名。
+    /// 某个难度实际生效的显示信息。BACKSTAGE 的资源按 enc_data → 主曲回落；
+    /// SHATTER 的资源只认 shatterinfo，自身缺项时保持 null，让调用方按 CSM 语义回落到 music.ogg / jacket.*，
+    /// 绝不能借用同目录 info.json 显式指定的主曲资源。
     /// </summary>
     public sealed record SongView(string Difficulty, string DisplayDifficulty, bool Backstage, bool UsesEncore,
         string? Name, string? FormattedName, string? Artist, string? BpmDisplay, string? JacketArtist,
-        string? AudioId, string? Jacket, string? PreviewId, double? Constant, string? Level, string? Designer);
+        string? AudioId, string? Jacket, string? PreviewId, double? Constant, string? Level, string? Designer, bool JacketAnimated);
 
     /// <summary>
     /// 读取目录下的 info.json / song.json 与 shatterinfo.json。两份都没有才返回 null，解析失败经
@@ -104,7 +109,11 @@ public sealed class SongInfo
                 Artist = shatter.Artist,
                 BpmDisplay = shatter.BpmDisplay,
                 JacketArtist = shatter.JacketArtist,
-                Version = shatter.Version
+                AudioId = shatter.AudioId,
+                Jacket = shatter.Jacket,
+                PreviewId = shatter.PreviewId,
+                Version = shatter.Version,
+                JacketAnimated = shatter.JacketAnimated
             };
         }
         info.Shatter = shatter;
@@ -122,8 +131,12 @@ public sealed class SongInfo
             Artist = Text(j, "artist"),
             BpmDisplay = Text(j, "bpm_display"),
             JacketArtist = Text(j, "jacket_artist"),
+            AudioId = Text(j, "audio_id"),
+            Jacket = Text(j, "jacket"),
+            PreviewId = Text(j, "preview_id"),
             Version = Text(j, "version"),
             HasEncore = j.TryGetProperty("has_encore", out var has) && has.ValueKind == JsonValueKind.True,
+            JacketAnimated = Bool(j, "jacket_animated"),
             Encore = ReadEncore(j)
         };
         foreach (int slot in new[] { 1, 2, 3, 4, 5 })
@@ -141,7 +154,8 @@ public sealed class SongInfo
     static ShatterData? ReadShatter(string file, Action<string>? error) => Load(file, error, j =>
         new ShatterData(file, Text(j, "difficulty_name"), Text(j, "chart_id"), Text(j, "name"),
             Text(j, "formatted_name"), Text(j, "artist"), Text(j, "bpm_display"), Text(j, "jacket_artist"),
-            Text(j, "version"), Text(j, "difficulty_number"), Text(j, "note_designer")));
+            Text(j, "audio_id"), Text(j, "jacket"), Text(j, "preview_id"), Text(j, "version"),
+            Text(j, "difficulty_number"), Text(j, "note_designer"), Bool(j, "jacket_animated")));
 
     /// <summary>info.json 与 shatterinfo.json 共用的读取壳：4 MiB 上限、根必须是对象、解析失败只上报不抛错。</summary>
     static T? Load<T>(string file, Action<string>? error, Func<JsonElement, T?> build) where T : class
@@ -174,7 +188,7 @@ public sealed class SongInfo
         }
         return new((int?)Number(e, "song_id"), Text(e, "name"), Text(e, "formatted_name"), Text(e, "audio_id"),
             Text(e, "jacket"), Text(e, "preview_id"), Text(e, "bpm_display"), Text(e, "artist"), Text(e, "jacket_artist"),
-            e.TryGetProperty("hide_backstage", out var hide) && hide.ValueKind == JsonValueKind.True);
+            e.TryGetProperty("hide_backstage", out var hide) && hide.ValueKind == JsonValueKind.True, Bool(e, "jacket_animated"));
     }
 
     /// <summary>字符串或数字都接受，空串视为缺失；其余类型（数组、对象、null）一律当作没写。</summary>
@@ -183,6 +197,8 @@ public sealed class SongInfo
 
     static double? Number(JsonElement parent, string key) => parent.TryGetProperty(key, out var v)
         && double.TryParse(v.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out double d) ? d : null;
+
+    static bool Bool(JsonElement parent, string key) => parent.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.True;
 
     /// <summary>该难度是否走 enc_data。谱面文件叫 ENCORE 或 BACKSTAGE 都算，且 enc_data 必须存在。</summary>
     public bool UsesEncore(string difficulty) => Encore != null && Normalize(difficulty) is "ENCORE" or "BACKSTAGE";
@@ -214,11 +230,21 @@ public sealed class SongInfo
         var e = encore ? Encore : null;
         var slot = SlotOf(difficulty);
         var d = ShatterOf(difficulty);
+        // CSM 的 SHATTER 是独立 song entry：缺 audio_id / jacket / preview_id 时回落目录默认资源，
+        // 不继承 info.json 的显式资源。普通难度才读取主曲字段；BACKSTAGE 则按 enc_data → 主曲回落。
+        string? audio = encore ? e?.AudioId ?? AudioId : d != null ? d.AudioId : AudioId;
+        string? jacket = encore ? e?.Jacket ?? Jacket : d != null ? d.Jacket : Jacket;
+        string? preview = encore ? e?.PreviewId ?? e?.AudioId ?? AudioId : d != null ? d.PreviewId : PreviewId;
+        // CSM 的 BACKSTAGE 没写独立 jacket 时直接复用主曲已经加载好的 sprite，所以也继承主曲的 animated 状态；
+        // 只有 enc_data 明确换了 jacket 才使用它自己的 jacket_animated。SHATTER 则由 shatterinfo 自己的标记决定。
+        bool animated = encore
+            ? (e?.Jacket != null ? e.JacketAnimated : JacketAnimated)
+            : d != null ? d.JacketAnimated : JacketAnimated;
         return new(Normalize(difficulty), DisplayDifficulty(difficulty), encore && !Encore!.HideBackstage, encore,
             e?.Name ?? Name ?? d?.Name, e?.FormattedName ?? FormattedName ?? d?.FormattedName,
             e?.Artist ?? Artist ?? d?.Artist, e?.BpmDisplay ?? BpmDisplay ?? d?.BpmDisplay,
-            e?.JacketArtist ?? JacketArtist ?? d?.JacketArtist, e?.AudioId, e?.Jacket, e?.PreviewId,
-            slot?.Constant, d?.Level ?? slot?.Display, d?.Designer ?? slot?.Designer);
+            e?.JacketArtist ?? JacketArtist ?? d?.JacketArtist, audio, jacket, preview,
+            slot?.Constant, d?.Level ?? slot?.Display, d?.Designer ?? slot?.Designer, animated);
     }
 
     /// <summary>

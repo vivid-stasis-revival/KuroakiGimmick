@@ -98,7 +98,66 @@ public static class ChartExport
         }
         string stem = ChartExportInput.Stem(input.Project);
         byte[] configBytes = Encoding.UTF8.GetBytes(input.ConfigText);
-        if (kind != ChartExportKind.ChartFolder)
+        bool legacyImageNameFallback = false;
+        static bool EditorAssetPath(string path) => path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .Any(part => part.EndsWith(".editor-assets", StringComparison.OrdinalIgnoreCase));
+        string ImageResource(string id, string path)
+        {
+            path = Path.GetFullPath(path);
+            string fileName;
+            if (input.ImageOriginalNames != null && input.ImageOriginalNames.TryGetValue(path, out string? original) && !string.IsNullOrWhiteSpace(original))
+                fileName = Path.GetFileName(original);
+            else
+            {
+                fileName = Path.GetFileName(path);
+                // Older projects may have lost the imported filename and retained only a SHA staging name.
+                string basis = Path.GetFileNameWithoutExtension(fileName);
+                if (EditorAssetPath(path) && basis.Length == 64 && basis.All(Uri.IsHexDigit))
+                {
+                    fileName = id + Path.GetExtension(fileName);
+                    legacyImageNameFallback = true;
+                }
+            }
+            fileName = Portable(fileName);
+            if (fileName.Contains('/')) throw new IOException("Image gimmick filename must be a single file name: " + fileName);
+            string name = putImageGimmickIntoAssetsFolder ? "Assets/" + fileName : fileName;
+            try { Copy(name, path); }
+            catch (IOException ex) when (ex.Message.StartsWith("Two resources map to the same output name:", StringComparison.Ordinal))
+            {
+                throw new IOException("Two image gimmick resources have the same original filename. Rename one before export: " + fileName, ex);
+            }
+            return name;
+        }
+        string RewrittenVsp()
+        {
+            string body;
+            if (input.ImageText != null) body = input.ImageText;
+            else if (input.Images != null)
+            {
+                if (!File.Exists(input.Images)) throw new FileNotFoundException("VSP dependency missing.", input.Images);
+                NoLinks(input.Images); body = File.ReadAllText(input.Images);
+            }
+            else throw new InvalidOperationException("VSP export requires an attached or authored VSP.");
+            string? root = input.ImageRoot;
+            root ??= input.Images == null ? SongFiles.Root(input.Project) : Path.GetDirectoryName(Path.GetFullPath(input.Images));
+            root ??= SongFiles.Root(input.Project);
+            if (root == null) throw new InvalidOperationException("Cannot resolve the VSP image resource root.");
+            return VspDocument.Rewrite(body, (id, token) => ImageResource(id,
+                Path.GetFullPath(token.Replace('\\', Path.DirectorySeparatorChar), root)));
+        }
+        if (kind == ChartExportKind.VspAndAssets)
+        {
+            if (!destination.EndsWith(".vsp", StringComparison.OrdinalIgnoreCase)) destination += ".vsp";
+            string body = RewrittenVsp();
+            Bytes(Path.GetFileName(destination), Encoding.UTF8.GetBytes(body));
+            warnings.Add(putImageGimmickIntoAssetsFolder
+                ? "Standalone VSP package: image resources are exported as Assets/<original filename>."
+                : "Standalone VSP package: image resources are exported beside the VSP with their original filenames.");
+            if (legacyImageNameFallback)
+                warnings.Add("Legacy hashed editor image names were exported using their VSP image IDs because older projects did not preserve the original filenames.");
+            warnings.Add("VSP + Assets does not include VSM, cgmk config, subtitles, audio or chart files.");
+        }
+        else if (kind != ChartExportKind.ChartFolder)
         {
             if (!destination.EndsWith(".vsm", StringComparison.OrdinalIgnoreCase)) destination += ".vsm";
             Bytes(Path.GetFileName(destination), input.VsmBytes);
@@ -155,53 +214,10 @@ public static class ChartExport
                     "resources/" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(path)))[..12].ToLowerInvariant() + "_" + Path.GetFileName(path);
                 Copy(name, path); return name;
             }
-            bool legacyImageNameFallback = false;
-            static bool EditorAssetPath(string path) => path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                .Any(part => part.EndsWith(".editor-assets", StringComparison.OrdinalIgnoreCase));
-            string ImageResource(string id, string path)
-            {
-                path = Path.GetFullPath(path);
-                string fileName;
-                if (input.ImageOriginalNames != null && input.ImageOriginalNames.TryGetValue(path, out string? original) && !string.IsNullOrWhiteSpace(original))
-                    fileName = Path.GetFileName(original);
-                else
-                {
-                    fileName = Path.GetFileName(path);
-                    // 旧工程把导入图片保存成 64 位 SHA 文件名，原始文件名已经不可恢复。至少用稳定的 VSP ID 代替哈希，
-                    // 新工程则由 VspDocument.PrepareSave 保留真正的原始文件名，不会再走这里。
-                    string basis = Path.GetFileNameWithoutExtension(fileName);
-                    if (EditorAssetPath(path) && basis.Length == 64 && basis.All(Uri.IsHexDigit))
-                    {
-                        fileName = id + Path.GetExtension(fileName);
-                        legacyImageNameFallback = true;
-                    }
-                }
-                fileName = Portable(fileName);
-                if (fileName.Contains('/')) throw new IOException("Image gimmick filename must be a single file name: " + fileName);
-                string name = putImageGimmickIntoAssetsFolder ? "Assets/" + fileName : fileName;
-                try { Copy(name, path); }
-                catch (IOException ex) when (ex.Message.StartsWith("Two resources map to the same output name:", StringComparison.Ordinal))
-                {
-                    throw new IOException("Two image gimmick resources have the same original filename. Rename one before export: " + fileName, ex);
-                }
-                return name;
-            }
             if (input.ImageText != null || input.Images != null)
             {
-                string body;
-                if (input.ImageText != null) body = input.ImageText;
-                else
-                {
-                    string source = input.Images!;
-                    if (!File.Exists(source)) throw new FileNotFoundException("VSP dependency missing.", source);
-                    NoLinks(source); body = File.ReadAllText(source);
-                }
-                // VSP 里的图片路径基准：ImagePathsRelativeToVsp 时用 VSP 自身目录，否则用谱面目录。成品一律重新
-                // 写成“项目根/原文件名”或“Assets/原文件名”，因此 VSP 永远只含相对谱面根的干净路径。
-                string imageRoot = input.ImageRoot ?? (input.Project.ImagePathsRelativeToVsp && input.Images != null
-                    ? Path.GetDirectoryName(input.Images)! : root);
-                body = VspDocument.Rewrite(body, (id, token) => ImageResource(id,
-                    Path.GetFullPath(token.Replace('\\', Path.DirectorySeparatorChar), imageRoot)));
+                // Shared with standalone VSP export: rewrite every resource to a portable author-facing filename.
+                string body = RewrittenVsp();
                 project.Images = stem + ".vsp"; project.ImagePathsRelativeToVsp = false;
                 Bytes(project.Images, Encoding.UTF8.GetBytes(body));
                 warnings.Add(putImageGimmickIntoAssetsFolder
@@ -227,7 +243,16 @@ public static class ChartExport
             Bytes("Kuroaki.sgv.json", Encoding.UTF8.GetBytes(AppJson.Serialize(project, ViewerProject.Json)));
             warnings.Add("Copies the source song folder, excluding build/cache/editor backup files. No game/mod installation is changed.");
             warnings.Add("Kuroaki.sgv.json retains E markers. Game compatibility still depends on the target game and required mods.");
-            if (chart.EndsWith(".vsb", StringComparison.OrdinalIgnoreCase))
+            if (chart.EndsWith(".vsc", StringComparison.OrdinalIgnoreCase))
+            {
+                // Notes are read-only, so Chart Folder must copy the source VSC byte-for-byte. The detected dialect
+                // exists to make the compatibility contract explicit and to prevent a future writer from silently
+                // upgrading Legacy projects merely because K/G understands the CSM 3.4 fifth column.
+                warnings.Add(input.VscDialect == VscDialect.Csm340
+                    ? "CSM 3.4 VSC detected from the source fifth column; the source VSC is copied byte-for-byte and remains CSM 3.4 format."
+                    : "Legacy VSC detected; the source VSC is copied byte-for-byte and no CSM 3.4 modExtra column is added.");
+            }
+            else if (chart.EndsWith(".vsb", StringComparison.OrdinalIgnoreCase))
                 warnings.Add("VSB stays byte-for-byte unchanged; edited events are written to the external VSM companion.");
         }
         if (input.Notices.Length > 0) warnings.Add($"Current preview has {input.Notices.Length} diagnostic notice(s); export does not certify their game support.");

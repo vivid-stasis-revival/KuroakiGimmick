@@ -21,6 +21,8 @@ public sealed class ViewerProject
     public string? WindowMotion { get; set; }
     public string? Audio { get; set; }
     public string? Jacket { get; set; }
+    /// <summary>Custom Songs Mod 3.4.0: jacket is a horizontal square-frame strip when true.</summary>
+    public bool JacketAnimated { get; set; }
     public string? FxProfile { get; set; }
     public string RoomPreset { get; set; } = "auto";
     public string? Title { get; set; }

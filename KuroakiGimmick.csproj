@@ -21,8 +21,8 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
     <Version>0.1.4</Version>
-    <BuildNumber>17.6.2</BuildNumber>
-    <BuildSerial>1762</BuildSerial>
+    <BuildNumber>17.7</BuildNumber>
+    <BuildSerial>1770</BuildSerial>
     <AssemblyVersion>0.1.4.0</AssemblyVersion>
     <FileVersion>$(Version).$(BuildSerial)</FileVersion>
     <InformationalVersion Condition="'$(InformationalVersion)' == ''">v$(Version) / $(BuildNumber)</InformationalVersion>

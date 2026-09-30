@@ -52,7 +52,11 @@ public sealed partial class Viewer
             if (textCanvas) DrawTextCanvas(previewImage, time);
             else if (imageCanvas) DrawImageCanvas(previewImage, time);
             else if (desktopPreview) DrawDesktop(frame, time);
-            else Canvas.Quad(Renderer.Final.Texture, previewImage, Color.White);
+            else
+            {
+                Canvas.Quad(Renderer.Final.Texture, previewImage, Color.White);
+                DrawSceneDirectManipulation(previewImage, time);
+            }
         }
         float controlsY = frame.Y + frame.H + 8;
         if (EButton(transport.Playing ? L.Get("PAUSE") : L.Get("PLAY"), new(previewX, controlsY, 69, 27), primary: true, enabled: !Busy, key: "editor-play")) transport.SetPlaying(!transport.Playing);
@@ -86,7 +90,8 @@ public sealed partial class Viewer
             string[] rows = [L.Get("E: mark exact time. Shift+E: delete target. CLEAR TARGET: release it."),
                 L.Get("ADD GIMMICK: choose a documented or custom name and event values."),
                 L.Get("F1: right-click a gimmick to add at the marked time / playhead."),
-                L.Get("EXPORT: VSM / VSM + cgmk config / Chart Folder (new output paths)."),
+                L.Get("EXPORT: VSM / VSM + cgmk config / VSP + assets / Chart Folder."),
+                L.Get("GAME SCENE: double-click image/text to select; drag the selected object to move X/Y."),
                 L.Get("Clip body: move. Right handle: duration. Double-click empty track: add."),
                 L.Get("Drag empty track: box-select. Shift+click adds or removes one clip."),
                 L.Get("Same mod selected: the right panel edits every one of them at once."),
@@ -98,8 +103,8 @@ public sealed partial class Viewer
                 L.Get("Space: play. A/B: loop bounds. L: loop. Esc: close live windows."),
                 L.Get("Fields accept 1/3 and 128+1/4. '_' keeps the dynamic VSM value."),
                 L.Get("Double-click marker: rename. Markers are saved in the project only.")];
-            // 行距 21：15 行的最后一条落在 r.Y + 360，仍在 r.Y + 385 的按钮之上。加行前先算这一笔。
-            for (int i = 0; i < rows.Length; i++) Text(rows[i], r.X + 25, r.Y + 66 + i * 21, 12, muted, max: r.W - 50);
+            // 16 行使用 20px 行距，最后一条落在 r.Y + 366，仍给底部按钮留出空间。
+            for (int i = 0; i < rows.Length; i++) Text(rows[i], r.X + 25, r.Y + 66 + i * 20, 12, muted, max: r.W - 50);
             modalInput = true;
             if (EButton(L.Get("VSM DOCS / F1"), new(r.X + 25, r.Y + 385, 297, 34))) OpenReference();
             if (EButton(L.Get("CLOSE"), new(r.X + 338, r.Y + 385, 297, 34))) help = false;
