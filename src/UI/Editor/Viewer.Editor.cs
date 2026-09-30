@@ -319,6 +319,7 @@ public sealed partial class Viewer
             "przm" => 1.1, "prx" => 30, "pry" => -10, "prrz" => 12,
             "pra" or "notealp" or "uialpha" => from > .5 ? 0 : 1,
             "freeze" or "fx_film" or "enable_hue" => from >= 1 ? 0 : 1,
+            "changeskin" => (Math.Truncate(from) + 1) % 4,
             // 新建的核心音符轨要立刻看得出变化，否则会造出一个 From == To 的空片段。
             "scrollspeed" => Math.Abs(from) < 1e-9 ? 3 : from * 1.5,
             "velocity" => Math.Abs(from) < 1e-9 ? 1.5 : from * 1.5,
@@ -330,7 +331,9 @@ public sealed partial class Viewer
         // 与模组文档一致，也免得时间轴上出现一个看起来有长度、实则时长毫无意义的片段。
         var clip = name.Equals(EpisodeScript.ModName, StringComparison.OrdinalIgnoreCase)
             ? new VsmDocument.Clip(Guid.NewGuid(), beat, 0, "linear", "_", "_", name, target)
-            : new VsmDocument.Clip(Guid.NewGuid(), beat, 1, "outSine", VsmDocument.Value(from), VsmDocument.N(to), name, target);
+            : name.Equals("changeskin", StringComparison.OrdinalIgnoreCase)
+                ? new VsmDocument.Clip(Guid.NewGuid(), beat, 0, "linear", "_", VsmDocument.N(to), name, target)
+                : new VsmDocument.Clip(Guid.NewGuid(), beat, 1, "outSine", VsmDocument.Value(from), VsmDocument.N(to), name, target);
         Edit(L.Get("Add ") + name, () => editor.Vsm.Add(clip));
         if (editor.Vsm.Find(clip.Id) != null)
         { selectedClip = clip.Id; selectedWindowEvent = -1; inspectorScroll = 0; FocusAddedTrack(name, target, beat); }

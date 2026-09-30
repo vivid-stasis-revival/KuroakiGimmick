@@ -243,6 +243,7 @@ public sealed partial class Viewer
                 SetUiLanguage(UiLanguage.Auto, persist: false);
                 // 默认值只套到 project 上；transport 自己缓存音量和延迟，必须再同步一次。工作区布局不在此重置。
                 new ViewerSettings().Apply(p);
+                audioMuted = false;
                 transport.SetVolume(p.PreviewVolume);
                 transport.SetDelay(p.AudioDelayMs);
             }

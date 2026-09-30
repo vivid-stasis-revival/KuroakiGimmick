@@ -4,7 +4,7 @@
 
 <p align="center">   面向《vivid/stasis》的谱面演出预览与编辑工具。<br>   在同一条时间轴上编排 gimmick、图片、字幕、场景效果与窗口运动，并直接检查它们在实际歌曲场景中的表现。 </p>
 
-<p align="center">   <img src="https://img.shields.io/badge/version-0.1.4_%2F_17.6.1-94cddd?style=flat-square" alt="v0.1.4 / Build 17.6.1">   <img src="https://img.shields.io/badge/C%23-.NET_8-b5a3e8?style=flat-square" alt="C# / .NET 8">   <img src="https://img.shields.io/badge/renderer-SDL3_GPU-94cddd?style=flat-square" alt="SDL3 GPU">   <img src="https://img.shields.io/badge/UI-中文_%2F_English-e8a4bd?style=flat-square" alt="中文 / English"> </p>
+<p align="center">   <img src="https://img.shields.io/badge/version-0.1.4_%2F_17.6.2-94cddd?style=flat-square" alt="v0.1.4 / Build 17.6.2">   <img src="https://img.shields.io/badge/C%23-.NET_8-b5a3e8?style=flat-square" alt="C# / .NET 8">   <img src="https://img.shields.io/badge/renderer-SDL3_GPU-94cddd?style=flat-square" alt="SDL3 GPU">   <img src="https://img.shields.io/badge/UI-中文_%2F_English-e8a4bd?style=flat-square" alt="中文 / English"> </p>
 
 <p align="center">   <a href="#关于-kuroakigimmick">关于</a> ·   <a href="#主要功能">功能</a> ·   <a href="#快速开始">快速开始</a> ·   <a href="#编辑与导出">编辑与导出</a> ·   <a href="#命令行">命令行</a> ·   <a href="#构建">构建</a> ·   <a href="#特别感谢">特别感谢</a> </p>
 
@@ -506,7 +506,7 @@ dotnet run -c Release --no-build -- \
 
 当前版本：
 
-**v0.1.4 / Build 17.6.1**
+**v0.1.4 / Build 17.6.2**
 
 实际版本号以：
 
@@ -540,7 +540,7 @@ bash scripts/publish-win.sh x64
 
 ```
 dist/
-└── KuroakiGimmick-v0.1.4-<RID>-17.6.1-<timestamp>/
+└── KuroakiGimmick-v0.1.4-<RID>-17.6.2-<timestamp>/
 ```
 
 并生成对应 ZIP。

@@ -4,13 +4,18 @@ Set-StrictMode -Version Latest
 $ProjectRoot = Split-Path $PSScriptRoot -Parent
 $Dotnet = if ($env:KUROAKI_DOTNET) { $env:KUROAKI_DOTNET } else { 'dotnet' }
 $null = Get-Command $Dotnet -ErrorAction Stop
+$ProjectFile = Join-Path $ProjectRoot 'KuroakiGimmick.csproj'
+$Version = ((& $Dotnet msbuild $ProjectFile -getProperty:Version -nologo) | Out-String).Trim()
+if ($LASTEXITCODE -ne 0) { throw 'Unable to read project Version.' }
+$BuildNumber = ((& $Dotnet msbuild $ProjectFile -getProperty:BuildNumber -nologo) | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or -not $Version -or -not $BuildNumber) { throw 'Unable to read project build version.' }
 $Dist = Join-Path $ProjectRoot 'dist'
 $null = New-Item -ItemType Directory -Path $Dist -Force
 $Architectures = if ($Arch -eq 'all') { @('x64','arm64') } else { @($Arch) }
 foreach ($Cpu in $Architectures) {
     $Rid = "win-$Cpu"
     $Stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-    $Name = "KuroakiGimmick-v0.1.3-$Rid-17.0-$Stamp"
+    $Name = "KuroakiGimmick-v$Version-$Rid-$BuildNumber-$Stamp"
     $Destination = Join-Path $Dist $Name
     if ((Test-Path $Destination) -or (Test-Path "$Destination.zip")) { throw "Output already exists: $Destination" }
     $Stage = Join-Path $Dist ('.publish-' + [guid]::NewGuid().ToString('N'))
@@ -18,7 +23,7 @@ foreach ($Cpu in $Architectures) {
     $Log = Join-Path $Dist "publish-$Rid-$Stamp.log"
     $null = New-Item -ItemType Directory -Path $Stage
     try {
-        & $Dotnet publish (Join-Path $ProjectRoot 'KuroakiGimmick.csproj') -c Release -r $Rid `
+        & $Dotnet publish $ProjectFile -c Release -r $Rid `
             --self-contained true --nologo -o $Package `
             -p:UseAppHost=true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false `
             -p:PublishReadyToRun=false -p:DebugType=None -p:DebugSymbols=false `

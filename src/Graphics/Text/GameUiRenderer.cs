@@ -303,8 +303,8 @@ public sealed partial class GameUiRenderer : IDisposable
     }
 
     /// <summary>
-    /// 固定在 application surface 上、但仍受 uialpha 控制的 HUD。底部黑栏本体不跟 uialpha 消失；
-    /// uialpha=0 时只隐藏歌曲信息与难度，这一点与实机一致。
+    /// 固定在 application surface 上、受 uialpha 整体控制的 HUD。底栏、歌曲信息与难度使用同一个 alpha，
+    /// uialpha=0 时这一层必须完全透明，不能留下遮挡字幕/图片的黑条。
     /// </summary>
     public void DrawFixedHud(Session session, double time)
     {
@@ -314,16 +314,16 @@ public sealed partial class GameUiRenderer : IDisposable
             return;
         }
 
-        // footer 是固定背景，不随 uialpha 淡出。只画底部 15px，避免再次把 PAUSE 叠到 proxy 之外。
-        canvas.Clip(new(0, GameplayFooterY, 320, 180 - GameplayFooterY));
-        Sprite("sp_gameplayoverlay2024", 0, 0, 0, Color.White);
-        canvas.Clip(null);
-
-        double alpha = session.Timeline.Get("uialpha", time);
+        double alpha = Math.Clamp(session.Timeline.Get("uialpha", time), 0, 1);
         if (alpha <= 0)
         {
             return;
         }
+
+        // sp_gameplayoverlay2024 同时含顶部内容和底栏，这里只裁出固定 footer，并让它与其余 HUD 一起淡出。
+        canvas.Clip(new(0, GameplayFooterY, 320, 180 - GameplayFooterY));
+        Sprite("sp_gameplayoverlay2024", 0, 0, 0, Color.White.Alpha(alpha));
+        canvas.Clip(null);
 
         var white = Color.White.Alpha(alpha);
         var p = session.Project;
@@ -354,7 +354,7 @@ public sealed partial class GameUiRenderer : IDisposable
 
     /// <summary>
     /// 真正的 GUI HUD：顶部 combo 与判定显示固定在屏幕上，不进入 proxy，也不受 uialpha 影响。
-    /// hide_combo 只控制 combo 本身；判定显示保持独立对象语义。
+    /// hide_combo 是谱面侧的整组读数开关，同时隐藏 combo、判定信息及其新生成的 combo 粒子。
     /// </summary>
     public void DrawGuiHud(Session session, double time)
     {

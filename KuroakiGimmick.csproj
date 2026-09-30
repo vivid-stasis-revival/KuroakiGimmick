@@ -21,9 +21,12 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
     <Version>0.1.4</Version>
+    <BuildNumber>17.6.2</BuildNumber>
+    <BuildSerial>1762</BuildSerial>
     <AssemblyVersion>0.1.4.0</AssemblyVersion>
-    <FileVersion>0.1.4.1761</FileVersion>
-    <InformationalVersion>0.1.4+17.6.1</InformationalVersion>
+    <FileVersion>$(Version).$(BuildSerial)</FileVersion>
+    <InformationalVersion Condition="'$(InformationalVersion)' == ''">v$(Version) / $(BuildNumber)</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 
     <AssemblyName>KuroakiGimmick</AssemblyName>
     <RootNamespace>KuroakiGimmick</RootNamespace>

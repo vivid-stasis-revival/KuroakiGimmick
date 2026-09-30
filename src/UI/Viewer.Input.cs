@@ -166,7 +166,7 @@ public sealed partial class Viewer
                 notes = !notes;
                 break;
             case 16:
-                SetVolume(transport.Volume > 0 ? 0 : .8);
+                ToggleMute();
                 break;
             case 24:
                 rangeOut = Math.Max(transport.Position, rangeIn + 1.0 / fps);

@@ -182,8 +182,10 @@ public sealed partial class Timeline
             var atStart = e.Name == "angelstar_checker_set" ? 0 : Evaluate(list, start, Initial(e.Name, e.Proxy));
             var from = e.From == 573613 ? atStart : e.From;
             var to = e.To == 573613 ? atStart : e.To;
-            // 激活型控制是瞬时写入：时长归零并直接跳到 To，不做插值。
-            bool activation = e.Name is "active_startrans" or "active_starchgcol";
+            // 激活/枚举型控制是瞬时写入：时长归零并直接跳到 To，不做插值。
+            // changeskin 选择的是离散皮肤下标；把 from->to 当普通 tween 会在一个事件里
+            // 依次穿过中间皮肤，和实际的整套皮肤切换语义不符。
+            bool activation = e.Name is "active_startrans" or "active_starchgcol" or "changeskin";
             list.Add(new(start, activation ? 0 : span, activation ? to : from, to, Easings.Normalize(e.Ease), e));
         }
         if (freezeLatches.Count > 0)

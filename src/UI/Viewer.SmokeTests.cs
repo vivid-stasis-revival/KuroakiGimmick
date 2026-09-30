@@ -39,6 +39,24 @@ public sealed partial class Viewer
             Type = 0x300,
             Scan = 17
         });
+        // M is a transient mute. It must not rewrite PreviewVolume or restore a hard-coded 80%.
+        double savedVolume = Current.Project.PreviewVolume;
+        SetVolume(.23);
+        effectiveVolumeDirty = false;
+        Handle(new() { Type = 0x300, Scan = 16 });
+        if (!audioMuted || Math.Abs(transport.Volume) > 1e-9 || Math.Abs(Current.Project.PreviewVolume - .23) > 1e-9)
+            throw new Exception("Mute changed the configured preview volume.");
+        Handle(new() { Type = 0x300, Scan = 16 });
+        if (audioMuted || Math.Abs(transport.Volume - .23) > 1e-9 || Math.Abs(Current.Project.PreviewVolume - .23) > 1e-9)
+            throw new Exception("Unmute did not restore the configured preview volume.");
+        SetVolume(savedVolume);
+        effectiveVolumeDirty = false;
+        // 6.2.2.2 NoteModsY parity: velocity multiplies the whole scroll term. Doubling it must double
+        // the displacement from the 144 judgement line when the other motion terms are zero.
+        double velocity1 = NoteMotion.YFromScroll(1000, 0, 0, 2, NoteMotion.ScrollMultiplier(3, 1, 1), 0);
+        double velocity2 = NoteMotion.YFromScroll(1000, 0, 0, 2, NoteMotion.ScrollMultiplier(3, 1, 2), 0);
+        if (Math.Abs((144 - velocity2) - 2 * (144 - velocity1)) > 1e-9)
+            throw new Exception("Velocity scroll parity failed.");
         SetTime(4);
         // scancode 79 = 右方向键：无 Shift 时步进正好一帧 = 1/fps 秒。
         Handle(new()

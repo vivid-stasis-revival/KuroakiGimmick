@@ -2,7 +2,13 @@
 
 版本以 `KuroakiGimmick.csproj` 为准。16.2 及更早的开发记录可通过 Git 历史查看。
 
-## 未发布
+## v0.1.4 / 17.6.2
+
+- 修复 M 键静音状态：静音不再把项目音量改成 0，取消静音会精确恢复此前设定的音量，而不是固定跳回 80%。
+- 修复预览语义：`changeskin` 改为离散的即时皮肤切换，不再把 `from → to` 当连续关键帧穿过中间皮肤；音符纵向运动统一到单一 NoteMotion 公式，`velocity` 按 `scrollspeed × scrollindN × velocity` 作用于完整滚动项，并补上回归检查，避免普通谱面与 Custom 预览再次分叉。
+- 修复 HUD 可见性：`uialpha=0` 时底部黑栏完全消失，不再遮挡文本/图片 gimmick；`hide_combo` 同时隐藏 combo、判定信息与新生成的 combo 钻尘。
+- 构建版本改由 `KuroakiGimmick.csproj` 的 `Version / BuildNumber / BuildSerial` 驱动；运行时正式版显示 `v0.1.4 / 17.6.2`，CI Nightly 可注入 `Nightly / <commit SHA>`。managed / NativeAOT / Windows 打包脚本也改为读取同一份版本元数据，不再残留旧版硬编码。
+- GitHub Actions 只在代码/资源/打包输入发生变化时构建；普通文档类 commit 不发布。代码 commit 自动发布 `Nightly / <short SHA>` Pre-release；commit message 中包含 `release: v0.1.4 / 17.6.2` 时发布正式 Release。
 
 - 统一 VSM 作者数值的 canonical 格式：编辑器、拖拽、保存与导出不再写出二进制浮点尾巴；文本/图片事件匹配改用容差比较。`fx_red` 的 0.5 布尔边界同样容忍 tween 误差，`fx_underwater` / `fx_chroma_distort` 低于 0.01 时给出警告并在预览与成品 VSM 中钳到安全值，避免原游戏黑屏。
 - 新增“允许导出覆盖文件”设置，默认关闭并跨启动保存，适用于视频、谱面、配置、谱面文件夹、信息卡片、截图及报告；命令行可用 `--overwrite` 开启。文件夹只替换同名文件，保留其他文件；输出先暂存，谱面批量替换失败时恢复旧文件。
