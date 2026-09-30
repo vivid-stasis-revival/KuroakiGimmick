@@ -160,6 +160,7 @@ public static class VsbReader
             {
                 case 228:
                     c.Proxies = r.ReadByte();
+                    c.ProxyCountDeclared = true;
                     if (c.Proxies > 64)
                     {
                         throw new InvalidDataException("At most 64 proxies are supported.");

@@ -16,6 +16,8 @@ public sealed class Chart
     public string Title { get; set; } = "UNTITLED";
     public string ObjectName { get; set; } = "obj_base_gimmick";
     public int Proxies { get; set; } = 1;
+    /// <summary>源数据是否显式声明了 proxy 数量。缺省值 1 只是解析/编辑回退，不能据此凭空写出 !proxies:1。</summary>
+    public bool ProxyCountDeclared { get; set; }
     public List<Note> Notes { get; } = [];
     public List<ModEvent> Mods { get; } = [];
     public List<FrameEvent> PerFrame { get; } = [];

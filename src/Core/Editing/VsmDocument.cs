@@ -35,6 +35,8 @@ public sealed partial class VsmDocument
     /// <summary>读到的 BOM 原始字节，写回时原样放在最前面；源文件没有 BOM 就不会凭空补一个。</summary>
     public byte[] Preamble { get; private set; } = [];
     public string NewLine { get; private set; } = "\n";
+    /// <summary>源文档没写 !proxies 时，编辑器从当前谱面继承的 proxy 数量提示；只在作者首次创建 proxy 事件时使用。</summary>
+    internal int ProxyCountHint { get; set; } = 1;
     /// <summary>可视化编辑的事件，按源行顺序给出。解析不了的行不在其中，但它们仍然存在于 Lines 里。</summary>
     public IEnumerable<Clip> Clips => Lines.Where(x => x.Event != null).Select(x => x.Event!);
     /// <summary>按行拼回完整源文本。逐行保留原换行符，因此未编辑的文件重新写出时与输入逐字节一致。</summary>
@@ -75,7 +77,12 @@ public sealed partial class VsmDocument
     /// </summary>
     public static VsmDocument FromChart(Chart chart)
     {
-        var text = new StringBuilder($"!obj:{chart.ObjectName}\n!proxies:{chart.Proxies}\n");
+        var text = new StringBuilder($"!obj:{chart.ObjectName}\n");
+        // Chart.Proxies 的默认值 1 只是 K/G 的解析/编辑回退，不等于源谱真的声明了一个 proxy。
+        // 无 proxy gimmick 时凭空写 !proxies:1 会改变原版运行语义：proxy 0 的 pra 初值为 0，轨道可能因此直接不可见。
+        // 只有源数据显式声明过 proxy 数量，或确实存在 proxy 级事件时才写该头。
+        if (chart.ProxyCountDeclared || chart.Mods.Any(m => m.Proxy >= 0))
+            text.AppendLine($"!proxies:{chart.Proxies}");
         foreach (var pair in chart.Metadata.Where(x => x.Key is not ("obj" or "proxies")))
             text.AppendLine($"!{pair.Key}:{pair.Value}");
         foreach (var m in chart.Mods.OrderBy(m => m.Order))
@@ -85,7 +92,9 @@ public sealed partial class VsmDocument
             text.AppendLine("mpf");
             foreach (var m in chart.PerFrame) text.AppendLine($"{N(m.StartBeat)},{N(m.EndBeat)},{m.Function}");
         }
-        return FromText(text.ToString());
+        var document = FromText(text.ToString());
+        document.ProxyCountHint = chart.Proxies;
+        return document;
     }
 
     void Parse(string text)
@@ -333,7 +342,10 @@ public sealed partial class VsmDocument
             To = next.To == previous.To || next.To == "_" ? next.To : N(Number(next.To))
         };
         Validate(next);
-        Lines[i] = RewriteLine(line, next);
+        EnsureProxyDeclaration(next.Proxy);
+        // EnsureProxyDeclaration may insert a header before this event, so resolve the stable Id again instead of reusing the old index.
+        i = Lines.FindIndex(l => l.Event?.Id == next.Id);
+        Lines[i] = RewriteLine(Lines[i], next);
     }
 
     static Line RewriteLine(Line line, Clip next)
@@ -356,6 +368,18 @@ public sealed partial class VsmDocument
     }
 
     /// <summary>
+    /// 只有作者真正创建/改成 proxy 级事件时才补 !proxies。Chart 的默认 proxy 数量只是编辑回退，
+    /// 不能在完全没有 proxy 内容的文档里自动制造声明。
+    /// </summary>
+    void EnsureProxyDeclaration(int proxy)
+    {
+        if (proxy < 0 || Lines.Any(line => Body(line.Text).TrimStart().StartsWith("!proxies:", StringComparison.Ordinal))) return;
+        int insert = Lines.FindIndex(line => Body(line.Text).TrimStart().StartsWith("!obj:", StringComparison.Ordinal));
+        int count = Math.Clamp(Math.Max(proxy + 1, ProxyCountHint), 1, 64);
+        Lines.Insert(insert >= 0 ? insert + 1 : 0, new($"!proxies:{count}", NewLine, null));
+    }
+
+    /// <summary>
     /// 追加效果事件，不排序、不与已有行合并；新行的 Id 即其后续身份。
     /// 文件里已有 mpf 段时插到它前面：原版 read_mods_file 的 mode 只能 mods→mpf 单向切换，
     /// 没有写 "mods" 回去的办法，那一行只会被当成事件行切分然后越界崩掉。既有段落和注释一律不动。
@@ -364,6 +388,7 @@ public sealed partial class VsmDocument
     {
         clip = Canonicalize(clip, true);
         Validate(clip);
+        EnsureProxyDeclaration(clip.Proxy);
         if (Lines.Count > 0 && Lines[^1].Ending.Length == 0) Lines[^1] = Lines[^1] with { Ending = NewLine };
         int mpf = Lines.FindIndex(line => Body(line.Text).Trim() == "mpf");
         var added = new Line(string.Join(',', Fields(clip)), NewLine, clip);

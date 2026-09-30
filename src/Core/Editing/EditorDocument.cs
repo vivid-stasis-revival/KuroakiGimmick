@@ -52,6 +52,7 @@ public sealed partial class EditorDocument
         cleanMarkers = markers.ToArray();
         // 没挂 gimmick 时从谱面现有 mod 反推一份 VSM 文本，保证编辑器始终有一份可改的源，而不是空白。
         Vsm = Project.Gimmick != null ? VsmDocument.Load(Project.Gimmick) : VsmDocument.FromChart(session.Chart);
+        Vsm.ProxyCountHint = session.Chart.Proxies;
         // 读取失败的 cgmk 绝不能变成一份“空但看起来可编辑”的配置：这里重跑一次 Parse 让错误浮出来，Session 没能装载就拒绝进入编辑。
         var configPath = WindowMotionConfig.Discover(Project);
         if (configPath != null)
