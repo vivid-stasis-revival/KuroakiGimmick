@@ -9,21 +9,24 @@ trap kg_cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 kg_publish() {
-    local rid="$1" name stamp package binary dest log single_file font_asset reference_asset macos_executable
+    local rid="$1" version build_number name stamp package binary dest log single_file font_asset reference_asset macos_executable
     command -v "${KG_DOTNET}" >/dev/null 2>&1 || { echo '请先安装 .NET 8 SDK，并让 dotnet 位于 PATH。' >&2; return 1; }
     command -v zip >/dev/null 2>&1 || { echo '需要 zip 命令。' >&2; return 1; }
     [ -f "${KG_ROOT}/KuroakiGimmick.csproj" ] || { echo '请把 scripts 放在完整源码目录内。' >&2; return 1; }
     [ -f "${KG_ROOT}/Assets/GameUI/game-ui.gameui.json" ] || { echo '缺少 Assets/GameUI，请使用完整源码包。' >&2; return 1; }
     [ -f "${KG_ROOT}/Assets/Fonts/cjk-editor.png" ] && [ -f "${KG_ROOT}/Assets/Fonts/cjk-editor.json" ] || { echo '缺少 Assets/Fonts/cjk-editor 字体图集。' >&2; return 1; }
     for font_asset in editor-help-sans.png editor-help-sans.json editor-help-sans-bold.png editor-help-sans-bold.json; do
-        [ -f "${KG_ROOT}/Assets/Fonts/${font_asset}" ] || { echo "缺少说明卡字体资源：${font_asset}。请使用完整 v0.1.3 源码包。" >&2; return 1; }
+        [ -f "${KG_ROOT}/Assets/Fonts/${font_asset}" ] || { echo "缺少说明卡字体资源：${font_asset}。请使用完整源码包。" >&2; return 1; }
     done
     for reference_asset in vsm-reference.json; do
-        [ -f "${KG_ROOT}/Assets/Documentation/${reference_asset}" ] || { echo "缺少语法手册：${reference_asset}。请使用完整 v0.1.3 源码包。" >&2; return 1; }
+        [ -f "${KG_ROOT}/Assets/Documentation/${reference_asset}" ] || { echo "缺少语法手册：${reference_asset}。请使用完整源码包。" >&2; return 1; }
     done
+    version="$("${KG_DOTNET}" msbuild "${KG_ROOT}/KuroakiGimmick.csproj" -getProperty:Version -nologo | tr -d '\r\n')"
+    build_number="$("${KG_DOTNET}" msbuild "${KG_ROOT}/KuroakiGimmick.csproj" -getProperty:BuildNumber -nologo | tr -d '\r\n')"
+    [ -n "${version}" ] && [ -n "${build_number}" ] || { echo '无法读取项目版本号。' >&2; return 1; }
     mkdir -p "${KG_ROOT}/dist"
     stamp="$(date '+%Y%m%d-%H%M%S')"
-    name="KuroakiGimmick-v0.1.3-${rid}-17.0-${stamp}"
+    name="KuroakiGimmick-v${version}-${rid}-${build_number}-${stamp}"
     dest="${KG_ROOT}/dist/${name}"
     [ ! -e "${dest}" ] && [ ! -e "${dest}.zip" ] || { echo "输出已存在：${dest}" >&2; return 1; }
     KG_STAGE="$(mktemp -d "${KG_ROOT}/dist/.publish-${rid}.XXXXXX")"
@@ -51,7 +54,7 @@ kg_publish() {
             [ "${macos_executable}" = '1' ] || { echo "macOS 单文件包应只有 1 个可执行文件，实际 ${macos_executable} 个。" >&2; return 1; }
             mkdir -p "${package}/KuroakiGimmick.app/Contents/Resources"
             cp "${KG_ROOT}/Assets/App/Kuroaki.icns" "${package}/KuroakiGimmick.app/Contents/Resources/Kuroaki.icns"
-            cat > "${package}/KuroakiGimmick.app/Contents/Info.plist" <<'PLIST'
+            cat > "${package}/KuroakiGimmick.app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -61,8 +64,8 @@ kg_publish() {
 <key>CFBundleExecutable</key><string>KuroakiGimmick</string>
 <key>CFBundleIconFile</key><string>Kuroaki.icns</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.1.3</string>
-<key>CFBundleVersion</key><string>17.0</string>
+<key>CFBundleShortVersionString</key><string>${version}</string>
+<key>CFBundleVersion</key><string>${build_number}</string>
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 PLIST

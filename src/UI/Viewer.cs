@@ -41,6 +41,9 @@ public sealed partial class Viewer : IDisposable
     VideoExport? export;
     float mouseX, mouseY;
     bool click, held, seeking, quit, full, notes = true, effects = true, integerScale, diagnostics, help;
+    // Mute is transient UI state, not a project volume value. Keeping it separate prevents M from
+    // overwriting PreviewVolume and lets a second press restore the exact configured level.
+    bool audioMuted;
     bool dialogOpen;
     double rangeIn, rangeOut;
     double? resumePosition;
@@ -90,6 +93,7 @@ public sealed partial class Viewer : IDisposable
         rangeOut = s.Duration;
         transport.Load(silent ? null : s.Audio, s.Duration);
         transport.SetChartPlayback(s.Playback);
+        audioMuted = false;
         transport.SetVolume(s.Project.PreviewVolume);
         transport.SetDelay(s.Project.AudioDelayMs);
         message = L.Format($"Loaded {s.Chart.Notes.Count(n=>n.Type is not (3 or 4 or 5)):N0} notes / {s.Chart.Mods.Count:N0} events.");
@@ -411,9 +415,18 @@ public sealed partial class Viewer : IDisposable
     bool effectiveVolumeDirty;
     void SetVolume(double volume)
     {
-        transport.SetVolume(volume);
-        Current.Project.PreviewVolume = transport.Volume;
+        // Moving either volume slider is an explicit request to hear that level, so it also leaves mute.
+        audioMuted = false;
+        Current.Project.PreviewVolume = Math.Clamp(volume, 0, 1);
+        transport.SetVolume(Current.Project.PreviewVolume);
         effectiveVolumeDirty = true;
+    }
+
+    /// <summary>临时静音不改 project/settings；恢复时精确回到用户最后设置的 PreviewVolume。</summary>
+    void ToggleMute()
+    {
+        audioMuted = !audioMuted;
+        transport.SetVolume(audioMuted ? 0 : Current.Project.PreviewVolume);
     }
 
     /// <summary>mm:ss.ff 格式；负值取绝对值显示，不带符号。</summary>

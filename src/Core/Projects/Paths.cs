@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 
 namespace KuroakiGimmick.Core;
@@ -8,8 +9,18 @@ namespace KuroakiGimmick.Core;
 public static class Paths
 {
     public const string Version = "0.1.4";
-    public const string BuildNumber = "17.6.1";
-    public const string BuildRevision = "v0.1.4 / 17.6.1";
+    public const string BuildNumber = "17.6.2";
+    public const string StableBuildRevision = "v0.1.4 / 17.6.2";
+    /// <summary>
+    /// UI/CLI 显示的构建标识来自程序集 InformationalVersion。CI 可注入 "Nightly / &lt;sha&gt;"，
+    /// 正式/本地构建缺省为 StableBuildRevision；避免每次发布还要在多个源码文件里手改版本字符串。
+    /// </summary>
+    public static string BuildRevision { get; } = ResolveBuildRevision();
+    static string ResolveBuildRevision()
+    {
+        string? value = typeof(Paths).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion?.Trim();
+        return string.IsNullOrWhiteSpace(value) ? StableBuildRevision : value;
+    }
     /// <summary>资源根目录：优先用可执行文件旁的 Assets，找不到才回退到 bundle 外的共享副本；返回值不保证存在。</summary>
     public static string Assets
     {

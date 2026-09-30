@@ -14,7 +14,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 kg_aot_publish() {
-    local rid="$1" host version stamp name dest package binary log asset item shared library project_arg output_arg lock_arg
+    local rid="$1" host version build_number stamp name dest package binary log asset item shared library project_arg output_arg lock_arg
     host="$(uname -s)"
     case "${rid}" in
         osx-*)
@@ -49,7 +49,8 @@ kg_aot_publish() {
         [ -f "${KG_AOT_ROOT}/Assets/App/Kuroaki.icns" ] || { echo '缺少 macOS 应用图标。' >&2; return 1; }
     fi
     version="$("${KG_AOT_DOTNET}" msbuild "${project_arg}" -getProperty:Version -nologo | tr -d '\r\n')"
-    [ -n "${version}" ] || { echo '无法读取项目版本号。' >&2; return 1; }
+    build_number="$("${KG_AOT_DOTNET}" msbuild "${project_arg}" -getProperty:BuildNumber -nologo | tr -d '\r\n')"
+    [ -n "${version}" ] && [ -n "${build_number}" ] || { echo '无法读取项目版本号。' >&2; return 1; }
     mkdir -p "${KG_AOT_ROOT}/dist"
     stamp="$(date '+%Y%m%d-%H%M%S')"
     name="KuroakiGimmick-v${version}-${rid}-NativeAOT-${stamp}"
@@ -97,7 +98,7 @@ kg_aot_publish() {
 <key>CFBundleIconFile</key><string>Kuroaki.icns</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>${version}</string>
-<key>CFBundleVersion</key><string>${version}</string>
+<key>CFBundleVersion</key><string>${build_number}</string>
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 PLIST

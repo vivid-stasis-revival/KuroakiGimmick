@@ -33,10 +33,9 @@ public sealed partial class SceneRenderer
             // footer 位于可动的 0..165 轨道副本之外。
             canvas.Quad(field.Texture, new(81, 165, 158, 15), Color.White.Alpha(1 - M("hom")), new(81f / 320, 165f / 180, 158f / 320, 15f / 180),
                 shader: fieldComposite);
-            if (clearFooter)
-            {
-                canvas.Fill(new(0, 165, 320, 15), Color.Hex(0).Alpha(1 - M("uialpha")));
-            }
+            // Do not paint an opaque "clear" rectangle here. The footer is a transparent render-layer concern;
+            // drawing black into scene made uialpha=0 leave a permanent strip over text/image gimmicks (#18).
+            _ = clearFooter;
         }
         // 启用 proxy 的谱面用自己的 proxy 副本替换中央游玩轨道；索引从大到小，即从后往前绘制。
         for (int p = proxyMode ? session.Chart.Proxies - 1 : -1; p >= 0; p--)
@@ -193,15 +192,14 @@ public sealed partial class SceneRenderer
             double xOffset = M("xoffset"), beatMotion = M("beat"), noteRotation = M("noterot");
             double bpmAtBeat = map.Bpm.BpmAtBeat(beat);
             bool custom = session.Chart.ObjectName == "obj_custom_gimmick";
-            // changeskin 在原版里是把整张 lane_sprites 换掉，所有轨道同时生效，不是逐轨的，所以这里只取一个值。
-            // GML 直接拿它当数组下标，GameMaker 的实数下标是向零取整，所以 tween 中途的小数照样截断，
-            // 皮肤是一跳一跳换过去的而不是渐变。取值越界由 NoteSkin 折回正常皮肤。
+            // changeskin 是离散枚举轨；Timeline 在事件起点直接写 To，不做 from->to tween。
+            // 所有轨道同时换整套 lane_sprites；越界由 NoteSkin 折回正常皮肤。
             int noteSkinIndex = session.SkinChangeEnabled ? (int) M("changeskin") : 0;
             var scrollByLane = noteScrollCache;
             var alphaByLane = noteAlphaCache;
             for (int lane = 0; lane < scrollByLane.Length; lane++)
             {
-                scrollByLane[lane] = scrollSpeed * M("scrollind" + lane) * velocity;
+                scrollByLane[lane] = NoteMotion.ScrollMultiplier(scrollSpeed, M("scrollind" + lane), velocity);
                 alphaByLane[lane] = custom ? noteAlpha * M("notealpind" + lane) : noteAlpha;
             }
             double beatPhase = Mod(beat + .3, 2), beatFraction = Mod(beatPhase, 1), beatEnvelope = 0;
@@ -218,9 +216,8 @@ public sealed partial class SceneRenderer
             {
                 double scroll = lane >= 0 && lane < scrollByLane.Length
                     ? scrollByLane[lane]
-                    : scrollSpeed * M("scrollind" + lane) * velocity;
-                double y = 144 + alignment - ((distance - yOffset) * .1 + driven * bpmAtBeat / 60 * 22) * scroll
-                    - wave * .2 * Math.Sin(distance * .006578947368421052);
+                    : NoteMotion.ScrollMultiplier(scrollSpeed, M("scrollind" + lane), velocity);
+                double y = alignment + NoteMotion.YFromScroll(distance, yOffset, driven, bpmAtBeat / 60, scroll, wave);
                 y += boostTime == 0
                     ? -boostDistance
                     : -boostDistance + boostDistance * Math.Pow(Math.Clamp((boostTime - distance) / boostTime, 0, 1), 3);

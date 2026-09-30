@@ -15,7 +15,7 @@ public static class ModCatalog
         Supported.Add("playspeed");
         Supported.Add("prtrX");
         Supported.Add("prtrY");
-        // o_combodisplay 的显隐开关；只控制 combo 数字及其命中钻尘，不影响独立的判定显示。
+        // 谱面侧 HUD 读数开关；隐藏 combo、判定信息及 combo 命中钻尘。
         Supported.Add("hide_combo");
         // Custom Episodes 模组注册的全局 mod：到点在谱面上浮出一段对白（story.json），
         // 不影响判定也不改任何演出参数。value1/value2 用不到，作者写 _ 即可。

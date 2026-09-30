@@ -134,7 +134,7 @@ public sealed partial class GameUiRenderer
     void DrawJudgement(Session session, double time, string font)
     {
         int mode = session.Project.GameUiJudgement;
-        if (mode <= 0 || session.Score.LastHit(time) == null)
+        if (mode <= 0 || session.Timeline.Get("hide_combo", time) != 0 || session.Score.LastHit(time) == null)
         {
             return;
         }

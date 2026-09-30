@@ -8,8 +8,77 @@ permissions:
   contents: read
 
 jobs:
+  detect:
+    name: Detect build / release intent
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.meta.outputs.should_build }}
+      is_release: ${{ steps.meta.outputs.is_release }}
+      build_label: ${{ steps.meta.outputs.build_label }}
+      release_tag: ${{ steps.meta.outputs.release_tag }}
+      short_sha: ${{ steps.meta.outputs.short_sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - id: meta
+        name: Resolve changed files and release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          short_sha="$(git rev-parse --short=7 HEAD)"
+          message="$(git log -1 --pretty=%B)"
+          release_line="$(printf '%s\n' "$message" | grep -Eom1 'release: v[0-9]+\.[0-9]+\.[0-9]+ / [0-9]+(\.[0-9]+)*' || true)"
+
+          is_release=false
+          build_label="Nightly / ${short_sha}"
+          release_tag="nightly-${short_sha}"
+          if [[ -n "$release_line" ]]; then
+            is_release=true
+            build_label="${release_line#release: }"
+            # Git refs cannot contain spaces; the release title keeps the human-readable slash form.
+            release_tag="$(printf '%s' "$build_label" | sed -E 's# / #-#g; s#[^0-9A-Za-z._-]+#-#g; s#-+$##')"
+          fi
+
+          should_build=false
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            should_build=true
+          elif [[ "$is_release" == true ]]; then
+            # A release trigger always rebuilds from the triggering commit even if that commit only bumps metadata.
+            should_build=true
+          else
+            before="${{ github.event.before }}"
+            if [[ -z "$before" || "$before" == "0000000000000000000000000000000000000000" ]]; then
+              changed="$(git show --pretty='' --name-only HEAD)"
+            else
+              changed="$(git diff --name-only "$before" "${GITHUB_SHA}")"
+            fi
+
+            # Only application/build inputs trigger NativeAOT. README/changelog/.github-only commits deliberately do not.
+            if printf '%s\n' "$changed" | grep -Eq '^(src/|Assets/|Resources/|ThirdParty/|scripts/|KuroakiGimmick\.csproj$|packages\.lock\.json$|app\.manifest$)'; then
+              should_build=true
+            fi
+          fi
+
+          {
+            echo "short_sha=$short_sha"
+            echo "is_release=$is_release"
+            echo "should_build=$should_build"
+            echo "build_label=$build_label"
+            echo "release_tag=$release_tag"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "should_build=$should_build"
+          echo "is_release=$is_release"
+          echo "build_label=$build_label"
+          echo "release_tag=$release_tag"
+
   build:
     name: ${{ matrix.rid }}
+    needs: detect
+    if: needs.detect.outputs.should_build == 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -42,20 +111,29 @@ jobs:
 
       - name: Publish NativeAOT
         shell: bash
-        run: >-
-          dotnet publish KuroakiGimmick.csproj -c Release -r ${{ matrix.rid }}
-          --self-contained true -p:PublishAot=true -p:PublishSingleFile=false
-          -o artifacts/${{ matrix.rid }}
-
-      - name: Verify native output
-        shell: bash
+        env:
+          BUILD_LABEL: ${{ needs.detect.outputs.build_label }}
         run: |
+          set -euo pipefail
+          dotnet publish KuroakiGimmick.csproj -c Release -r '${{ matrix.rid }}' \
+            --self-contained true -p:PublishAot=true -p:PublishSingleFile=false \
+            "-p:InformationalVersion=${BUILD_LABEL}" \
+            -o 'artifacts/${{ matrix.rid }}'
+
+      - name: Verify native output and embedded version
+        shell: bash
+        env:
+          BUILD_LABEL: ${{ needs.detect.outputs.build_label }}
+        run: |
+          set -euo pipefail
           test -f 'artifacts/${{ matrix.rid }}/${{ matrix.executable }}'
           test -f 'artifacts/${{ matrix.rid }}/${{ matrix.sdl }}'
           test -f 'artifacts/${{ matrix.rid }}/${{ matrix.shaderc }}'
           test -f 'artifacts/${{ matrix.rid }}/${{ matrix.spirv_cross }}'
           test ! -f 'artifacts/${{ matrix.rid }}/KuroakiGimmick.runtimeconfig.json'
           test ! -f 'artifacts/${{ matrix.rid }}/KuroakiGimmick.deps.json'
+          actual="$('artifacts/${{ matrix.rid }}/${{ matrix.executable }}' --version | sed 's/^KuroakiGimmick //')"
+          test "$actual" = "$BUILD_LABEL" || { echo "Version mismatch: '$actual' != '$BUILD_LABEL'" >&2; exit 1; }
 
       - name: Archive macOS build
         if: runner.os == 'macOS'
@@ -74,3 +152,51 @@ jobs:
           archive: false
           if-no-files-found: error
           retention-days: 14
+
+  release:
+    name: Publish GitHub release
+    needs: [detect, build]
+    if: needs.detect.outputs.should_build == 'true' && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: nativeaot-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish Nightly or stable Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BUILD_LABEL: ${{ needs.detect.outputs.build_label }}
+          RELEASE_TAG: ${{ needs.detect.outputs.release_tag }}
+          IS_RELEASE: ${{ needs.detect.outputs.is_release }}
+          SHORT_SHA: ${{ needs.detect.outputs.short_sha }}
+        run: |
+          set -euo pipefail
+          mapfile -t assets < <(find release-assets -type f -name '*.zip' -print | sort)
+          (( ${#assets[@]} > 0 )) || { echo 'No release archives downloaded.' >&2; exit 1; }
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+            if [[ "$IS_RELEASE" == true ]]; then
+              gh release edit "$RELEASE_TAG" --title "$BUILD_LABEL" --draft=false --prerelease=false
+            else
+              gh release edit "$RELEASE_TAG" --title "$BUILD_LABEL" --draft=false --prerelease=true
+            fi
+          elif [[ "$IS_RELEASE" == true ]]; then
+            gh release create "$RELEASE_TAG" "${assets[@]}" \
+              --target "$GITHUB_SHA" \
+              --title "$BUILD_LABEL" \
+              --generate-notes
+          else
+            gh release create "$RELEASE_TAG" "${assets[@]}" \
+              --target "$GITHUB_SHA" \
+              --title "$BUILD_LABEL" \
+              --prerelease \
+              --notes "Automated NativeAOT build for commit ${SHORT_SHA} (${GITHUB_SHA})."
+          fi
