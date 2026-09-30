@@ -17,6 +17,7 @@ jobs:
       build_label: ${{ steps.meta.outputs.build_label }}
       release_tag: ${{ steps.meta.outputs.release_tag }}
       short_sha: ${{ steps.meta.outputs.short_sha }}
+
     steps:
       - uses: actions/checkout@v7
         with:
@@ -35,29 +36,42 @@ jobs:
           is_release=false
           build_label="Nightly / ${short_sha}"
           release_tag="nightly-${short_sha}"
+
           if [[ -n "$release_line" ]]; then
             is_release=true
             build_label="${release_line#release: }"
-            # Git refs cannot contain spaces; the release title keeps the human-readable slash form.
-            release_tag="$(printf '%s' "$build_label" | sed -E 's# / #-#g; s#[^0-9A-Za-z._-]+#-#g; s#-+$##')"
+
+            # Git refs cannot contain spaces or slashes in this form.
+            # Keep the human-readable slash form only as the Release title.
+            release_tag="$(printf '%s' "$build_label" \
+              | sed -E 's# / #-#g; s#[^0-9A-Za-z._-]+#-#g; s#-+$##')"
           fi
 
           should_build=false
+
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # Manual run always builds the selected commit.
             should_build=true
           elif [[ "$is_release" == true ]]; then
-            # A release trigger always rebuilds from the triggering commit even if that commit only bumps metadata.
+            # Stable releases always rebuild from the triggering commit,
+            # even when the release commit only changes metadata/docs.
             should_build=true
           else
             before="${{ github.event.before }}"
+
             if [[ -z "$before" || "$before" == "0000000000000000000000000000000000000000" ]]; then
               changed="$(git show --pretty='' --name-only HEAD)"
             else
               changed="$(git diff --name-only "$before" "${GITHUB_SHA}")"
             fi
 
-            # Only application/build inputs trigger NativeAOT. README/changelog/.github-only commits deliberately do not.
-            if printf '%s\n' "$changed" | grep -Eq '^(src/|Assets/|Resources/|ThirdParty/|scripts/|KuroakiGimmick\.csproj$|packages\.lock\.json$|app\.manifest$)'; then
+            echo "Changed files:"
+            printf '%s\n' "$changed"
+
+            # Only application/build inputs trigger NativeAOT.
+            # README / CHANGELOG / .github-only commits intentionally do not build.
+            if printf '%s\n' "$changed" | grep -Eq \
+              '^(src/|Assets/|Resources/|ThirdParty/|scripts/|KuroakiGimmick\.csproj$|packages\.lock\.json$|app\.manifest$)'; then
               should_build=true
             fi
           fi
@@ -80,6 +94,7 @@ jobs:
     needs: detect
     if: needs.detect.outputs.should_build == 'true'
     runs-on: ${{ matrix.runner }}
+
     strategy:
       fail-fast: false
       matrix:
@@ -90,6 +105,7 @@ jobs:
             sdl: SDL3.dll
             shaderc: shaderc_shared.dll
             spirv_cross: spirv-cross.dll
+
           - runner: macos-15
             rid: osx-arm64
             executable: KuroakiGimmick
@@ -107,7 +123,9 @@ jobs:
 
       - name: Select the installed SDK
         shell: bash
-        run: printf '{"sdk":{"version":"%s"}}\n' '${{ steps.dotnet.outputs.dotnet-version }}' > global.json
+        run: |
+          printf '{"sdk":{"version":"%s"}}\n' \
+            '${{ steps.dotnet.outputs.dotnet-version }}' > global.json
 
       - name: Publish NativeAOT
         shell: bash
@@ -115,8 +133,13 @@ jobs:
           BUILD_LABEL: ${{ needs.detect.outputs.build_label }}
         run: |
           set -euo pipefail
-          dotnet publish KuroakiGimmick.csproj -c Release -r '${{ matrix.rid }}' \
-            --self-contained true -p:PublishAot=true -p:PublishSingleFile=false \
+
+          dotnet publish KuroakiGimmick.csproj \
+            -c Release \
+            -r '${{ matrix.rid }}' \
+            --self-contained true \
+            -p:PublishAot=true \
+            -p:PublishSingleFile=false \
             "-p:InformationalVersion=${BUILD_LABEL}" \
             -o 'artifacts/${{ matrix.rid }}'
 
@@ -126,28 +149,43 @@ jobs:
           BUILD_LABEL: ${{ needs.detect.outputs.build_label }}
         run: |
           set -euo pipefail
+
           test -f 'artifacts/${{ matrix.rid }}/${{ matrix.executable }}'
           test -f 'artifacts/${{ matrix.rid }}/${{ matrix.sdl }}'
           test -f 'artifacts/${{ matrix.rid }}/${{ matrix.shaderc }}'
           test -f 'artifacts/${{ matrix.rid }}/${{ matrix.spirv_cross }}'
+
           test ! -f 'artifacts/${{ matrix.rid }}/KuroakiGimmick.runtimeconfig.json'
           test ! -f 'artifacts/${{ matrix.rid }}/KuroakiGimmick.deps.json'
+
           actual="$('artifacts/${{ matrix.rid }}/${{ matrix.executable }}' --version | sed 's/^KuroakiGimmick //')"
-          test "$actual" = "$BUILD_LABEL" || { echo "Version mismatch: '$actual' != '$BUILD_LABEL'" >&2; exit 1; }
+
+          if [[ "$actual" != "$BUILD_LABEL" ]]; then
+            echo "Version mismatch: '$actual' != '$BUILD_LABEL'" >&2
+            exit 1
+          fi
 
       - name: Archive macOS build
         if: runner.os == 'macOS'
         shell: bash
-        run: ditto -c -k --keepParent 'artifacts/${{ matrix.rid }}' 'artifacts/KuroakiGimmick-${{ matrix.rid }}.zip'
+        run: |
+          ditto -c -k --keepParent \
+            'artifacts/${{ matrix.rid }}' \
+            'artifacts/KuroakiGimmick-${{ matrix.rid }}.zip'
 
       - name: Archive Windows build
         if: runner.os == 'Windows'
         shell: pwsh
-        run: Compress-Archive -LiteralPath 'artifacts/${{ matrix.rid }}' -DestinationPath 'artifacts/KuroakiGimmick-${{ matrix.rid }}.zip'
+        run: |
+          Compress-Archive `
+            -LiteralPath 'artifacts/${{ matrix.rid }}' `
+            -DestinationPath 'artifacts/KuroakiGimmick-${{ matrix.rid }}.zip'
 
-      - uses: actions/upload-artifact@v7
+      # archive: false makes upload-artifact use the uploaded filename itself
+      # as the Actions artifact name, so do not set a misleading custom name.
+      - name: Upload release archive
+        uses: actions/upload-artifact@v7
         with:
-          name: nativeaot-${{ matrix.rid }}
           path: artifacts/KuroakiGimmick-${{ matrix.rid }}.zip
           archive: false
           if-no-files-found: error
@@ -158,14 +196,31 @@ jobs:
     needs: [detect, build]
     if: needs.detect.outputs.should_build == 'true' && needs.build.result == 'success'
     runs-on: ubuntu-latest
+
     permissions:
       contents: write
+
     steps:
-      - uses: actions/download-artifact@v7
+      # With archive:false above, the real Actions artifact names are:
+      #   KuroakiGimmick-win-x64.zip
+      #   KuroakiGimmick-osx-arm64.zip
+      - name: Download release archives
+        uses: actions/download-artifact@v7
         with:
-          pattern: nativeaot-*
+          pattern: 'KuroakiGimmick-*.zip'
           path: release-assets
           merge-multiple: true
+
+      - name: Verify downloaded release archives
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Downloaded release assets:"
+          find release-assets -type f -print | sort
+
+          test -f release-assets/KuroakiGimmick-win-x64.zip
+          test -f release-assets/KuroakiGimmick-osx-arm64.zip
 
       - name: Publish Nightly or stable Release
         shell: bash
@@ -176,25 +231,52 @@ jobs:
           RELEASE_TAG: ${{ needs.detect.outputs.release_tag }}
           IS_RELEASE: ${{ needs.detect.outputs.is_release }}
           SHORT_SHA: ${{ needs.detect.outputs.short_sha }}
+
         run: |
           set -euo pipefail
-          mapfile -t assets < <(find release-assets -type f -name '*.zip' -print | sort)
-          (( ${#assets[@]} > 0 )) || { echo 'No release archives downloaded.' >&2; exit 1; }
+
+          mapfile -t assets < <(
+            find release-assets -type f -name 'KuroakiGimmick-*.zip' -print | sort
+          )
+
+          if (( ${#assets[@]} != 2 )); then
+            echo "Expected exactly 2 release archives, found ${#assets[@]}." >&2
+            printf 'Found: %s\n' "${assets[@]:-<none>}" >&2
+            exit 1
+          fi
 
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+            gh release upload \
+              "$RELEASE_TAG" \
+              "${assets[@]}" \
+              --clobber
+
             if [[ "$IS_RELEASE" == true ]]; then
-              gh release edit "$RELEASE_TAG" --title "$BUILD_LABEL" --draft=false --prerelease=false
+              gh release edit \
+                "$RELEASE_TAG" \
+                --title "$BUILD_LABEL" \
+                --draft=false \
+                --prerelease=false
             else
-              gh release edit "$RELEASE_TAG" --title "$BUILD_LABEL" --draft=false --prerelease=true
+              gh release edit \
+                "$RELEASE_TAG" \
+                --title "$BUILD_LABEL" \
+                --draft=false \
+                --prerelease=true
             fi
+
           elif [[ "$IS_RELEASE" == true ]]; then
-            gh release create "$RELEASE_TAG" "${assets[@]}" \
+            gh release create \
+              "$RELEASE_TAG" \
+              "${assets[@]}" \
               --target "$GITHUB_SHA" \
               --title "$BUILD_LABEL" \
               --generate-notes
+
           else
-            gh release create "$RELEASE_TAG" "${assets[@]}" \
+            gh release create \
+              "$RELEASE_TAG" \
+              "${assets[@]}" \
               --target "$GITHUB_SHA" \
               --title "$BUILD_LABEL" \
               --prerelease \
