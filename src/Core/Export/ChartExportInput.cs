@@ -8,7 +8,8 @@ namespace KuroakiGimmick.Core;
 /// <summary>已编辑文档的一份冻结快照。导出不会保存、也不会把编辑会话标记为已保存。</summary>
 public sealed record ChartExportInput(ViewerProject Project, string? Images, string VsmText, byte[] VsmBytes,
     string ConfigText, string[] ProtectedPaths, string[] Notices, string? ImageText = null, string? ImageRoot = null,
-    IReadOnlyDictionary<string, string>? TextSources = null, IReadOnlyDictionary<string, string>? ImageOriginalNames = null)
+    IReadOnlyDictionary<string, string>? TextSources = null, IReadOnlyDictionary<string, string>? ImageOriginalNames = null,
+    VscDialect VscDialect = VscDialect.Legacy)
 {
     /// <summary>从编辑器文档取快照。此后再改动文档不影响已生成的导出计划。</summary>
     public static ChartExportInput Capture(EditorDocument document, Session session)
@@ -40,7 +41,7 @@ public sealed record ChartExportInput(ViewerProject Project, string? Images, str
             session.Chart.Diagnostics.Concat(check.Diagnostics).Select(d => d.Message).Distinct().ToArray(),
             document.Images.HasContent ? document.Images.Text : null, document.Images.ResourceRoot,
             document.TextSources.ToDictionary(x => x.Key, x => x.Value, StringComparer.Ordinal),
-            document.Images.OriginalResourceNames());
+            document.Images.OriginalResourceNames(), session.Chart.VscDialect);
     }
     /// <summary>导出文件名的词干：取谱面/VSM 的难度名并去掉 ".editor" 后缀，避免把编辑副本的命名带进成品。</summary>
     public static string Stem(ViewerProject p)

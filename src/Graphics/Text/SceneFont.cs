@@ -119,7 +119,7 @@ public sealed class SceneFont : IDisposable
     /// 给出的是已经过 matrix 变换的四个角点。
     /// </summary>
     public void Draw(Canvas canvas, Session session, double time, Matrix3x2? projection = null,
-        Func<string, double>? values = null, string? ghostId = null, Action<string, Vector2[]>? bounds = null)
+        Func<string, double>? values = null, string? ghostId = null, Action<string, Vector2[]>? bounds = null, bool render = true)
     {
         UseFont(canvas, session);
         var tl = session.Timeline;
@@ -135,8 +135,9 @@ public sealed class SceneFont : IDisposable
             double M(string kind) => values?.Invoke(kind + suffix) ?? tl.Get(kind + suffix, time);
             double alpha = M("textalp"), scale = M("textscale");
             // 正在编辑的轨道即使被演出调成全透明，也要给一个可见的幽灵，否则用户看不到自己在改什么。
+            // render=false 是 GAME SCENE 命中测量：透明文字仍要留下作者框，否则恰好在 fade=0 的拍上永远选不中。
             if (track.Id == ghostId && alpha <= 0) alpha = .3;
-            if (alpha <= 0 || Math.Abs(scale) < .001 || Math.Abs(scale) > 1000)
+            if ((render && alpha <= 0) || Math.Abs(scale) < .001 || Math.Abs(scale) > 1000)
             {
                 continue;
             }
@@ -169,10 +170,11 @@ public sealed class SceneFont : IDisposable
                     var g = GlyphFor(rune.ToString());
                     var texture = originalAtlas ?? pages[g.page];
                     float gx = left + g.offset * fontX, gy = top - ascenderOffset;
-                    canvas.Polygon(texture, Vector2.Transform(new(gx, gy), matrix), Vector2.Transform(new(gx + g.w * fontX, gy), matrix),
-                        Vector2.Transform(new(gx, gy + g.h * fontY), matrix), Vector2.Transform(new(gx + g.w * fontX, gy + g.h * fontY),
-                        matrix), color, new(g.x / (float) texture.Width, g.y / (float) texture.Height, g.w / (float) texture.Width,
-                        g.h / (float) texture.Height));
+                    if (render)
+                        canvas.Polygon(texture, Vector2.Transform(new(gx, gy), matrix), Vector2.Transform(new(gx + g.w * fontX, gy), matrix),
+                            Vector2.Transform(new(gx, gy + g.h * fontY), matrix), Vector2.Transform(new(gx + g.w * fontX, gy + g.h * fontY),
+                            matrix), color, new(g.x / (float) texture.Width, g.y / (float) texture.Height, g.w / (float) texture.Width,
+                            g.h / (float) texture.Height));
                     left += g.advance;
                 }
                 top += step;

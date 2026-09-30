@@ -60,14 +60,14 @@ public sealed class InfoCardRenderer : IDisposable
         // 安静的网格底纹，避免大片纯色看起来像没画完。
         for (int x = 0; x < BaseWidth; x += 32) canvas.Fill(new(x, 0, 1, BaseHeight), Bg2);
         for (int y = 0; y < BaseHeight; y += 32) canvas.Fill(new(0, y, BaseWidth, 1), Bg2);
-        DrawJacket(canvas, fonts, card);
+        DrawJacket(canvas, fonts, session, card);
         DrawHeader(canvas, fonts, card);
         DrawRows(canvas, fonts, gameUi, session, card);
         DrawStats(canvas, fonts, gameUi, session, card);
         return target;
     }
 
-    void DrawJacket(Canvas canvas, Fonts fonts, SongInfoCard card)
+    void DrawJacket(Canvas canvas, Fonts fonts, Session session, SongInfoCard card)
     {
         // 封面 440x440，外面单独画亮框，避免把图二次重采样。
         canvas.Fill(new(48, 94, 452, 452), Bg0);
@@ -99,9 +99,13 @@ public sealed class InfoCardRenderer : IDisposable
             return;
         }
         // 等比放大后居中；低分辨率封面保持硬边，与游戏里的观感一致。
-        float factor = Math.Min(440f / jacket.Width, 440f / jacket.Height);
-        float w = Math.Max(1, Round(jacket.Width * factor)), h = Math.Max(1, Round(jacket.Height * factor));
-        canvas.Quad(jacket, new(54 + (440 - w) / 2, 100 + (440 - h) / 2, w, h), Color.White);
+        int frames = session.Jackets.Animated && card.JacketPath == session.Jackets.DefaultPath
+            ? Math.Max(1, session.Jackets.AnimatedFrames) : 1;
+        float sourceWidth = jacket.Width / (float)frames;
+        float factor = Math.Min(440f / sourceWidth, 440f / jacket.Height);
+        float w = Math.Max(1, Round(sourceWidth * factor)), h = Math.Max(1, Round(jacket.Height * factor));
+        // Information cards use frame 0 so an animated horizontal strip is not displayed as one stretched ultra-wide image.
+        canvas.Quad(jacket, new(54 + (440 - w) / 2, 100 + (440 - h) / 2, w, h), Color.White, new(0, 0, 1f / frames, 1));
     }
 
     void DrawHeader(Canvas canvas, Fonts fonts, SongInfoCard card)

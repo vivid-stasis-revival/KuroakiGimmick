@@ -356,7 +356,7 @@
   "Select text to edit content + motion.": "选择文字以编辑内容和动画。",
   "Chart Folder includes text files.": "谱面文件夹导出包含文字文件。",
   "TEXT / ": "文字 / ",
-  "LEGACY": "旧式",
+  "LEGACY": "旧版文本",
   "TEXT CANVAS": "文字画布",
   "Content": "内容",
   "At / beat": "位置 / 拍",
@@ -849,5 +849,10 @@
   "演多久由 story.json 的字数与打字速度决定，在轨道上画成琥珀色区间。": "演多久由 story.json 的字数与打字速度决定，在轨道上画成琥珀色区间。",
   "下一次触发会当场顶掉正在播的那一段；被切掉几句写在区间标签上。": "下一次触发会当场顶掉正在播的那一段；被切掉几句写在区间标签上。",
   "立绘 / CG / 转场只在剧情房间可用，谱面内会被模组静默跳过。": "立绘 / CG / 转场只在剧情房间可用，谱面内会被模组静默跳过。",
-  "No text cue exists at or before the target beat.": "目标拍及之前没有可操作的字幕。"
+  "No text cue exists at or before the target beat.": "目标拍及之前没有可操作的字幕。",
+  "VSP + assets": "VSP + 图片资源",
+  "EXPORT: VSM / VSM + cgmk config / VSP + assets / Chart Folder.": "导出：VSM / VSM + cgmk 配置 / VSP + 图片资源 / 谱面文件夹。",
+  "GAME SCENE: double-click image/text to select; drag the selected object to move X/Y.": "GAME SCENE：双击图片/文本进行选择；拖动已选对象可直接修改 X/Y。",
+  "Selected in GAME SCENE. Drag to move X/Y; Undo is one step.": "已在 GAME SCENE 中选中。拖动修改 X/Y；一次拖拽只占一个撤销步骤。",
+  "Scene drag unavailable: ": "场景拖动不可用："
 }

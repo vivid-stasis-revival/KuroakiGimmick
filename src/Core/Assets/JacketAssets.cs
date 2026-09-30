@@ -23,6 +23,9 @@ public sealed class JacketAssets
     public string Mode { get; private set; } = "normal";
     public string? DefaultPath { get; private set; }
     public bool CustomLayout { get; private set; }
+    /// <summary>CSM 3.4.0 horizontal square-frame jacket strip metadata for the song's default jacket.</summary>
+    public bool Animated { get; private set; }
+    public int AnimatedFrames { get; private set; } = 1;
     public int Count { get; private set; } = 1;
     public Dictionary<int, string> Files { get; } = [];
     /// <summary>负值取最后一张；其余按 ceil 后对 Count 取模，这是原版协议行为，不要改成四舍五入或钳制。</summary>
@@ -46,7 +49,7 @@ public sealed class JacketAssets
             return result;
         }
         string? Find(string dir,
-            string stem) => Directory.Exists(dir) ? Directory.EnumerateFiles(dir).Order(StringComparer.Ordinal).FirstOrDefault(f => Path.GetFileNameWithoutExtension(f).Equals(stem, StringComparison.OrdinalIgnoreCase) && Path.GetExtension(f).ToLowerInvariant() is ".png" or ".jpg" or ".jpeg") : null;
+            string stem) => Directory.Exists(dir) ? Directory.EnumerateFiles(dir).Order(StringComparer.Ordinal).FirstOrDefault(f => Path.GetFileNameWithoutExtension(f).Equals(stem, StringComparison.OrdinalIgnoreCase) && Path.GetExtension(f).ToLowerInvariant() is ".gif" or ".png" or ".jpg" or ".jpeg") : null;
         result.DefaultPath = project.Jacket ?? Find(root, "jacket");
         result.Mode = result.CustomLayout? SongFiles.ConfigString(project, "JACKET_MANAGE_MODE", "plaudite") : "normal";
         if (result.Mode is not ("normal" or "plaudite" or "custom"))
@@ -71,6 +74,14 @@ public sealed class JacketAssets
                 if (info.Width is < 1 or > 16384 || info.Height is < 1 or > 16384 || (long) info.Width * info.Height * 4 > 64 * 1024 * 1024)
                 {
                     throw new InvalidDataException("Cover dimensions exceed the 64 MiB decoded limit.");
+                }
+                if (project.JacketAnimated && result.DefaultPath != null &&
+                    Path.GetFullPath(path).Equals(Path.GetFullPath(result.DefaultPath), StringComparison.OrdinalIgnoreCase))
+                {
+                    result.Animated = true;
+                    result.AnimatedFrames = Math.Max(1, info.Width / Math.Max(1, info.Height));
+                    if (result.AnimatedFrames <= 1)
+                        chart.Diagnostics.Add(new(path, 0, "jacket_animated is true but the cover does not contain multiple square frames."));
                 }
                 result.Files[id] = path;
             }

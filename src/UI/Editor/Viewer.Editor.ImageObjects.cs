@@ -31,12 +31,12 @@ public sealed partial class Viewer
     string imageObjectError = "";
     static readonly string[] ImagePresets = ["MOVE", "SCALE", "ROTATE", "FADE IN", "FADE OUT", "POP IN"];
     /// <summary>画布上是否有拖拽正在进行（图像、动画组或文本任一）。为真时禁止改选中项，免得拖到一半换了对象。</summary>
-    bool ImageGestureActive => imageObjectDrag != null || imageGroupDrag != null || textDrag != null;
+    bool ImageGestureActive => imageObjectDrag != null || imageGroupDrag != null || textDrag != null || sceneDirectDrag != null;
 
     /// <summary>换谱面时清空 image 编辑状态。先取消手势，否则鼠标捕获会留到下一个谱面。</summary>
     void ResetImageObjects()
     {
-        CancelImageGesture(); selectedImageId = null; selectedImageGroup = null; imageInspector = imageCanvas = imageSources = false;
+        CancelSceneDirectGesture(); CancelImageGesture(); selectedImageId = null; selectedImageGroup = null; imageInspector = imageCanvas = imageSources = false;
         imageModelOwner = null; imageModelRevision = -1; imageSampler = null; imageGroups.Clear();
         expandedImageTracks.Clear(); hiddenImageItems.Clear(); lockedImageItems.Clear(); imageListScroll = 0;
         imageViewCenter = new(160, 90); imageViewZoom = 1; imageObjectError = "";
@@ -115,7 +115,7 @@ public sealed partial class Viewer
     /// 从列表或画布选中一个 image。手势进行中直接返回，未在 VSP 声明的 id 也不受理。
     /// 会关掉文本侧的面板（共用同一块区域），停播并把播放头对到 ImageEditBeat；换了对象才重置视图缩放。
     /// </summary>
-    void SelectImageObject(string id, bool canvas = true, Guid? groupId = null)
+    void SelectImageObject(string id, bool canvas = true, Guid? groupId = null, double? keyBeat = null)
     {
         if (editor == null || ImageGestureActive) return;
         EnsureImageModel();
@@ -130,6 +130,10 @@ public sealed partial class Viewer
             selectedClip = groupId;
             imagePoseTarget = ActiveImageGroup?.Duration > 0 ? ImagePoseTarget.End : ImagePoseTarget.Key;
             imageKeyBeat = ActiveImageGroup?.Beat ?? InsertionBeat;
+        }
+        else if (keyBeat is double directBeat)
+        {
+            selectedClip = null; imagePoseTarget = ImagePoseTarget.Key; imageKeyBeat = directBeat;
         }
         else { selectedClip = null; imagePoseTarget = ImagePoseTarget.Initial; }
         if (changed) { inspectorScroll = 0; imageViewCenter = new(160, 90); imageViewZoom = 1; }

@@ -75,6 +75,7 @@ public static class SongFiles
         {
             p.Audio = view.AudioId == null ? null : Existing(dir, view.AudioId);
             p.Jacket = view.Jacket == null ? null : Existing(dir, view.Jacket);
+            p.JacketAnimated = view.JacketAnimated;
             if (double.TryParse(view.BpmDisplay, NumberStyles.Float, CultureInfo.InvariantCulture, out double bpm)
                 && bpm > 0 && bpm <= 10000)
             {
