@@ -86,6 +86,7 @@ public static class VsmReader
                             break;
                         case "proxies":
                             c.Proxies = int.Parse(value, CultureInfo.InvariantCulture);
+                            c.ProxyCountDeclared = true;
                             if (c.Proxies is < 0 or > 64)
                             {
                                 throw new FormatException("Proxy count must be 0..64.");
