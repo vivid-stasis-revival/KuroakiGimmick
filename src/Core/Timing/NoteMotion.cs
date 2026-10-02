@@ -9,6 +9,19 @@ public static class NoteMotion
     /// <summary>原版滚动倍率：scrollspeed × scrollindN × velocity。velocity 不做额外缩放。</summary>
     public static double ScrollMultiplier(double scrollSpeed, double laneScroll, double velocity) => scrollSpeed * laneScroll * velocity;
 
+    /// <summary>Conservative future cutoff, in milliseconds. Past the boost transition, Y is linear plus bounded wave/boost terms.</summary>
+    public static double FutureDistance(double alignment, double yOffset, double driven, double beatsPerSecond,
+        double scroll, double wave, double boostTime, double boostDistance, bool custom)
+    {
+        if (scroll == 0) return double.PositiveInfinity;
+        double center = alignment + 144 + yOffset * .1 * scroll - driven * beatsPerSecond * 22 * scroll;
+        double radius = Math.Abs(wave * .2) + Math.Abs(boostDistance);
+        double distance = (scroll > 0 ? center + 25 + radius : 205 - center + radius) / (.1 * Math.Abs(scroll));
+        // Custom boost is cubic only before bt; afterwards its magnitude is bounded by |bd|.
+        distance = Math.Max(distance, custom ? Math.Max(0, boostTime) : 0);
+        return double.IsFinite(distance) ? distance + 1e-6 : double.PositiveInfinity;
+    }
+
     /// <summary>横向偏移。以两拍为周期、0.3 拍相位提前的原版律动包络；distance 单位毫秒，结果在 320×180 逻辑空间。</summary>
     public static double X(Timeline t, double time, int lane, double distance)
     {

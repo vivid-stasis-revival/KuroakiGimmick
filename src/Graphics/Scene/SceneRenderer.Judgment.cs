@@ -51,11 +51,9 @@ public sealed partial class SceneRenderer
     void DrawJudgmentEffects(Session session, double t)
     {
         var map = session.Timeline;
-        var hits = session.Score.Hits;
         bool holdTicks = session.Project.GameUiEnabled && session.Project.GameUiHoldEffects;
-        for (int i = LowerBound(hits, t - IndicatorLife, h => h.Time); i < hits.Count && hits[i].Time <= t; i++)
+        foreach (var h in session.Score.HitsBetween(t - IndicatorLife, t, holdTicks))
         {
-            var h = hits[i];
             // 地雷在原版 autoplay 分支里只结算不出特效。长条中途的节拍点是独立开关。
             if (h.Kind == ScoreState.HitKind.Mine || (h.Kind == ScoreState.HitKind.HoldTick && !holdTicks))
             {
@@ -123,11 +121,10 @@ public sealed partial class SceneRenderer
     /// </summary>
     void DrawComboParticles(Session session, double t)
     {
-        var hits = session.Score.Hits;
-        for (int i = LowerBound(hits, t - ComboDustAlpha * ComboDustLife / 240, h => h.Time); i < hits.Count && hits[i].Time <= t; i++)
+        foreach (var hit in session.Score.HitsBetween(t - ComboDustAlpha * ComboDustLife / 240, t))
         {
             // 字宽要按这次判定当时的连击数来量，不能用当前帧的：数字位数一变，喷射点会整体外扩。
-            double hitTime = hits[i].Time;
+            double hitTime = hit.Time;
             if (session.Timeline.Get("uialpha", hitTime) <= 0 || session.Timeline.Get("hide_combo", hitTime) != 0)
             {
                 continue;

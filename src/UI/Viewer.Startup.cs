@@ -10,6 +10,10 @@ public sealed partial class Viewer
 {
     bool startup, startupInput, startupLoadPending;
     int startupScroll;
+    string? startupTip;
+    bool startupTipVisible;
+
+    void RefreshStartupTip() => startupTip = FunTips.Pick(FunTips.Load(), startupTip);
     bool StartupVisible => startup || startupAlpha > .001f;
 
     /// <summary>
@@ -109,7 +113,8 @@ public sealed partial class Viewer
 
     void DrawStartup(int w, int h)
     {
-        if (!StartupVisible) return;
+        if (!StartupVisible) { startupTipVisible = false; return; }
+        if (!startupTipVisible) { RefreshStartupTip(); startupTipVisible = true; }
         Canvas.Clip(null);
         using var fade = Canvas.Opacity(startupAlpha);
         Canvas.Fill(new(0, 0, w, h), Color.Hex(0x03060B, .87f));
@@ -141,6 +146,7 @@ public sealed partial class Viewer
                 max: split - left - 25);
             if (startupLoadPending || message.StartsWith(L.Get("Load failed: "), StringComparison.Ordinal))
                 Text(message, left, card.Y + 301, 11, red, max: split - left - 25);
+            DrawStartupTip(left, card.Y + 342, split - left - 25, card.Y + card.H - 90);
             if (Button(L.Get("SETTINGS"), new(left, card.Y + card.H - 69, split - left - 24, 34)))
             {
                 startup = false; settings = true; click = false;
@@ -176,6 +182,33 @@ public sealed partial class Viewer
         finally { startupInput = false; }
     }
 
+    void DrawStartupTip(float x, float y, float width, float bottom)
+    {
+        if (startupTip == null || width < 40 || bottom - y < 75) return;
+        Label(L.Get("TIP"), x, y);
+        float lineY = y + 24;
+        string rest = startupTip.Replace("\r", "");
+        while (rest.Length > 0 && lineY + 16 <= bottom)
+        {
+            int count = 0;
+            while (count < rest.Length && rest[count] != '\n')
+            {
+                int next = count + (char.IsHighSurrogate(rest[count]) && count + 1 < rest.Length ? 2 : 1);
+                if (fonts.Measure(rest[..next], 12) > width && count > 0) break;
+                count = next;
+            }
+            if (count < rest.Length && rest[count] != '\n' && count > 0)
+            {
+                int space = rest.LastIndexOf(' ', count - 1);
+                if (space > 0) count = space;
+            }
+            Text(rest[..count], x, lineY, 12, muted, max: width);
+            rest = rest[count..].TrimStart(' ', '\t');
+            if (rest.StartsWith('\n')) rest = rest[1..];
+            lineY += 18;
+        }
+    }
+
     /// <summary>真实 SDL 输入与 GPU 绘制的启动页检查；调用方使用 silent Viewer，测试不会写用户设置。</summary>
     public void SmokeStartupUi(string screenshot)
     {
@@ -196,6 +229,14 @@ public sealed partial class Viewer
         try
         {
             Draw(1440, 940);
+            // Exercise wrapping with fixed text independently of the bundled tips.
+            startupTip = "小贴士：拖动播放头，再添加字幕。 Tips stay stable while the welcome page is visible.";
+            startupTipVisible = true;
+            Draw(1440, 940);
+            string? shown = startupTip;
+            Draw(1440, 940);
+            if (startupTip != shown) throw new Exception("Welcome tip changed during drawing.");
+            Draw(800, 600); Draw(1440, 940);
             Canvas.SavePpm(UiTarget, screenshot);
             // 断言的正是绘制循环取标题的那个函数：谱面文件名是 ENCORE，列表里必须是这首歌。
             if (RecentTitle(song) != "Scarlet Death / lexycat @ BACKSTAGE  LV.17")

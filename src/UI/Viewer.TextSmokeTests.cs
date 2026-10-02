@@ -77,6 +77,25 @@ public sealed partial class Viewer
         int selectedRow = editTracks.FindIndex(t => t.TextId == id);
         if (selectedRow < trackScroll || selectedRow >= trackScroll + Math.Max(1, (int)(editorTracksRect.H / 35)))
             throw new InvalidOperationException("Resizing hid the selected text object track.");
-        Console.WriteLine("PASS text UI: grouped tracks, real glyph canvas, drag/undo/redo, Escape, scale, rotation, multiline input and resized layouts");
+        // #28: stale inspector position must not override the playhead or an explicit marker.
+        activeMarker = null;
+        SelectText(id);
+        transport.Seek(Current.Timeline.Bpm.Time(32));
+        AddTextCueHere();
+        if (!editor.EditableTexts().Tracks.Single(t => t.Id == id).Cues.Any(c => c.Beat == 32)
+            || textAt != 32 || textAnimation != null)
+            throw new InvalidOperationException("Content cue did not use the current insertion beat.");
+        editor.Undo();
+        if (editor.EditableTexts().Tracks.Single(t => t.Id == id).Cues.Any(c => c.Beat == 32))
+            throw new InvalidOperationException("New content cue did not undo in one action.");
+        editor.Redo();
+        activeMarker = editor.Mark(48);
+        transport.Seek(Current.Timeline.Bpm.Time(16));
+        AddTextCueHere();
+        if (textAt != 48 || !editor.EditableTexts().Tracks.Single(t => t.Id == id).Cues.Any(c => c.Beat == 48))
+            throw new InvalidOperationException("Content cue ignored the active insertion marker.");
+        activeMarker = null;
+        Sync();
+        Console.WriteLine("PASS text UI: grouped tracks, real glyph canvas, drag/undo/redo, Escape, scale, rotation, multiline input, resized layouts, playhead/marker cue insertion and cue undo/redo");
     }
 }

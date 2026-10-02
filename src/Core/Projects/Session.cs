@@ -12,6 +12,7 @@ public sealed partial class Session
     public Timeline Timeline { get; }
     /// <summary>自动演奏的判定表；命中特效与计分 HUD 共用这一份，保证画面上炸开的那一下和数字跳的那一下是同一次判定。</summary>
     public ScoreState Score { get; }
+    public NoteIndex NoteIndex { get; }
     public Windows.WindowMotionConfig WindowMotion { get; }
     public CustomImages Images { get; }
     public AudioData? Audio { get; }
@@ -130,6 +131,7 @@ public sealed partial class Session
         Timeline = new(Chart, p, Audio?.Duration ?? Chart.Duration, Fx, NativeGimmick);
         // 判定表依赖 BpmMap 求长条的每拍毫秒数，所以必须排在 Timeline 之后。
         Score = new(Chart, Timeline.Bpm);
+        NoteIndex = new(Chart.Notes);
         Checker = Checkerboard.Load(p, Chart, Timeline);
         // 时长取音频优先；无音频时取谱面、时间轴尾部和最后一条文本 cue 之后的富余，三者取最大，避免演出被提前截断。
         Duration = Audio?.Duration ?? Math.Max(Math.Max(Chart.Duration, Timeline.End + .5),

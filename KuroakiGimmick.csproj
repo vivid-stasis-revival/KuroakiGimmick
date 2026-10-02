@@ -213,6 +213,7 @@
 
   <ItemGroup>
     <Compile Include="src/**/*.cs" />
+    <EmbeddedResource Include="Assets/tips.json" LogicalName="KuroakiGimmick.Tips.json" />
 
     <EmbeddedResource Include="src/UI/Localization/*.json" LogicalName="KuroakiGimmick.Localization.%(Filename)%(Extension)" />
 

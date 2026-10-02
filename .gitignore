@@ -2,6 +2,7 @@
 # Keep application branding available in the source repository.
 /Assets/*
 !/Assets/App/
+!/Assets/tips.json
 /GameUI_*/
 /GimmickExtras_*/
 /RoomFX_*/
@@ -34,3 +35,7 @@ __MACOSX/
 *.suo
 __pycache__/
 *.py[cod]
+
+# Standalone regression runner outputs.
+/tests/**/bin/
+/tests/**/obj/

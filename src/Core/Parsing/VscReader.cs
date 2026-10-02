@@ -48,7 +48,7 @@ public static class VscReader
                 {
                     throw new FormatException("Invalid note lane.");
                 }
-                var extra = new Dictionary<int, object>();
+                Dictionary<int, object>? extra = null;
                 Dictionary<string, string?>? modExtra = null;
                 if (parts.Length >= 5 && parts[4].Length > 0)
                 {
@@ -67,7 +67,7 @@ public static class VscReader
                         throw new FormatException("Hold ends before its start.");
                     }
                     // 回写毫秒：extra[1] 沿用 VSB 的槽位含义，hold 存绝对结束毫秒，报告和导出共用同一表示。
-                    extra[1] = end * 1000;
+                    (extra ??= new())[1] = end * 1000;
                 }
                 else if (type == 3)
                 {
@@ -96,7 +96,7 @@ public static class VscReader
                                 throw new FormatException("Invalid BPM.");
                             }
                             // 变速行复用 extra[1] 存 BPM（hold 行存的是结束毫秒），由音符 type 区分。
-                            extra[1] = n;
+                            (extra ??= new())[1] = n;
                         }
                         // 时间戳列始终是权威值；t 只是编辑器的对齐锚点，不参与换算。
                         else if (key is "v" or "s")
@@ -105,7 +105,7 @@ public static class VscReader
                         }
                     }
                 }
-                chart.Notes.Add(new(time, type, lane, end, extra, modExtra));
+                chart.Notes.Add(new(time, type, lane, end, extra ?? Note.EmptyExtra, modExtra));
                 if (chart.Notes.Count > 2_000_000)
                 {
                     throw new InvalidDataException("Too many VSC notes.");
