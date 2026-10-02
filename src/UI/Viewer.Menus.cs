@@ -112,7 +112,7 @@ public sealed partial class Viewer
                 break;
             case MenuCommand.Welcome:
                 if (settings) { settings = false; SaveSettings(); }
-                help = false; startup = true; click = held = false;
+                help = false; startup = true; startupTipVisible = false; click = held = false;
                 break;
             case MenuCommand.AttachFiles: ChooseOpen(true); break;
             case MenuCommand.Reload: Reload(); break;

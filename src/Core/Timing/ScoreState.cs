@@ -1,139 +1,308 @@
 namespace KuroakiGimmick.Core;
 
 /// <summary>
-/// 自动演奏下的判定流与两个滚动分数。原版 handle_judgement 是计分、连击和命中特效的同一个入口，
-/// 这里同样把它们合成一张判定表：谱面加载完就把每一次判定的时刻、轨道和特效种类一次算好，
-/// 之后 HUD 与判定特效都只按时间二分这张表，不保留任何跨帧状态，拖时间轴、倒放和导出结果一致。
+/// Autoplay judgements: explicit heads/tails and compact arithmetic hold streams.
+/// Rolling scores use bounded checkpoints, not one pair of doubles per future tick.
+/// All queries remain independent of playback direction.
 /// </summary>
 public sealed class ScoreState
 {
-    /// <summary>判定要出哪几样特效。原版由 handle_judgement_normal 的 arg5/arg6/arg7 三个开关组合而成。</summary>
-    public enum HitKind
-    {
-        /// <summary>常规键：指示框 + 两簇音符颗粒 + 两簇钻尘。长条的头和尾同样走这一档。</summary>
-        Note,
-        /// <summary>宽键：宽指示框 + 三簇音符颗粒 + 两簇朝外侧横飞的钻尘。</summary>
-        Wide,
-        /// <summary>地雷：只结算不出特效，原版 autoplay 分支把 arg5..arg7 全传 false。</summary>
-        Mine,
-        /// <summary>长条中途的节拍判定：只有两簇钻尘，没有指示框也没有音符颗粒。</summary>
-        HoldTick
-    }
-
-    /// <summary>
-    /// 一次判定。Time 单位秒；Lane 是 0..3 常规、4..6 宽键的内部轨道号。
-    /// Lead 是特效生成时音符距判定线还有多少毫秒，也就是原版 NoteModsX 的第一个参数去掉视觉延迟后的部分：
-    /// 音符自己被判定时它是 0，长条的节拍点和尾判用的却是长条头的坐标，于是变成负数。
-    /// </summary>
+    public enum HitKind { Note, Wide, Mine, HoldTick }
     public readonly record struct Hit(double Time, int Lane, HitKind Kind, double Lead);
-
-    /// <summary>
-    /// 判定档位：0=A.CRITICAL 1=CRITICAL 2=GREAT 3=GOOD 4=FAILED。
-    /// 预览没有按键输入，走的是原版 obj_note_rendering 的 autoplay 分支，该分支一律判 A.CRITICAL。
-    /// 接入真实判定后改这里即可，命中特效的配色帧号与 HUD 上的判定文本都由它导出。
-    /// </summary>
     public const int Tier = 0;
-    /// <summary>地雷在自己的时刻之后 timings[0] 毫秒才结算：原版 miss_timing 取的是 -timings[0]，不是 0。</summary>
-    const double MineWindow = 35;
-    /// <summary>长条尾部 150 毫秒不再切分节拍点，照抄 LoadSong 的 holdendms - notems - 150。</summary>
-    const double HoldTailGrace = 150;
-    /// <summary>单条长条的节拍点上限。原版没有这个限制，这里只是挡住畸形谱面（极高 BPM + 超长 hold）撑爆内存。</summary>
-    const int MaxHoldParts = 100_000;
-
-    /// <summary>按时间升序的全部判定。原版 notecount 正好等于它的长度：长条记 2 + parts，其余每个音符记 1。</summary>
-    public List<Hit> Hits { get; } = [];
-    /// <summary>原版 global.notecount。</summary>
-    public int NoteCount => Hits.Count;
-    /// <summary>原版 global.notevalue = 1000000 / notecount；没有音符时取 0，避免除零。</summary>
+    public const double MaxScore = 1010000, Accuracy = 100;
+    const double MineWindow = .035, HoldTailGrace = 150;
+    const int MaxHoldParts = 100_000, CheckpointLimit = 4096;
+    readonly Hit[] hits;
+    readonly Hold[] holds;
+    readonly Run[] runs;
+    readonly double[] runMaxEnd;
+    readonly long[] runCounts;
+    readonly double[] holdMaxEnd;
+    readonly List<Checkpoint> checkpoints = [];
+    readonly double accRate, accStep;
+    public long NoteCount { get; }
     public double NoteValue { get; }
-    /// <summary>原版 global.minusscore：从 1010000 里扣掉失分。预览全是 A.CRITICAL，扣分项恒为 0。</summary>
-    public const double MaxScore = 1010000;
-    /// <summary>原版 global.accuracy.value：[100,100,75,50,0] 的滑动平均，初值也是 100，因此全 A.CRITICAL 时恒为 100。</summary>
-    public const double Accuracy = 100;
+    public int StoredHitCount => hits.Length;
+    public int HoldStreamCount => holds.Length;
+    public int RollingCheckpointCount => checkpoints.Count;
 
-    /// <summary>两个滚动数字每秒（曲目时间）最多爬多少。</summary>
-    readonly double accRate, exRate;
-    /// <summary>每次判定给目标值加多少：准确分 1.01 × notevalue，EX 分固定 3。</summary>
-    readonly double accStep, exStep;
-    /// <summary>第 k 次判定发生的那一瞬间，两个滚动数字各自已经爬到的位置。</summary>
-    readonly double[] accAtHit, exAtHit;
+    readonly record struct Hold(double Start, double PeriodMs, int Count, int Lane)
+    {
+        public double At(int i) => Start + (i + 1) * PeriodMs / 1000;
+        public double End => At(Count - 1);
+    }
+    // Start is the source hold head, preserving the original p * perBeat / 1000 arithmetic.
+    readonly record struct Run(double Start, double PeriodMs, int Count, long Weight)
+    {
+        public double At(int i) => PeriodMs == 0 ? Start : Start + (i + 1) * PeriodMs / 1000;
+        public double End => At(Count - 1);
+        public int Bound(double time, bool inclusive)
+        {
+            int lo = 0, hi = Count;
+            while (lo < hi)
+            {
+                int mid = lo + (hi - lo) / 2;
+                if (inclusive ? At(mid) <= time : At(mid) < time) lo = mid + 1;
+                else hi = mid;
+            }
+            return lo;
+        }
+    }
+    readonly record struct Checkpoint(double Time, long Count, double Acc, double Ex);
+    readonly record struct Cursor(int Run, int Index);
 
     public ScoreState(Chart chart, BpmMap bpm)
     {
+        var explicitHits = new List<Hit>();
+        var holdStreams = new List<Hold>();
+        var groups = new Dictionary<(double Start, double Period, int Count), long>();
         foreach (var n in chart.Notes)
         {
             switch (n.Type)
             {
-                case 0:
-                    Hits.Add(new(n.Time, n.Lane, HitKind.Note, 0));
-                    break;
-                // 原版 LoadSong 把 type 1 与 type 8 一起塞进 4 + lane 的宽键轨道，计分上没有区别。
-                case 1 or 8:
-                    Hits.Add(new(n.Time, 4 + n.Lane, HitKind.Wide, 0));
-                    break;
-                case 6:
-                    Hits.Add(new(n.Time + MineWindow / 1000, n.Lane, HitKind.Mine, 0));
-                    break;
-                case 7:
-                    Hits.Add(new(n.Time + MineWindow / 1000, 4 + n.Lane, HitKind.Mine, 0));
-                    break;
+                case 0: explicitHits.Add(new(n.Time, n.Lane, HitKind.Note, 0)); break;
+                case 1 or 8: explicitHits.Add(new(n.Time, 4 + n.Lane, HitKind.Wide, 0)); break;
+                case 6 or 7: explicitHits.Add(new(n.Time + MineWindow, n.Lane + (n.Type == 7 ? 4 : 0), HitKind.Mine, 0)); break;
                 case 2:
-                    // msdelay 取 LoadSong 读到这条长条时的 BPM，也就是该时刻生效的变速段；
-                    // 工程若指定了固定 BPM，这里跟着固定值走，与画面上的滚动保持同一套时间。
-                    double perBeat = 60000 / bpm.BpmAtBeat(bpm.Beat(n.Time));
-                    int parts = (int) Math.Min(MaxHoldParts, Math.Floor(Math.Max(0, (n.End - n.Time) * 1000 - HoldTailGrace) / perBeat));
-                    Hits.Add(new(n.Time, n.Lane, HitKind.Note, 0));
-                    for (int p = 1; p <= parts; p++)
+                    double period = 60000 / bpm.BpmAtBeat(bpm.Beat(n.Time));
+                    int parts = (int)Math.Min(MaxHoldParts, Math.Floor(Math.Max(0, (n.End - n.Time) * 1000 - HoldTailGrace) / period));
+                    explicitHits.Add(new(n.Time, n.Lane, HitKind.Note, 0));
+                    explicitHits.Add(new(n.End, n.Lane, HitKind.Note, (n.Time - n.End) * 1000));
+                    if (parts > 0)
                     {
-                        Hits.Add(new(n.Time + p * perBeat / 1000, n.Lane, HitKind.HoldTick, -p * perBeat));
+                        holdStreams.Add(new(n.Time, period, parts, n.Lane));
+                        var key = (n.Time, period, parts);
+                        groups[key] = groups.GetValueOrDefault(key) + 1;
                     }
-                    Hits.Add(new(n.End, n.Lane, HitKind.Note, (n.Time - n.End) * 1000));
                     break;
             }
         }
-        Hits.Sort((a, b) => a.Time.CompareTo(b.Time));
-        NoteValue = Hits.Count == 0 ? 0 : 1000000.0 / Hits.Count;
-        // 原版每帧做 sdisp += timediff * 60 * (359800 / notecount)，而 timediff 是曲目时间差而不是真实帧时间，
-        // 所以这两个追赶积分器其实是曲目位置的函数：同一份谱面在 t 处的值唯一确定，可以预先算好再闭式求值。
-        accRate = Hits.Count == 0 ? 0 : 60 * 359800.0 / Hits.Count;
-        exRate = 60;
+        explicitHits.Sort((a, b) => a.Time.CompareTo(b.Time));
+        hits = explicitHits.ToArray();
+        holds = holdStreams.OrderBy(h => h.At(0)).ToArray();
+        holdMaxEnd = new double[Math.Max(1, holds.Length * 4)];
+        if (holds.Length > 0) BuildHolds(1, 0, holds.Length);
+        runs = groups.Select(g => new Run(g.Key.Start, g.Key.Period, g.Key.Count, g.Value)).OrderBy(r => r.At(0)).ToArray();
+        runMaxEnd = new double[Math.Max(1, runs.Length * 4)];
+        runCounts = new long[runMaxEnd.Length];
+        if (runs.Length > 0) BuildRuns(1, 0, runs.Length);
+        NoteCount = hits.LongLength + (runs.Length == 0 ? 0 : runCounts[1]);
+        NoteValue = NoteCount == 0 ? 0 : 1000000.0 / NoteCount;
         accStep = 1.01 * NoteValue;
-        exStep = 3;
-        accAtHit = new double[Hits.Count];
-        exAtHit = new double[Hits.Count];
-        for (int k = 1; k < Hits.Count; k++)
-        {
-            // 第 k 次判定发生的瞬间显示值还没来得及动，因此上限是前 k 次判定累计的目标值。
-            double gap = Hits[k].Time - Hits[k - 1].Time;
-            accAtHit[k] = Math.Min(k * accStep, accAtHit[k - 1] + accRate * gap);
-            exAtHit[k] = Math.Min(k * exStep, exAtHit[k - 1] + exRate * gap);
-        }
+        accRate = NoteCount == 0 ? 0 : 60 * 359800.0 / NoteCount;
+        BuildCheckpoints();
     }
 
-    /// <summary>t 时刻已经结算的判定次数。原版全 A.CRITICAL，所以它同时就是 global.currentcombo。</summary>
-    public int Judged(double time) => SortedSearch.UpperBound(Hits, time, h => h.Time);
-    /// <summary>原版 global.currentcombo。A.CRITICAL 每次 +1；断连和 GOOD 的分支在自动演奏下走不到。</summary>
-    public int Combo(double time) => Judged(time);
-    /// <summary>原版 global.currentscore：不经滚动的即时准确分。</summary>
+    double BuildHolds(int node, int lo, int hi)
+    {
+        if (hi - lo == 1) return holdMaxEnd[node] = holds[lo].End;
+        int mid = lo + (hi - lo) / 2;
+        return holdMaxEnd[node] = Math.Max(BuildHolds(node * 2, lo, mid), BuildHolds(node * 2 + 1, mid, hi));
+    }
+    void BuildRuns(int node, int lo, int hi)
+    {
+        if (hi - lo == 1)
+        {
+            runMaxEnd[node] = runs[lo].End;
+            runCounts[node] = runs[lo].Weight * runs[lo].Count;
+            return;
+        }
+        int mid = lo + (hi - lo) / 2;
+        BuildRuns(node * 2, lo, mid); BuildRuns(node * 2 + 1, mid, hi);
+        runMaxEnd[node] = Math.Max(runMaxEnd[node * 2], runMaxEnd[node * 2 + 1]);
+        runCounts[node] = runCounts[node * 2] + runCounts[node * 2 + 1];
+    }
+    public long Judged(double time) => SortedSearch.UpperBound(hits, time, h => h.Time) + CountAt(1, 0, runs.Length, time);
+    long CountAt(int node, int lo, int hi, double time)
+    {
+        if (lo == hi || runs[lo].At(0) > time) return 0;
+        if (runMaxEnd[node] <= time) return runCounts[node];
+        if (hi - lo == 1) return runs[lo].Weight * runs[lo].Bound(time, true);
+        int mid = lo + (hi - lo) / 2;
+        return CountAt(node * 2, lo, mid, time) + CountAt(node * 2 + 1, mid, hi, time);
+    }
+    public long Combo(double time) => Judged(time);
     public double CurrentScore(double time) => Judged(time) * accStep;
-    /// <summary>原版 global.gamescore：EX 分的即时值，A.CRITICAL 每个 3 分。</summary>
-    public int GameScore(double time) => 3 * Judged(time);
-    /// <summary>原版 sdisp_accscore：右上角那个会追上来的准确分。</summary>
-    public double AccScore(double time) => Rolling(time, accAtHit, accStep, accRate);
-    /// <summary>原版 sdisp_exscore：EX 分的滚动显示，固定每秒 60，密集段会明显落后于 gamescore。</summary>
-    public double ExScore(double time) => Rolling(time, exAtHit, exStep, exRate);
-
-    /// <summary>最近一次判定的时刻，用于判定显示的补间与淡出；t 之前还没有判定时返回 null。</summary>
+    public long GameScore(double time) => 3 * Judged(time);
+    public double AccScore(double time) => Rolling(time).Acc;
+    public double ExScore(double time) => Rolling(time).Ex;
     public double? LastHit(double time)
     {
-        int k = Judged(time);
-        return k == 0 ? null : Hits[k - 1].Time;
+        int i = SortedSearch.UpperBound(hits, time, h => h.Time);
+        double last = Math.Max(i == 0 ? double.NegativeInfinity : hits[i - 1].Time, LastAt(1, 0, runs.Length, time));
+        return double.IsNegativeInfinity(last) ? null : last;
+    }
+    double LastAt(int node, int lo, int hi, double time)
+    {
+        if (lo == hi || runs[lo].At(0) > time) return double.NegativeInfinity;
+        if (runMaxEnd[node] <= time) return runMaxEnd[node];
+        if (hi - lo == 1)
+        {
+            int count = runs[lo].Bound(time, true);
+            return count == 0 ? double.NegativeInfinity : runs[lo].At(count - 1);
+        }
+        int mid = lo + (hi - lo) / 2;
+        return Math.Max(LastAt(node * 2, lo, mid, time), LastAt(node * 2 + 1, mid, hi, time));
     }
 
-    /// <summary>min(目标值, 上一次判定时的位置 + 速率 × 已过时间)，即原版逐帧 min(sdisp + step, target) 的闭式。</summary>
-    double Rolling(double time, double[] atHit, double step, double rate)
+    PriorityQueue<Cursor, double> Queue(double after, double until)
     {
-        int k = Judged(time);
-        return k == 0 ? 0 : Math.Min(k * step, atHit[k - 1] + rate * (time - Hits[k - 1].Time));
+        var queue = new PriorityQueue<Cursor, double>();
+        int explicitIndex = SortedSearch.UpperBound(hits, after, h => h.Time);
+        if (explicitIndex < hits.Length && hits[explicitIndex].Time <= until)
+            queue.Enqueue(new(-1, explicitIndex), hits[explicitIndex].Time);
+        Add(1, 0, runs.Length);
+        return queue;
+        void Add(int node, int lo, int hi)
+        {
+            if (lo == hi || runMaxEnd[node] <= after || runs[lo].At(0) > until) return;
+            if (hi - lo == 1)
+            {
+                int i = runs[lo].Bound(after, true);
+                if (i < runs[lo].Count && runs[lo].At(i) <= until) queue.Enqueue(new(lo, i), runs[lo].At(i));
+                return;
+            }
+            int mid = lo + (hi - lo) / 2;
+            Add(node * 2, lo, mid); Add(node * 2 + 1, mid, hi);
+        }
+    }
+    Checkpoint Advance(Checkpoint state, Run run, int first, int count)
+    {
+        double start = run.At(first), end = run.At(first + count - 1);
+        double acc = state.Count == 0 ? 0 : Math.Min(state.Count * accStep, state.Acc + accRate * (start - state.Time));
+        double ex = state.Count == 0 ? 0 : Math.Min(state.Count * 3.0, state.Ex + 60 * (start - state.Time));
+        long beforeLast = state.Count + (count - 1L) * run.Weight;
+        return new(end, state.Count + count * run.Weight,
+            Math.Min(beforeLast * accStep, acc + accRate * (end - start)),
+            Math.Min(beforeLast * 3.0, ex + 60 * (end - start)));
+    }
+    void BuildCheckpoints()
+    {
+        long stride = Math.Max(256, (NoteCount + CheckpointLimit - 1) / CheckpointLimit), next = stride;
+        var queue = Queue(double.NegativeInfinity, double.PositiveInfinity);
+        var state = new Checkpoint(double.NegativeInfinity, 0, 0, 0);
+        double last = Math.Max(hits.Length == 0 ? double.NegativeInfinity : hits[^1].Time,
+            runs.Length == 0 ? double.NegativeInfinity : runMaxEnd[1]);
+        while (queue.TryPeek(out _, out double upcoming))
+        {
+            if (SkipBusy(ref state, last, upcoming))
+            {
+                queue = Queue(state.Time, double.PositiveInfinity);
+                SaveCheckpoint();
+                continue;
+            }
+            var cursor = queue.Dequeue();
+            if (cursor.Run == -1)
+            {
+                state = AdvanceExplicit(state, cursor.Index, queue, double.PositiveInfinity);
+                SaveCheckpoint();
+                continue;
+            }
+            var run = runs[cursor.Run];
+            int end = queue.TryPeek(out _, out double other) ? Math.Max(cursor.Index + 1, run.Bound(other, false)) : run.Count;
+            int take = (int)Math.Min(end - cursor.Index, Math.Max(1, (next - state.Count + run.Weight - 1) / run.Weight));
+            state = Advance(state, run, cursor.Index, take);
+            SaveCheckpoint();
+            int following = cursor.Index + take;
+            if (following < run.Count) queue.Enqueue(new(cursor.Run, following), run.At(following));
+        }
+        if (state.Count > 0 && (checkpoints.Count == 0 || checkpoints[^1].Time != state.Time)) checkpoints.Add(state);
+        void SaveCheckpoint()
+        {
+            if (checkpoints.Count > 0 && checkpoints[^1].Time == state.Time) checkpoints[^1] = state;
+            if (state.Count < next) return;
+            if (checkpoints.Count == 0 || checkpoints[^1].Time != state.Time) checkpoints.Add(state);
+            next = state.Count + stride;
+        }
+    }
+    Checkpoint AdvanceExplicit(Checkpoint state, int index, PriorityQueue<Cursor, double> queue, double until)
+    {
+        double time = hits[index].Time;
+        int end = SortedSearch.UpperBound(hits, time, h => h.Time);
+        state = Advance(state, new Run(time, 0, 1, end - index), 0, 1);
+        if (end < hits.Length && hits[end].Time <= until) queue.Enqueue(new(-1, end), hits[end].Time);
+        return state;
+    }
+
+    /// <summary>
+    /// Both displays are still below their *current* targets throughout this interval, even if no new hits arrive.
+    /// Therefore every intervening tick can be counted arithmetically without visiting it. Half the proven interval
+    /// leaves a numerical margin and makes dense, overlapping long holds cheap without approximating the scores.
+    /// </summary>
+    bool SkipBusy(ref Checkpoint state, double until, double upcoming)
+    {
+        if (state.Count == 0 || accRate == 0) return false;
+        double seconds = Math.Min((state.Count * accStep - state.Acc) / accRate, (state.Count * 3.0 - state.Ex) / 60);
+        double at = Math.Min(until, state.Time + seconds * .5);
+        if (!(at > upcoming + .1)) return false;
+        double elapsed = at - state.Time;
+        state = new(at, Judged(at), state.Acc + accRate * elapsed, state.Ex + 60 * elapsed);
+        return true;
+    }
+
+    double cachedTime = double.NaN;
+    (double Acc, double Ex) cachedRolling;
+    (double Acc, double Ex) Rolling(double time)
+    {
+        if (time == cachedTime) return cachedRolling;
+        int i = SortedSearch.UpperBound(checkpoints, time, c => c.Time) - 1;
+        var state = i >= 0 ? checkpoints[i] : new Checkpoint(double.NegativeInfinity, 0, 0, 0);
+        var queue = Queue(state.Time, time);
+        while (queue.TryPeek(out _, out double upcoming))
+        {
+            if (SkipBusy(ref state, time, upcoming))
+            {
+                queue = Queue(state.Time, time);
+                continue;
+            }
+            var cursor = queue.Dequeue();
+            if (cursor.Run == -1)
+            {
+                state = AdvanceExplicit(state, cursor.Index, queue, time);
+                continue;
+            }
+            var run = runs[cursor.Run];
+            int end = run.Bound(time, true);
+            if (queue.TryPeek(out _, out double other)) end = Math.Min(end, Math.Max(cursor.Index + 1, run.Bound(other, false)));
+            state = Advance(state, run, cursor.Index, end - cursor.Index);
+            if (end < run.Count && run.At(end) <= time) queue.Enqueue(new(cursor.Run, end), run.At(end));
+        }
+        cachedTime = time;
+        return cachedRolling = state.Count == 0 ? (0, 0) :
+            (Math.Min(state.Count * accStep, state.Acc + accRate * (time - state.Time)),
+             Math.Min(state.Count * 3.0, state.Ex + 60 * (time - state.Time)));
+    }
+
+    /// <summary>Only materialize effects in the requested lifetime window. Returned hits are chronological.</summary>
+    public IEnumerable<Hit> HitsBetween(double from, double to, bool includeHoldTicks = true)
+    {
+        var queue = new PriorityQueue<(int Hold, int Index), double>();
+        if (includeHoldTicks) AddHolds(1, 0, holds.Length);
+        int explicitIndex = SortedSearch.LowerBound(hits, from, h => h.Time);
+        while ((explicitIndex < hits.Length && hits[explicitIndex].Time <= to) || queue.Count > 0)
+        {
+            if (explicitIndex < hits.Length && hits[explicitIndex].Time <= to &&
+                (!queue.TryPeek(out _, out double next) || hits[explicitIndex].Time <= next))
+            { yield return hits[explicitIndex++]; continue; }
+            var cursor = queue.Dequeue();
+            var hold = holds[cursor.Hold];
+            yield return new(hold.At(cursor.Index), hold.Lane, HitKind.HoldTick, -(cursor.Index + 1) * hold.PeriodMs);
+            int i = cursor.Index + 1;
+            if (i < hold.Count && hold.At(i) <= to) queue.Enqueue((cursor.Hold, i), hold.At(i));
+        }
+        void AddHolds(int node, int lo, int hi)
+        {
+            if (lo == hi || holdMaxEnd[node] < from || holds[lo].At(0) > to) return;
+            if (hi - lo == 1)
+            {
+                var hold = holds[lo];
+                int i = new Run(hold.Start, hold.PeriodMs, hold.Count, 1).Bound(from, false);
+                if (i < hold.Count && hold.At(i) <= to) queue.Enqueue((lo, i), hold.At(i));
+                return;
+            }
+            int mid = lo + (hi - lo) / 2;
+            AddHolds(node * 2, lo, mid); AddHolds(node * 2 + 1, mid, hi);
+        }
     }
 }

@@ -86,7 +86,7 @@ public static class VsbReader
     {
         int type = 0, lane = 0;
         double time = 0;
-        var extra = new Dictionary<int, object>();
+        Dictionary<int, object>? extra = null;
         while (true)
         {
             var f = r.ReadByte();
@@ -115,7 +115,7 @@ public static class VsbReader
                             break;
                         }
                         var id = r.ReadByte();
-                        extra[id] = t switch
+                        (extra ??= new())[id] = t switch
                         {
                             176 => r.ReadByte(),
                             177 => r.ReadSByte(),
@@ -134,7 +134,7 @@ public static class VsbReader
             }
         }
         // 二进制里的时间是毫秒，统一在此除以 1000 转成秒；extra[1] 对 hold 是绝对结束时刻（毫秒），原样保留。
-        double end = type == 2 && extra.TryGetValue(1, out var e) ? Convert.ToDouble(e) / 1000 : time / 1000;
+        double end = type == 2 && extra != null && extra.TryGetValue(1, out var e) ? Convert.ToDouble(e) / 1000 : time / 1000;
         if (type == 2 && end < time / 1000)
         {
             throw new InvalidDataException("Hold ends before its start.");
@@ -143,7 +143,7 @@ public static class VsbReader
         {
             throw new InvalidDataException($"Invalid lane {lane} for note type {type}.");
         }
-        c.Notes.Add(new Note(time / 1000, type, lane, end, extra));
+        c.Notes.Add(new Note(time / 1000, type, lane, end, extra ?? Note.EmptyExtra));
     }
 
     static void ReadMods(BinaryReader r, Chart c, string? songRoot, string? definitionPath, string profile)

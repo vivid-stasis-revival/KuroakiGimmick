@@ -226,28 +226,23 @@ public sealed partial class SceneRenderer
             double X(double distance) => xOffset + beatMotion / 100 * 11 * beatEnvelope * (beatPhase < 1 ? 1 : -1)
                 * Math.Sin(distance / 60 + Math.PI / 2);
 
-            var notes = session.Chart.Notes;
+            double futureDistance = double.NegativeInfinity;
+            for (int lane = 0; lane < scrollByLane.Length; lane++)
+            {
+                double laneBoost = custom ? (boostDistance == 0 ? 0 : boostDistance + M("boost_distanceind" + lane)) : boostDistance;
+                futureDistance = Math.Max(futureDistance, NoteMotion.FutureDistance(alignment,
+                    yOffset + (custom ? M("yoffsetind" + lane) : 0), driven, bpmAtBeat / 60,
+                    scrollByLane[lane], wave, boostTime + (custom ? M("boost_timeind" + lane) : 0), laneBoost, custom));
+            }
+            double latestStart = Math.Min(Math.BitIncrement(drawUntil / 1000), scrollTime + futureDistance / 1000);
             // 只裁剪音符，图片与歌词仍可自由覆盖整个场景。
             // 音符的横向运动不受影响；下边界跟随 field，在被复制/旋转成 proxy 时
             // 一起变换，而不是裁在屏幕空间上。
             canvas.Clip(new(0, 0, 320, TrackBottom));
-            // hold 可能远在光标之前就开始，所以扫描不丢弃早于当前时间的起点。
-            foreach (var n in notes)
+            // Query by both endpoints so long holds survive, while distant stacks never enter motion evaluation.
+            foreach (var n in session.NoteIndex.Candidates(visualTime, latestStart))
             {
-                if (n.Type is 3 or 4 or 5)
-                {
-                    continue;
-                }
-                // 两个谱面读取器都保证音符按起始时间升序。一旦越过 drawuntil，后面不可能再有可绘制的音符，
-                // 所以是 break 而不是 continue —— 换成 continue 只会白扫完整张大谱。
-                if (n.Time * 1000 > drawUntil)
-                {
-                    break;
-                }
-                if (n.End < visualTime)
-                {
-                    continue;
-                }
+                if (n.Time * 1000 > drawUntil) break;
                 int lane = n.Type is 1 or 7 or 8 ? 4 + n.Lane : n.Lane;
                 double distance = (n.Time - scrollTime) * 1000;
                 double endDistance = (n.End - scrollTime) * 1000;

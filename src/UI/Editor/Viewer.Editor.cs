@@ -296,9 +296,9 @@ public sealed partial class Viewer
         if (noteMagnet && magnet)
         {
             var map = Current.Timeline.Bpm;
-            var nearest = Current.Chart.Notes.Where(n => n.Type is not (3 or 4 or 5))
-                .Select(n => map.Beat(n.Time)).OrderBy(b => Math.Abs(b - beat)).Take(1).ToArray();
-            if (nearest.Length > 0 && Math.Abs(nearest[0] - beat) * pixelsPerBeat <= 10) return VsmDocument.Canonical(nearest[0]);
+            double? nearest = Current.NoteIndex.NearestBeat(beat, map);
+            if (nearest is double candidate && Math.Abs(candidate - beat) * pixelsPerBeat <= 10)
+                return VsmDocument.Canonical(candidate);
         }
         double step = SnapSteps[snapIndex];
         return VsmDocument.Canonical(step <= 0 ? beat : Math.Round(beat / step) * step);

@@ -153,6 +153,20 @@ public sealed partial class Viewer
         textAt = end ? Current.Timeline.Bpm.Beat(Current.Timeline.Bpm.Time(clip.Beat) + clip.Duration * 60 / Current.Timeline.Bpm.BpmAtBeat(clip.Beat)) : clip.Beat;
         transport.SetPlaying(false); transport.Seek(Current.Timeline.Bpm.Time(textAt));
     }
+    void AddTextCueHere()
+    {
+        if (editor == null || selectedTextId == null) return;
+        double beat = InsertionBeat;
+        var track = editor.EditableTexts().Tracks.FirstOrDefault(t => t.Id == selectedTextId);
+        if (track == null) return;
+        editor.SetTextCue(selectedTextId, beat, track.At(beat));
+        textAnimation = null;
+        textAt = beat;
+        inspectorScroll = 0;
+        transport.SetPlaying(false);
+        transport.Seek(Current.Timeline.Bpm.Time(beat));
+    }
+
     /// <summary>
     /// 文本检视面板。所有行都经 Row 做视口裁剪，rows 一路累加到最后才用来夹 inspectorScroll，
     /// 所以行数随 legacy/具名、是否选中动画而变也不会滚出范围。
@@ -192,7 +206,7 @@ public sealed partial class Viewer
         }
         Field(L.Get("Content"), track.At(textAt), value => editor.SetTextCue(id, textAt, value.Replace("{n}", "\n")), preserveWhitespace: true);
         Button(L.Get("ENABLE TEXT PREVIEW + EXPORT"), () => editor.Change(L.Get("Enable text"), () => editor.Windows.Root["ENABLE_TEXT"] = true));
-        Button(L.Get("+ CONTENT CUE HERE"), () => editor.SetTextCue(id, textAt, track.At(textAt)));
+        Button(L.Get("+ CONTENT CUE HERE"), AddTextCueHere);
         Button(L.Get("CLEAR TEXT HERE"), () => editor.SetTextCue(id, textAt, ""));
         foreach (string kind in new[] { "textX", "textY", "textscale", "textrot", "textalp", id.Length == 0 ? "textcolhex" : "textcolrgb" }
             .Concat(id.Length == 0 ? Array.Empty<string>() : new[] { "textalignh", "textalignv", "textsep", "textmaxwidth" }))
