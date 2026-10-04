@@ -75,30 +75,59 @@ public sealed partial class SceneRenderer
         canvas.Blend(BlendFactor.SourceAlpha, BlendFactor.InverseSourceAlpha);
     }
 
-    /// <summary>slash_anycol 斜线；col_convertion 为 0 时按原版交换 R 与 B，不是颜色解析写反。</summary>
+    /// <summary>slash_anycol 斜线；非零 duration 会在区间内按 60 Hz 每 tick 生成新实例。col_convertion=0 时按原版交换 R/B。</summary>
     void DrawSlashes(Session session, double time)
     {
         var timeline = session.Timeline;
+        slashInstanceCache.Clear();
+
+        // 零时长事件保持原来的单次 callback 与种子，避免已有谱面的静态画面发生无谓变化。
         for (int i = LowerBound(timeline.Callbacks, time - 1, e => e.Time); i < timeline.Callbacks.Count && timeline.Callbacks[i].Time <= time; i++)
         {
             var e = timeline.Callbacks[i];
-            if (e.Name != "slash_anycol")
+            if (e.Name == "slash_anycol")
+                slashInstanceCache.Add((e.Time, (uint)e.Index * 17 + 623, e.Index));
+        }
+
+        // 非零 duration 不预烘焙 Callback。每帧只展开最近 1 秒内仍存活的生成 tick，
+        // 因此超长 slash 区间不会把内存按 duration 线性炸开，seek/倒拖也仍完全确定（#33）。
+        foreach (var span in timeline.SlashSpans)
+        {
+            if (span.Start > time) break;
+            if (span.End <= time - 1) continue;
+
+            double visibleStart = Math.Max(span.Start, time - 1);
+            int firstTick = Math.Max(0, (int)Math.Ceiling((visibleStart - span.Start) * 60));
+            int lastTick = Math.Min(span.TickCount - 1, (int)Math.Floor((time - span.Start) * 60));
+            for (int tick = firstTick; tick <= lastTick; tick++)
             {
-                continue;
+                double spawnTime = span.Start + tick / 60.0;
+                // 原 callback 序号与 tick 一起构成种子；连续 slash 不会全部叠成同一条线。
+                uint seed = unchecked((uint)span.Index * 17u + (uint)tick * 65537u + 623u);
+                slashInstanceCache.Add((spawnTime, seed, span.Index));
             }
-            uint rgb = (uint) Math.Clamp(timeline.Get("set_slash_col", e.Time), 0, 16777215);
-            if (timeline.Get("col_convertion", e.Time) == 0)
-            {
+        }
+
+        // 多个持续区间重叠时仍按实际出生时间绘制；同刻再按源顺序稳定排序。
+        slashInstanceCache.Sort((a, b) =>
+        {
+            int byTime = a.Time.CompareTo(b.Time);
+            return byTime != 0 ? byTime : a.Index.CompareTo(b.Index);
+        });
+
+        foreach (var slash in slashInstanceCache)
+        {
+            double age = time - slash.Time;
+            if (age < 0 || age >= 1) continue;
+            uint rgb = (uint)Math.Clamp(timeline.Get("set_slash_col", slash.Time), 0, 16777215);
+            if (timeline.Get("col_convertion", slash.Time) == 0)
                 rgb = ((rgb & 255) << 16) | (rgb & 0xFF00) | ((rgb >> 16) & 255);
-            }
-            uint seed = (uint) e.Index * 17 + 623;
-            float age = (float)(time - e.Time), width = 12 * (1 - age) * (1 - age);
+
+            float width = (float)(12 * (1 - age) * (1 - age));
             if (rgb != 0)
-            {
                 canvas.Blend(BlendFactor.InverseDestinationColor, BlendFactor.Zero);
-            }
-            // 反相目标色、目标系数取零；无论上面是否切换过，结束时都要恢复常规混合。
-            canvas.Line(-6, Timeline.Hash(seed) * 180, 326, Timeline.Hash(seed + 1) * 180, width, Color.Hex(rgb));
+            canvas.Line(-6, Timeline.Hash(slash.Seed) * 180, 326, Timeline.Hash(slash.Seed + 1) * 180, width, Color.Hex(rgb));
+            // 反相目标色、目标系数取零；无论上面是否切换过，结束时都恢复常规混合。
             canvas.Blend(BlendFactor.SourceAlpha, BlendFactor.InverseSourceAlpha);
         }
     }

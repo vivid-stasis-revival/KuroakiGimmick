@@ -197,42 +197,66 @@ public sealed partial class SceneRenderer
             int noteSkinIndex = session.SkinChangeEnabled ? (int) M("changeskin") : 0;
             var scrollByLane = noteScrollCache;
             var alphaByLane = noteAlphaCache;
+            var xOffsetByLane = noteXOffsetCache;
+            var yOffsetByLane = noteYOffsetCache;
+            var boostTimeByLane = noteBoostTimeCache;
+            var boostDistanceByLane = noteBoostDistanceCache;
             for (int lane = 0; lane < scrollByLane.Length; lane++)
             {
                 scrollByLane[lane] = NoteMotion.ScrollMultiplier(scrollSpeed, M("scrollind" + lane), velocity);
-                alphaByLane[lane] = custom ? noteAlpha * M("notealpind" + lane) : noteAlpha;
+                // 这些逐轨参数由 base/custom 两个公共 note renderer 都读取。对象类型只决定 boost 的插值语义，
+                // 不能把已经注册在全局时间轴上的 lane mod 再在渲染末端关掉（#32）。
+                alphaByLane[lane] = noteAlpha * M("notealpind" + lane);
+                xOffsetByLane[lane] = xOffset + M("xoffsetind" + lane);
+                yOffsetByLane[lane] = yOffset + M("yoffsetind" + lane);
+                boostTimeByLane[lane] = boostTime + M("boost_timeind" + lane);
+                boostDistanceByLane[lane] = boostDistance == 0 ? 0 : boostDistance + M("boost_distanceind" + lane);
             }
-            double beatPhase = Mod(beat + .3, 2), beatFraction = Mod(beatPhase, 1), beatEnvelope = 0;
-            if (beatFraction < .3)
-            {
-                beatEnvelope = Math.Pow(beatFraction / .3, 2);
-            }
-            else if (beatFraction < .7)
-            {
-                beatEnvelope = 1 - Math.Pow((beatFraction - .3) / .4, 2);
-            }
-
             double Y(double distance, int lane)
             {
                 double scroll = lane >= 0 && lane < scrollByLane.Length
                     ? scrollByLane[lane]
                     : NoteMotion.ScrollMultiplier(scrollSpeed, M("scrollind" + lane), velocity);
-                double y = alignment + NoteMotion.YFromScroll(distance, yOffset, driven, bpmAtBeat / 60, scroll, wave);
-                y += boostTime == 0
-                    ? -boostDistance
-                    : -boostDistance + boostDistance * Math.Pow(Math.Clamp((boostTime - distance) / boostTime, 0, 1), 3);
+                double laneYOffset = lane >= 0 && lane < yOffsetByLane.Length
+                    ? yOffsetByLane[lane]
+                    : yOffset + M("yoffsetind" + lane);
+                double laneBoostTime = lane >= 0 && lane < boostTimeByLane.Length
+                    ? boostTimeByLane[lane]
+                    : boostTime + M("boost_timeind" + lane);
+                double laneBoostDistance = lane >= 0 && lane < boostDistanceByLane.Length
+                    ? boostDistanceByLane[lane]
+                    : boostDistance == 0 ? 0 : boostDistance + M("boost_distanceind" + lane);
+                double y = alignment + NoteMotion.YFromScroll(distance, laneYOffset, driven, bpmAtBeat / 60, scroll, wave);
+                if (custom)
+                {
+                    // Custom 的逐轨 boost 只在全局 boost_distance 非零时启用，保持原版门控。
+                    if (boostDistance != 0)
+                        y += -laneBoostDistance + (distance < laneBoostTime && laneBoostTime > 0
+                            ? laneBoostDistance * Math.Pow((laneBoostTime - distance) / laneBoostTime, 3)
+                            : 0);
+                }
+                else
+                {
+                    y += laneBoostTime == 0
+                        ? -laneBoostDistance
+                        : -laneBoostDistance + laneBoostDistance * Math.Pow(Math.Clamp((laneBoostTime - distance) / laneBoostTime, 0, 1), 3);
+                }
                 return y;
             }
-            double X(double distance) => xOffset + beatMotion / 100 * 11 * beatEnvelope * (beatPhase < 1 ? 1 : -1)
-                * Math.Sin(distance / 60 + Math.PI / 2);
+            double X(double distance, int lane)
+            {
+                double laneXOffset = lane >= 0 && lane < xOffsetByLane.Length
+                    ? xOffsetByLane[lane]
+                    : xOffset + M("xoffsetind" + lane);
+                return NoteMotion.XFromValues(beat, distance, laneXOffset, beatMotion);
+            }
 
             double futureDistance = double.NegativeInfinity;
             for (int lane = 0; lane < scrollByLane.Length; lane++)
             {
-                double laneBoost = custom ? (boostDistance == 0 ? 0 : boostDistance + M("boost_distanceind" + lane)) : boostDistance;
                 futureDistance = Math.Max(futureDistance, NoteMotion.FutureDistance(alignment,
-                    yOffset + (custom ? M("yoffsetind" + lane) : 0), driven, bpmAtBeat / 60,
-                    scrollByLane[lane], wave, boostTime + (custom ? M("boost_timeind" + lane) : 0), laneBoost, custom));
+                    yOffsetByLane[lane], driven, bpmAtBeat / 60, scrollByLane[lane], wave,
+                    boostTimeByLane[lane], boostDistanceByLane[lane], custom));
             }
             double latestStart = Math.Min(Math.BitIncrement(drawUntil / 1000), scrollTime + futureDistance / 1000);
             // 只裁剪音符，图片与歌词仍可自由覆盖整个场景。
@@ -249,18 +273,12 @@ public sealed partial class SceneRenderer
                 double y = Y(distance, lane), endY = Y(endDistance, lane);
                 double laneAlpha = lane >= 0 && lane < alphaByLane.Length
                     ? alphaByLane[lane]
-                    : noteAlpha * (custom ? M("notealpind" + lane) : 1);
-                if (custom)
-                {
-                    y = alignment + NoteMotion.Y(map, t, lane, distance);
-                    endY = alignment + NoteMotion.Y(map, t, lane, endDistance);
-                }
+                    : noteAlpha * M("notealpind" + lane);
                 if (Math.Max(y, endY) < -25 || Math.Min(y, endY) > 205)
                 {
                     continue;
                 }
-                float x = (float)(NoteSkin.LaneX(n.Type, n.Lane)
-                    + (custom ? NoteMotion.X(map, t, lane, distance) : X(distance)));
+                float x = (float)(NoteSkin.LaneX(n.Type, n.Lane) + X(distance, lane));
                 if (n.Type == 2)
                 {
                     noteSkin.Hold(n.Lane, x, (float) y, (float) endY, laneAlpha, n.Time <= visualTime, noteSkinIndex);

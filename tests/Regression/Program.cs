@@ -118,6 +118,43 @@ for (int trial = 0; trial < 5000; trial++)
 Check(double.IsPositiveInfinity(NoteMotion.FutureDistance(3, 0, 0, 3, 0, 0, 0, 0, false)), "Stopped scroll must remain conservative");
 Console.WriteLine("PASS note index and motion bounds: crossing holds, magnet oracle, future stack, reverse/zero scroll, wave, boost and offsets");
 
+// #31/#32/#33: base/custom scope and callback semantics must not be inferred from renderer object gates.
+var laneChart = new Chart { ObjectName = "obj_base_gimmick" };
+laneChart.Mods.Add(new(0, 0, "linear", 0, 10, "xoffsetind0", -1, 0));
+laneChart.Mods.Add(new(0, 0, "linear", 0, 20, "yoffsetind0", -1, 1));
+laneChart.Mods.Add(new(0, 0, "linear", 1, .5, "notealpind0", -1, 2));
+var laneTimeline = new Timeline(laneChart, new ViewerProject { Bpm = 120, ScrollSpeed = 3 }, 1);
+Near(NoteMotion.X(laneTimeline, 0, 0, 0), 10, "Base xoffsetind must affect lane 0");
+Near(NoteMotion.X(laneTimeline, 0, 1, 0), 0, "Base xoffsetind must not leak to lane 1");
+Near(NoteMotion.Y(laneTimeline, 0, 0, 0), 150, "Base yoffsetind must affect lane 0");
+Near(NoteMotion.Y(laneTimeline, 0, 1, 0), 144, "Base yoffsetind must not leak to lane 1");
+Near(laneTimeline.Get("notealp", 0) * laneTimeline.Get("notealpind0", 0), .5, "Base notealpind must remain a live global lane mod");
+
+var baseParticles = new Timeline(new Chart { ObjectName = "obj_base_gimmick" }, new ViewerProject { Bpm = 120 }, 1);
+Check(baseParticles.Particles.Any(p => !p.Burst), "Base gimmick lost ambient background particles");
+var unrelatedParticles = new Timeline(new Chart { ObjectName = "obj_unknown_gimmick" }, new ViewerProject { Bpm = 120 }, 1);
+Check(unrelatedParticles.Particles.Count == 0, "Unknown native object gained ambient particles without a profile");
+var sideOnlyChart = new Chart { ObjectName = "obj_unknown_gimmick" };
+sideOnlyChart.Mods.Add(new(0, 0, "linear", 0, 1, "pburstleft", -1, 0));
+var sideOnly = new Timeline(sideOnlyChart, new ViewerProject { Bpm = 120 }, 1);
+Check(sideOnly.Particles.Count > 0 && sideOnly.Particles.All(p => p.Burst), "Side burst should build offsets without inventing ambient dust");
+
+var slashSpanChart = new Chart();
+slashSpanChart.Mods.Add(new(0, 1, "linear", 0, 1, "slash_anycol", -1, 0));
+var slashSpanTimeline = new Timeline(slashSpanChart, new ViewerProject { Bpm = 60 }, 0);
+Check(slashSpanTimeline.SlashSpans.Count == 1, "Non-zero slash_anycol duration must become a spawn span");
+Near(slashSpanTimeline.SlashSpans[0].Start, 0, "Slash span start");
+Near(slashSpanTimeline.SlashSpans[0].End, 1, "Slash span end");
+Check(slashSpanTimeline.SlashSpans[0].TickCount == 60, "One-second slash span must spawn at 60 Hz");
+Check(slashSpanTimeline.Callbacks.All(c => c.Name != "slash_anycol"), "Non-zero slash span must not expand into callback allocations");
+Check(slashSpanTimeline.End >= 2, "Slash span tail lifetime was truncated");
+var slashOnceChart = new Chart();
+slashOnceChart.Mods.Add(new(0, 0, "linear", 0, 1, "slash_anycol", -1, 0));
+var slashOnceTimeline = new Timeline(slashOnceChart, new ViewerProject { Bpm = 60 }, 0);
+Check(slashOnceTimeline.SlashSpans.Count == 0 && slashOnceTimeline.Callbacks.Count(c => c.Name == "slash_anycol") == 1,
+    "Zero-duration slash_anycol must remain a one-shot callback");
+Console.WriteLine("PASS issues #31/#32/#33: base ambient particles, global lane mods and 60 Hz slash spans");
+
 string temp = Path.Combine(Path.GetTempPath(), "kuroaki-regression-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(temp);
 try

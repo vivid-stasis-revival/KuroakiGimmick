@@ -13,11 +13,14 @@ public sealed partial class Timeline
 
     /// <summary>一次回调触发。Time 单位秒；Index 是全局触发序号，既用于 LatestOnly 判定同一 drawing 的最后一次触发，也让稳定排序后保留声明顺序。</summary>
     public record Callback(double Time, string Name, double Value, int Index);
+    /// <summary>slash_anycol 的持续生成区间；Start/End 为秒，Index 继承全局 callback 序号，用于确定性随机种子和同刻稳定顺序。</summary>
+    public record SlashSpan(double Start, double End, int TickCount, int Index);
     /// <summary>烘焙好的粒子。Time/Death/Life 单位秒，但都由 60 Hz 逻辑 tick 推导；X/Y/Vx/Vy 在 320×180 逻辑空间，速度是每 tick 位移。</summary>
     public record Dust(double Time, float X, float Y, float Vx, float Vy, int Frame, float Hue, float Saturation, double Death,
         bool Burst = false, double Life = 2, bool FollowPower = false);
     public Dictionary<(string Name, int Proxy), List<Segment>> Tracks { get; } = [];
     public List<Callback> Callbacks { get; } = [];
+    public List<SlashSpan> SlashSpans { get; } = [];
     public record LoreleiSlash(double Time, int Count, double Color, int Index);
     public List<LoreleiSlash> LoreleiSlashes { get; } = [];
     public List<Dust> Particles { get; } = [];
@@ -43,6 +46,7 @@ public sealed partial class Timeline
         End = duration;
         // freeze 的两个回调点分别落在事件起点和终点，后者可能排在后续事件之后，所以先攒起来最后统一排序。
         List<(double Time, double Value, ModEvent Event)> freezeLatches = [];
+        int callbackSequence = 0;
         double loreleiColor = 16777215;
         // 事件先按拍、再按声明顺序展开，这是整条链路的稳定顺序来源。
         foreach (var e in c.Mods.OrderBy(x => x.Beat).ThenBy(x => x.Order))
@@ -93,11 +97,11 @@ public sealed partial class Timeline
                 // slash 的实例数来自原版：1 + 时长毫秒数，取偶数舍入；gun 恒为 1 次。
                 double count = e.Name == sequence.Mod("slash") ? Math.Max(0, Math.Round(1 + span * 1000, MidpointRounding.ToEven)) : 1;
                 if (count > 4096) c.Diagnostics.Add(new("native-sequence", e.SourceLine, "Slash callback exceeds 4096 instances; skipped.", true));
-                else { Callbacks.Add(new(start, e.Name, count, Callbacks.Count)); End = Math.Max(End, start + 1); }
+                else { Callbacks.Add(new(start, e.Name, count, callbackSequence++)); End = Math.Max(End, start + 1); }
                 continue;
             }
             if (c.ObjectName == "obj_custom_gimmick" && CustomCompatibility.IsSideCallback(e.Name))
-            { Callbacks.Add(new(start, e.Name, e.To, Callbacks.Count)); End = Math.Max(End, start + 1); continue; }
+            { Callbacks.Add(new(start, e.Name, e.To, callbackSequence++)); End = Math.Max(End, start + 1); continue; }
             End = Math.Max(End, start + span);
             // v1.12.7 的 updateMods 会跳过未注册的 ID。只有这一个经过核实的
             // 旧拼写被归类为 no-op，其余未知 mod 仍然进诊断。
@@ -141,7 +145,21 @@ public sealed partial class Timeline
             }
             if (e.Name == "slash_anycol" && e.To > 0)
             {
-                Callbacks.Add(new(start, e.Name, e.To, Callbacks.Count));
+                if (span <= 0)
+                {
+                    // 零时长仍是一次性 callback，保持旧谱面与既有随机种子行为。
+                    Callbacks.Add(new(start, e.Name, e.To, callbackSequence++));
+                    End = Math.Max(End, start + 1);
+                }
+                else
+                {
+                    // 本体不是把一条 slash 拉长，而是在区间内每个 60 Hz 逻辑 tick 生成一条新 slash。
+                    // 这里只保存区间；绘制时仅枚举最近 1 秒仍存活的实例，避免长 duration 预分配海量 Callback（#33）。
+                    double rawTicks = Math.Ceiling(span * 60);
+                    int tickCount = rawTicks >= int.MaxValue ? int.MaxValue : Math.Max(1, (int)rawTicks);
+                    SlashSpans.Add(new(start, start + span, tickCount, callbackSequence++));
+                    End = Math.Max(End, start + span + 1);
+                }
                 continue;
             }
             if (e.Name == "recolor")
@@ -169,7 +187,7 @@ public sealed partial class Timeline
                 // 侧边回调占用 0.4 秒尾部，可见绘制只有 0.3875 秒；为“简化”把两者统一会改变最后一个回调之后的时间轴。
                 double lifetime = Native.Data.CallbackLifetimes.GetValueOrDefault(e.Name, drawings.Max(d => d.Lifetime));
                 End = Math.Max(End, start + lifetime);
-                Callbacks.Add(new(start, e.Name, e.To, Callbacks.Count));
+                Callbacks.Add(new(start, e.Name, e.To, callbackSequence++));
                 continue;
             }
             var key = (e.Name, e.Proxy);
@@ -262,22 +280,30 @@ public sealed partial class Timeline
         // 在任何粒子预计算前建立逐帧索引，保证所有发射器看到同一套 mod 求值规则。
         IndexObjectBehavior();
         // 粒子最长只烘焙到 3600 秒，避免异常时长的工程把内存吃光；其余查询仍按 End 走。
-        if (c.ObjectName == "obj_custom_gimmick" || Native?.Data?.AmbientParticles == true
-            || c.Mods.Any(e => e.Name is "pburstleft" or "pburstright"))
+        // o_csm_particle_system 属于 base/custom 共用的玩法场景能力，不能把 ambient dust 错绑到 custom object（#31）。
+        bool ambientParticles = c.ObjectName is "obj_base_gimmick" or "obj_custom_gimmick"
+            || Native?.Data?.AmbientParticles == true;
+        bool hasSideBursts = c.Mods.Any(e => e.Name is "pburstleft" or "pburstright");
+        bool needsParticleOffsets = ambientParticles || hasSideBursts
+            || c.Mods.Any(e => e.Name is "particlexpower" or "particleypower");
+        if (needsParticleOffsets)
         {
-            BuildCustomParticles(Math.Min(End, 3600), c.ObjectName == "obj_custom_gimmick" || Native?.Data?.AmbientParticles == true);
+            BuildCustomParticles(Math.Min(End, 3600), emit: ambientParticles);
             if (c.ObjectName == "obj_custom_gimmick")
             {
                 BuildBursts(Math.Min(End, 3600));
             }
-            BuildSideBursts(Math.Min(End, 3600));
+            if (hasSideBursts)
+            {
+                BuildSideBursts(Math.Min(End, 3600));
+            }
             Particles.Sort((a, b) => a.Time.CompareTo(b.Time));
         }
         if (screenGlow && fx?.Find("FX_glow") == null)
         {
             c.Diagnostics.Add(new("renderer", 0, "Scene glow requires the original FX_glow layer settings; the missing layer is not rendered."));
         }
-        if ((c.ObjectName == "obj_custom_gimmick" || c.Mods.Any(e => e.Name is "pburstleft" or "pburstright" or "fx_particleglow"))
+        if ((ambientParticles || c.Mods.Any(e => e.Name is "pburstleft" or "pburstright" or "fx_particleglow"))
             && fx?.Find("glow") == null)
         {
             c.Diagnostics.Add(new("renderer", 0,

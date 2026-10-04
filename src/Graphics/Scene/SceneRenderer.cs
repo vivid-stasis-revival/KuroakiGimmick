@@ -41,6 +41,12 @@ public sealed partial class SceneRenderer : IDisposable
     // 复用的逐帧音符求值缓存。避免每帧重新分配 lane 数组。
     readonly double[] noteScrollCache = new double[8];
     readonly double[] noteAlphaCache = new double[8];
+    readonly double[] noteXOffsetCache = new double[8];
+    readonly double[] noteYOffsetCache = new double[8];
+    readonly double[] noteBoostTimeCache = new double[8];
+    readonly double[] noteBoostDistanceCache = new double[8];
+    // slash_anycol 持续区间每帧只展开当前仍可见的实例；复用列表避免渲染循环反复分配。
+    readonly List<(double Time, uint Seed, int Index)> slashInstanceCache = [];
     Texture? jacketTexture;
     string? jacketPath;
     public SceneRenderer(Canvas c)

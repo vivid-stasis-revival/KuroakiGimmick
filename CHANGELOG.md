@@ -4,6 +4,10 @@
 
 ## 未发布
 
+- 修复 #31：`obj_base_gimmick` 与 `obj_custom_gimmick` 都恢复公共 `o_csm_particle_system` 背景粒子；粒子位移表、ambient dust 与 side burst 的启用条件拆开，特殊原生对象仍由 profile 的 `AmbientParticles` 显式控制。
+- 修复 #32：`xoffsetindN` / `yoffsetindN` / `notealpindN` 以及逐轨 boost 不再被 `obj_custom_gimmick` 的渲染分支错误门控；base/custom 共用逐帧 lane cache，候选裁剪与最终 Note 坐标使用同一组逐轨参数。
+- 修复 #33：非零 duration 的 `slash_anycol` 按本体语义在区间内以 60 Hz 持续生成新 slash；时间轴只保存生成区间，渲染时按需展开最近 1 秒存活实例，避免长区间预分配海量 callback，并按每条 slash 的出生时刻采样颜色。
+
 - #27：欢迎页从 `Assets/tips.json` 读取趣味 tips，每次打开随机选一条；空数组不显示，缺失/损坏时安全回退，内容由维护者填写。
 - #28：`+ CONTENT CUE HERE` 使用当前插入拍（播放头或活动标记），新增后切换 Inspector 目标，保留一步撤销/重做。
 - #29：普通音符共享只读空扩展字段；已排序谱面跳过重复排序；磁吸改用可演奏音符索引。长条 tick 改为紧凑时间序列，命中特效仅生成当前存活窗口，滚动分数使用有界检查点与精确追赶区间跳跃，判定/连击计数支持 64 位。
