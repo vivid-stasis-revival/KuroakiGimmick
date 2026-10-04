@@ -24,8 +24,12 @@ public static class NoteMotion
 
     /// <summary>横向偏移。以两拍为周期、0.3 拍相位提前的原版律动包络；distance 单位毫秒，结果在 320×180 逻辑空间。</summary>
     public static double X(Timeline t, double time, int lane, double distance)
+        => XFromValues(t.Bpm.Beat(time), distance, t.Get("xoffset", time) + t.Get("xoffsetind" + lane, time), t.Get("beat", time));
+
+    /// <summary>已求值参数版横向偏移；渲染热路径按 lane 缓存 mod 后调用，避免逐 Note 重复查时间轴。</summary>
+    public static double XFromValues(double beatAtTime, double distance, double xOffset, double beatMotion)
     {
-        double beat = (t.Bpm.Beat(time) + .3) % 2, f = beat % 1, amount = 0;
+        double beat = (beatAtTime + .3) % 2, f = beat % 1, amount = 0;
         if (f < .3)
         {
             amount = Math.Pow(f / .3, 2);
@@ -34,8 +38,7 @@ public static class NoteMotion
         {
             amount = 1 - Math.Pow((f - .3) / .4, 2);
         }
-        return t.Get("xoffset", time) + t.Get("xoffsetind" + lane, time) + t.Get("beat",
-            time) / 100 * 11 * amount * (beat < 1 ? 1 : -1) * Math.Sin(distance / 60 + Math.PI / 2);
+        return xOffset + beatMotion / 100 * 11 * amount * (beat < 1 ? 1 : -1) * Math.Sin(distance / 60 + Math.PI / 2);
     }
 
     /// <summary>
