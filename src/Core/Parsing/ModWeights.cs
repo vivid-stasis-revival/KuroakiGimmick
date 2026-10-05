@@ -41,6 +41,9 @@ public static class ModWeights
         // Custom Episodes：o_mod_storyentry 的 Create 末尾 addGlobalMod("custom_episode", 0, cb, undefined)。
         // 权重 0：触发一段剧情不构成演出强度，不该计进 GIMMICK 统计。
         ["custom_episode"] = 0,
+        // lr_extra_gimmicks: UnlimitedAddGlobalMod(name, 0, callback, undefined).
+        ["lr_slash"] = 0,
+        ["lr_slash_color"] = 0,
     };
 
     /// <summary>先查原版表，再查模组注册表；两者都没有才算未知。</summary>
@@ -96,10 +99,21 @@ public static class ModWeights
         double total = 0;
         int count = 0;
         var unknown = new List<string>();
-        foreach (var clip in VsmDocument.FromText(text).Clips)
+        var document = VsmDocument.FromText(text);
+        string objectName = "obj_base_gimmick";
+        foreach (var line in document.Lines)
+        {
+            string header = line.Text.Trim();
+            int colon = header.IndexOf(':');
+            if (colon > 0 && header[..colon].Trim() == "!obj") objectName = header[(colon + 1)..].Trim();
+        }
+        foreach (var clip in document.Clips)
         {
             int repeats = clip.RepeatCount;
-            if (!TryWeight(clip.Name, out double weight))
+            // 原生 DF/FB 的同名 addExtraMod 仍取默认权重 1；零权重属于 LR 模组的 Custom 回调。
+            double weight;
+            if (clip.Name is "lr_slash" or "lr_slash_color" && objectName != "obj_custom_gimmick") weight = 1;
+            else if (!TryWeight(clip.Name, out weight))
             {
                 weight = 1;
                 if (!unknown.Contains(clip.Name, StringComparer.OrdinalIgnoreCase))

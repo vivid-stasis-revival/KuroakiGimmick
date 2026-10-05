@@ -2,6 +2,14 @@ namespace KuroakiGimmick.Core;
 
 internal static class ProjectBackups
 {
+    static void EnsureHiddenRoot(string path)
+    {
+        string root = Path.Combine(Path.GetDirectoryName(path)!, ".kuroaki");
+        Directory.CreateDirectory(root);
+        // Unix 隐藏目录由前导点决定；Windows 还必须显式设置 Hidden。
+        if (OperatingSystem.IsWindows())
+            File.SetAttributes(root, File.GetAttributes(root) | FileAttributes.Hidden);
+    }
     internal static string WorkingFolder(string path) => Path.Combine(Path.GetDirectoryName(path)!, ".kuroaki", "projects", Path.GetFileName(path));
     static string Folder(string path) => Path.Combine(Path.GetDirectoryName(path)!, ".kuroaki", "backup", Path.GetFileName(path));
 
@@ -35,6 +43,7 @@ internal static class ProjectBackups
         var files = LegacyFiles(path).ToList();
         files.AddRange(files.Append(path).Select(f => f + ".bak").Where(File.Exists).ToArray());
         if (files.Count == 0) return;
+        EnsureHiddenRoot(path);
         string root = Path.Combine(Path.GetDirectoryName(path)!, ".kuroaki", "legacy", Path.GetFileName(path), Guid.NewGuid().ToString("N"));
         foreach (string file in files)
         {
@@ -59,6 +68,7 @@ internal static class ProjectBackups
         bool removable = true;
         try
         {
+            EnsureHiddenRoot(path);
             Directory.CreateDirectory(transaction);
             for (int i = 0; i < targets.Length; i++)
             {
@@ -100,6 +110,7 @@ internal static class ProjectBackups
     internal static void Create(string path)
     {
         if (!File.Exists(path)) return;
+        EnsureHiddenRoot(path);
         string root = Folder(path), token = DateTime.UtcNow.ToString("yyyyMMddTHHmmssfffffff") + "-" + Guid.NewGuid().ToString("N");
         string temporary = Path.Combine(root, ".tmp-" + token);
         try

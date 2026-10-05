@@ -9,12 +9,36 @@ namespace KuroakiGimmick.Core;
 public sealed record ChartExportInput(ViewerProject Project, string? Images, string VsmText, byte[] VsmBytes,
     string ConfigText, string[] ProtectedPaths, string[] Notices, string? ImageText = null, string? ImageRoot = null,
     IReadOnlyDictionary<string, string>? TextSources = null, IReadOnlyDictionary<string, string>? ImageOriginalNames = null,
-    VscDialect VscDialect = VscDialect.Legacy)
+    VscDialect VscDialect = VscDialect.Legacy, IReadOnlyList<string>? Dependencies = null)
 {
     /// <summary>从编辑器文档取快照。此后再改动文档不影响已生成的导出计划。</summary>
     public static ChartExportInput Capture(EditorDocument document, Session session)
     {
         var project = document.Project.Copy();
+        // 只冻结当前会话实际解析的本地资源，不把目录当成导出依赖。
+        string? songRoot = SongFiles.Root(project);
+        var dependencies = new List<string>();
+        void Local(string? path)
+        {
+            if (path != null && songRoot != null && File.Exists(path) && ChartExport.Inside(path, songRoot))
+                dependencies.Add(Path.GetFullPath(path));
+        }
+        Local(session.NativeGimmick.Manifest); Local(session.NativeGimmick.ResourceManifest);
+        foreach (var sprite in session.NativeGimmick.Sprites.Values)
+            foreach (string frame in sprite.Frames) Local(frame);
+        foreach (string path in session.NativeGimmick.TextureFiles.Values) Local(path);
+        foreach (string path in session.NativeGimmick.Resources.Values) Local(path);
+        Local(session.Fx.Path); Local(session.Fx.DynamicDefinitions);
+        foreach (var layer in session.Fx.Layers) Local(layer.TexturePath);
+        Local(session.GameUi.Manifest);
+        if (project.GameUi != null && Directory.Exists(project.GameUi)) project.GameUi = session.GameUi.Manifest;
+        if (session.GameUi.Data is { } ui)
+        {
+            foreach (string frame in ui.Sprites.Values.SelectMany(s => s.Frames)) Local(session.GameUi.File(frame));
+            foreach (var font in ui.Fonts.Values) Local(session.GameUi.File(font.File));
+        }
+        Local(session.Jackets.DefaultPath);
+        foreach (string path in session.Jackets.Files.Values) Local(path);
         project.EditorMarkers = document.Markers.ToList();
         var windows = document.CompiledWindows().AsInlineGameConfig();
         // 单独挂载的独立窗口文件并不等于整份 cgmk 配置。
@@ -41,7 +65,8 @@ public sealed record ChartExportInput(ViewerProject Project, string? Images, str
             session.Chart.Diagnostics.Concat(check.Diagnostics).Select(d => d.Message).Distinct().ToArray(),
             document.Images.HasContent ? document.Images.Text : null, document.Images.ResourceRoot,
             document.TextSources.ToDictionary(x => x.Key, x => x.Value, StringComparer.Ordinal),
-            document.Images.OriginalResourceNames(), session.Chart.VscDialect);
+            document.Images.OriginalResourceNames(), session.Chart.VscDialect,
+            dependencies.Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
     }
     /// <summary>导出文件名的词干：取谱面/VSM 的难度名并去掉 ".editor" 后缀，避免把编辑副本的命名带进成品。</summary>
     public static string Stem(ViewerProject p)

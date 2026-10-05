@@ -855,5 +855,6 @@
   "EXPORT: VSM / VSM + cgmk config / VSP + assets / Chart Folder.": "EXPORT: VSM / VSM + cgmk config / VSP + assets / Chart Folder.",
   "GAME SCENE: double-click image/text to select; drag the selected object to move X/Y.": "GAME SCENE: double-click image/text to select; drag the selected object to move X/Y.",
   "Selected in GAME SCENE. Drag to move X/Y; Undo is one step.": "Selected in GAME SCENE. Drag to move X/Y; Undo is one step.",
-  "Scene drag unavailable: ": "Scene drag unavailable: "
+  "Scene drag unavailable: ": "Scene drag unavailable: ",
+  "Includes the current chart and its referenced resources only. Other difficulties, unrelated files and editor backups are excluded.": "Includes the current chart and its referenced resources only. Other difficulties, unrelated files and editor backups are excluded."
 }

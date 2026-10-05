@@ -9,14 +9,14 @@ using KuroakiGimmick.Core.Windows;
 namespace KuroakiGimmick.Core;
 
 /// <summary>
-/// 谱面导出：写出 VSM、VSM + cgmk 配置，或整个谱面文件夹。先 Prepare 出完整计划（含哈希）再 Write，
+/// 谱面导出：写出 VSM、VSM + cgmk 配置，或当前谱面与其资源。先 Prepare 出完整计划（含哈希）再 Write，
 /// 全程只读源素材、不修改也不安装任何游戏文件；同名输出是否覆盖由导出计划决定。
 /// </summary>
 public static class ChartExport
 {
     static readonly StringComparison PathComparison = StringComparison.OrdinalIgnoreCase;
     static readonly HashSet<string> ToolDirectories = new(StringComparer.OrdinalIgnoreCase)
-    { ".git", ".svn", "__MACOSX", "node_modules", "bin", "obj", "dist", ".vs", ".idea" };
+    { ".kuroaki", ".git", ".svn", "__MACOSX", "node_modules", "bin", "obj", "dist", ".vs", ".idea" };
     /// <summary>判断 <paramref name="path"/> 是否等于 <paramref name="directory"/> 或位于其内部；用于阻止导出目标与源目录相互嵌套。</summary>
     public static bool Inside(string path, string directory) =>
         Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar).Equals(Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar), PathComparison) ||
@@ -172,30 +172,41 @@ public static class ChartExport
         {
             string chart = input.Project.Chart ?? throw new InvalidOperationException("Chart Folder requires an attached VSC/VSB.");
             string root = Path.GetDirectoryName(Path.GetFullPath(chart))!;
-            // 目标与源互不嵌套：否则遍历会把正在写出的文件再读回来，或直接污染源谱面目录。
+            // 目标与源互不嵌套，避免污染源谱面目录。
             if (Inside(destination, root) || Inside(root, destination))
                 throw new IOException("Choose a NEW folder outside the source chart folder and its parents.");
             if (!Directory.Exists(root)) throw new DirectoryNotFoundException("Source chart folder missing: " + root);
             NoLinks(root);
-            void Walk(string directory)
+            bool ToolPath(string path) => Path.GetRelativePath(root, path)
+                .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(part =>
+                    ToolDirectories.Contains(part) || part.EndsWith(".editor-assets", StringComparison.OrdinalIgnoreCase) ||
+                    part.EndsWith(".editor-texts", StringComparison.OrdinalIgnoreCase) || part.StartsWith(".kuroaki-", StringComparison.OrdinalIgnoreCase));
+            void Dependency(string path)
             {
-                // 按 Ordinal 排序遍历，保证同一份源目录每次导出得到同样的文件顺序。
-                foreach (string file in Directory.EnumerateFiles(directory).Order(StringComparer.Ordinal))
-                { if (!IgnoreFile(file)) Copy(Path.GetRelativePath(root, file), file); }
-                foreach (string child in Directory.EnumerateDirectories(directory).Order(StringComparer.Ordinal))
-                {
-                    if (Path.GetFileName(child) == ".kuroaki" || ToolDirectories.Contains(Path.GetFileName(child)) || Path.GetFileName(child).EndsWith(".editor-assets", StringComparison.OrdinalIgnoreCase) || Path.GetFileName(child).EndsWith(".editor-texts", StringComparison.OrdinalIgnoreCase) || Path.GetFileName(child).StartsWith(".kuroaki-", StringComparison.Ordinal)) continue;
-                    NoLinks(child); Walk(child);
-                }
+                path = Path.GetFullPath(path);
+                if (!Inside(path, root) || ToolPath(path) || IgnoreFile(path))
+                    throw new IOException("Export dependency must be a song resource outside editor/cache folders: " + path);
+                Copy(Path.GetRelativePath(root, path), path);
             }
-            Walk(root);
+            Dependency(chart);
+            foreach (string path in input.Dependencies ?? []) Dependency(path);
+            // 元数据及当前难度的音乐、封面、试听资源保留原相对路径。
+            foreach (string name in new[] { "info.json", "song.json", SongInfo.ShatterFile })
+                if (SongFiles.Existing(root, name) is { } path) Dependency(path);
+            var song = SongInfo.Read(root)?.Effective(stem);
+            foreach (string? name in new[] { song?.AudioId, song?.Jacket, song?.PreviewId })
+                if (name != null) Dependency(Path.GetFullPath(name.Replace('\\', Path.DirectorySeparatorChar), root));
+            foreach (string name in new[] { stem + ".vsv", "GLOBAL.vsv" })
+                if (SongFiles.Existing(root, name) is { } path) Dependency(path);
+            var sourceChart = new Chart(); VsmReader.ReplaceModsText(sourceChart, input.VsmText, "export.vsm");
+            if (sourceChart.Mods.Any(e => e.Name == EpisodeScript.ModName) && EpisodeScript.Find(input.Project, sourceChart) is { } story)
+                Dependency(story);
             var project = input.Project.Copy();
             project.Chart = Path.GetRelativePath(root, chart).Replace('\\', '/');
             project.Gimmick = stem + ".vsm"; project.WindowMotion = stem + "_cgmk_config.json";
-            // 任意的歌曲元数据/资源、其它难度和回调保持原样不动。
-            // 只有编辑产生的 VSM/配置和显式挂载的图片声明会在副本中被替换。
+            // 当前难度的编辑内容覆盖依赖同名项，其它难度不参与导出。
             Bytes(project.Gimmick, input.VsmBytes); Bytes(project.WindowMotion, configBytes);
-            if (input.TextSources is { Count: > 0 })
+            if (input.TextSources != null)
             {
                 project.TextFiles = new(StringComparer.Ordinal);
                 if (!input.TextSources.ContainsKey("")) files.Remove(stem + "_text.txt");
@@ -206,11 +217,20 @@ public static class ChartExport
                     Bytes(name, Encoding.UTF8.GetBytes(pair.Value)); project.TextFiles.Add(pair.Key, name);
                 }
             }
+            else
+            {
+                project.TextFiles = new(StringComparer.Ordinal);
+                foreach (var track in CustomText.Load(input.Project, sourceChart, enabled: true).Tracks)
+                {
+                    string name = Portable(stem + "_text" + (track.Id.Length == 0 ? "" : "_" + track.Id) + ".txt");
+                    Copy(name, track.Path); project.TextFiles.Add(track.Id, name);
+                }
+            }
             // 非 VSP 资源保留原目录语义；VSP 图片单独走 ImageResource，绝不再把 .kuroaki、暂存目录或路径哈希泄漏到成品。
             string Resource(string path)
             {
                 path = Path.GetFullPath(path);
-                string name = Inside(path, root) ? Path.GetRelativePath(root, path).Replace('\\', '/') :
+                string name = Inside(path, root) && !ToolPath(path) && !IgnoreFile(path) ? Path.GetRelativePath(root, path).Replace('\\', '/') :
                     "resources/" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(path)))[..12].ToLowerInvariant() + "_" + Path.GetFileName(path);
                 Copy(name, path); return name;
             }
@@ -236,12 +256,14 @@ public static class ChartExport
             {
                 if (path == null) return null;
                 if (!Inside(path, root)) throw new IOException("Move explicitly attached preview manifests/assets into the song folder before Chart Folder export: " + path);
+                if (ToolPath(path)) throw new IOException("Preview manifests/assets must be outside editor/cache folders: " + path);
+                if (File.Exists(path)) Dependency(path);
                 return Path.GetRelativePath(root, path).Replace('\\', '/');
             }
             project.FxProfile = InternalOnly(project.FxProfile); project.GameUi = InternalOnly(project.GameUi);
             project.GimmickAssets = InternalOnly(project.GimmickAssets); project.GimmickDefinition = InternalOnly(project.GimmickDefinition);
             Bytes("Kuroaki.sgv.json", Encoding.UTF8.GetBytes(AppJson.Serialize(project, ViewerProject.Json)));
-            warnings.Add("Copies the source song folder, excluding build/cache/editor backup files. No game/mod installation is changed.");
+            warnings.Add("Includes the current chart and its referenced resources only. Other difficulties, unrelated files and editor backups are excluded.");
             warnings.Add("Kuroaki.sgv.json retains E markers. Game compatibility still depends on the target game and required mods.");
             if (chart.EndsWith(".vsc", StringComparison.OrdinalIgnoreCase))
             {

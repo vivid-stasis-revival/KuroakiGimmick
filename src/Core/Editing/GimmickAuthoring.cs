@@ -9,9 +9,9 @@ internal static class GimmickAuthoring
     static readonly VsmReference.Entry[] extraGimmicks =
     [
         new() { Id = "frollsy.lr_slash", Kind = "mod", Name = "lr_slash", Scope = "custom",
-            Category = "Frollsy's Extra Gimmicks", Summary = "竖向斜线：value1 为条数（_ = 1，最多 64），value2 为 GameMaker 颜色（_ = 当前色）。" },
+            Category = "LR Extra Gimmicks", Summary = "竖向斜线：value1 向下取整并限制为 1–64（_ = 1），value2 为 GameMaker 打包颜色（255 = 红色，_ = 当前色）；duration 不影响生成条数。" },
         new() { Id = "frollsy.lr_slash_color", Kind = "mod", Name = "lr_slash_color", Scope = "custom",
-            Category = "Frollsy's Extra Gimmicks", Summary = "设置后续竖向斜线颜色：value2 为 GameMaker 颜色，_ 不改变当前色。" }
+            Category = "LR Extra Gimmicks", Summary = "设置后续竖向斜线颜色：value1 忽略，value2 为 GameMaker 打包颜色（255 = 红色），_ 不改变当前色；初始颜色为白色。" }
     ];
 
     public static VsmReference.Entry? Entry(string name) => extraGimmicks.FirstOrDefault(e => e.Name == name)

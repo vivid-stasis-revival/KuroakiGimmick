@@ -70,7 +70,7 @@ public sealed partial class Timeline
                 if (c.ObjectName != "obj_custom_gimmick")
                 {
                     SourceNoOps.Add(new(e.Name, e.SourceLine, e.Beat,
-                        "Frollsy's Extra Gimmicks requires obj_custom_gimmick."));
+                        "LR Extra Gimmicks requires obj_custom_gimmick."));
                     continue;
                 }
                 if (e.Name == "lr_slash_color")

@@ -60,8 +60,7 @@ public sealed partial class SceneRenderer
                 var e = slashes[i];
                 double age = time - e.Time;
                 if (age >= 1 || (e.Color == 0) != (pass == 0)) continue;
-                uint bgr = (uint)Math.Clamp(e.Color, 0, 16777215);
-                var color = Color.Hex(((bgr & 255) << 16) | (bgr & 0xFF00) | ((bgr >> 16) & 255));
+                var color = Color.GameMaker(e.Color);
                 float width = (float)(12 * (1 - age) * (1 - age));
                 for (int n = 0; n < e.Count; n++)
                 {
