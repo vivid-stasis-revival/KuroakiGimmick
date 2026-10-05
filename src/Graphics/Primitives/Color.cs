@@ -9,6 +9,12 @@ namespace KuroakiGimmick.Graphics;
 public readonly record struct Color(float R, float G, float B, float A = 1)
 {
     public static Color Hex(uint rgb, float alpha = 1) => new(((rgb >> 16) & 255) / 255f, ((rgb >> 8) & 255) / 255f, (rgb & 255) / 255f, alpha);
+    /// <summary>GameMaker 打包颜色的低 24 位按 BGR 存储；与 color_get_* 一致，不把带符号或高位颜色钳为黑/白。</summary>
+    public static Color GameMaker(double packed)
+    {
+        uint bgr = (uint)((Math.Truncate(packed) % 16777216 + 16777216) % 16777216);
+        return new((bgr & 255) / 255f, ((bgr >> 8) & 255) / 255f, ((bgr >> 16) & 255) / 255f);
+    }
     public Color Alpha(double a) => this with
     {
         A = (float)Math.Clamp(a, 0, 1)

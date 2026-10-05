@@ -155,6 +155,8 @@ Check(slashOnceTimeline.SlashSpans.Count == 0 && slashOnceTimeline.Callbacks.Cou
     "Zero-duration slash_anycol must remain a one-shot callback");
 Console.WriteLine("PASS issues #31/#32/#33: base ambient particles, global lane mods and 60 Hz slash spans");
 
+IssueFixes.Run();
+
 string temp = Path.Combine(Path.GetTempPath(), "kuroaki-regression-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(temp);
 try

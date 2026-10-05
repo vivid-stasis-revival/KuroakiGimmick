@@ -4,6 +4,10 @@
 
 ## 未发布
 
+- #36：按提供的 `lr_extra_gimmicks` 源码核对回调语义，补上 `lr_slash` / `lr_slash_color` 的零权重；颜色按 GameMaker 的 BGR 低 24 位解码，修正带符号或含高位颜色被钳为黑白的问题。增加条数、颜色继承、同拍顺序、区间展开与对象作用域回归验证。
+- 修复 #39：图片与文本编辑的 Opacity 标签和 0% 提示统一使用“不透明度”。
+- 修复 #40：保留 `.kuroaki` 原路径，Windows 保存时设置隐藏属性（也适用于已有目录）；Chart Folder 改为只导出当前谱面及必要依赖，排除备份、工作副本、其它难度与未引用文件。
+
 - 修复 #31：`obj_base_gimmick` 与 `obj_custom_gimmick` 都恢复公共 `o_csm_particle_system` 背景粒子；粒子位移表、ambient dust 与 side burst 的启用条件拆开，特殊原生对象仍由 profile 的 `AmbientParticles` 显式控制。
 - 修复 #32：`xoffsetindN` / `yoffsetindN` / `notealpindN` 以及逐轨 boost 不再被 `obj_custom_gimmick` 的渲染分支错误门控；base/custom 共用逐帧 lane cache，候选裁剪与最终 Note 坐标使用同一组逐轨参数。
 - 修复 #33：非零 duration 的 `slash_anycol` 按本体语义在区间内以 60 Hz 持续生成新 slash；时间轴只保存生成区间，渲染时按需展开最近 1 秒存活实例，避免长区间预分配海量 callback，并按每条 slash 的出生时刻采样颜色。
