@@ -856,5 +856,6 @@
   "GAME SCENE: double-click image/text to select; drag the selected object to move X/Y.": "GAME SCENE：双击图片/文本进行选择；拖动已选对象可直接修改 X/Y。",
   "Selected in GAME SCENE. Drag to move X/Y; Undo is one step.": "已在 GAME SCENE 中选中。拖动修改 X/Y；一次拖拽只占一个撤销步骤。",
   "Scene drag unavailable: ": "场景拖动不可用：",
-  "Includes the current chart and its referenced resources only. Other difficulties, unrelated files and editor backups are excluded.": "只包含当前谱面及其引用资源；不导出其它难度、无关文件或编辑器备份。"
+  "Includes the current chart and its referenced resources only. Other difficulties, unrelated files and editor backups are excluded.": "只包含当前谱面及其引用资源；不导出其它难度、无关文件或编辑器备份。",
+  "Track order updated / undo available": "轨道顺序已更新 / 可撤销"
 }

@@ -10,6 +10,8 @@ public sealed class ViewerProject
     public int Version { get; set; } = 1;
     /// <summary>仅编辑器使用的书签，存在工程文件里而不是游戏文件里。</summary>
     public List<Editing.TimelineMarker> EditorMarkers { get; set; } = [];
+    /// <summary>时间轴行的显示顺序；使用稳定轨道键，不改变 VSM 源行或事件执行顺序。</summary>
+    public List<string> EditorTrackOrder { get; set; } = [];
     public string? Chart { get; set; }
     public string? Gimmick { get; set; }
     public string? Images { get; set; }
@@ -72,6 +74,7 @@ public sealed class ViewerProject
     {
         var copy = (ViewerProject)MemberwiseClone();
         copy.EditorMarkers = (EditorMarkers ?? []).ToList();
+        copy.EditorTrackOrder = (EditorTrackOrder ?? []).ToList();
         copy.TextFiles = TextFiles == null ? null : new(TextFiles, StringComparer.Ordinal);
         return copy;
     }

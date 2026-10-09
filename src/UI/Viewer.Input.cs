@@ -19,6 +19,7 @@ public sealed partial class Viewer
         // 先换算到逻辑坐标，再按优先级交给各手势 / 覆盖层处理器；任一处理器吃掉事件后，下方的 viewer 快捷键不再响应。
         e = LogicalInput(e);
         if (HandleStartupInput(e)) return;
+        if (HandleTrackOrderInput(e)) return;
         if (HandleSceneDirectGesture(e)) return;
         if (HandleTextGesture(e)) return;
         if (HandleActiveImageGesture(e)) return;

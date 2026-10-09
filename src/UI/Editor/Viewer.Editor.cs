@@ -109,6 +109,7 @@ public sealed partial class Viewer
     /// </summary>
     void ResetEditorForLoad()
     {
+        CancelTrackOrder();
         ResetTextObjects();
         ResetImageObjects();
         CancelImageImport(); droppedImages.Clear(); imageDropActive = false;

@@ -37,7 +37,7 @@ public sealed partial class Viewer
     void DrawAnimatedTrackHelp(Rect timeline, EditTrack? track, float width, float height)
     {
         long now = Environment.TickCount64;
-        bool blocked = UiBlockingOverlayVisible;
+        bool blocked = UiBlockingOverlayVisible || draggedTrackKey != null;
         if (blocked) track = null;
 
         if (track != null)

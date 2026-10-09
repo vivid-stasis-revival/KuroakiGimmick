@@ -33,7 +33,7 @@ public sealed partial class Viewer
 
     /// <summary>
     /// 按文档 revision 增量重建轨道列表；revision 没变就直接返回，避免每帧重排。
-    /// 轨道顺序即源文件顺序（核心轨在前），不按字母排序去编造层级。
+    /// 默认按源文件顺序（核心轨在前）构建，再应用工程中保存的显示顺序。
     /// </summary>
     void RebuildEditTracks()
     {
@@ -103,6 +103,7 @@ public sealed partial class Viewer
         {
             AddModTrack(EpisodeScript.ModName, -1);
         }
+        ApplyTrackOrder();
         layoutRevision = editor.Revision;
     }
     /// <summary>按音频对象引用缓存波形包络；只有换了音频才重算。固定 4096 个 bin，与歌曲长度无关。</summary>
@@ -238,11 +239,13 @@ public sealed partial class Viewer
         }
         textTimelineHeight = editorTracksRect.H;
         trackScroll = Math.Clamp(trackScroll, 0, Math.Max(0, editTracks.Count - visibleRows));
+        ScrollTrackOrder(visibleRows);
         var clips = editor.Vsm.Clips.ToArray();
         hoveredEditTrack = null;
         // 片段与轨道行的几何每帧重建。选框求交、右键命中都读这两张表，而不是各自再算一遍坐标。
         clipHits.Clear(); rowHits.Clear();
         float shownTrackScroll = Math.Clamp(motion.To("timeline-track-scroll", trackScroll, .13), 0, Math.Max(0, editTracks.Count - visibleRows));
+        trackShownScroll = shownTrackScroll;
         int firstTrack = Math.Max(0, (int)MathF.Floor(shownTrackScroll));
         for (int row = 0; row <= visibleRows + 1 && row + firstTrack < editTracks.Count; row++)
         {
@@ -253,6 +256,13 @@ public sealed partial class Viewer
             Canvas.Clip(new(r.X + 1, clipY, labelW - 1, clipEnd - clipY));
             var labelRect = new Rect(r.X + 1, y, labelW - 31, 34);
             Canvas.Fill(new(r.X + 1, y, labelW - 1, 34), (row + firstTrack) % 2 == 0 ? panel : Theme.PanelAlt);
+            var grip = new Rect(x - 81, y + 5, 18, 24);
+            bool labelInteractive = !UiBlockingOverlayVisible && !Busy && !ImageGestureActive &&
+                !(trackHelpVisualActive && trackHelpHitRectValid && trackHelpHitRect.Contains(mouseX, mouseY));
+            if (TrackRoot(track) == track.Key && labelInteractive && draggedTrackKey == null && click &&
+                mouseY >= clipY && mouseY < clipEnd &&
+                (grip.Contains(mouseX, mouseY) || !track.ImageGroup && track.TextId == null && labelRect.Contains(mouseX, mouseY)))
+                BeginTrackOrder(track);
             if (track.TextId is { } tid)
             {
                 if (EButton(expandedTextTracks.Contains(tid) ? "-" : ">", new(r.X + 5, y + 5, 22, 24), key: "text-expand:" + tid))
@@ -268,7 +278,11 @@ public sealed partial class Viewer
                 if (timelineInteractive && click && labelRect.Contains(mouseX, mouseY) && mouseY >= clipY && mouseY < clipEnd)
                 { SelectImageObject(track.ImageId!); click = false; }
             }
-            else Text(ImageShortText(track.Label, labelW - 72), r.X + 10, y + 10, 12, track.Window ? Color.Hex(0xDAB6FF) : white, true, labelW - 72);
+            else Text(ImageShortText(track.Label, labelW - 96), r.X + 10, y + 10, 12, track.Window ? Color.Hex(0xDAB6FF) : white, true, labelW - 96);
+            if (TrackRoot(track) == track.Key)
+            {
+                for (int n = 0; n < 3; n++) Canvas.Line(grip.X + 4, y + 12 + n * 4, grip.X + 13, y + 12 + n * 4, 1, muted);
+            }
             string targetBadge = track.TextId != null ? "TXT" : track.ImageGroup ? "IMG" : track.Window ? "W" + track.Target : track.Target < 0 ? "G" : "P" + track.Target;
             Text(targetBadge, x - 58, y + 11, 11, muted, true, 25);
             if (labelRect.Contains(mouseX, mouseY) && mouseY >= clipY && mouseY < clipEnd)
@@ -332,6 +346,7 @@ public sealed partial class Viewer
             if (held) UpdateMarquee(); else FinishMarquee();
         }
         DrawMarquee();
+        DrawTrackOrder();
         if (timelineInteractive && click && new Rect(x, rulerY, editorTracksRect.W, 25).Contains(mouseX, mouseY))
         { editorScrub = true; selectedNoteTime = null; transport.SetPlaying(false); transport.Seek(Current.Timeline.Bpm.Time(Snap(BeatAt(mouseX)))); click = false; }
         if (editorScrub && held) transport.Seek(Current.Timeline.Bpm.Time(Snap(BeatAt(mouseX))));
