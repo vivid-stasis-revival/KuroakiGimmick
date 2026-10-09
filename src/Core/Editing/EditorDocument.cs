@@ -14,12 +14,13 @@ namespace KuroakiGimmick.Core.Editing;
 public sealed partial class EditorDocument
 {
     /// <summary>一次撤销点的全量快照。Lines 是不可变 record 数组，未改动的行在快照间共享，不会真的复制整份文本。</summary>
-    sealed record Snapshot(VsmDocument.Line[] Lines, string Windows, TimelineMarker[] Markers, string ImageText, string TextSources, string Label);
+    sealed record Snapshot(VsmDocument.Line[] Lines, string Windows, TimelineMarker[] Markers, string ImageText, string TextSources, string[] TrackOrder, string Label);
     readonly List<Snapshot> undo = [], redo = [];
     /// <summary>上次保存时各伴生文件的 SHA-256。再次保存前比对，用来发现文件在编辑器之外被改过。</summary>
     readonly Dictionary<string, string> savedHashes = new(StringComparer.Ordinal);
     string cleanText, cleanWindows, cleanImages, cleanTexts;
     TimelineMarker[] cleanMarkers;
+    string[] cleanTrackOrder;
     readonly List<TimelineMarker> markers = [];
     public IReadOnlyList<TimelineMarker> Markers => markers;
     public string[] ImportedPaths { get; }
@@ -29,8 +30,8 @@ public sealed partial class EditorDocument
     public ViewerProject Project { get; private set; }
     public string? SavedProjectPath { get; private set; }
     public long Revision { get; private set; }
-    /// <summary>脏标记按五份源内容与上次保存时的快照逐一比对得出，不用计数器——撤销回到保存点后应当重新变回干净。</summary>
-    public bool Dirty => Vsm.Text != cleanText || Windows.Serialize() != cleanWindows || !markers.SequenceEqual(cleanMarkers) || Images.Text != cleanImages || TextSnapshot() != cleanTexts;
+    /// <summary>源内容及轨道布局与保存快照逐一比对；撤销回到保存点后重新变为干净。</summary>
+    public bool Dirty => Vsm.Text != cleanText || Windows.Serialize() != cleanWindows || !markers.SequenceEqual(cleanMarkers) || Images.Text != cleanImages || TextSnapshot() != cleanTexts || !Project.EditorTrackOrder.SequenceEqual(cleanTrackOrder);
     public bool CanUndo => undo.Count > 0;
     public bool CanRedo => redo.Count > 0;
     public string UndoLabel => undo.Count > 0 ? undo[^1].Label : "";
@@ -43,6 +44,8 @@ public sealed partial class EditorDocument
     public EditorDocument(Session session)
     {
         Project = session.Project.Copy();
+        Project.EditorTrackOrder = Project.EditorTrackOrder.Where(k => !string.IsNullOrWhiteSpace(k) && !k.Any(char.IsControl)).Distinct(StringComparer.Ordinal).ToList();
+        cleanTrackOrder = Project.EditorTrackOrder.ToArray();
         ImportedPaths = new[] { Project.Chart, Project.Gimmick, Project.WindowMotion, Project.Images, Project.Audio, Project.Jacket, session.ProjectPath }
             .Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => Path.GetFullPath(p!)).ToArray();
         // 标记要满足全部条件才收下：标签单行且不超过 128 字、拍值有限、ID 不重复、与已有标记至少差 1e-9 拍。外部改坏的条目静默丢弃，不让它污染时间轴。
@@ -78,9 +81,9 @@ public sealed partial class EditorDocument
     }
 
     /// <summary>取一次全量快照作为撤销点。Lines 只复制数组本身，行对象是共享的不可变 record。</summary>
-    Snapshot Capture(string label) => new(Vsm.Lines.ToArray(), Windows.Serialize(), markers.ToArray(), Images.Text, TextSnapshot(), label);
-    /// <summary>整体回滚到某个快照，五份源必须一起换，缺一份就会出现文本与配置对不上的中间态。Revision 自增用于让上层重建缓存。</summary>
-    void Restore(Snapshot s) { Vsm.Restore(s.Lines); Windows = WindowMotionConfig.Parse(s.Windows, Windows.Path); markers.Clear(); markers.AddRange(s.Markers); Images.Restore(s.ImageText); RestoreTexts(s.TextSources); Revision++; }
+    Snapshot Capture(string label) => new(Vsm.Lines.ToArray(), Windows.Serialize(), markers.ToArray(), Images.Text, TextSnapshot(), Project.EditorTrackOrder.ToArray(), label);
+    /// <summary>整体还原源内容和布局，避免文本、配置与轨道顺序处于不一致的中间态。Revision 自增用于重建缓存。</summary>
+    void Restore(Snapshot s) { Vsm.Restore(s.Lines); Windows = WindowMotionConfig.Parse(s.Windows, Windows.Path); markers.Clear(); markers.AddRange(s.Markers); Images.Restore(s.ImageText); RestoreTexts(s.TextSources); Project.EditorTrackOrder = s.TrackOrder.ToList(); Revision++; }
     /// <summary>
     /// 所有改动的唯一入口：先取快照，change 抛异常就整体回滚，保证文档不会停在改了一半的状态。
     /// 内容没有真正变化时不压栈，免得撤销栈被空操作填满；栈上限 64，超出丢最旧的一条。任何一次成功改动都会清空重做栈。
@@ -90,7 +93,7 @@ public sealed partial class EditorDocument
         var before = Capture(label);
         try { change(); }
         catch { Restore(before); throw; }
-        if (before.Lines.SequenceEqual(Vsm.Lines) && before.Windows == Windows.Serialize() && before.Markers.SequenceEqual(markers) && before.ImageText == Images.Text && before.TextSources == TextSnapshot()) return;
+        if (before.Lines.SequenceEqual(Vsm.Lines) && before.Windows == Windows.Serialize() && before.Markers.SequenceEqual(markers) && before.ImageText == Images.Text && before.TextSources == TextSnapshot() && before.TrackOrder.SequenceEqual(Project.EditorTrackOrder)) return;
         undo.Add(before); if (undo.Count > 64) undo.RemoveAt(0);
         redo.Clear(); Revision++;
     }
@@ -249,7 +252,7 @@ public sealed partial class EditorDocument
         }
         // 全部就位之后才更新哈希与四份 clean 基线，Dirty 随即变回 false；任何一步失败都不会走到这里，脏状态原样保留。
         foreach (string target in files.Keys) savedHashes[target] = Hash(target);
-        Project = p; SavedProjectPath = path; cleanText = Vsm.Text; cleanWindows = Windows.Serialize(); cleanMarkers = markers.ToArray(); cleanImages = Images.Text; cleanTexts = TextSnapshot();
+        Project = p; SavedProjectPath = path; cleanText = Vsm.Text; cleanWindows = Windows.Serialize(); cleanMarkers = markers.ToArray(); cleanImages = Images.Text; cleanTexts = TextSnapshot(); cleanTrackOrder = Project.EditorTrackOrder.ToArray();
         try { ProjectBackups.ArchiveLegacy(path); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Console.Error.WriteLine("[save migration] " + ex.Message); }
         ProjectBackups.Prune(path);

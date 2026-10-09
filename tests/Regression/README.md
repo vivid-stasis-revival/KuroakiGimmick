@@ -11,6 +11,8 @@ Issue checks also cover the supplied LR Extra Gimmicks callback/colour contract,
 
 Lorelei checks cover forward/reverse blue/red side motion, mirroring, fade/lifetime, object scope and First Breath's missing reverse-blue callback, plus countdown tween evaluation, decimal HUD text, reverse seeks and independence from the DF decoration config.
 
+Issue #43 checks cover layout-only track ordering, unchanged source-event identities, no-op moves, new tracks, copy isolation, undo/redo and save/reopen. The SDL text UI smoke also checks #42 inline/modal workflow search with real text events and live filtering, and #43 label/group dragging, Escape and focus-loss cancellation.
+
 `ScoreState` retains explicit heads/tails, arithmetic tick streams and at most 4097 rolling checkpoints. Identical tick streams are counted together; intervals in which both score displays provably remain below their current targets can be skipped exactly. Other intervals use an ordered merge, so pathological sparse interleaving can still cost time proportional to the judgements visited, without storing them all. Effect generation scales with the hits in the visible effect lifetime.
 
 `NoteIndex` uses a start-time search and subtree maximum end times, preserving crossing holds and source draw order. Its future cutoff is conservative for positive/negative scroll, offsets, wave and boost. Zero scroll retains future candidates because those notes may actually be visible. No note-count or simultaneous-note limit was lowered.

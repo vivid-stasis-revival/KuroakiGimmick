@@ -2,6 +2,11 @@
 
 版本以 `KuroakiGimmick.csproj` 为准。16.2 及更早的开发记录可通过 Git 历史查看。
 
+## 未发布
+
+- 修复 #42：添加 gimmick 页面的搜索框遵循 Inline/Modal 设置，点击和 Ctrl/Cmd+F 共用输入方式；Inline 搜索支持实时筛选、Enter 提交和 Esc 取消，覆盖层不再吞掉文本输入。
+- 实现 #43：时间轴可拖动左侧轨道名称或三线手柄调整行顺序，靠近列表上下边缘时自动滚动，Esc/失去焦点取消。图片与文字组连同展开的原始通道一起移动；顺序保存在 SGV 工程中，支持单步撤销/重做，不改 VSM 事件顺序。
+
 ## v0.1.4 / 17.7.1
 
 - 适配 Lorelei 的蓝色/红色正向与反向侧条：`lr_sides_blue`、`lr_sides_red`、`lr_sides_rev_blue`、`lr_sides_rev_red`。按原始实例的减速、镜像、帧号和淡出公式绘制，支持 Custom、Distorted Fate 与 First Breath；保留 First Breath 原版没有反向蓝色回调的行为。事件按起点触发，不将 duration 或端点误当作动画控制。

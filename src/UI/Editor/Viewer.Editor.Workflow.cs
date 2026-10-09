@@ -14,6 +14,16 @@ namespace KuroakiGimmick.UI;
 /// </summary>
 public sealed partial class Viewer
 {
+    const string AddSearchKey = "workflow:add-search";
+    Rect addSearchRect;
+    string addShownQuery = "";
+    void SetAddQuery(string value) { addQuery = value; addListScroll = 0; }
+    void OpenAddSearch()
+    {
+        if (preferences.ModalValueEditor || addQuery.Length > InlineMax || addQuery.Contains('\n'))
+            OpenValue(L.Get("Search name or description"), addQuery, SetAddQuery);
+        else OpenInline(AddSearchKey, addQuery, SetAddQuery);
+    }
     string workflow = "", displayedWorkflow = "", workflowError = "", addQuery = "", addName = "", addFrom = "_", addTo = "1", addEase = "linear";
     double addBeat, addDuration = 1;
     int addProxy = -1, addListScroll;
@@ -195,6 +205,7 @@ public sealed partial class Viewer
     {
         if (!WorkflowVisible || modalActive) return false;
         if (valueAlpha > .001f) { click = held = false; return true; }
+        if (inlineField == AddSearchKey && HandleInlineInput(e)) return true;
         if (e.Type is 0x400 or 0x401 or 0x402)
         {
             mouseX = e.X; mouseY = e.Y;
@@ -212,7 +223,7 @@ public sealed partial class Viewer
                 click = false;
             }
             else if (workflow == "add" && (e.Modifiers & 0x0CC0) != 0 && e.Scan == 9)
-                OpenValue(L.Get("Search gimmicks"), addQuery, value => { addQuery = value; addListScroll = 0; });
+                OpenAddSearch();
         }
         return true;
     }
@@ -254,11 +265,17 @@ public sealed partial class Viewer
     }
     void DrawAddGimmick(Rect box)
     {
+        inlineFields.Clear(); inlineVisible = false;
         Text(L.Get("ADD GIMMICK"), box.X + 24, box.Y + 20, 23, white);
         float split = box.X + Math.Min(305, box.W * .34f), x = split + 20, rightWidth = box.X + box.W - 24 - x;
-        if (WorkflowButton(addQuery.Length == 0 ? L.Get("SEARCH / Ctrl+F") : addQuery, new(box.X + 24, box.Y + 65, split - box.X - 40, 34)))
-            OpenValue(L.Get("Search name or description"), addQuery, value => { addQuery = value; addListScroll = 0; });
-        var results = GimmickAuthoring.Search(addQuery);
+        var searchBox = new Rect(box.X + 24, box.Y + 65, split - box.X - 40, 34);
+        addSearchRect = searchBox;
+        inlineFields.Add((AddSearchKey, L.Get("Search name or description"), addQuery, SetAddQuery, false));
+        if (inlineField == AddSearchKey) DrawInlineEditor(searchBox);
+        else if (WorkflowButton(addQuery.Length == 0 ? L.Get("SEARCH / Ctrl+F") : addQuery, searchBox)) OpenAddSearch();
+        string query = inlineField == AddSearchKey ? inlineValue : addQuery;
+        if (query != addShownQuery) { addShownQuery = query; addListScroll = 0; }
+        var results = GimmickAuthoring.Search(query);
         addListRect = new(box.X + 24, box.Y + 110, split - box.X - 40, box.H - 175);
         int visible = Math.Max(1, (int)(addListRect.H / 34));
         addListScroll = Math.Clamp(addListScroll, 0, Math.Max(0, results.Length - visible));

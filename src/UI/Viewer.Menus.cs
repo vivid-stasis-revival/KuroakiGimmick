@@ -35,7 +35,7 @@ public sealed partial class Viewer
 
     bool MenuEnabled(MenuCommand command)
     {
-        bool dialogFree = !Busy && !dialogOpen && pendingDiscard == null && !modalActive && !InlineActive;
+        bool dialogFree = !Busy && !dialogOpen && pendingDiscard == null && !modalActive && !InlineActive && draggedTrackKey == null;
         if (command == MenuCommand.Quit) return !dialogOpen;
         if (command == MenuCommand.Welcome) return dialogFree && !ImageGestureActive;
         if (command is MenuCommand.OpenFile or MenuCommand.OpenFolder)
@@ -80,6 +80,7 @@ public sealed partial class Viewer
         var state = new HashCode();
         state.Add(Busy); state.Add(dialogOpen); state.Add(UiBlockingOverlayVisible); state.Add(ImageGestureActive);
         state.Add(InlineActive);
+        state.Add(draggedTrackKey);
         state.Add(Current.IsEmpty); state.Add(editorMode); state.Add(editor?.CanUndo); state.Add(editor?.CanRedo);
         state.Add(notes); state.Add(effects); state.Add(Current.Project.GameUiEnabled); state.Add(full);
         state.Add(loopEnabled); state.Add(editorFollow); state.Add(transport.Playing);
