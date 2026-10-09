@@ -10,14 +10,14 @@ public sealed partial class SceneRenderer
 {
     /// <summary>
     /// 把透明的 field 经 fieldComposite 反预乘后贴回 scene，透明度只被乘一次。
-    /// Base / Custom 的轨道背景（含底部灰色区域）由 proxy 整体变换；
-    /// 歌曲信息底栏在独立 HUD 阶段绘制，其他原生对象保留自己的固定底栏约定。
+    /// Proxy 按原版范围裁剪轨道，灰色判定背景随裁剪区域一起变换；
+    /// Base / Custom 不在源位置重复留下底部灰条，歌曲信息底栏仍由独立 HUD 绘制。
     /// </summary>
     void CompositeField(Session session, double time, bool proxyMode, bool clearFooter)
     {
         CaptureWindowField(session);
         var timeline = session.Timeline;
-        bool movingTrackFooter = session.Chart.ObjectName is "obj_base_gimmick" or "obj_custom_gimmick";
+        bool separateHudFooter = session.Chart.ObjectName is "obj_base_gimmick" or "obj_custom_gimmick";
         double M(string name, int proxy = -1) => timeline.Get(name, time, proxy);
         canvas.Begin(scene, RenderWidth, RenderHeight, 320, 180);
         // 固定侧边保留谱面图片；每份轨道副本在所有深度 pass 上
@@ -31,8 +31,8 @@ public sealed partial class SceneRenderer
             canvas.Quad(field.Texture, new(0, 0, 81, 180), Color.White.Alpha(1 - M("hom")), new(0, 0, 81f / 320, 1), shader: fieldComposite);
             canvas.Quad(field.Texture, new(239, 0, 81, 180), Color.White.Alpha(1 - M("hom")), new(239f / 320, 0, 81f / 320, 1),
                 shader: fieldComposite);
-            // Base / Custom 已把完整轨道底部纳入 proxy，不能在源位置再留一份灰色区域。
-            if (!movingTrackFooter)
+            // Base / Custom 的 y=165..180 属于裁剪外区域，不在源位置再留一份灰条。
+            if (!separateHudFooter)
                 canvas.Quad(field.Texture, new(81, 165, 158, 15), Color.White.Alpha(1 - M("hom")), new(81f / 320, 165f / 180, 158f / 320, 15f / 180),
                     shader: fieldComposite);
             // Do not paint an opaque "clear" rectangle here. The footer is a transparent render-layer concern;
@@ -59,7 +59,7 @@ public sealed partial class SceneRenderer
             }
             double x = M("prx", p) + M("prxb", p) + M("prxc", p) + M("prxd", p), y = M("pry", p) + M("pryb", p) + M("pryc", p) + M("pryd", p);
             float angle = (float)((M("prrz", p) + M("prrzb", p)) * M("rotdir"));
-            float left = 113 - (float) M("shxa", p), right = 208 + (float) M("shxa", p), top = 0, bottom = movingTrackFooter ? 180 : TrackBottom;
+            float left = 113 - (float) M("shxa", p), right = 208 + (float) M("shxa", p), top = 0, bottom = TrackBottom;
             // .08/0 与 .35/.35 是原版的默认取景；只有被谱面改写过才切换到自定义裁剪边界。
             if (M("prct", p) != .08 || M("prcb", p) != 0)
             {
