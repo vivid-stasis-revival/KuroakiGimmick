@@ -13,7 +13,7 @@ Lorelei checks cover forward/reverse blue/red side motion, mirroring, fade/lifet
 
 Issue #43 checks cover layout-only track ordering, unchanged source-event identities, no-op moves, new tracks, copy isolation, undo/redo and save/reopen. The SDL text UI smoke also checks #42 inline/modal workflow search with real text events and live filtering, and #43 label/group dragging, Escape and focus-loss cancellation.
 
-The same SDL smoke reads GPU pixels to verify that Base/Custom track backgrounds extend to the bottom, move/scale/rotate with Proxy, leave no grey strip at the source position and continue to respect Proxy alpha and authored cropping.
+The same SDL smoke reads GPU pixels to verify that non-Proxy backgrounds extend to the bottom, while Base/Custom Proxy uses the original 0..165 default crop. The visible grey region moves/scales/rotates with Proxy, including perspective, without restoring the cropped-out 15 pixels or leaving a strip at the source position. Alpha, authored cropping and explicit crop expansion are also checked.
 
 `ScoreState` retains explicit heads/tails, arithmetic tick streams and at most 4097 rolling checkpoints. Identical tick streams are counted together; intervals in which both score displays provably remain below their current targets can be skipped exactly. Other intervals use an ordered merge, so pathological sparse interleaving can still cost time proportional to the judgements visited, without storing them all. Effect generation scales with the hits in the visible effect lifetime.
 
