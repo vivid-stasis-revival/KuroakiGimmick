@@ -365,7 +365,7 @@ public sealed partial class GameUiRenderer : IDisposable
         }
         var p = session.Project;
         string font = current.Data.Fonts.ContainsKey(p.GameUiFont) ? p.GameUiFont : "fnt_monacovs";
-        DrawCombo(session, time);
+        DrawCombo(session, time, font);
         DrawJudgement(session, time, font);
     }
 

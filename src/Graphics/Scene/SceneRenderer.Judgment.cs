@@ -115,8 +115,8 @@ public sealed partial class SceneRenderer
     /// o_combodisplay 每次判定从连击数两侧向外喷的钻尘。它带 drawInGui，属于 HUD 而不是轨道，
     /// 所以画在 HUD 批次里，落点由 GameUiRenderer 量出的字宽决定（原版 160 ± (string_width / 2 + 6)）。
     /// 这几簇没有传 judgement，原版 switch 落不到任何 case，image_blend 保持白色。
-    /// 粒子实例也不跟 uialpha 缩放，原版只是在命中发生时 uialpha 为 0 才不生成；
-    /// 因此必须检查 hitTime，而不是当前帧。hide_combo 同样只阻止新的 combo 粒子生成。
+    /// 这些 GUI 粒子不受 uialpha 控制；hide_combo 在命中发生时阻止新粒子生成，
+    /// 已生成的粒子继续按自身寿命淡出，因此检查 hitTime 而不是当前帧。
     /// 深度 depth - 1 比连击数本身更靠前，因此必须排在 HUD 绘制之后。
     /// </summary>
     void DrawComboParticles(Session session, double t)
@@ -125,7 +125,7 @@ public sealed partial class SceneRenderer
         {
             // 字宽要按这次判定当时的连击数来量，不能用当前帧的：数字位数一变，喷射点会整体外扩。
             double hitTime = hit.Time;
-            if (session.Timeline.Get("uialpha", hitTime) <= 0 || session.Timeline.Get("hide_combo", hitTime) != 0)
+            if (session.Timeline.Get("hide_combo", hitTime) != 0)
             {
                 continue;
             }

@@ -11,7 +11,17 @@ internal static class GimmickAuthoring
         new() { Id = "frollsy.lr_slash", Kind = "mod", Name = "lr_slash", Scope = "custom",
             Category = "LR Extra Gimmicks", Summary = "竖向斜线：value1 向下取整并限制为 1–64（_ = 1），value2 为 GameMaker 打包颜色（255 = 红色，_ = 当前色）；duration 不影响生成条数。" },
         new() { Id = "frollsy.lr_slash_color", Kind = "mod", Name = "lr_slash_color", Scope = "custom",
-            Category = "LR Extra Gimmicks", Summary = "设置后续竖向斜线颜色：value1 忽略，value2 为 GameMaker 打包颜色（255 = 红色），_ 不改变当前色；初始颜色为白色。" }
+            Category = "LR Extra Gimmicks", Summary = "设置后续竖向斜线颜色：value1 忽略，value2 为 GameMaker 打包颜色（255 = 红色），_ 不改变当前色；初始颜色为白色。" },
+        new() { Id = "compat.lr_sides_blue", Kind = "mod", Name = "lr_sides_blue", Scope = "custom",
+            Category = "Lorelei / DF", Summary = "生成一对蓝色侧条，从轨道中央向外减速展开并淡出；duration、value1、value2 不影响生成。" },
+        new() { Id = "compat.lr_sides_red", Kind = "mod", Name = "lr_sides_red", Scope = "custom",
+            Category = "Lorelei / DF", Summary = "生成一对红色侧条，从轨道中央向外减速展开并淡出；duration、value1、value2 不影响生成。" },
+        new() { Id = "compat.lr_sides_rev_blue", Kind = "mod", Name = "lr_sides_rev_blue", Scope = "custom",
+            Category = "Lorelei / DF", Summary = "生成一对蓝色侧条，从屏幕外侧向内减速移动并淡出；原生 First Breath 中此项没有绘制回调。" },
+        new() { Id = "compat.lr_sides_rev_red", Kind = "mod", Name = "lr_sides_rev_red", Scope = "custom",
+            Category = "Lorelei / DF", Summary = "生成一对红色侧条，从屏幕外侧向内减速移动并淡出。" },
+        new() { Id = "compat.df_countdown", Kind = "mod", Name = "df_countdown", Scope = "global",
+            Category = "Lorelei / DF", Summary = "大于 0 时以两位小数替换顶部连击读数，显示 COUNTDOWN，并将判定精灵下移以避让标题；用 duration 和 value1/value2 编排倒计时。" }
     ];
 
     public static VsmReference.Entry? Entry(string name) => extraGimmicks.FirstOrDefault(e => e.Name == name)

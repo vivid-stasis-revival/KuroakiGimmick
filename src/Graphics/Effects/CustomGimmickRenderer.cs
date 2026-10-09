@@ -67,6 +67,27 @@ public sealed class CustomGimmickRenderer : IDisposable
     }
     public void Dispose() { foreach (var texture in textures.Values) texture.Dispose(); textures.Clear(); }
 
+    /// <summary>Lorelei 实例只画自身侧条，不产生 Apocalypse 的拖尾；xscale 的符号决定镜像。</summary>
+    public void DrawLoreleiSides(Session session, double time)
+    {
+        if (!LoreleiSides.SupportsObject(session.Chart.ObjectName)) return;
+        string sprite = session.Chart.ObjectName == "obj_firstbreath_gimmick" ? "sp_firstbreath_sidething" : "sp_lorelei_sidething";
+        var callbacks = session.Timeline.Callbacks;
+        for (int i = SortedSearch.LowerBound(callbacks, time - LoreleiSides.Lifetime, e => e.Time);
+            i < callbacks.Count && callbacks[i].Time <= time; i++)
+        {
+            var callback = callbacks[i];
+            if (session.NativeGimmick.Data?.Callbacks.ContainsKey(callback.Name) == true) continue;
+            foreach (var side in LoreleiSides.At(callback.Name, time - callback.Time))
+            {
+                if (Image(session, sprite + "_" + side.Frame) is not { } texture) continue;
+                // These sprites are 120x180 with origin (60,90).
+                canvas.Quad(texture, new((float)side.X - 60 * side.Direction, (float)side.Y - 90,
+                    120 * side.Direction, 180), Color.White.Alpha(side.Alpha));
+            }
+        }
+    }
+
     /// <summary>DF 装饰：两条侧线、白底和可裁剪的网格。网格按 df_grid_top/bottom 同时裁几何与 UV，拉伸贴图不等价。</summary>
     public void DrawDf(Session session, double time)
     {

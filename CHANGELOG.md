@@ -2,7 +2,16 @@
 
 版本以 `KuroakiGimmick.csproj` 为准。16.2 及更早的开发记录可通过 Git 历史查看。
 
-## 未发布
+## v0.1.4 / 17.7.1
+
+- 适配 Lorelei 的蓝色/红色正向与反向侧条：`lr_sides_blue`、`lr_sides_red`、`lr_sides_rev_blue`、`lr_sides_rev_red`。按原始实例的减速、镜像、帧号和淡出公式绘制，支持 Custom、Distorted Fate 与 First Breath；保留 First Breath 原版没有反向蓝色回调的行为。事件按起点触发，不将 duration 或端点误当作动画控制。
+- 支持 `df_countdown` 的两位小数顶部读数与 COUNTDOWN 标题；倒计时独立于 DF 网格/侧线配置，支持任意定位与倒拖，到零后恢复普通 HUD 读数。mod 选择器补上侧条和倒计时说明。
+- 修正 combo、分数、准确率及倒计时的比例精灵字模排版：绘制和度量共用裁剪后的字宽，去掉逐帧水平留白造成的间距与居中偏移；倒计时标题与判定在命中弹动时保持间隔。
+- 修复轨道及灰色判定背景被误裁在 y=165 的问题，恢复原始背景到 y=180；音符继续使用游玩区裁剪。`uialpha=0` 时不再少掉底部 15 个逻辑像素。
+- 修正 acc/combo/timer 两侧菱形粒子的显隐：生成由 `hide_combo` 控制，不再受 `uialpha` 门控；已经生成的粒子按自身寿命淡出。
+- 增加 Lorelei 运动、对象作用域、回调寿命、倒计时与反向定位回归验证；使用本地 Renatus 谱面验证正反向侧条、HUD 排版、底部灰色区域及菱形粒子。
+- 侧条使用本地 `Assets/CustomGimmicks/sp_lorelei_sidething_0.png` / `_1.png`；First Breath 使用 `sp_firstbreath_sidething_0.png` / `_1.png`，均为 120×180、原点 (60,90)。这些原始游戏资源仍需用户自行准备，不随源码仓库或 Actions 发布包分发。
+- 正式版本更新为 `v0.1.4 / 17.7.1`，构建序号为 `1771`；由现有 NativeAOT Actions 发布 Windows x64 和 macOS arm64 正式 Release。
 
 - #36：按提供的 `lr_extra_gimmicks` 源码核对回调语义，补上 `lr_slash` / `lr_slash_color` 的零权重；颜色按 GameMaker 的 BGR 低 24 位解码，修正带符号或含高位颜色被钳为黑白的问题。增加条数、颜色继承、同拍顺序、区间展开与对象作用域回归验证。
 - 修复 #39：图片与文本编辑的 Opacity 标签和 0% 提示统一使用“不透明度”。

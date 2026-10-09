@@ -12,11 +12,14 @@ public static class CustomCompatibility
     public static readonly HashSet<string> NativeOnly = new("track_alpha en_whiteoverlay eo_endsat1 eo_endsat2 eo_endsat3 eo_endsat4 eo_endcg sekaisen_arrow_point sekaisen_target_point sekaisen_jacket".Split(' '));
     public static string? NoOpReason(string name, Chart chart, ViewerProject project)
     {
+        if (chart.ObjectName == "obj_firstbreath_gimmick" && name == "lr_sides_rev_blue")
+            return "Original First Breath registers lr_sides_rev_blue without a callback; its value is stored but no side instances are created.";
         if (chart.ObjectName != "obj_custom_gimmick") return null;
         if (name == "imgalp") return "Original Custom Gimmick registers imgalp_<image ID> only; bare imgalp is unregistered and updateMods skips it.";
         if (NativeOnly.Contains(name)) return "Original Custom Gimmick does not register this native-object parameter; updateMods skips it. Source: obj_base_gimmick / obj_custom_gimmick / native-object Create.";
         if (name == "fx_edge" && !SongFiles.Config(project, "ENABLE_NON_BASE_FX")) return "ENABLE_NON_BASE_FX is false; the original object does not register this filter control.";
-        if (name.StartsWith("df_", StringComparison.Ordinal) && !SongFiles.Config(project, "ENABLE_DF_GRID_AND_SIDELINE")) return "ENABLE_DF_GRID_AND_SIDELINE is false; these drawing controls are not registered.";
+        if (name is "df_sideline" or "df_sideline2" or "df_sideline_alpha" or "df_whitebg" or "df_grid_alpha" or "df_grid_top" or "df_grid_bottom"
+            && !SongFiles.Config(project, "ENABLE_DF_GRID_AND_SIDELINE")) return "ENABLE_DF_GRID_AND_SIDELINE is false; these drawing controls are not registered.";
         if (Stars.Contains(name) && !SongFiles.Config(project, "ENABLE_STARPARTICLE", false)) return "ENABLE_STARPARTICLE is false; original Custom Gimmick does not register star controls.";
         if (name is "playspeed" or "jumpto_beat" or "jumpto_s" && !SongFiles.Config(project, "ENABLE_MUSIC_CONTROL")) return "ENABLE_MUSIC_CONTROL is false; original music-control callback does nothing.";
         return null;

@@ -156,6 +156,7 @@ Check(slashOnceTimeline.SlashSpans.Count == 0 && slashOnceTimeline.Callbacks.Cou
 Console.WriteLine("PASS issues #31/#32/#33: base ambient particles, global lane mods and 60 Hz slash spans");
 
 IssueFixes.Run();
+LoreleiCompatibility.Run();
 
 string temp = Path.Combine(Path.GetTempPath(), "kuroaki-regression-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(temp);
