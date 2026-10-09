@@ -41,7 +41,8 @@ public sealed partial class GameUiRenderer
 
     /// <summary>
     /// 量一串精灵字模的宽度。步进 = 该帧裁剪矩形的宽 + 字距，与 GameMaker 比例精灵字体一致。
-    /// 墨迹边界按"整帧带原点画在起笔点上"推算，供调用方按视觉中心对齐。
+    /// 比例精灵字体将每帧裁剪区域的左边贴到笔尖，不保留帧内水平留白；
+    /// 度量与 SpriteText 使用同一规则，供调用方按视觉中心对齐。
     /// 精灵缺失或没带裁剪矩形时返回 null：没有逐帧包围盒就还原不出比例字宽，宁可不画也不拿整帧宽度去猜。
     /// </summary>
     SpriteTextMetrics? Measure(string name, string text)
@@ -59,14 +60,17 @@ public sealed partial class GameUiRenderer
                 continue;
             }
             var b = bounds[frame];
-            left = Math.Min(left, pen - s.OriginX + b[0]);
-            right = Math.Max(right, pen - s.OriginX + b[0] + b[2]);
+            if (c != ' ')
+            {
+                left = Math.Min(left, pen);
+                right = Math.Max(right, pen + b[2]);
+            }
             pen += b[2] + ComboSeparation;
         }
         return right < left ? null : new(pen, left, right);
     }
 
-    /// <summary>按 Measure 的同一套步进逐帧绘制；(penX, penY) 是起笔点，每一帧都把自己的原点对到笔尖上。</summary>
+    /// <summary>比例字模只画裁剪区域；X 不使用精灵原点和帧内留白，Y 保留原版基线偏移。</summary>
     void SpriteText(string name, string text, float penX, float penY, Color colour)
     {
         if (current?.Data == null || !current.Data.Sprites.TryGetValue(name, out var s) || s.Bounds is not { } bounds)
@@ -80,14 +84,22 @@ public sealed partial class GameUiRenderer
             {
                 continue;
             }
-            Sprite(name, frame, penX, penY, colour);
-            penX += bounds[frame][2] + ComboSeparation;
+            var b = bounds[frame];
+            if (c != ' ')
+            {
+                var texture = Image(s.Frames[frame]);
+                canvas.Quad(texture, new(penX, penY + b[1] - s.OriginY, b[2], b[3]), colour,
+                    new(b[0] / (float)s.Width, b[1] / (float)s.Height, b[2] / (float)s.Width, b[3] / (float)s.Height));
+            }
+            penX += b[2] + ComboSeparation;
         }
     }
 
     /// <summary>原版 o_combodisplay 的 event_user(2)：顶部大号数字按 op_minusscore 切换内容。</summary>
-    static string ComboText(Session session, double time)
+    public static string ComboText(Session session, double time)
     {
+        double countdown = session.Timeline.Get("df_countdown", time);
+        if (countdown > 0) return countdown.ToString("0.00", CultureInfo.InvariantCulture).PadLeft(5);
         var score = session.Score;
         return session.Project.GameUiCombo switch
         {
@@ -105,13 +117,14 @@ public sealed partial class GameUiRenderer
     static string Whole(double value) => Math.Round(value).ToString(CultureInfo.InvariantCulture);
     /// <summary>距上次判定过了多久（秒）。还没有任何判定时返回正无穷，各处补间因此停在终点、淡出停在 0。</summary>
     static double SinceHit(Session session, double time) => session.Score.LastHit(time) is { } hit ? time - hit : double.PositiveInfinity;
+    static float ComboBounce(Session session, double time) => (float)(3 * (1 - Easings.Eval("outQuint", SinceHit(session, time) / ComboTween)));
 
     /// <summary>
     /// 顶部大号连击数。原版 draw_text_o(171, y + 8) 配 fa_center，但同一次事件里的钻尘是以 160 为中心向两侧分开的，
     /// 说明这串数字视觉上是落在 160 上的；这里直接按墨迹范围居中到 160，不去复刻 GameMaker 文字引擎的起笔偏移。
     /// y 的补间原版跟的是真实帧时间，这里换成曲目时间，否则拖动时间轴后数字会卡在补间半路。
     /// </summary>
-    void DrawCombo(Session session, double time)
+    void DrawCombo(Session session, double time, string font)
     {
         if (session.Project.GameUiCombo <= 0 || session.Timeline.Get("hide_combo", time) != 0)
         {
@@ -122,8 +135,10 @@ public sealed partial class GameUiRenderer
         {
             return;
         }
-        double y = ComboY + 3 * (1 - Easings.Eval("outQuint", SinceHit(session, time) / ComboTween));
+        double y = ComboY + ComboBounce(session, time);
         SpriteText(ComboFont, text, 160 - (m.Left + m.Right) / 2, (float) y + ComboBaseline, Color.White);
+        if (session.Timeline.Get("df_countdown", time) > 0)
+            Text(font, "COUNTDOWN", 160, (float)y + 19, Color.White, Color.White, true);
     }
 
     /// <summary>
@@ -140,15 +155,17 @@ public sealed partial class GameUiRenderer
         }
         double age = SinceHit(session, time), ease = Easings.Eval("outQuint", age / JudgementTween);
         var white = Color.White;
+        // 标题随数字弹动；判定同步避让，防止命中瞬间标题压到放大的现代判定上。
+        float countdownOffset = session.Timeline.Get("df_countdown", time) > 0 ? 11 + ComboBounce(session, time) : 0;
         switch (mode)
         {
             case 1:
                 // 现代样式：整块精灵以原点为中心从 1.125 倍收回 1 倍。
-                Sprite("sp_judgements_2", ScoreState.Tier + 1, JudgementX, JudgementY, white, (float)(JudgementPopScale + (1 - JudgementPopScale) * ease));
+                Sprite("sp_judgements_2", ScoreState.Tier + 1, JudgementX, JudgementY + countdownOffset, white, (float)(JudgementPopScale + (1 - JudgementPopScale) * ease));
                 break;
             case 2:
                 // 经典样式：不缩放，改成从 27 抬回 24。
-                Sprite("sp_judgements", ScoreState.Tier + 1, JudgementX, (float)(JudgementClassicPop + (JudgementY - JudgementClassicPop) * ease), white);
+                Sprite("sp_judgements", ScoreState.Tier + 1, JudgementX, (float)(JudgementClassicPop + (JudgementY - JudgementClassicPop) * ease) + countdownOffset, white);
                 break;
             default:
                 // 底部描边文字：alph 是从 13 开始按曲目时间掉的，画的时候被 draw_set_alpha 夹在 1，

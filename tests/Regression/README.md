@@ -9,6 +9,8 @@ The score oracle implements the previous expanded judgement algorithm. Checks co
 
 Issue checks also cover the supplied LR Extra Gimmicks callback/colour contract, zero Custom mod weights, dependency-only Chart Folder exports, staged image names, save/reopen/export, unchanged backup locations and the Windows hidden flag (when run on Windows).
 
+Lorelei checks cover forward/reverse blue/red side motion, mirroring, fade/lifetime, object scope and First Breath's missing reverse-blue callback, plus countdown tween evaluation, decimal HUD text, reverse seeks and independence from the DF decoration config.
+
 `ScoreState` retains explicit heads/tails, arithmetic tick streams and at most 4097 rolling checkpoints. Identical tick streams are counted together; intervals in which both score displays provably remain below their current targets can be skipped exactly. Other intervals use an ordered merge, so pathological sparse interleaving can still cost time proportional to the judgements visited, without storing them all. Effect generation scales with the hits in the visible effect lifetime.
 
 `NoteIndex` uses a start-time search and subtree maximum end times, preserving crossing holds and source draw order. Its future cutoff is conservative for positive/negative scroll, offsets, wave and boost. Zero scroll retains future candidates because those notes may actually be visible. No note-count or simultaneous-note limit was lowered.

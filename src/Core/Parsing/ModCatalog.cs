@@ -11,6 +11,7 @@ public static class ModCatalog
     {
         Supported.Add("lr_slash");
         Supported.Add("lr_slash_color");
+        foreach (string name in "lr_sides_blue lr_sides_red lr_sides_rev_blue lr_sides_rev_red df_countdown".Split(' ')) Supported.Add(name);
         Supported.Add("fx_film");
         Supported.Add("playspeed");
         Supported.Add("prtrX");

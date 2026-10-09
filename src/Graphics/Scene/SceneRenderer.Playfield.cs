@@ -135,9 +135,7 @@ public sealed partial class SceneRenderer
         // 灰色的 hold/判定区有自己独立的透明度。
         if (drawNotes)
         {
-            canvas.Clip(new(0, 0, 320, TrackBottom));
             canvas.Quad(laneTexture, new(0, 0, 320, 180), Color.White.Alpha(ui));
-            canvas.Clip(null);
         }
         // GameMaker 的 image depth = 图层优先级取负。轨道装饰深度 200，判定覆盖层深度 0，
         // 音符 -350，游戏 HUD -1000；下面每个 DrawImages 区间就是按这些深度切出来的。
@@ -154,9 +152,9 @@ public sealed partial class SceneRenderer
         DrawImages(session, t, -100, 0, field);
         if (drawNotes && session.NativeGimmick.Data?.ReplaceJudgmentOverlay != true)
         {
-            canvas.Clip(new(0, 0, 320, TrackBottom));
+            // 原始轨道与灰色判定背景延伸到 y=180；只有音符裁到 y=165。
+            // 固定 HUD 自行覆盖底栏，uialpha=0 时仍应能看见完整灰色区域。
             canvas.Quad(nativeSequence.HoldOverlay(session, t) ?? holdOverlay, new(0, 0, 320, 180), Color.White.Alpha(M("holdoverlayalpha")));
-            canvas.Clip(null);
         }
         DrawImages(session, t, 0, 10, field);
         // Custom 的旧式/具名字幕实例都位于 depth -10：判定覆盖层之后、音符和 cover (-400) 之前。
