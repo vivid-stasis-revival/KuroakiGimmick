@@ -118,6 +118,24 @@ for (int trial = 0; trial < 5000; trial++)
 Check(double.IsPositiveInfinity(NoteMotion.FutureDistance(3, 0, 0, 3, 0, 0, 0, 0, false)), "Stopped scroll must remain conservative");
 Console.WriteLine("PASS note index and motion bounds: crossing holds, magnet oracle, future stack, reverse/zero scroll, wave, boost and offsets");
 
+// Custom Gimmicks Create loops over zero proxies; loadMods instantiates them later.
+// Base and Custom both start with pra=0 until an explicit clip activates each proxy.
+var customProxyChart = new Chart { ObjectName = "obj_custom_gimmick", Proxies = 16 };
+var customProxyTimeline = new Timeline(customProxyChart, new ViewerProject { Bpm = 120 }, 2);
+Near(customProxyTimeline.Get("pra", 0, 7), 0, "Custom P7 must default to PRA=0 before its first event");
+var baseProxyChart = new Chart { ObjectName = "obj_base_gimmick", Proxies = 16 };
+var baseProxyTimeline = new Timeline(baseProxyChart, new ViewerProject { Bpm = 120 }, 2);
+Near(baseProxyTimeline.Get("pra", 0, 7), 0, "Base P7 must retain PRA=0");
+customProxyChart.Mods.Add(new ModEvent(0, 0, "linear", 0, 0, "pra", 7, 0));
+var customExplicit = new Timeline(customProxyChart, new ViewerProject { Bpm = 120 }, 2);
+Near(customExplicit.Get("pra", 0, 7), 0, "Explicit custom PRA must override object default");
+Near(customExplicit.Get("pra", 0, 6), 0, "Other proxies must stay invisible without a PRA event");
+customProxyChart.Mods.Add(new ModEvent(0, 0, "linear", 0, 1, "pra", 7, 1));
+var activated = new Timeline(customProxyChart, new ViewerProject { Bpm = 120 }, 2);
+Near(activated.Get("pra", 0, 7), 1, "Explicit Custom PRA event activates its proxy");
+Near(activated.Get("pra", 0, 8), 0, "Un-authored Custom P8 must remain hidden (Stage4a)");
+Console.WriteLine("PASS proxy alpha: Base and Custom start at 0, authored overrides isolated");
+
 // #31/#32/#33: base/custom scope and callback semantics must not be inferred from renderer object gates.
 var laneChart = new Chart { ObjectName = "obj_base_gimmick" };
 laneChart.Mods.Add(new(0, 0, "linear", 0, 10, "xoffsetind0", -1, 0));

@@ -57,6 +57,15 @@ public sealed partial class Viewer
         selectedClips.Clear();
         if (id is Guid g) selectedClips.Add(g);
         selectedClip = id;
+        SyncPickedProxy(id);
+    }
+
+    void SyncPickedProxy(Guid? id)
+    {
+        if (id is not Guid g || editor == null) return;
+        var clip = editor.Vsm.Find(g);
+        if (clip is { Proxy: >= 0 } && clip.Name.StartsWith("pr", StringComparison.OrdinalIgnoreCase))
+            newProxy = clip.Proxy;
     }
 
     /// <summary>
@@ -76,6 +85,7 @@ public sealed partial class Viewer
         }
         else if (!selectedClips.Contains(id)) { selectedClips.Clear(); selectedClips.Add(id); }
         selectedClip = id;
+        SyncPickedProxy(id);
     }
 
     /// <summary>选择同一条轨道（同 mod、同 proxy）上的全部片段，批量改参最常用的起手式。</summary>
@@ -84,7 +94,7 @@ public sealed partial class Viewer
         if (editor == null) return;
         selectedClips.Clear();
         foreach (var c in editor.Vsm.Clips.Where(c => c.TrackKey == clip.TrackKey)) selectedClips.Add(c.Id);
-        selectedClip = clip.Id; inspectorScroll = 0;
+        selectedClip = clip.Id; SyncPickedProxy(clip.Id); inspectorScroll = 0;
         message = L.Format($"Selected {selectedClips.Count} {clip.Name} clips.");
     }
 
@@ -408,7 +418,7 @@ public sealed partial class Viewer
         Field(L.Get("Proxy / -1 global"), Shared(picked, c => c.Proxy.ToString(CultureInfo.InvariantCulture)), v =>
         {
             int p = int.Parse(v, CultureInfo.InvariantCulture);
-            if (p >= Current.Chart.Proxies) throw new FormatException(L.Get("Proxy exceeds !proxies."));
+            if (p >= EditableProxyCount) throw new FormatException(L.Get("Proxy exceeds !proxies."));
             EditClips(c => c with { Proxy = p }, L.Get("Set proxy"));
         });
         Text(sameMod ? L.Get("Beat moves the group; spacing is kept.") : L.Get("Mixed mods: from / to stay per clip."),

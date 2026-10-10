@@ -103,6 +103,17 @@ public sealed partial class Viewer
         SmokeShatterDrop();
         Draw(1440, 940);
         // 从 editor 的实际设置按钮进入；改变设置必须经过 DrawSettings 消费鼠标点击。
+        // Regression: expanded Proxy rows must push Settings and the scroll
+        // footer down, not overlay the 16 proxy buttons (v6/v7 sidebar bug).
+        foreach (bool windows in new[] { false, true })
+        {
+            float collapsed = EditorToolsSettingsOffset(false, windows);
+            float expanded = EditorToolsSettingsOffset(true, windows);
+            if (Math.Abs(expanded - collapsed - ProxySidebarExpandedHeight) > .001f ||
+                expanded < ProxySidebarExpandedHeight + (windows ? 520 : 348) ||
+                EditorToolsContentHeight(true, windows) < expanded + 52)
+                throw new Exception("Expanded proxy sidebar overlaps Settings or clips its footer.");
+        }
         OpenEditor();
         imageSources = textSources = false;
         editorSourceScroll = 10000;

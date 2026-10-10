@@ -56,7 +56,7 @@ public sealed partial class Viewer
         // 视频编辑器不会因为某条轨道暂时没有片段就把它藏起来。主要的 note / SV 控制轨始终保留，
         // 这样第一个事件可以直接在时间轴上创建。
         foreach (string name in CoreGlobalTracks) AddModTrack(name, -1);
-        for (int proxy = 0; proxy < Current.Chart.Proxies; proxy++)
+        for (int proxy = 0; proxy < EditableProxyCount; proxy++)
             foreach (string name in CoreProxyTracks) AddModTrack(name, proxy);
 
         // 其余轨道一律保持源文件顺序，而不是按字母排序凭空造出一套层级。

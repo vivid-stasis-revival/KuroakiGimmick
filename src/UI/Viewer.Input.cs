@@ -20,6 +20,7 @@ public sealed partial class Viewer
         e = LogicalInput(e);
         if (HandleStartupInput(e)) return;
         if (HandleTrackOrderInput(e)) return;
+        if (HandlePrGridGesture(e)) return; // Floating PR calibration HUD owns its header drag and [+] toggle.
         if (HandleSceneDirectGesture(e)) return;
         if (HandleTextGesture(e)) return;
         if (HandleActiveImageGesture(e)) return;

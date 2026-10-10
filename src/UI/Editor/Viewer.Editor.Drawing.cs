@@ -56,6 +56,7 @@ public sealed partial class Viewer
             {
                 Canvas.Quad(Renderer.Final.Texture, previewImage, Color.White);
                 DrawSceneDirectManipulation(previewImage, time);
+                DrawPrCalibrationGrid(previewImage, time);
             }
         }
         float controlsY = frame.Y + frame.H + 8;
@@ -124,20 +125,34 @@ public sealed partial class Viewer
         var body = new Rect(r.X, r.Y + 35, r.W, Math.Max(1, r.H - 35));
         if (textSources) DrawTextSources(body); else if (imageSources) DrawImageSources(body); else DrawEditorTools(body);
     }
+    // One scrollable coordinate system for both panels and the controls below them.
+    // Keep layout and wheel bounds in sync. The expanded Window Movement footer
+    // also needs room beyond its last text baseline (the old 566 clipped it).
+    const float ProxySidebarExpandedHeight = 349;
+    static float EditorToolsSettingsOffset(bool proxyExpanded, bool windowsExpanded) =>
+        (windowsExpanded ? 520 : 348) + (proxyExpanded ? ProxySidebarExpandedHeight : 0);
+    static float EditorToolsContentHeight(bool proxyExpanded, bool windowsExpanded) =>
+        EditorToolsSettingsOffset(proxyExpanded, windowsExpanded) + 63;
+
     /// <summary>
-    /// 工具页。内容高度固定，靠 editorSourceScroll 手动滚动并裁剪。
+    /// 工具页。全部控件共享一个滚动坐标系，Proxy 展开后设置按钮也顺延。
     /// SourceButton 只在按钮完整落在可视区内才允许点击 —— 被裁掉一半的按钮如果还能点，用户会点到看不见的东西。
     /// </summary>
     void DrawEditorTools(Rect r)
     {
-        const float contentHeight = 442;
+        float proxyOffset = proxyPanelExpanded ? ProxySidebarExpandedHeight : 0;
+        float contentHeight = EditorToolsContentHeight(proxyPanelExpanded, windowToolsExpanded);
+        int proxyCount = EditableProxyCount;
+        if (newProxy >= proxyCount) newProxy = -1; // undo/delete may shrink the declared range
         editorSourceScroll = Math.Clamp(editorSourceScroll, 0, Math.Max(0, contentHeight - r.H));
         float y = r.Y - editorSourceScroll, x = r.X, half = (r.W - 6) / 2;
         Canvas.Clip(r);
-        bool SourceButton(string text, Rect box, bool primary = false, bool enabled = true)
+        bool SourceButton(string text, Rect box, bool primary = false, bool enabled = true,
+            bool active = false, string? key = null)
         {
             bool visible = box.Y >= r.Y && box.Y + box.H <= r.Y + r.H;
-            return EButton(text, box, primary: primary, enabled: enabled && visible);
+            return EButton(text, box, primary: primary, active: active,
+                enabled: enabled && visible, key: key);
         }
         Label(L.Get("ADD AT MARKER / PLAYHEAD"), x, y);
         if (SourceButton(L.Get("OPEN CHART"), new(x, y + 18, half, 28), enabled: !Busy)) ChooseOpen();
@@ -145,27 +160,117 @@ public sealed partial class Viewer
         if (SourceButton(L.Get("ADD GIMMICK..."), new(x, y + 54, r.W, 28))) OpenAddGimmick();
         if (SourceButton(L.Get("+ IMAGE / DROP IMAGE"), new(x, y + 90, r.W, 30), primary: true, enabled: !Busy)) ChooseImageImport();
         if (SourceButton(L.Get("PRESET >"), new(x, y + 128, half, 28))) { templateIndex = (templateIndex + 1) % ModTemplates.Length; customMod = ModTemplates[templateIndex]; }
-        if (SourceButton(newProxy < 0 ? L.Get("GLOBAL") : L.Get("PROXY ") + newProxy, new(x + half + 6, y + 128, half, 28)))
-            newProxy = newProxy + 1 >= Current.Chart.Proxies ? -1 : newProxy + 1;
-        if (SourceButton(L.Get("+ GIMMICK CLIP"), new(x, y + 164, r.W, 31), primary: true, enabled: !Busy)) AddMod();
-        Divider(x, y + 206, r.W);
-        if (SourceButton(L.Get("WINDOW ") + newWindow, new(x, y + 216, r.W, 26)))
-            OpenValue(L.Get("WindowMovement index (0..63)"), newWindow.ToString(), v => { int n = int.Parse(v, CultureInfo.InvariantCulture); if (n is < 0 or > 63) throw new FormatException(L.Get("Use 0..63.")); newWindow = n; });
-        string[] labels = [L.Get("MOVE / DANCE"), L.Get("RESIZE"), L.Get("SHOW / HIDE"), L.Get("Z ORDER"), L.Get("CONTENT SOURCE")];
-        for (int i = 0; i < Operations.Length; i++)
+        // Clicking the current target expands/collapses the in-sidebar list. No global
+        // backdrop, no input capture, and no risk of accidentally editing the chart below.
+        string proxyTitle = (proxyPanelExpanded ? "v " : "> ") +
+            (newProxy < 0 ? L.Get("GLOBAL") : "P" + newProxy);
+        if (SourceButton(proxyTitle, new(x + half + 6, y + 128, half - 27, 28),
+            active: proxyPanelExpanded, key: "proxy-inline-expand"))
         {
-            int operation = i;
-            if (SourceButton(labels[i], new(x + (i % 2) * (half + 6), y + 250 + i / 2 * 31, i == 4 ? r.W : half, 26), enabled: !Busy))
-                AddWindowEvent(Operations[operation]);
+            proxyPanelExpanded = !proxyPanelExpanded;
+            proxyOffset = proxyPanelExpanded ? ProxySidebarExpandedHeight : 0;
+            contentHeight = EditorToolsContentHeight(proxyPanelExpanded, windowToolsExpanded);
+            proxyPickerPage = Math.Max(0, newProxy) / 16;
         }
-        if (SourceButton(L.Get("PROXY BINDINGS JSON"), new(x, y + 348, r.W, 27)) && editor != null)
-            OpenValue(L.Get("ECG_PROXY_WINDOW_BINDINGS (JSON array)"), (editor.Windows.Bindings ?? new JsonArray()).ToJsonString(), v =>
+        if (SourceButton(">", new(x + r.W - 25, y + 128, 25, 28), key: "proxy-inline-next"))
+        {
+            newProxy = newProxy + 1 >= proxyCount ? -1 : newProxy + 1;
+            if (newProxy >= 0) FocusProxyTrack(newProxy);
+        }
+        if (proxyPanelExpanded && editor != null)
+        {
+            // In-flow layout: 16 entries per page in two columns, 8 rows. Only
+            // source buttons entirely visible inside the tools clipping region can fire.
+            float baseY = y + 164;
+            int pages = Math.Max(1, (proxyCount + 15) / 16);
+            proxyPickerPage = Math.Clamp(proxyPickerPage, 0, pages - 1);
+            Text($"PROXIES  {proxyPickerPage * 16}..{Math.Min(proxyCount - 1, proxyPickerPage * 16 + 15)}", x + 3, baseY + 3, 10, muted, true, r.W - 58);
+            if (SourceButton("<", new(x + r.W - 50, baseY, 23, 19), enabled: proxyPickerPage > 0,
+                key: "proxy-inline-page-prev")) proxyPickerPage--;
+            if (SourceButton(">", new(x + r.W - 25, baseY, 23, 19), enabled: proxyPickerPage + 1 < pages,
+                key: "proxy-inline-page-next")) proxyPickerPage++;
+            if (SourceButton("GLOBAL  (-1)", new(x, baseY + 23, r.W, 25),
+                active: newProxy == -1, key: "proxy-inline-global")) newProxy = -1;
+            double now = transport.Position;
+            bool pending = editor.Revision != renderedRevision;
+            for (int i = 0; i < 16; i++)
             {
-                var a = JsonNode.Parse(v) as JsonArray ?? throw new FormatException(L.Get("Expected an array."));
-                editor.Change(L.Get("Edit proxy bindings"), () => editor.Windows.Root[BindingsKey] = a.DeepClone());
-            });
-        if (SourceButton(L.Get("SETTINGS / LANGUAGE"), new(x, y + 386, r.W, 28), enabled: !Busy)) { OpenSettings(); click = false; }
-        Text(L.Get("Scroll for more controls"), x, y + 426, 10, muted);
+                int index = proxyPickerPage * 16 + i;
+                if (index >= proxyCount) break;
+                int col = i % 2, row = i / 2;
+                int clips = editor.Vsm.Clips.Count(c => c.Proxy == index);
+                string alpha = pending || index >= Current.Chart.Proxies ? "?" :
+                    Current.Timeline.Get("pra", now, index).ToString("0.#", CultureInfo.InvariantCulture);
+                string item = $"P{index}" + (clips > 0 ? "*" : "") + " a" + alpha;
+                if (SourceButton(item, new(x + col * (half + 6), baseY + 53 + row * 27, half, 24),
+                    active: newProxy == index, key: "proxy-inline-" + index))
+                {
+                    newProxy = index;
+                    FocusProxyTrack(index);
+                }
+            }
+            // Authoring actions deliberately remain in the same source panel,
+            // targeting the explicitly selected proxy rather than an old hovered clip.
+            string[] mods = ["prx", "pry", "prrz", "przm"];
+            string[] labels = ["+ X", "+ Y", "+ ROT", "+ SCALE"];
+            for (int i = 0; i < mods.Length; i++)
+            {
+                int target = newProxy;
+                if (SourceButton(labels[i], new(x + (i % 2) * (half + 6), baseY + 273 + (i / 2) * 28, half, 25),
+                    enabled: !Busy && target >= 0, key: "proxy-inline-add-" + mods[i]))
+                    AddMod(property: mods[i], proxy: target);
+            }
+            Text("a = PRA now   * = clips", x + 3, baseY + 336, 10, muted, max: r.W - 5);
+        }
+        if (SourceButton(L.Get("+ GIMMICK CLIP"), new(x, y + proxyOffset + 164, r.W, 31), primary: true, enabled: !Busy)) AddMod();
+        Divider(x, y + proxyOffset + 206, r.W);
+        if (SourceButton(L.Get("+ NEW PROXY"), new(x, y + proxyOffset + 216, half, 28), enabled: !Busy && proxyCount < 64)) CreateProxy();
+        string gridLabel = prGridMode switch { 1 => "PR GRID: ON", 2 => "PR GRID: OFF", _ => "PR GRID: AUTO" };
+        if (SourceButton(L.Get(gridLabel), new(x + half + 6, y + proxyOffset + 216, half, 28))) prGridMode = (prGridMode + 1) % 3;
+        if (newProxy >= 0 && newProxy < proxyCount)
+        {
+            bool hasAlpha = editor?.Vsm.Clips.Any(c => c.Proxy == newProxy && c.Name.Equals("pra", StringComparison.OrdinalIgnoreCase)) == true;
+            // Base and Custom share the same actual initial state: PRA=0.
+            // The previous Custom-only +PRA path assumed pra=1 at startup,
+            // which is false because loadMods creates proxies after Create.
+            if (SourceButton(L.Get("INITIALIZE PRA") + " / P" + newProxy, new(x, y + proxyOffset + 249, r.W, 26), enabled: !hasAlpha && !Busy)) EnableSelectedProxy();
+            Text(hasAlpha ? L.Get("PRA defined / edit its track to change visibility") : L.Get("PRA defaults to 0 / initialize to make this proxy visible"),
+                x, y + proxyOffset + 282, 10, muted, max: r.W);
+        }
+        else
+        {
+            Text(L.Get("PROXY COUNT: ") + proxyCount + L.Get(" / select P0... to configure visibility"), x, y + proxyOffset + 255, 11, muted, max: r.W);
+        }
+        Divider(x, y + proxyOffset + 303, r.W);
+        if (SourceButton((windowToolsExpanded ? "v " : "> ") + L.Get("WINDOW MOVEMENT"), new(x, y + proxyOffset + 312, r.W, 27)))
+        {
+            windowToolsExpanded = !windowToolsExpanded;
+            contentHeight = EditorToolsContentHeight(proxyPanelExpanded, windowToolsExpanded);
+            editorSourceScroll = Math.Max(0, editorSourceScroll - 1);
+        }
+        if (windowToolsExpanded)
+        {
+            if (SourceButton(L.Get("WINDOW ") + newWindow, new(x, y + proxyOffset + 347, r.W, 26)))
+                OpenValue(L.Get("WindowMovement index (0..63)"), newWindow.ToString(), v => { int n = int.Parse(v, CultureInfo.InvariantCulture); if (n is < 0 or > 63) throw new FormatException(L.Get("Use 0..63.")); newWindow = n; });
+            string[] labels = [L.Get("MOVE / DANCE"), L.Get("RESIZE"), L.Get("SHOW / HIDE"), L.Get("Z ORDER"), L.Get("CONTENT SOURCE")];
+            for (int i = 0; i < Operations.Length; i++)
+            {
+                int operation = i;
+                if (SourceButton(labels[i], new(x + (i % 2) * (half + 6), y + proxyOffset + 381 + i / 2 * 31, i == 4 ? r.W : half, 26), enabled: !Busy))
+                    AddWindowEvent(Operations[operation]);
+            }
+            if (SourceButton(L.Get("PROXY BINDINGS JSON"), new(x, y + proxyOffset + 478, r.W, 27)) && editor != null)
+                OpenValue(L.Get("ECG_PROXY_WINDOW_BINDINGS (JSON array)"), (editor.Windows.Bindings ?? new JsonArray()).ToJsonString(), v =>
+                {
+                    var a = JsonNode.Parse(v) as JsonArray ?? throw new FormatException(L.Get("Expected an array."));
+                    editor.Change(L.Get("Edit proxy bindings"), () => editor.Windows.Root[BindingsKey] = a.DeepClone());
+                });
+        }
+        // Must include the expanded Proxy panel. Previously settings and the
+        // scroll hint still used the collapsed Y, overpainting proxy rows 10-13.
+        float settingsY = EditorToolsSettingsOffset(proxyPanelExpanded, windowToolsExpanded);
+        if (SourceButton(L.Get("SETTINGS / LANGUAGE"), new(x, y + settingsY, r.W, 28), enabled: !Busy)) { OpenSettings(); click = false; }
+        Text(L.Get("Scroll for more controls"), x, y + settingsY + 40, 10, muted);
         Canvas.Clip(null);
         if (contentHeight > r.H)
         {
@@ -261,7 +366,7 @@ public sealed partial class Viewer
             Field(L.Get("From / _"), VsmDocument.UiValue(c.From), v => EditClip(m => m with { From = v }, L.Get("Set from")));
             Field(L.Get("To / _"), VsmDocument.UiValue(c.To), v => EditClip(m => m with { To = v }, L.Get("Set to")));
             Field(L.Get("Ease"), c.Ease, v => EditClip(m => m with { Ease = Easings.Normalize(v) }, L.Get("Set ease")));
-            Field(L.Get("Proxy / -1 global"), c.Proxy.ToString(), v => { int p = int.Parse(v, CultureInfo.InvariantCulture); if (p >= Current.Chart.Proxies) throw new FormatException(L.Get("Proxy exceeds !proxies.")); EditClip(m => m with { Proxy = p }, L.Get("Set proxy")); });
+            Field(L.Get("Proxy / -1 global"), c.Proxy.ToString(), v => { int p = int.Parse(v, CultureInfo.InvariantCulture); if (p >= EditableProxyCount) throw new FormatException(L.Get("Proxy exceeds !proxies.")); EditClip(m => m with { Proxy = p }, L.Get("Set proxy")); });
             if (c.RepeatEnd is double end)
             {
                 Field(L.Get("Repeat end"), VsmDocument.Ui(end), v => EditClip(m => m with { RepeatEnd = VsmDocument.Number(v) }, L.Get("Set repeat end")));

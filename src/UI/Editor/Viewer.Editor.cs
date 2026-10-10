@@ -45,6 +45,43 @@ public sealed partial class Viewer
         beatStart = start;
     }
     int trackScroll, inspectorScroll, snapIndex = 2, templateIndex, newProxy = -1, newWindow;
+    bool windowToolsExpanded;
+    bool proxyPanelExpanded;
+    int proxyPickerPage;
+    // 0 = 选中 PR 系事件时自动显示，1 = 常显，2 = 关闭。
+    int prGridMode;
+    int EditableProxyCount => editor?.Vsm.ProxyCount ?? Current.Chart.Proxies;
+    /// <summary>只在首次向未初始化的 proxy 写事件时补一条可见性初值，不覆盖作者已有的 pra 曲线。</summary>
+    void EnsureProxyInitiallyVisible(int target, string name)
+    {
+        if (editor == null || target < 0 || name.Equals("pra", StringComparison.OrdinalIgnoreCase) ||
+            // Custom proxies also start at pra=0: Custom Create runs before loadMods.
+            // When adding the first non-PRA clip to a NEW proxy, emit an explicit
+            // enabling clip so the author can immediately see what they edited.
+            editor.Vsm.Clips.Any(c => c.Proxy == target && c.Name.Equals("pra", StringComparison.OrdinalIgnoreCase))) return;
+        editor.Vsm.Add(new VsmDocument.Clip(Guid.NewGuid(), 0, 0, "linear", "1", "1", "pra", target));
+    }
+    void CreateProxy()
+    {
+        if (editor == null || Busy) return;
+        int count = EditableProxyCount;
+        if (count >= 64) { message = L.Get("Proxy limit: 64."); return; }
+        // 先扩声明再创建数据，两项都放在同一个可撤销操作里。
+        Edit(L.Get("Add proxy ") + count, () =>
+        {
+            editor.Vsm.SetProxyCount(count + 1);
+            EnsureProxyInitiallyVisible(count, "prx");
+        });
+        if (EditableProxyCount > count) { newProxy = count; prGridMode = 1; }
+    }
+    void EnableSelectedProxy()
+    {
+        if (editor == null || newProxy < 0 || newProxy >= EditableProxyCount || Busy) return;
+        if (editor.Vsm.Clips.Any(c => c.Proxy == newProxy && c.Name.Equals("pra", StringComparison.OrdinalIgnoreCase)))
+        { message = L.Get("Proxy alpha is already authored. Edit its pra track instead."); return; }
+        int p = newProxy;
+        Edit(L.Get("Enable proxy ") + p, () => EnsureProxyInitiallyVisible(p, "prx"));
+    }
     static readonly double[] SnapSteps = [0, 1, .5, .25, .125, 1.0 / 3, 1.0 / 6, 1.0 / 12, .0625];
     static readonly string[] SnapLabels = ["OFF", "1", "1/2", "1/4", "1/8", "1/3", "1/6", "1/12", "1/16"];
     static readonly string[] ModTemplates = ["prx", "pry", "prrz", "przm", "pra", "scrollspeed", "velocity", "noterot", "wave", "notealp", "uialpha", "fx_glow"];
@@ -119,7 +156,7 @@ public sealed partial class Viewer
         CloseInline(); CloseClipMenu(); selectedClips.Clear(); marqueeActive = false; marqueePending = null; panActive = false;
         selectedClip = null; selectedWindowEvent = -1; selectedNoteTime = null; editDrag = null; hoveredEditTrack = null;
         trackHelpWHeld = false; trackHelpWDownAt = 0; displayedHelpTrack = null; motion.Snap("track-help-visible", 0);
-        trackScroll = inspectorScroll = 0; motion.Snap("timeline-track-scroll", 0); motion.Snap("inspector-scroll", 0); beatStart = 0; windowTimelineConfig = null; nativeWindows?.Dispose(); nativeWindows = null;
+        trackScroll = inspectorScroll = 0; newProxy = -1; windowToolsExpanded = false; proxyPanelExpanded = false; proxyPickerPage = 0; prGridMode = 0; prGridHudOffsetX = float.NaN; prGridHudOffsetY = 8; prGridHudExpanded = prGridHudDragging = false; prGridHudRect = default; editorSourceScroll = 0; motion.Snap("timeline-track-scroll", 0); motion.Snap("inspector-scroll", 0); beatStart = 0; windowTimelineConfig = null; nativeWindows?.Dispose(); nativeWindows = null;
         if (editorMode) OpenEditor();
     }
     /// <summary>时间轴总长（秒），取谱面时长、音符结束与所有 WindowMovement 事件结束的最大值，末尾各留 0.5 秒余量。</summary>
@@ -259,7 +296,8 @@ public sealed partial class Viewer
     bool EButton(string label, Rect rect, bool primary = false, bool active = false, bool enabled = true,
         string? key = null, [CallerFilePath] string caller = "", [CallerLineNumber] int callerLine = 0)
     {
-        bool allowed = !ReferenceVisible && (!modalActive && pendingDiscard == null && !help || modalInput) && (!menuOpen || menuInput);
+        bool allowed = !ReferenceVisible && (!modalActive && pendingDiscard == null && !help || modalInput)
+            && (!menuOpen || menuInput);
         bool hit = Button(label, rect, primary, active, enabled && allowed, key, caller, callerLine);
         if (hit) click = false;
         return hit;
@@ -311,8 +349,8 @@ public sealed partial class Viewer
     void AddMod(double? at = null, string? property = null, int? proxy = null)
     {
         if (editor == null) return;
-        string name = property ?? customMod; int target = proxy ?? GimmickAuthoring.SuggestedProxy(KuroakiGimmick.Core.Documentation.VsmReference.Shared.MatchMod(name).FirstOrDefault()?.Entry, newProxy, Current.Chart.Proxies);
-        if (target >= Current.Chart.Proxies) { message = L.Get("Proxy is outside the chart's declared !proxies range."); return; }
+        string name = property ?? customMod; int target = proxy ?? GimmickAuthoring.SuggestedProxy(KuroakiGimmick.Core.Documentation.VsmReference.Shared.MatchMod(name).FirstOrDefault()?.Entry, newProxy, EditableProxyCount);
+        if (target >= EditableProxyCount) { message = L.Get("Proxy is outside the chart's declared !proxies range."); return; }
         double beat = at ?? InsertionBeat;
         double from = Current.Timeline.Get(name, Current.Timeline.Bpm.Time(beat), target);
         double to = name switch
@@ -335,7 +373,11 @@ public sealed partial class Viewer
             : name.Equals("changeskin", StringComparison.OrdinalIgnoreCase)
                 ? new VsmDocument.Clip(Guid.NewGuid(), beat, 0, "linear", "_", VsmDocument.N(to), name, target)
                 : new VsmDocument.Clip(Guid.NewGuid(), beat, 1, "outSine", VsmDocument.Value(from), VsmDocument.N(to), name, target);
-        Edit(L.Get("Add ") + name, () => editor.Vsm.Add(clip));
+        Edit(L.Get("Add ") + name, () =>
+        {
+            EnsureProxyInitiallyVisible(target, name);
+            editor.Vsm.Add(clip);
+        });
         if (editor.Vsm.Find(clip.Id) != null)
         { selectedClip = clip.Id; selectedWindowEvent = -1; inspectorScroll = 0; FocusAddedTrack(name, target, beat); }
     }
