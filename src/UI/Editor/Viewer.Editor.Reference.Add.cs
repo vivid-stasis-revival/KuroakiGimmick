@@ -62,7 +62,7 @@ public sealed partial class Viewer
         CloseReference(); referenceAlpha = 0; motion.Snap("docs", 0);
         if (!EnsureAuthoring()) return;
         editorMode = true;
-        int target = GimmickAuthoring.SuggestedProxy(entry, newProxy, Current.Chart.Proxies);
+        int target = GimmickAuthoring.SuggestedProxy(entry, newProxy, EditableProxyCount);
         // 模板条目必须先落实成具体 identifier；切换 obj 也一律要求显式确认，不能一键静默改掉谱面对象。
         if (editFirst || entry.MatchPattern.Length > 0 ||
             (entry.Scope == "custom" && Current.Chart.ObjectName != "obj_custom_gimmick"))

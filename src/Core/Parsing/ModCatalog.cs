@@ -137,7 +137,7 @@ public static class ModCatalog
         }
         return name switch
         {
-            // 16777215 是 0xFFFFFF 白色；proxy 的 pra 默认透明，全局（-1）默认不透明。
+            // 16777215 是 0xFFFFFF 白色；Base/Custom proxy 的 pra 都默认为 0（Custom Create 的初始化循环执行时 proxyCount 尚为 0）。
             "df_sideline_alpha" => 1,
             "playspeed" or "starspd_multiplier" or "startrans_alpha" or "starchgcol_alpha" => 1,
             "starchgcol_up_rgb" or "starchgcol_down_rgb" => 16777215,

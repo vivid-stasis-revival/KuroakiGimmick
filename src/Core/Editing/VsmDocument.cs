@@ -367,6 +367,53 @@ public sealed partial class VsmDocument
         return line with { Text = string.Join(',', parts) + suffix, Event = next };
     }
 
+    /// <summary>即时读取源文档的 proxy 声明，UI 不必等异步 Session 重建才能访问新增下标。</summary>
+    public int ProxyCount
+    {
+        get
+        {
+            foreach (var line in Lines)
+            {
+                string body = Body(line.Text).Trim();
+                if (body.StartsWith("!proxies:", StringComparison.Ordinal) &&
+                    int.TryParse(body[9..].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int count) && count is >= 0 and <= 64)
+                    return count;
+            }
+            return Math.Clamp(ProxyCountHint, 0, 64);
+        }
+    }
+
+    /// <summary>
+    /// 扩容 !proxies（最多 64），保留原头部的缩进、行末注释和换行。
+    /// 不允许缩到已有事件使用的下标之下，也不会无端修改其它元数据。
+    /// </summary>
+    public void SetProxyCount(int count)
+    {
+        if (count is < 1 or > 64 || Clips.Any(c => c.Proxy >= count))
+            throw new FormatException("Proxy count must be 1..64 and include all existing proxy events.");
+        int i = Lines.FindIndex(line => Body(line.Text).TrimStart().StartsWith("!proxies:", StringComparison.Ordinal));
+        if (i >= 0)
+        {
+            var line = Lines[i];
+            string body = Body(line.Text), suffix = line.Text[body.Length..];
+            int colon = body.IndexOf(':');
+            string original = body[(colon + 1)..];
+            int spaces = original.Length - original.TrimStart().Length;
+            int trailing = original.Length - original.TrimEnd().Length;
+            Lines[i] = line with { Text = body[..(colon + 1)] + original[..spaces] + count.ToString(CultureInfo.InvariantCulture)
+                + (trailing > 0 ? original[^trailing..] : "") + suffix };
+        }
+        else
+        {
+            int header = Lines.FindIndex(line => Body(line.Text).TrimStart().StartsWith("!obj:", StringComparison.Ordinal));
+            if (header >= 0 && Lines[header].Ending.Length == 0)
+                Lines[header] = Lines[header] with { Ending = NewLine };
+            Lines.Insert(header >= 0 ? header + 1 : 0, new($"!proxies:{count}", NewLine, null));
+        }
+        // ProxyCountHint 是导入时的固定回退值，不能跟随可撤销的编辑更新。
+        // 否则撤销新建 !proxies 后，UI 会继续显示撤销前的数量。
+    }
+
     /// <summary>
     /// 只有作者真正创建/改成 proxy 级事件时才补 !proxies。Chart 的默认 proxy 数量只是编辑回退，
     /// 不能在完全没有 proxy 内容的文档里自动制造声明。
@@ -376,6 +423,8 @@ public sealed partial class VsmDocument
         if (proxy < 0 || Lines.Any(line => Body(line.Text).TrimStart().StartsWith("!proxies:", StringComparison.Ordinal))) return;
         int insert = Lines.FindIndex(line => Body(line.Text).TrimStart().StartsWith("!obj:", StringComparison.Ordinal));
         int count = Math.Clamp(Math.Max(proxy + 1, ProxyCountHint), 1, 64);
+        if (insert >= 0 && Lines[insert].Ending.Length == 0)
+            Lines[insert] = Lines[insert] with { Ending = NewLine };
         Lines.Insert(insert >= 0 ? insert + 1 : 0, new($"!proxies:{count}", NewLine, null));
     }
 

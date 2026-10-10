@@ -114,7 +114,16 @@ public sealed partial class Viewer
         {
             if (textSources) textListScroll = Math.Max(0, textListScroll - (int)Math.Round(e.WheelY));
             else if (imageSources) imageListScroll = Math.Max(0, imageListScroll - (int)Math.Round(e.WheelY));
-            else editorSourceScroll = Math.Clamp(editorSourceScroll - e.WheelY * 30, 0, Math.Max(0, 437 - editorSourceRect.H));
+            else
+            {
+                // Use exactly the same content height as DrawEditorTools.
+                // Keeping a second literal here caused controls at the bottom
+                // of expanded Proxy/Window Movement to become unreachable.
+                float contentHeight = EditorToolsContentHeight(proxyPanelExpanded, windowToolsExpanded);
+                float bodyHeight = Math.Max(1, editorSourceRect.H - 35);
+                editorSourceScroll = Math.Clamp(editorSourceScroll - e.WheelY * 36,
+                    0, Math.Max(0, contentHeight - bodyHeight));
+            }
             return true;
         }
         if (e.Type != 0x401 || e.Button != 1) return false;

@@ -11,7 +11,8 @@ public sealed partial class SceneRenderer
     /// <summary>
     /// 把透明的 field 经 fieldComposite 反预乘后贴回 scene，透明度只被乘一次。
     /// Proxy 按原版范围裁剪轨道，灰色判定背景随裁剪区域一起变换；
-    /// Base / Custom 不在源位置重复留下底部灰条，歌曲信息底栏仍由独立 HUD 绘制。
+    /// Base 的裁剪外灰条不应留在原位置；Custom v1.12.7 则明确将
+    /// application_surface 底部 (81..239, 165..180) 重新拷回画面，不能一起丢弃。
     /// </summary>
     void CompositeField(Session session, double time, bool proxyMode, bool clearFooter)
     {
@@ -31,12 +32,25 @@ public sealed partial class SceneRenderer
             canvas.Quad(field.Texture, new(0, 0, 81, 180), Color.White.Alpha(1 - M("hom")), new(0, 0, 81f / 320, 1), shader: fieldComposite);
             canvas.Quad(field.Texture, new(239, 0, 81, 180), Color.White.Alpha(1 - M("hom")), new(239f / 320, 0, 81f / 320, 1),
                 shader: fieldComposite);
-            // Base / Custom 的 y=165..180 属于裁剪外区域，不在源位置再留一份灰条。
-            if (!separateHudFooter)
+            // Custom Draw_74 explicitly restores this segment from the full application surface
+            // before drawing proxies. Without it, opaque backdrops/masks expose the black scene
+            // clear at y=165..180. Base proxyMode00 keeps its separate footer behavior.
+            if (!separateHudFooter || session.Chart.ObjectName == "obj_custom_gimmick")
                 canvas.Quad(field.Texture, new(81, 165, 158, 15), Color.White.Alpha(1 - M("hom")), new(81f / 320, 165f / 180, 158f / 320, 15f / 180),
                     shader: fieldComposite);
-            // Do not paint an opaque "clear" rectangle here. The footer is a transparent render-layer concern;
-            // drawing black into scene made uialpha=0 leave a permanent strip over text/image gimmicks (#18).
+            // Custom Gimmicks v1.12.7 Draw_74 draws a BLACK rectangle over the
+            // footer AFTER restoring aft(81,165,158,15), and BEFORE any proxies.
+            // draw_rectangle_colour(..., 0): final 0 = outline=false, NOT alpha=0.
+            // Actual alpha comes from draw_set_alpha(1 - cc.mod_uialpha).
+            // With Stage4a uialpha=0 the restored gray hold background must vanish;
+            // proxy-sampled content is drawn afterwards and remains unaffected.
+            if (session.Chart.ObjectName == "obj_custom_gimmick")
+            {
+                double footerMask = Math.Clamp(1 - M("uialpha"), 0, 1);
+                if (footerMask > 0)
+                    canvas.Fill(new(0, TrackBottom, 320, 180 - TrackBottom),
+                        new Color(0, 0, 0).Alpha(footerMask));
+            }
             _ = clearFooter;
         }
         // 启用 proxy 的谱面用自己的 proxy 副本替换中央游玩轨道；索引从大到小，即从后往前绘制。

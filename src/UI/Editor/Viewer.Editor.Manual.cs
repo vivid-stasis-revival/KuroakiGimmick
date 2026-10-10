@@ -156,7 +156,7 @@ public sealed partial class Viewer
                 throw new FormatException(L.Get("The identifier does not match the selected document template."));
             customMod = name;
             if (entry.Scope == "global") newProxy = -1;
-            else if (entry.Scope == "proxy" && Current.Chart.Proxies > 0) newProxy = Math.Clamp(newProxy, 0, Current.Chart.Proxies - 1);
+            else if (entry.Scope == "proxy" && EditableProxyCount > 0) newProxy = Math.Clamp(newProxy, 0, EditableProxyCount - 1);
             help = false;
             click = false;
             message = L.Get("Selected identifier only (no event created). Check target, object and compatibility before adding.");

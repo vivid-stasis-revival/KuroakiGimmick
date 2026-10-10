@@ -84,7 +84,7 @@ public sealed partial class Viewer
         addQuery = ""; addListScroll = 0; addSwitchObject = false;
         addTemplate = entry ?? GimmickAuthoring.Entry(customMod);
         addName = entry?.Name ?? customMod;
-        addProxy = GimmickAuthoring.SuggestedProxy(addTemplate, newProxy, Current.Chart.Proxies);
+        addProxy = GimmickAuthoring.SuggestedProxy(addTemplate, newProxy, EditableProxyCount);
         SetExtraGimmickDefaults();
         transport.SetPlaying(false); held = click = editorScrub = false;
         motion.Snap("workflow", 0);
@@ -92,7 +92,7 @@ public sealed partial class Viewer
     void PickGimmick(VsmReference.Entry entry)
     {
         addTemplate = entry; addName = entry.Name; addSwitchObject = false; workflowError = "";
-        addProxy = GimmickAuthoring.SuggestedProxy(entry, newProxy, Current.Chart.Proxies);
+        addProxy = GimmickAuthoring.SuggestedProxy(entry, newProxy, EditableProxyCount);
         SetExtraGimmickDefaults();
     }
     void SetExtraGimmickDefaults()
@@ -115,10 +115,11 @@ public sealed partial class Viewer
         try
         {
             if (NeedsCustomObject && !addSwitchObject) throw new InvalidOperationException(L.Get("This entry requires obj_custom_gimmick. Explicitly enable USE CUSTOM OBJ or cancel."));
-            var clip = GimmickAuthoring.Create(addName, addBeat, addDuration, addEase, addFrom, addTo, addProxy, Current.Chart.Proxies, addTemplate);
+            var clip = GimmickAuthoring.Create(addName, addBeat, addDuration, addEase, addFrom, addTo, addProxy, EditableProxyCount, addTemplate);
             editor.Change(L.Get("Add ") + clip.Name, () =>
             {
                 if (NeedsCustomObject && addSwitchObject) editor.Vsm.SetHeader("obj", "obj_custom_gimmick");
+                EnsureProxyInitiallyVisible(clip.Proxy, clip.Name);
                 editor.Vsm.Add(clip);
             });
             selectedClip = clip.Id; selectedWindowEvent = -1; inspectorScroll = 0;

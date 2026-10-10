@@ -328,8 +328,16 @@ public sealed partial class Timeline
     }
 
     /// <summary>该 mod 在任何事件之前的初值：全局轨道优先用对象定义的默认值，其余走基础协议表。</summary>
-    double Initial(string name, int proxy) => proxy == -1 && Native?.Data?.Defaults.TryGetValue(name,
-        out var value) == true ? value : ModCatalog.Default(name, proxy, Scroll);
+    double Initial(string name, int proxy)
+    {
+        // Both Base and Custom proxies default to pra=0. Custom Create attempts to
+        // set all existing proxies to 1, but proxyCount is still zero at that point:
+        // cc_Create calls loadMods *after* Create, and loadMods instantiates the
+        // proxies (each obj_gimmick_proxy_Create initializes pra=0).
+        // Do not treat !proxies:N as N visible copies (Stage4a relies on this).
+        return proxy == -1 && Native?.Data?.Defaults.TryGetValue(name, out var value) == true
+            ? value : ModCatalog.Default(name, proxy, Scroll);
+    }
     /// <summary>
     /// 确定性整数散列，返回 [0,1)。粒子、色相等一切“随机”都由它从序号导出，
     /// 因此回放、拖动和导出得到同一结果；换成 Random 会让同一份谱面每次不同。
