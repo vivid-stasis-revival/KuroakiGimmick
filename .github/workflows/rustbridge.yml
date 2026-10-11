@@ -1,0 +1,94 @@
+name: RustBridge core migration
+on:
+  push:
+    paths:
+      - 'rust/**'
+      - 'src/Bridge/**'
+      - 'src/Graphics/Scene/SceneRenderer*'
+      - 'src/Core/Parsing/**'
+      - 'src/Core/Timing/BpmMap.cs'
+      - 'src/Core/Projects/Session.cs'
+      - 'src/Core/Projects/ViewerSettings.cs'
+      - 'src/Core/Audio/**'
+      - 'src/UI/**'
+      - 'src/App/Program.cs'
+      - 'scripts/build-rustbridge*'
+      - 'scripts/publish-*'
+      - 'scripts/rust-native-*'
+      - '.github/workflows/nativeaot.yml'
+      - '.github/workflows/rustbridge.yml'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  bridge:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            library: libkg_native_core.dylib
+          - os: ubuntu-24.04
+            library: libkg_native_core.so
+          - os: windows-2022
+            library: kg_native_core.dll
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Rust unit tests
+        run: cargo test --manifest-path rust/kg-native-core/Cargo.toml
+      - name: Rust cdylib
+        run: cargo build --release --manifest-path rust/kg-native-core/Cargo.toml
+      - name: Compile existing C# UI + SDL renderer
+        run: dotnet build -c Release -p:PublishAot=false
+      - name: Copy native library for managed test
+        shell: bash
+        run: cp "rust/kg-native-core/target/release/${{ matrix.library }}" bin/Release/net8.0/
+      - name: Differential motion self-test (32,768 comparisons)
+        shell: bash
+        run: dotnet run -c Release --no-build -- --rust-bridge-test
+        env:
+          KG_RUST_BRIDGE: verify
+      - name: Native engine headless parity test (VSC/VSM/BPM)
+        shell: bash
+        run: dotnet run -c Release --no-build -- --rust-engine-test
+        env:
+          KG_RUST_ENGINE: verify
+      - name: Timeline batch runtime headless parity test
+        shell: bash
+        run: dotnet run -c Release --no-build -- --rust-timeline-test
+        env:
+          KG_RUST_ENGINE: verify
+      - name: Optimization Audio headless FFI and PCM smoke test
+        shell: bash
+        run: dotnet run -c Release --no-build -- --rust-audio-test
+        env:
+          KG_RUST_AUDIO_REQUIRED: '1'
+      - name: Full CPU regressions with native parser parity
+        shell: bash
+        run: |
+          dotnet build tests/Regression/Regression.csproj -c Release -p:PublishAot=false
+          cp "rust/kg-native-core/target/release/${{ matrix.library }}" tests/Regression/bin/Release/net8.0/
+          dotnet run --project tests/Regression -c Release --no-build
+        env:
+          KG_RUST_ENGINE: verify
+      - name: NativeAOT publish (macOS ARM64)
+        if: runner.os == 'macOS'
+        run: dotnet publish -c Release -r osx-arm64 -p:PublishAot=true
+      - name: NativeAOT RustBridge load and differential test
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          cp rust/kg-native-core/target/release/libkg_native_core.dylib bin/Release/net8.0/osx-arm64/publish/
+          DYLD_LIBRARY_PATH="$PWD/bin/Release/net8.0/osx-arm64/publish" KG_RUST_BRIDGE=verify \
+            bin/Release/net8.0/osx-arm64/publish/KuroakiGimmick --rust-bridge-test
+          DYLD_LIBRARY_PATH="$PWD/bin/Release/net8.0/osx-arm64/publish" KG_RUST_ENGINE=verify \
+            bin/Release/net8.0/osx-arm64/publish/KuroakiGimmick --rust-engine-test
+          DYLD_LIBRARY_PATH="$PWD/bin/Release/net8.0/osx-arm64/publish" KG_RUST_ENGINE=verify \
+            bin/Release/net8.0/osx-arm64/publish/KuroakiGimmick --rust-timeline-test
+          DYLD_LIBRARY_PATH="$PWD/bin/Release/net8.0/osx-arm64/publish" KG_RUST_AUDIO_REQUIRED=1 \
+            bin/Release/net8.0/osx-arm64/publish/KuroakiGimmick --rust-audio-test

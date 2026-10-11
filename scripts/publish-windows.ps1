@@ -1,5 +1,6 @@
 param([ValidateSet('x64','arm64','all')][string]$Arch = 'x64')
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'rust-native-windows.ps1')
 Set-StrictMode -Version Latest
 $ProjectRoot = Split-Path $PSScriptRoot -Parent
 $Dotnet = if ($env:KUROAKI_DOTNET) { $env:KUROAKI_DOTNET } else { 'dotnet' }
@@ -29,15 +30,23 @@ foreach ($Cpu in $Architectures) {
             -p:PublishReadyToRun=false -p:DebugType=None -p:DebugSymbols=false `
             "-p:NuGetLockFilePath=$Stage/publish.lock.json" 2>&1 | Tee-Object -FilePath $Log
         if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed; see $Log" }
-        foreach ($Required in @('KuroakiGimmick.exe','Assets/GameUI/game-ui.gameui.json','Assets/Fonts/cjk-editor.png','Assets/Fonts/cjk-editor.json','Assets/Fonts/editor-help-sans.png','Assets/Fonts/editor-help-sans.json','Assets/Fonts/editor-help-sans-bold.png','Assets/Fonts/editor-help-sans-bold.json','Assets/GimmickExtras/scene_gameplay.runtime.fx.json','Assets/Documentation/vsm-reference.json')) {
+        Build-KgRustNative -Rid $Rid -OutputPath $Package
+        foreach ($Required in @('KuroakiGimmick.exe','kg_native_core.dll','Assets/GameUI/game-ui.gameui.json','Assets/Fonts/cjk-editor.png','Assets/Fonts/cjk-editor.json','Assets/Fonts/editor-help-sans.png','Assets/Fonts/editor-help-sans.json','Assets/Fonts/editor-help-sans-bold.png','Assets/Fonts/editor-help-sans-bold.json','Assets/GimmickExtras/scene_gameplay.runtime.fx.json','Assets/Documentation/vsm-reference.json')) {
             if (-not (Test-Path (Join-Path $Package $Required))) { throw "Publish output missing: $Required" }
         }
-        # The package root must hold the single .exe and nothing else executable:
-        # loose .dll/.deps.json/.runtimeconfig.json means PublishSingleFile did not apply.
-        $LooseBuildFiles = @(Get-ChildItem -LiteralPath $Package -File | Where-Object { $_.Extension -in @('.dll','.json','.pdb') })
+        # The managed app is single-file; the Rust DLL is a required sidecar native library.
+        # Other loose .dll/.deps.json/.runtimeconfig.json still indicate a broken package.
+        $LooseBuildFiles = @(Get-ChildItem -LiteralPath $Package -File | Where-Object { $_.Extension -in @('.dll','.json','.pdb') -and $_.Name -ne 'kg_native_core.dll' })
         if ($LooseBuildFiles.Count -gt 0) { throw "Single-file output leaked build files: $($LooseBuildFiles.Name -join ', ')" }
-        foreach ($Item in @('README.md','CHANGELOG.md','THIRD_PARTY_NOTICES.md','ThirdParty','docs')) {
+        foreach ($Item in @('README.md','CHANGELOG.md','THIRD_PARTY_NOTICES.md','OPTIMIZATION_ENGINE.md','RUSTBRIDGE.md','RUSTBRIDGE_ENGINE.md','RUST_RUNTIME_V030.md','RUSTBRIDGE_CHANGELOG.md','ThirdParty')) {
             Copy-Item -LiteralPath (Join-Path $ProjectRoot $Item) -Destination $Package -Recurse
+        }
+        $null = New-Item -ItemType Directory -Force -Path (Join-Path $Package 'tests/Regression')
+        Copy-Item -LiteralPath (Join-Path $ProjectRoot 'tests/Regression/README.md') -Destination (Join-Path $Package 'tests/Regression/README.md')
+        if (Test-Path (Join-Path $ProjectRoot 'docs')) {
+            Copy-Item -LiteralPath (Join-Path $ProjectRoot 'docs') -Destination $Package -Recurse
+        } else {
+            $null = New-Item -ItemType Directory -Force -Path (Join-Path $Package 'docs')
         }
         if ($env:KUROAKI_FFMPEG) {
             Copy-Item -LiteralPath $env:KUROAKI_FFMPEG -Destination (Join-Path $Package 'ffmpeg.exe')

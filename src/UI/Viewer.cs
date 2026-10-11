@@ -59,6 +59,7 @@ public sealed partial class Viewer : IDisposable
         this.applyPreferences = applyPreferences;
         this.settingsPath = settingsPath;
         preferences = ViewerSettings.Load(settingsPath);
+        OptimizationEngineSettings.Apply(preferences);
         persistRecentProjects = !silent || settingsPath != null;
         if (uiLanguage != null) preferences.UiLanguage = UiLanguage.Normalize(uiLanguage);
         L.SetLanguage(preferences.UiLanguage);
@@ -408,6 +409,7 @@ public sealed partial class Viewer : IDisposable
     public void OpenSettings()
     {
         settings = true;
+        settingsSection = "general";
         help = false;
     }
 

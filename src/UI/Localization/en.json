@@ -886,5 +886,21 @@
   "Proxy picker legend": "a = PRA now   * = has clips   /   scene includes ALL proxies",
   "SELECTED PROXY HIDDEN": "P HIDDEN / ALL SHOWN",
   "SELECTED PROXY OFFSCREEN": "P OFFSCREEN / ALL SHOWN",
-  "SELECTED PROXY OUTLINE": "P OUTLINE / ALL SHOWN"
+  "SELECTED PROXY OUTLINE": "P OUTLINE / ALL SHOWN",
+  "General": "General",
+  "Audio & Sync": "Audio & Sync",
+  "Display": "Display",
+  "Interface": "Interface",
+  "Workflow": "Workflow",
+  "Performance": "Performance",
+  "Export": "Export",
+  "Calculation Engine": "Calculation Engine",
+  "Audio Engine": "Audio Engine",
+  "Parallel Loading": "Parallel Loading",
+  "Decoded Audio Cache": "Decoded Audio Cache",
+  "Changes apply when opening the next chart. Debug environment overrides take priority.": "Changes apply when opening the next chart. Debug environment overrides take priority.",
+  "Memory + disk PCM cache; stored in the application cache directory.": "Memory + disk PCM cache; stored in the application cache directory.",
+  "RESET PERFORMANCE": "RESET PERFORMANCE",
+  "ENABLED": "ENABLED",
+  "DISABLED": "DISABLED"
 }

@@ -15,6 +15,10 @@ public sealed partial class Timeline
     /// <summary>读取基础轨道后应用声明式别名、逐帧覆盖与回调淡入；不修改时间轴状态。</summary>
     public double Get(string name, double t, int proxy = -1)
     {
+        // Main frame path: one Rust FFI call in PrepareFrame, zero crossings per Get.
+        // Other times/threads fall back to original C# automatically.
+        if (TryNativeBase(name, t, proxy, out double nativeValue))
+            return SafeModValue(name, nativeValue);
         double initial = Initial(name, proxy);
         var key = (name, proxy);
         var v = Tracks.TryGetValue(key, out var list) ? Evaluate(list, t, initial) : initial;

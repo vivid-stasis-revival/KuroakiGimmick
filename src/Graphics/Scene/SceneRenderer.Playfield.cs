@@ -1,5 +1,6 @@
 using System.Numerics;
 using KuroakiGimmick.Core;
+using KuroakiGimmick.Bridge;
 
 namespace KuroakiGimmick.Graphics;
 
@@ -277,33 +278,105 @@ public sealed partial class SceneRenderer
             // 音符的横向运动不受影响；下边界跟随 field，在被复制/旋转成 proxy 时
             // 一起变换，而不是裁在屏幕空间上。
             canvas.Clip(new(0, 0, 320, TrackBottom));
-            // Query by both endpoints so long holds survive, while distant stacks never enter motion evaluation.
-            foreach (var n in session.NoteIndex.Candidates(visualTime, latestStart))
+            // Preserve original draw ordering, clipping, blend layers and SDL_GPU output.
+            // Only the note movement numerics are replaceable by a native batch.
+            void DrawOne(Note n, double y, double endY, double motionX)
             {
-                if (n.Time * 1000 > drawUntil) break;
                 int lane = n.Type is 1 or 7 or 8 ? 4 + n.Lane : n.Lane;
-                double distance = (n.Time - scrollTime) * 1000;
-                double endDistance = (n.End - scrollTime) * 1000;
-                double y = Y(distance, lane), endY = Y(endDistance, lane);
                 double laneAlpha = lane >= 0 && lane < alphaByLane.Length
                     ? alphaByLane[lane]
                     : noteAlpha * M("notealpind" + lane);
-                if (Math.Max(y, endY) < -25 || Math.Min(y, endY) > 205)
-                {
-                    continue;
-                }
-                float x = (float)(NoteSkin.LaneX(n.Type, n.Lane) + X(distance, lane));
+                if (Math.Max(y, endY) < -25 || Math.Min(y, endY) > 205) return;
+                float x = (float)(NoteSkin.LaneX(n.Type, n.Lane) + motionX);
                 if (n.Type == 2)
                 {
-                    noteSkin.Hold(n.Lane, x, (float) y, (float) endY, laneAlpha, n.Time <= visualTime, noteSkinIndex);
-                    nativeGimmick.DrawStarcrashersHoldBlend(session, t, n.Lane, x, (float) y, (float) endY,
+                    noteSkin.Hold(n.Lane, x, (float)y, (float)endY, laneAlpha, n.Time <= visualTime, noteSkinIndex);
+                    nativeGimmick.DrawStarcrashersHoldBlend(session, t, n.Lane, x, (float)y, (float)endY,
                         laneAlpha, n.Time <= visualTime);
                 }
                 else
                 {
-                    noteSkin.Note(n.Type, n.Lane, x, (float) y, laneAlpha, (float) noteRotation, noteSkinIndex);
-                    nativeGimmick.DrawStarcrashersNoteBlend(session, t, n.Type, n.Lane, x, (float) y,
-                        laneAlpha, (float) noteRotation);
+                    noteSkin.Note(n.Type, n.Lane, x, (float)y, laneAlpha, (float)noteRotation, noteSkinIndex);
+                    nativeGimmick.DrawStarcrashersNoteBlend(session, t, n.Type, n.Lane, x, (float)y,
+                        laneAlpha, (float)noteRotation);
+                }
+            }
+
+            bool nativeEvaluated = false;
+            if (RustNoteBridge.Enabled)
+            {
+                // NoteIndex gives us a bounded, start-sorted candidate stream. Reuse buffers
+                // across frames rather than allocating FFI payloads for every frame/note.
+                rustNoteCandidates.Clear();
+                foreach (var n in session.NoteIndex.Candidates(visualTime, latestStart))
+                {
+                    if (n.Time * 1000 > drawUntil) break;
+                    rustNoteCandidates.Add(n);
+                }
+                int count = rustNoteCandidates.Count;
+                if (count > 0)
+                {
+                    EnsureRustMotionCapacity(count);
+                    for (int i = 0; i < count; i++)
+                    {
+                        var n = rustNoteCandidates[i];
+                        int lane = n.Type is 1 or 7 or 8 ? 4 + n.Lane : n.Lane;
+                        double scroll = lane >= 0 && lane < scrollByLane.Length
+                            ? scrollByLane[lane]
+                            : NoteMotion.ScrollMultiplier(scrollSpeed, M("scrollind" + lane), velocity);
+                        double laneYOffset = lane >= 0 && lane < yOffsetByLane.Length
+                            ? yOffsetByLane[lane] : yOffset + M("yoffsetind" + lane);
+                        double laneXOffset = lane >= 0 && lane < xOffsetByLane.Length
+                            ? xOffsetByLane[lane] : xOffset + M("xoffsetind" + lane);
+                        double laneBoostTime = lane >= 0 && lane < boostTimeByLane.Length
+                            ? boostTimeByLane[lane] : boostTime + M("boost_timeind" + lane);
+                        double laneBoostDistance = lane >= 0 && lane < boostDistanceByLane.Length
+                            ? boostDistanceByLane[lane]
+                            : boostDistance == 0 ? 0 : boostDistance + M("boost_distanceind" + lane);
+                        rustMotionInputs[i] = new RustNoteBridge.MotionInput
+                        {
+                            Distance = (n.Time - scrollTime) * 1000,
+                            EndDistance = (n.End - scrollTime) * 1000,
+                            Scroll = scroll,
+                            XOffset = laneXOffset,
+                            YOffset = laneYOffset,
+                            BoostTime = laneBoostTime,
+                            BoostDistance = laneBoostDistance
+                        };
+                    }
+                    var motionParams = new RustNoteBridge.MotionParams
+                    {
+                        Beat = beat,
+                        Alignment = alignment,
+                        Driven = driven,
+                        BeatsPerSecond = bpmAtBeat / 60,
+                        Wave = wave,
+                        BeatMotion = beatMotion,
+                        Custom = custom ? 1u : 0u
+                    };
+                    nativeEvaluated = RustNoteBridge.TryEvaluate(motionParams, rustMotionInputs, rustMotionOutputs, count);
+                    if (nativeEvaluated)
+                    {
+                        for (int i = 0; i < count; i++)
+                        {
+                            var motion = rustMotionOutputs[i];
+                            DrawOne(rustNoteCandidates[i], motion.Y, motion.EndY, motion.XOffset);
+                        }
+                    }
+                }
+                else nativeEvaluated = true; // No notes: do not call native code with empty arrays.
+            }
+            if (!nativeEvaluated)
+            {
+                // Trusted original C# path: unchanged formulas, always available even
+                // without the cdylib or after a native/managed mismatch in verify mode.
+                foreach (var n in session.NoteIndex.Candidates(visualTime, latestStart))
+                {
+                    if (n.Time * 1000 > drawUntil) break;
+                    int lane = n.Type is 1 or 7 or 8 ? 4 + n.Lane : n.Lane;
+                    double distance = (n.Time - scrollTime) * 1000;
+                    double endDistance = (n.End - scrollTime) * 1000;
+                    DrawOne(n, Y(distance, lane), Y(endDistance, lane), X(distance, lane));
                 }
             }
             // 命中特效在原版是深度 -375 的独立实例，压在音符（-350）之上，共用同一块轨道裁剪。

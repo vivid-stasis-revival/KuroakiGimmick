@@ -126,7 +126,7 @@ public sealed partial class Viewer
         if (!settings) throw new Exception("Editor settings button did not open settings.");
         int savedAlignment = Current.Project.NoteAlignment;
         Current.Project.NoteAlignment = 0;
-        Handle(new() { Type = 0x401, Button = 1, X = 900, Y = 192 });
+        Handle(new() { Type = 0x401, Button = 1, X = 690, Y = 292 });
         Draw(1440, 940);
         Handle(new() { Type = 0x402, Button = 1 });
         Draw(1440, 940);
@@ -140,14 +140,13 @@ public sealed partial class Viewer
             string saved = Current.Project.GameUiFont;
             var session = Current;
             OpenSettings();
-            // (900, 132) 命中设置面板的 MONACO 按钮；坐标基于 1440x940 画布，按下后必须补一帧 Draw 才会消费这次点击。
-            // 面板高度改了就要跟着改：y 取的是 Text Font 那一行在淡入补间两端都覆盖到的重叠区间。
+            // (690, 247) 命中新布局的 MONACO 按钮。新布局以面板坐标贴边定位。
             Handle(new()
             {
                 Type = 0x401,
                 Button = 1,
-                X = 900,
-                Y = 132
+                X = 690,
+                Y = 247
             });
             Draw(1440, 940);
             Handle(new()
@@ -161,13 +160,13 @@ public sealed partial class Viewer
             {
                 throw new Exception("Monaco setting did not switch in the current session.");
             }
-            // (700, 132) 命中同一行的 DEFAULT 按钮。
+            // (530, 247) 命中同一行的 DEFAULT 按钮。
             Handle(new()
             {
                 Type = 0x401,
                 Button = 1,
-                X = 700,
-                Y = 132
+                X = 530,
+                Y = 247
             });
             Draw(1440, 940);
             Handle(new()

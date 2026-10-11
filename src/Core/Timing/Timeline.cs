@@ -334,6 +334,9 @@ public sealed partial class Timeline
         {
             BuildObjectParticles(Math.Min(End, 3600), emitter);
         }
+        // All original mutable timeline construction is complete. Rust now owns a
+        // frozen copy of the track arrays for one-call-per-frame base evaluation.
+        RustTracks = RustTimelineBridge.Create(Tracks, Initial);
     }
 
     /// <summary>该 mod 在任何事件之前的初值：全局轨道优先用对象定义的默认值，其余走基础协议表。</summary>

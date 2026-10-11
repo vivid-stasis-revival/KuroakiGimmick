@@ -1,0 +1,5 @@
+!obj:obj_custom_gimmick
+!proxies:1
+0,0,linear,3,3,scrollspeed,-1
+4,4,linear,3,5,scrollspeed,-1
+8,0,linear,5,3,scrollspeed,-1

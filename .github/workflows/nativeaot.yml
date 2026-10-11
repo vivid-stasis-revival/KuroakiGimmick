@@ -69,9 +69,9 @@ jobs:
             printf '%s\n' "$changed"
 
             # Only application/build inputs trigger NativeAOT.
-            # README / CHANGELOG / .github-only commits intentionally do not build.
+            # README / CHANGELOG-only commits intentionally do not build. Rust and release workflow changes do.
             if printf '%s\n' "$changed" | grep -Eq \
-              '^(src/|Assets/|Resources/|ThirdParty/|scripts/|KuroakiGimmick\.csproj$|packages\.lock\.json$|app\.manifest$)'; then
+              '^(src/|rust/|Assets/|Resources/|ThirdParty/|scripts/|\.github/workflows/nativeaot\.yml$|KuroakiGimmick\.csproj$|packages\.lock\.json$|app\.manifest$)'; then
               should_build=true
             fi
           fi
@@ -105,6 +105,7 @@ jobs:
             sdl: SDL3.dll
             shaderc: shaderc_shared.dll
             spirv_cross: spirv-cross.dll
+            rust_core: kg_native_core.dll
 
           - runner: macos-15
             rid: osx-arm64
@@ -112,6 +113,7 @@ jobs:
             sdl: libSDL3.dylib
             shaderc: libshaderc_shared.dylib
             spirv_cross: libspirv-cross.dylib
+            rust_core: libkg_native_core.dylib
 
     steps:
       - uses: actions/checkout@v7
@@ -126,6 +128,12 @@ jobs:
         run: |
           printf '{"sdk":{"version":"%s"}}\n' \
             '${{ steps.dotnet.outputs.dotnet-version }}' > global.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust Optimization Engine unit tests
+        shell: bash
+        run: cargo test --manifest-path rust/kg-native-core/Cargo.toml
 
       - name: Publish NativeAOT
         shell: bash
@@ -143,6 +151,13 @@ jobs:
             "-p:InformationalVersion=${BUILD_LABEL}" \
             -o 'artifacts/${{ matrix.rid }}'
 
+      - name: Build and stage matching Rust Optimization Engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          source scripts/rust-native-common.sh
+          kg_rust_publish '${{ matrix.rid }}' 'artifacts/${{ matrix.rid }}'
+
       - name: Verify native output and embedded version
         shell: bash
         env:
@@ -154,6 +169,7 @@ jobs:
           test -f 'artifacts/${{ matrix.rid }}/${{ matrix.sdl }}'
           test -f 'artifacts/${{ matrix.rid }}/${{ matrix.shaderc }}'
           test -f 'artifacts/${{ matrix.rid }}/${{ matrix.spirv_cross }}'
+          test -s 'artifacts/${{ matrix.rid }}/${{ matrix.rust_core }}'
 
           test ! -f 'artifacts/${{ matrix.rid }}/KuroakiGimmick.runtimeconfig.json'
           test ! -f 'artifacts/${{ matrix.rid }}/KuroakiGimmick.deps.json'
@@ -167,6 +183,16 @@ jobs:
             echo "Version mismatch: '$actual' != '$BUILD_LABEL'" >&2
             exit 1
           fi
+
+      - name: Verify RustBridge in the actual published executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          executable='artifacts/${{ matrix.rid }}/${{ matrix.executable }}'
+          KG_RUST_BRIDGE=verify "$executable" --rust-bridge-test
+          KG_RUST_ENGINE=verify "$executable" --rust-engine-test
+          KG_RUST_ENGINE=verify "$executable" --rust-timeline-test
+          KG_RUST_AUDIO_REQUIRED=1 "$executable" --rust-audio-test
 
       - name: Archive macOS build
         if: runner.os == 'macOS'
@@ -258,6 +284,18 @@ jobs:
           fi
 
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            # A corrective release commit can reuse the same version. Keep the tag
+            # pointing at the code that produced the uploaded native artifacts.
+            tagged_sha="$(gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')"
+            if [[ "$tagged_sha" != "$GITHUB_SHA" ]]; then
+              if [[ "$IS_RELEASE" != true ]]; then
+                echo "Refusing to move non-release tag $RELEASE_TAG" >&2
+                exit 1
+              fi
+              gh api --method PATCH "repos/$GH_REPO/git/refs/tags/$RELEASE_TAG" \
+                -f sha="$GITHUB_SHA" -F force=true >/dev/null
+              echo "Updated corrective release tag $RELEASE_TAG to $GITHUB_SHA"
+            fi
             gh release upload \
               "$RELEASE_TAG" \
               "${assets[@]}" \

@@ -1,0 +1,13 @@
+Symphonia - Pure Rust media container and audio decoding library
+Philip Deljanov and contributors; see upstream source headers for copyright notices.
+
+Upstream source: https://github.com/pdeljanov/Symphonia
+Facade dependency: symphonia 0.5.4 (pinned in rust/kg-native-core/Cargo.toml).
+Enabled features: ogg, vorbis, flac, wav, pcm, mp3, isomp4, aac.
+The upstream codec/container/core/metadata components are resolved by Cargo.
+The upstream Rust source is used without modification.
+
+License: Mozilla Public License 2.0 (MPL-2.0).
+License text: https://www.mozilla.org/en-US/MPL/2.0/
+A copy is included as ThirdParty/Symphonia-MPL-2.0.txt.
+Application/native glue code retains the repository's own license.

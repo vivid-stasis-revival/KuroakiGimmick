@@ -3,6 +3,7 @@
 set -euo pipefail
 KG_AOT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KG_AOT_DOTNET="${KUROAKI_DOTNET:-dotnet}"
+. "$(dirname "${BASH_SOURCE[0]}")/rust-native-common.sh"
 KG_AOT_STAGE=''
 kg_aot_cleanup() {
     if [ -n "${KG_AOT_STAGE}" ] && [ -d "${KG_AOT_STAGE}" ]; then
@@ -76,10 +77,12 @@ kg_aot_publish() {
         -p:PublishAot=true -p:PublishSingleFile=false \
         -p:DebugType=None -p:DebugSymbols=false \
         "-p:NuGetLockFilePath=${lock_arg}" 2>&1 | tee "${log}"
+    kg_rust_publish "${rid}" "${binary}"
     [ ! -e "${binary}/KuroakiGimmick.deps.json" ] && [ ! -e "${binary}/KuroakiGimmick.runtimeconfig.json" ] \
         || { echo '发布结果包含 .NET 运行时配置文件，NativeAOT 未生效。' >&2; return 1; }
     case "${rid}" in
         osx-*)
+            [ -s "${binary}/libkg_native_core.dylib" ] || { echo "发布结果缺少 Rust 原生库：libkg_native_core.dylib" >&2; return 1; }
             [ -x "${binary}/KuroakiGimmick" ] || { echo '发布结果缺少 macOS 原生可执行文件。' >&2; return 1; }
             for library in libSDL3.dylib libshaderc_shared.dylib libspirv-cross.dylib; do
                 [ -f "${binary}/${library}" ] || { echo "发布结果缺少原生库：${library}" >&2; return 1; }
@@ -109,6 +112,7 @@ PLIST
             chmod +x "${binary}/KuroakiGimmick"
             ;;
         win-*)
+            [ -s "${binary}/kg_native_core.dll" ] || { echo "发布结果缺少 Rust 原生库：kg_native_core.dll" >&2; return 1; }
             [ -f "${binary}/KuroakiGimmick.exe" ] || { echo '发布结果缺少 Windows 原生可执行文件。' >&2; return 1; }
             for library in SDL3.dll shaderc_shared.dll spirv-cross.dll; do
                 [ -f "${binary}/${library}" ] || { echo "发布结果缺少原生库：${library}" >&2; return 1; }
@@ -124,8 +128,10 @@ PLIST
         Assets/Documentation/vsm-reference.json; do
         [ -f "${package}/${asset}" ] || { echo "发布结果缺少资源：${asset}" >&2; return 1; }
     done
-    for item in README.md CHANGELOG.md THIRD_PARTY_NOTICES.md; do cp "${KG_AOT_ROOT}/${item}" "${package}/${item}"; done
+    for item in README.md CHANGELOG.md THIRD_PARTY_NOTICES.md OPTIMIZATION_ENGINE.md RUSTBRIDGE.md RUSTBRIDGE_ENGINE.md RUST_RUNTIME_V030.md RUSTBRIDGE_CHANGELOG.md; do cp "${KG_AOT_ROOT}/${item}" "${package}/${item}"; done
     cp -R "${KG_AOT_ROOT}/ThirdParty" "${package}/ThirdParty"
+    mkdir -p "${package}/tests/Regression"
+    cp "${KG_AOT_ROOT}/tests/Regression/README.md" "${package}/tests/Regression/README.md"
     mkdir -p "${package}/docs"
     if [ -n "${KUROAKI_FFMPEG:-}" ]; then
         [ -f "${KUROAKI_FFMPEG}" ] || { echo 'KUROAKI_FFMPEG 文件不存在。' >&2; return 1; }

@@ -4,7 +4,7 @@
 
 <p align="center">   面向《vivid/stasis》的谱面演出预览与编辑工具。<br>   在同一条时间轴上编排 gimmick、图片、字幕、场景效果与窗口运动，并直接检查它们在实际歌曲场景中的表现。 </p>
 
-<p align="center">   <img src="https://img.shields.io/badge/version-0.1.4_%2F_17.7.1-94cddd?style=flat-square" alt="v0.1.4 / Build 17.7.1">   <img src="https://img.shields.io/badge/C%23-.NET_8-b5a3e8?style=flat-square" alt="C# / .NET 8">   <img src="https://img.shields.io/badge/renderer-SDL3_GPU-94cddd?style=flat-square" alt="SDL3 GPU">   <img src="https://img.shields.io/badge/UI-中文_%2F_English-e8a4bd?style=flat-square" alt="中文 / English"> </p>
+<p align="center">   <img src="https://img.shields.io/badge/version-0.1.5_%2F_18.0-94cddd?style=flat-square" alt="v0.1.5 / Build 18.0">   <img src="https://img.shields.io/badge/C%23-.NET_8-b5a3e8?style=flat-square" alt="C# / .NET 8">   <img src="https://img.shields.io/badge/renderer-SDL3_GPU-94cddd?style=flat-square" alt="SDL3 GPU">   <img src="https://img.shields.io/badge/UI-中文_%2F_English-e8a4bd?style=flat-square" alt="中文 / English"> </p>
 
 <p align="center">   <a href="#关于-kuroakigimmick">关于</a> ·   <a href="#主要功能">功能</a> ·   <a href="#快速开始">快速开始</a> ·   <a href="#编辑与导出">编辑与导出</a> ·   <a href="#命令行">命令行</a> ·   <a href="#构建">构建</a> ·   <a href="#特别感谢">特别感谢</a> </p>
 
@@ -230,8 +230,9 @@ macOS 使用 **Metal**。
 | macOS               | Metal                                      |
 | Windows             | Direct3D 12                                |
 | 完整场景资源        | 用户自行准备的本地 `Assets/`               |
-| Ogg/Vorbis          | 内置解码                                   |
-| 其他音频 / 视频导出 | FFmpeg                                     |
+| Rust                | stable 工具链（rustup / cargo / rustc），用于优化引擎及发行构建 |
+| Ogg/Vorbis          | Symphonia；兼容路径使用内置 NVorbis |
+| 其他音频 / 视频导出 | 支持的 WAV / FLAC / MP3 / AAC 等由 Symphonia 解码；其他格式、兼容音频路径及视频导出需要 FFmpeg |
 
 首次恢复 NuGet 包需要网络连接。
 
@@ -239,8 +240,10 @@ macOS 使用 **Metal**。
 
 ```
 dotnet restore KuroakiGimmick.csproj --locked-mode
-dotnet build KuroakiGimmick.csproj -c Release --no-restore
+bash scripts/build-rustbridge.sh
 ```
+
+Windows 使用 `pwsh -File scripts/build-rustbridge.ps1`。构建脚本会测试 Rust、编译 C#、复制原生库并执行四项无 SDL 自测。只需 C# 兼容路径时仍可运行 `dotnet build KuroakiGimmick.csproj -c Release --no-restore`；未放置原生库时默认优化引擎会记录原因并回退。
 
 ### 启动
 
@@ -501,6 +504,14 @@ dotnet run -c Release --no-build -- \
 开启后会在导出成功时替换已有输出；谱面文件夹按文件合并，保留本次未导出的其他文件，原谱面源文件仍受保护。
 命令行导出也读取此设置，可添加 `--overwrite` 单次开启覆盖。
 
+### 引擎与诊断
+
+默认使用 Optimization (Rust) 计算和音频引擎，并开启并行加载、PCM 缓存；可在设置 → Performance 中切换，重新打开谱面后生效。环境变量优先于设置。
+
+`KG_RUST_ENGINE=auto|off|verify|required` 控制解析、BPM 和 Timeline；`KG_RUST_BRIDGE` 单独控制音符运动，未设置时随计算引擎开关。`verify` 比较 C#/Rust 结果，`required` 在原生路径失败时退出。音频单独使用 `KG_AUDIO_ENGINE=optimization|nvorbis` 和 `KG_RUST_AUDIO_REQUIRED=1`。完整开关、原生库位置和验证命令见 [优化引擎说明](OPTIMIZATION_ENGINE.md)。
+
+VSM 行尾 `//` 注释会被读取并产生 warning，C# 与 Rust 行为一致；进入原游戏前仍应移除注释。独立注释行和裸 `mods` 标记保留兼容性错误诊断。
+
 ### 指定语言
 
 ```
@@ -521,7 +532,9 @@ dotnet run -c Release --no-build -- \
 
 当前版本：
 
-**v0.1.4 / Build 17.7.1**
+**v0.1.5 / Build 18.0**
+
+发行脚本需要 Rust 工具链，并为目标 RID 编译、打包匹配架构的 `kg_native_core` 动态库。跨架构构建还需要对应 Rust target 和链接器。
 
 实际版本号以：
 
@@ -555,7 +568,7 @@ bash scripts/publish-win.sh x64
 
 ```
 dist/
-└── KuroakiGimmick-v0.1.4-<RID>-17.7.1-<timestamp>/
+└── KuroakiGimmick-v0.1.5-<RID>-18.0-<timestamp>/
 ```
 
 并生成对应 ZIP。
@@ -590,6 +603,7 @@ NativeAOT 输出包含：
 - SDL3
 - shaderc
 - SPIRV-Cross
+- Rust Optimization Engine（`libkg_native_core.dylib` / `kg_native_core.dll`）
 - 其他所需原生动态库
 
 这些文件必须作为完整目录一起保留。
@@ -602,7 +616,7 @@ NativeAOT 输出包含：
 dotnet publish -c Release -r <rid>
 ```
 
-时，Release + RID 默认选择 NativeAOT。
+时，Release + RID 默认选择 NativeAOT。直接执行 `dotnet publish` 不会自动构建或复制 Rust 库；发行请使用上述脚本，或自行放置匹配架构的原生库。
 
 如果需要原有的 .NET 单文件发布：
 
@@ -680,6 +694,7 @@ KuroakiGimmick/
 │
 ├── src/
 │   ├── App/
+│   ├── Bridge/
 │   ├── Core/
 │   ├── Graphics/
 │   ├── Native/
@@ -692,6 +707,12 @@ KuroakiGimmick/
 │   └── Fonts/
 │
 ├── ThirdParty/
+│
+├── rust/
+│   └── kg-native-core/
+│
+├── tests/
+│   └── Regression/
 │
 ├── scripts/
 │
@@ -751,7 +772,7 @@ KuroakiGimmick/
 - 发布脚本
 - NativeAOT 构建脚本
 
-公开源码不包含内部测试、检查脚本以及游戏资源 Dump 脚本。
+公开源码包含不依赖游戏素材的 CPU 回归与 Rust 原生自测，说明见 [tests/Regression/README.md](tests/Regression/README.md)。不包含内部游戏资源 Dump 脚本。
 
 ## 第三方组件
 
@@ -763,6 +784,7 @@ KuroakiGimmick 使用了包括但不限于：
 - Shaderc
 - SPIRV-Cross
 - NVorbis
+- Symphonia（Rust 音频解码）
 - StbImageSharp
 - StbImageWriteSharp
 - StbTrueTypeSharp
@@ -869,3 +891,15 @@ KuroakiGimmick 是非官方项目，与 hajimeli **不存在官方隶属、合�
 ```
 
 每次打开欢迎页随机选一条，连续打开尽量不重复。内容按原文显示；会去掉首尾空白、重复项和超过 512 字符的条目。空数组表示不显示 tips。文件损坏或缺失时回退到程序内置副本；不会访问网络。发行包中同样保留这个可编辑文件。
+
+
+## Rust Optimization Engine
+
+当前引擎 crate 版本为 `0.3.0-alpha.0`，应用版本为 `v0.1.5 / 18.0`。Rust 负责 VSC/VSB/VSM 解析、BPM 构建、音符运动、Symphonia 音频解码和 Timeline 基础轨道批量求值；C# 负责事件语义、回调、逐帧绑定、编辑模型、SDL 播放和 GPU 渲染。
+
+- [优化引擎、开关与发布](OPTIMIZATION_ENGINE.md)
+- [音符运动与 ABI](RUSTBRIDGE.md)
+- [谱面解析与 BPM](RUSTBRIDGE_ENGINE.md)
+- [Timeline Runtime](RUST_RUNTIME_V030.md)
+
+性能需要在目标平台和实际谱面上验证；`verify` 会计算两套结果，适合检查一致性，不适合性能基准。

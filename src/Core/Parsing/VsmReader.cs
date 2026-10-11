@@ -15,11 +15,21 @@ public static class VsmReader
         {
             throw new InvalidDataException("VSM exceeds 64 MiB.");
         }
+        // The Rust parser is only used when it can preserve the C# representation.
+        // Native errors, unsupported syntax or diagnostics return to the original code.
+        if (RustEngineBridge.TryApplyVsm(c, File.ReadAllText(path), path)) return;
         ReplaceModsLines(c, File.ReadLines(path), path);
     }
 
     /// <summary>编辑器预览直接消费内存中的修订文本；不写临时源文件覆盖原文件，也不另建一套解析器。</summary>
-    public static void ReplaceModsText(Chart c, string text, string source) => ReplaceModsLines(c, text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n'), source);
+    public static void ReplaceModsText(Chart c, string text, string source)
+    {
+        if (RustEngineBridge.TryApplyVsm(c, text, source)) return;
+        ReplaceModsTextOriginal(c, text, source);
+    }
+
+    internal static void ReplaceModsTextOriginal(Chart c, string text, string source) =>
+        ReplaceModsLines(c, text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n'), source);
 
     static void ReplaceModsLines(Chart c, IEnumerable<string> lines, string path)
     {
@@ -31,7 +41,7 @@ public static class VsmReader
         // read_mods_file 只跳过空行，既不认 "mods" 标记也不剥 // 注释：这两种行都会走到
         // string_split(line, ",") 然后取 parts[1]，在原版里直接越界崩掉。这里照旧宽容地读下去，
         // 但必须把首次出现的位置报出来，否则作者在预览里一切正常、进游戏才发现打不开。
-        int strayMods = 0, comment0 = 0;
+        int strayMods = 0, comment0 = 0, trailingComment0 = 0;
         double Number(string value) => ParseNumber(value, message => c.Diagnostics.Add(new(path, lineNumber, message)));
         foreach (var raw in lines)
         {
@@ -49,7 +59,7 @@ public static class VsmReader
             var comment = line.IndexOf("//", StringComparison.Ordinal);
             if (comment >= 0)
             {
-                if (comment0 == 0) comment0 = lineNumber;
+                if (trailingComment0 == 0) trailingComment0 = lineNumber;
                 line = line[..comment].Trim();
             }
             try
@@ -158,7 +168,11 @@ public static class VsmReader
             c.Diagnostics.Add(new(path, comment0, "The original read_mods_file never strips // comments: a comment line is split as an event "
                 + "and parts[1] goes out of range, and a trailing comment lands in the proxy field. Delete every comment; blank lines are fine.", true));
         }
+        if (trailingComment0 > 0)
+            c.Diagnostics.Add(new(path, trailingComment0, TrailingCommentWarning));
     }
+
+    internal const string TrailingCommentWarning = "K/G accepts trailing // comments, but the original read_mods_file does not strip them. Remove trailing comments before using this file in the game.";
 
     // read_mods_file 把数值字段交给 GML real()。公开的 HTML5 runner 使用
     // parseFloat，只消费数字前缀（327.6.6 读成 327.6）。

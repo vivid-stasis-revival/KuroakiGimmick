@@ -2,6 +2,23 @@
 
 版本以 `KuroakiGimmick.csproj` 为准。16.2 及更早的开发记录可通过 Git 历史查看。
 
+## v0.1.5 / 18.0
+
+- 修复 Rust/C# 的 VSM 行尾 `//` 注释解析：元数据、事件、mpf 标记与函数均可读取，保留源行并给出一致 warning；进入原游戏前仍应删除注释。
+- VSC/VSB 在分配输入缓冲区前检查 128 MiB 文件限制；Rust 解码没有扩展字段的音符复用 `Note.EmptyExtra`，恢复大谱面空字典共享。
+- 移除托管 BPM 包解码残留的 2,000,001 段限制，按包字节数检查数量；Rust BPM 输出仍遵守 512 MiB 包预算。
+- 对齐 README、当前引擎/ABI 文档和默认 `auto` 说明，补全 CLI 引擎开关及四项自测；添加 Symphonia 依赖/许可证说明，发布包附带引擎指南。
+- 增加行尾注释、换行格式、提前拒绝超大文件和超过两百万 BPM 变速点的回归；CI 在放置原生库后运行完整 CPU 回归，Windows 构建脚本补齐 Timeline 自测。
+- 修复 Release 发布链路：`publish-mac.sh`、`publish-win.sh`、`publish-aot-mac.sh`、`publish-aot-win.sh` 和 `publish-windows.ps1` 现在对目标 RID 编译并打包 Rust Optimization Engine 动态库。
+- NativeAOT GitHub Actions 现在安装 Rust 工具链、运行 Cargo 单测、打包原生库，并对发布的可执行文件执行 RustBridge / Engine / Timeline / Audio 无 SDL 测试。
+- 缺少匹配架构的 Rust 库、链接工具链或构建失败时立即中止发布；修复版 Release 会将已有同名发布标签指向最新修复提交。
+
+- 将设置窗口改为贴边双列卡片概览与可点击侧栏分组：General、Audio & Sync、Display、VS UI、Performance、Export；点击后切换为对应页面，不再只是装饰性高亮。
+- 完整保留声音延迟、音量、字体、判定线对齐、分辨率、工作流、VS UI、导出、重置与用户偏好持久化。Performance 页集成 Optimization (Rust) / Compatibility (C#)、NVorbis、并行加载、PCM 缓存及性能重置。
+- RustBridge 集成：VSC/VSB/VSM 解析、BPM、Note Motion、Symphonia 音频解码、两级 PCM 缓存、并行加载和 Timeline 基础轨道批量求值；保留 C# 兼容回退及 verify/self-test 流程。
+- 移除 Rust/C# 解析器固定的 2,000,000 Note 上限；保留文件大小、包长度、数据校验及内存安全边界。
+- 更新 CI 与自测以覆盖原生解析器、音频和 Timeline；版本号 `v0.1.5 / 18.0`，构建序号 `1800`。
+
 ## 未发布
 
 - 修复 Base/Custom Proxy 在原位置残留底部灰条：Proxy 保留原版 y=0..165 的默认裁剪，灰色判定背景随裁剪区域变换，裁剪外的底部 15 像素不再固定显示；无 Proxy 时仍绘制完整背景，歌曲信息底栏由固定 HUD 绘制，显式裁剪继续生效。

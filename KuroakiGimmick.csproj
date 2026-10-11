@@ -20,10 +20,10 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
-    <Version>0.1.4</Version>
-    <BuildNumber>17.7.1</BuildNumber>
-    <BuildSerial>1771</BuildSerial>
-    <AssemblyVersion>0.1.4.0</AssemblyVersion>
+    <Version>0.1.5</Version>
+    <BuildNumber>18.0</BuildNumber>
+    <BuildSerial>1800</BuildSerial>
+    <AssemblyVersion>0.1.5.0</AssemblyVersion>
     <FileVersion>$(Version).$(BuildSerial)</FileVersion>
     <InformationalVersion Condition="'$(InformationalVersion)' == ''">v$(Version) / $(BuildNumber)</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
