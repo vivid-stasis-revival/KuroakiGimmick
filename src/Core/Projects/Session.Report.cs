@@ -145,6 +145,33 @@ public sealed partial class Session
                 ["textures"] = AppJson.Node(NativeGimmick.TextureFiles),
                 ["particles"] = Timeline.ObjectParticles.Count,
                 ["completeObject"] = NativeGimmick.Data?.CompleteObject ?? false,
+                ["starcrashersLateAtTime"] = Chart.ObjectName == "obj_starcrashers_gimmick"
+                    ? new JsonObject
+                    {
+                        ["greenleftMix8Bit"] = JsonValue.Create(time is { } mixTime
+                            ? (double?)Math.Round(Math.Clamp(Timeline.Get("chorus_greenleft_overlay", mixTime), 0, 1) * 255) / 255 : null),
+                        ["leftDustCallbacks"] = Chart.Mods.Count(e => e.Name == "chorus_satalli_alli_particles"),
+                        ["rightDustCallbacks"] = Chart.Mods.Count(e => e.Name == "chorus_satalli_sat_particles"),
+                        ["endingCallbacks"] = Chart.Mods.Count(e => e.Name == "ending_coroutine"),
+                        ["endingVisible"] = JsonValue.Create(time is { } storyTime && storyTime >= 208.04 && storyTime < 222.58
+                            && Chart.Mods.Any(e => e.Name == "ending_coroutine" && Timeline.Bpm.Time(e.Beat) <= storyTime))
+                    } : null,
+                ["roomLayersAtTime"] = new JsonArray((NativeGimmick.Data?.RoomLayers ?? [])
+                    .OrderByDescending(l => l.Depth).Select(layer => (JsonNode?)new JsonObject
+                    {
+                        ["name"] = layer.Name,
+                        ["sprite"] = layer.Sprite,
+                        ["depth"] = layer.Depth,
+                        ["alphaMod"] = layer.AlphaMod,
+                        ["alpha"] = JsonValue.Create(time is { } layerTime
+                            ? (double?)GimmickRoomLayerTimeline.Alpha(layer, Timeline, layerTime) : null),
+                        ["x"] = JsonValue.Create(time is { } xTime
+                            ? (double?)GimmickRoomLayerTimeline.X(layer, xTime) : null),
+                        ["y"] = JsonValue.Create(time is { } yTime
+                            ? (double?)GimmickRoomLayerTimeline.Y(layer, yTime) : null),
+                        ["tileX"] = layer.TileHorizontal,
+                        ["tileY"] = layer.TileVertical
+                    }).ToArray()),
                 ["callbacks"] = AppJson.Node(Timeline.Callbacks.Where(c => NativeGimmick.Data?.Callbacks.ContainsKey(c.Name) == true)
                     .GroupBy(c => c.Name).ToDictionary(g => g.Key, g => g.Count())),
                 ["randomness"] = "Fixed seed for repeatable seeks and exports; not the random sequence of a recorded game run."

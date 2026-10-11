@@ -296,10 +296,14 @@ public sealed partial class SceneRenderer
                 if (n.Type == 2)
                 {
                     noteSkin.Hold(n.Lane, x, (float) y, (float) endY, laneAlpha, n.Time <= visualTime, noteSkinIndex);
+                    nativeGimmick.DrawStarcrashersHoldBlend(session, t, n.Lane, x, (float) y, (float) endY,
+                        laneAlpha, n.Time <= visualTime);
                 }
                 else
                 {
                     noteSkin.Note(n.Type, n.Lane, x, (float) y, laneAlpha, (float) noteRotation, noteSkinIndex);
+                    nativeGimmick.DrawStarcrashersNoteBlend(session, t, n.Type, n.Lane, x, (float) y,
+                        laneAlpha, (float) noteRotation);
                 }
             }
             // 命中特效在原版是深度 -375 的独立实例，压在音符（-350）之上，共用同一块轨道裁剪。

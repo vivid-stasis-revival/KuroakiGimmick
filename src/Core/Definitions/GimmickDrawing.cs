@@ -18,6 +18,7 @@ public sealed class GimmickDrawing
     public double VelocityX { get; set; }
     public double VelocityY { get; set; }
     public int Frame { get; set; }
+    public string? FrameMod { get; set; }
     public double FramesPerSecond { get; set; }
     /// <summary>同一阶段内的绘制顺序：Depth 大的先绘制。</summary>
     public int Depth { get; set; }

@@ -37,6 +37,8 @@ public sealed class GimmickDefinition
     public Dictionary<string, double> CallbackLifetimes { get; set; } = [];
     public Dictionary<string, List<GimmickDrawing>> Callbacks { get; set; } = [];
     public List<GimmickDrawing> Overlays { get; set; } = [];
+    public List<GimmickRoomLayer> RoomLayers { get; set; } = [];
+    public List<GimmickDrawing> MaskLayers { get; set; } = [];
     public GimmickBackground? Background { get; set; }
     public GimmickParticleEmitter? ParticleEmitter { get; set; }
     public string PostModeMod { get; set; } = "shadermode";

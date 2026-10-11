@@ -9,6 +9,8 @@ public enum BlendFactor : uint
 {
     Zero = 1,
     One = 2,
+    // SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_COLOR: required by original Starcrashers mask fireworks.
+    InverseSourceColor = 4,
     DestinationColor = 5,
     InverseDestinationColor = 6,
     SourceAlpha = 7,

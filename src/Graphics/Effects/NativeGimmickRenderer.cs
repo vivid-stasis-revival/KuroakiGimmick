@@ -12,6 +12,7 @@ public sealed partial class NativeGimmickRenderer : IDisposable
     private readonly Canvas canvas;
     private readonly Target background;
     private readonly Target filtered;
+    private readonly Target mask;
     private NativeGimmickProfile? current;
     private GimmickDrawScheduler? scheduler;
     private readonly Dictionary<(string Path, bool Repeat, bool Linear), Texture> textures = [];
@@ -24,6 +25,7 @@ public sealed partial class NativeGimmickRenderer : IDisposable
         this.canvas = canvas;
         background = new(canvas.Gpu, 320, 180);
         filtered = new(canvas.Gpu, 320, 180);
+        mask = new(canvas.Gpu, 320, 180);
     }
 
     /// <summary>先 Flush 再缩放两块离屏目标，避免仍在队列中的批次引用旧尺寸纹理。</summary>
@@ -32,6 +34,9 @@ public sealed partial class NativeGimmickRenderer : IDisposable
         canvas.Flush();
         background.Resize(width, height);
         filtered.Resize(width, height);
+        // The GameMaker obj_starcrashers_mask Surface is ALWAYS 320x180.
+        // Keep it 1 physical pixel per game pixel; final upscaling uses Target's
+        // nearest sampler. Scaling this with RenderWidth breaks raster/blend parity.
     }
 
     /// <summary>
@@ -190,7 +195,11 @@ public sealed partial class NativeGimmickRenderer : IDisposable
             return;
         }
         // 先对帧号取模再转 int，长时间预览时才不会溢出。
-        int frame = (int)((drawing.Frame + Math.Floor(Math.Max(0, age) * drawing.FramesPerSecond)) % sprite.Frames.Count);
+        double frameValue = drawing.FrameMod == null
+            ? drawing.Frame + Math.Floor(Math.Max(0, age) * drawing.FramesPerSecond)
+            : session.Timeline.Get(drawing.FrameMod, time);
+        if (!double.IsFinite(frameValue)) return;
+        int frame = (int)((frameValue % sprite.Frames.Count + sprite.Frames.Count) % sprite.Frames.Count);
         if (Image(drawing.Sprite, frame) is not { } texture)
         {
             return;
@@ -248,6 +257,8 @@ public sealed partial class NativeGimmickRenderer : IDisposable
         ReleaseSessionResources();
         background.Dispose();
         filtered.Dispose();
+        DisposeStarcrashersObjects();
+        mask.Dispose();
     }
 }
 
