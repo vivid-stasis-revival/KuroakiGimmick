@@ -1,4 +1,4 @@
-name: RustBridge core migration
+name: Rust Engine checks (Windows / macOS)
 on:
   push:
     paths:
@@ -12,6 +12,7 @@ on:
       - 'src/Core/Audio/**'
       - 'src/UI/**'
       - 'src/App/Program.cs'
+      - 'tests/Regression/**'
       - 'scripts/build-rustbridge*'
       - 'scripts/publish-*'
       - 'scripts/rust-native-*'
@@ -28,8 +29,6 @@ jobs:
         include:
           - os: macos-15
             library: libkg_native_core.dylib
-          - os: ubuntu-24.04
-            library: libkg_native_core.so
           - os: windows-2022
             library: kg_native_core.dll
     runs-on: ${{ matrix.os }}

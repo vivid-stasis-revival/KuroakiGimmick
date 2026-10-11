@@ -48,7 +48,8 @@ internal static class IssueFixes
         string root = Path.Combine(temp, "song"); Directory.CreateDirectory(root);
         string FileAt(string name, string text = "resource")
         {
-            string path = Path.Combine(root, name); Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            // Match production image-name maps: canonical absolute paths, including Windows separators.
+            string path = Path.GetFullPath(Path.Combine(root, name)); Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             File.WriteAllText(path, text); return path;
         }
         try
@@ -92,7 +93,7 @@ internal static class IssueFixes
 
             // Save twice: companions and backups must stay at their original location.
             string save = Path.Combine(root, "edit.sgv.json");
-            var session = new Session(new ViewerProject { Chart = sourceChart, RoomPreset = "none", GameUiEnabled = false });
+            var session = new Session(new ViewerProject { Chart = sourceChart, RoomPreset = "none", GameUiEnabled = false, Profile = "core" });
             var document = new EditorDocument(session);
             document.SaveCopy(save); document.SaveCopy(save);
             string hiddenRoot = Path.Combine(root, ".kuroaki");

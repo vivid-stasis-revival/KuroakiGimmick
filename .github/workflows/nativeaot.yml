@@ -158,6 +158,17 @@ jobs:
           source scripts/rust-native-common.sh
           kg_rust_publish '${{ matrix.rid }}' 'artifacts/${{ matrix.rid }}'
 
+      - name: Include release guides and dependency notices
+        shell: bash
+        run: |
+          set -euo pipefail
+          output='artifacts/${{ matrix.rid }}'
+          cp README.md CHANGELOG.md THIRD_PARTY_NOTICES.md OPTIMIZATION_ENGINE.md \
+            RUSTBRIDGE.md RUSTBRIDGE_ENGINE.md RUST_RUNTIME_V030.md RUSTBRIDGE_CHANGELOG.md "$output/"
+          cp -R ThirdParty "$output/"
+          mkdir -p "$output/tests/Regression"
+          cp tests/Regression/README.md "$output/tests/Regression/README.md"
+
       - name: Verify native output and embedded version
         shell: bash
         env:
@@ -193,6 +204,19 @@ jobs:
           KG_RUST_ENGINE=verify "$executable" --rust-engine-test
           KG_RUST_ENGINE=verify "$executable" --rust-timeline-test
           KG_RUST_AUDIO_REQUIRED=1 "$executable" --rust-audio-test
+
+      - name: Record packaged Rust Engine files
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo '### NativeAOT package: ${{ matrix.rid }}'
+            echo 'Rust Engine is shipped beside the native executable:'
+            echo '- `${{ matrix.executable }}`'
+            echo '- `${{ matrix.rust_core }}`'
+            echo 'All four native load/parity tests passed on the published executable.'
+          } >> "$GITHUB_STEP_SUMMARY"
+          ls -lh 'artifacts/${{ matrix.rid }}/${{ matrix.rust_core }}'
 
       - name: Archive macOS build
         if: runner.os == 'macOS'
