@@ -50,8 +50,9 @@ internal static class LoreleiCompatibility
         {
             string file = Path.Combine(root, "FINALE.vsm");
             File.WriteAllText(file, "!obj:obj_custom_gimmick\n0,4,linear,4,0,df_countdown,-1\n");
-            File.WriteAllText(Path.Combine(root, "FINALE_cgmk_config.json"), "{\"ENABLE_DF_GRID_AND_SIDELINE\":false}");
-            var session = new Session(new ViewerProject { Gimmick = file, Bpm = 60, RoomPreset = "none", GameUiEnabled = false });
+            // The countdown test needs no private jacket catalog or native object resources.
+            File.WriteAllText(Path.Combine(root, "FINALE_cgmk_config.json"), "{\"ENABLE_DF_GRID_AND_SIDELINE\":false,\"JACKET_MANAGE_MODE\":\"normal\"}");
+            var session = new Session(new ViewerProject { Gimmick = file, Bpm = 60, RoomPreset = "none", GameUiEnabled = false, Profile = "core" });
             Check(session.Timeline.SourceNoOps.All(n => n.Name != "df_countdown"), "Countdown must be independent of DF decoration config");
             Check(GameUiRenderer.ComboText(session, 1) == " 3.00", "Countdown decimal / integer padding");
             Check(GameUiRenderer.ComboText(session, 4) != " 0.00", "Expired countdown returns to score display");

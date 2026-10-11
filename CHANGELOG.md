@@ -4,6 +4,7 @@
 
 ## v0.1.5 / 18.0
 
+- CI 修正：Rust Engine 检查只构建 Windows/macOS；CPU 回归使用不依赖本地曲绘目录的 fixture，并规范化 Windows 暂存图片路径。NativeAOT 发布包已包含 Rust 动态库，现补齐引擎指南、依赖许可证及明确的打包摘要。
 - 修复 Rust/C# 的 VSM 行尾 `//` 注释解析：元数据、事件、mpf 标记与函数均可读取，保留源行并给出一致 warning；进入原游戏前仍应删除注释。
 - VSC/VSB 在分配输入缓冲区前检查 128 MiB 文件限制；Rust 解码没有扩展字段的音符复用 `Note.EmptyExtra`，恢复大谱面空字典共享。
 - 移除托管 BPM 包解码残留的 2,000,001 段限制，按包字节数检查数量；Rust BPM 输出仍遵守 512 MiB 包预算。

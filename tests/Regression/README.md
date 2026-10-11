@@ -1,5 +1,9 @@
 Run the CPU regression suite (no game assets, GPU or additional test packages needed):
 
+Tests use synthetic resources and explicit core/normal-cover settings; a clean
+checkout must pass without private `Assets/Catalog` or object definitions.
+Fixture paths are normalized before use in image-name maps, including on Windows.
+
 ```sh
 dotnet run --project tests/Regression -c Release
 dotnet run --project tests/Regression -c Release -- --scale
@@ -16,8 +20,10 @@ DYLD_LIBRARY_PATH="$PWD/bin/Release/net8.0" KG_RUST_ENGINE=verify dotnet run --p
 DYLD_LIBRARY_PATH="$PWD/bin/Release/net8.0" KG_RUST_ENGINE=required dotnet run --project tests/Regression -c Release -- --bpm-scale
 ```
 
-On Windows/Linux, copy `kg_native_core.dll` / `libkg_native_core.so` to
+On Windows, copy `kg_native_core.dll` to
 `tests/Regression/bin/Release/net8.0/` and set `KG_RUST_ENGINE=verify` before running.
+The GitHub Actions Rust Engine matrix covers Windows/macOS only; this does not
+add Linux application support. NativeAOT publishes Windows x64 and macOS ARM64.
 
 The score oracle implements the previous expanded judgement algorithm. Checks cover exact hit payloads, tick boundaries, fixed/variable BPM, reverse seeks, rolling scores and simultaneous judgements. Scale mode reports synthetic note/index/score construction, managed allocations, retained memory and magnet queries at 10k/100k/500k/1M notes, plus synchronized and staggered long holds with billions of logical judgements. These timings exclude audio, texture loading and GPU rendering.
 
