@@ -58,6 +58,14 @@ public static class GimmickValidation
         ValidateBpm(definition.FixedBpm);
         bool HasSprite(string name) => !string.IsNullOrWhiteSpace(name) && (definition.Sprites.ContainsKey(name)
             || definition.RequiredSprites.ContainsKey(name));
+        Require(definition.RoomLayers != null && definition.RoomLayers.Count <= 32 &&
+            definition.MaskLayers != null && definition.MaskLayers.Count <= 32, "Invalid room or mask layer count.");
+        foreach (var roomLayer in definition.RoomLayers)
+            Require(roomLayer != null && double.IsFinite(roomLayer.Alpha) && double.IsFinite(roomLayer.ScrollY) &&
+                roomLayer.Alpha >= 0 && roomLayer.Alpha <= 1 &&
+                (roomLayer.Sprite == null || HasSprite(roomLayer.Sprite)), "Invalid native room layer.");
+        foreach (var maskLayer in definition.MaskLayers)
+            ValidateDrawing(maskLayer, HasSprite);
         foreach (var requirement in definition.RequiredSprites.Values)
         {
             Require(requirement != null && requirement.Width is >= 1 and <= 4096 && requirement.Height is >= 1 and <= 4096
@@ -173,7 +181,8 @@ public static class GimmickValidation
             && drawing.Tweens.Count <= 32 && drawing.SuppressRanges != null && drawing.SuppressRanges.Count <= 64 && Finite(drawing.X, drawing.Y,
             drawing.ScaleX, drawing.ScaleY, drawing.Alpha, drawing.Angle, drawing.VelocityX, drawing.VelocityY, drawing.FramesPerSecond,
             drawing.Lifetime) && drawing.Lifetime is > 0 and <= 60 && drawing.FramesPerSecond is >= 0 and <= 1000 && drawing.Frame >= 0
-            && (drawing.EventValue == null || double.IsFinite(drawing.EventValue.Value)), "Invalid drawing sprite, stage or transform.");
+            && (drawing.EventValue == null || double.IsFinite(drawing.EventValue.Value))
+            && (drawing.FrameMod == null || !string.IsNullOrWhiteSpace(drawing.FrameMod)), "Invalid drawing sprite, stage or transform.");
         foreach (var range in drawing.SuppressRanges)
         {
             Require(range != null && Finite(range.Start, range.End) && range.Start <= range.End, "Invalid callback suppression interval.");

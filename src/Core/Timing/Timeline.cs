@@ -58,6 +58,15 @@ public sealed partial class Timeline
             // 拍 → 秒：起点查 BPM map，时长按事件起点所在分段的 BPM 折算。
             // 与原版一致，跨变速点的 tween 不重新积分，整段沿用起点的 BPM。
             double start = Bpm.Time(e.Beat), span = e.Duration * 60 / Bpm.BpmAtBeat(e.Beat);
+            // Starcrashers registers these as extraModCallbacks, NOT ordinary value tracks.
+            // v2 (e.To) supplies arg3, the particle repeat count.
+            if (c.ObjectName == "obj_starcrashers_gimmick" && e.Name is
+                "chorus_satalli_alli_particles" or "chorus_satalli_sat_particles" or "ending_coroutine")
+            {
+                Callbacks.Add(new(start, e.Name, e.To, callbackSequence++));
+                End = Math.Max(End, e.Name == "ending_coroutine" ? 222.58 : start + 8);
+                continue;
+            }
             if (LoreleiSides.IsCallback(e.Name) && Native?.Data?.Callbacks.ContainsKey(e.Name) != true)
             {
                 if (!LoreleiSides.SupportsObject(c.ObjectName))
@@ -266,7 +275,7 @@ public sealed partial class Timeline
         }
         if (Native?.Data?.CompleteObject != true && c.ObjectName is not ("obj_base_gimmick" or "obj_custom_gimmick"))
         {
-            c.Diagnostics.Add(new("renderer", 0, $"{c.ObjectName}: common mods only; its custom object renderer is not implemented."));
+            c.Diagnostics.Add(new("renderer", 0, $"{c.ObjectName}: partial native object renderer; some game-specific effects remain unimplemented."));
         }
         bool screenGlow = Tracks.Where(k => k.Key.Name == "fx_glow").SelectMany(k => k.Value).Any(s => s.To > 0 || s.Duration > 0 && s.From > 0);
         if (!File.Exists(Path.Combine(Paths.Assets, "GameFX", "sp_noise2.png")) && Native?.Supports("uhnoise") != true && c.Mods.Any(e => e.Name == "uhnoise" && (e.To != 0 || e.From != 0)))

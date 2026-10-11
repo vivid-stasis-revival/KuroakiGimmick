@@ -107,6 +107,30 @@ public sealed partial class SceneRenderer : IDisposable
             && session.Chart.Proxies > 0 && session.Chart.Mods.Any(e => e.Proxy >= 0);
         canvas.Begin(scene, RenderWidth, RenderHeight, 320, 180, new Color(0, 0, 0));
         nativeGimmick.DrawBackground(scene, session, time, effects);
+        nativeGimmick.DrawRoomLayers(scene, session, time);
+        nativeGimmick.DrawStarcrashersBehindMask(scene, session, time);
+        nativeGimmick.DrawStarcrashersLateDust(scene, session, time);
+        // Starcrashers raw stage inspection. Disabled unless explicitly requested.
+        // Stage ordering here is significant: behind-mask instances and directional
+        // dust have already drawn to scene; the mask is multiplied only afterwards.
+        string? scMaskProbe = session.Chart.ObjectName == "obj_starcrashers_gimmick"
+            ? Environment.GetEnvironmentVariable("KUROAKI_SC_MASK_VIEW") : null;
+        if (scMaskProbe == "before-mask")
+        {
+            canvas.Pass(Final, scene.Texture, canvas.Basic);
+            return;
+        }
+        nativeGimmick.DrawMask(scene, session, time);
+        if (scMaskProbe == "mask")
+        {
+            canvas.Pass(Final, nativeGimmick.StarcrashersMaskProbeTexture, canvas.Basic);
+            return;
+        }
+        if (scMaskProbe == "after-mask")
+        {
+            canvas.Pass(Final, scene.Texture, canvas.Basic);
+            return;
+        }
         nativeSequence.Backgrounds(scene, session, time, effects);
         nativeGimmick.DrawParticles(session, time);
         // 深度 801：白色底衬使深度 700 处以乘算绘制的 jacket 可见。
@@ -257,6 +281,7 @@ public sealed partial class SceneRenderer : IDisposable
             nativeGimmick.DrawGui(session, time, notes);
             nativeSequence.Gui(session, time);
             gameUi.DrawSequenceStory(session, time);
+            gameUi.DrawStarcrashersStory(session, time);
             nativeSequence.EndFade(session, time);
         }
         // 谱面内剧情不依赖原生 gimmick：任何自定义曲写了 custom_episode 都能触发，所以在门控之外。
