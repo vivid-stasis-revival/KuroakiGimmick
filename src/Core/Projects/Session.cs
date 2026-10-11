@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Diagnostics;
 
 namespace KuroakiGimmick.Core;
 
@@ -52,6 +53,15 @@ public sealed partial class Session
         Windows.WindowMotionConfig? editedWindows = null, Session? reuseAudioFrom = null, string? editedVsp = null, string? imageResourceRoot = null,
         IReadOnlyDictionary<string, string>? editedTexts = null)
     {
+        bool loadProfile = Environment.GetEnvironmentVariable("KG_LOAD_PROFILE") == "1";
+        long loadStart = Stopwatch.GetTimestamp(), lastMark = loadStart;
+        void Profile(string section)
+        {
+            if (!loadProfile) return;
+            long now = Stopwatch.GetTimestamp();
+            Console.Error.WriteLine($"[K/G Load] {section,-24} {Stopwatch.GetElapsedTime(lastMark, now).TotalMilliseconds,9:F2} ms   elapsed={Stopwatch.GetElapsedTime(loadStart, now).TotalMilliseconds:F2} ms");
+            lastMark = now;
+        }
         Project = p;
         ProjectPath = projectPath;
         p.GameUiFont = string.IsNullOrWhiteSpace(p.GameUiFont) ? ViewerSettings.DefaultFont : ViewerSettings.FontResource(p.GameUiFont);
@@ -69,6 +79,16 @@ public sealed partial class Session
         {
             throw new InvalidDataException("Invalid viewer settings: alignment 0/1, supported render width, volume 0..1 and delays -2000..2000 ms required.");
         }
+        // Audio is independent of the chart's scene metadata. Begin it after validation
+        // and overlap the expensive decode with chart/asset metadata work.
+        string? audioPath = p.Audio;
+        AudioData? previousAudio = reuseAudioFrom?.Project.Audio == audioPath ? reuseAudioFrom?.Audio : null;
+        bool parallel = OptimizationEngineSettings.ParallelLoading && audioPath != null && previousAudio == null;
+        string audioEngine = OptimizationEngineSettings.AudioMode;
+        bool audioCache = OptimizationEngineSettings.AudioCache;
+        long audioStarted = Stopwatch.GetTimestamp();
+        System.Threading.Tasks.Task<AudioData>? audioJob = parallel
+            ? System.Threading.Tasks.Task.Run(() => AudioData.Decode(audioPath!, audioEngine, audioCache)) : null;
         Chart = p.Chart == null ? new Chart
         {
             Title = p.Title ?? Path.GetFileNameWithoutExtension(p.Gimmick ?? "UNTITLED")
@@ -79,6 +99,7 @@ public sealed partial class Session
             VsmReader.ReplaceModsText(Chart, editedVsm, p.Gimmick ?? "editor.vsm");
         else if (p.Gimmick != null)
             VsmReader.ReplaceMods(Chart, p.Gimmick);
+        Profile("VSC/VSB + VSM parse");
         WindowMotion = editedWindows ?? Windows.WindowMotionConfig.Load(p, Chart);
         if (editedWindows != null) editedWindows.Validate(Chart);
         // 只载入资源元数据、图片尺寸和 shader 文本并按组件记录错误，此处不创建任何 GPU 纹理。
@@ -115,20 +136,27 @@ public sealed partial class Session
         {
             p.Bpm = initialBpm;
         }
+        Profile("Assets + scene metadata");
         if (p.Audio != null)
         {
             try
             {
                 // 同一路径的音频从上一个会话直接复用：编辑器每改一次参数都重建会话，重复解码会让交互停顿。
-                Audio = reuseAudioFrom?.Project.Audio == p.Audio ? reuseAudioFrom.Audio : AudioData.Decode(p.Audio);
+                Audio = previousAudio ?? (audioJob != null
+                    ? audioJob.GetAwaiter().GetResult() : AudioData.Decode(p.Audio, audioEngine, audioCache));
             }
             catch (Exception ex)
             {
+                if (Environment.GetEnvironmentVariable("KG_RUST_AUDIO_REQUIRED") == "1") throw;
                 // 音频失败不阻断预览，但记为错误诊断——strict 模式据此给出非零退出码。
                 Chart.Diagnostics.Add(new("audio", 0, "Audio unavailable: " + ex.Message, true));
             }
         }
+        if (loadProfile && audioPath != null)
+            Console.Error.WriteLine($"[K/G Audio] engine={audioEngine} parallel={parallel} cache={audioCache} wall={Stopwatch.GetElapsedTime(audioStarted).TotalMilliseconds:F2} ms");
+        Profile("Audio decode/reuse (wait)");
         Timeline = new(Chart, p, Audio?.Duration ?? Chart.Duration, Fx, NativeGimmick);
+        Profile("Timeline construct");
         // 判定表依赖 BpmMap 求长条的每拍毫秒数，所以必须排在 Timeline 之后。
         Score = new(Chart, Timeline.Bpm);
         NoteIndex = new(Chart.Notes);
@@ -138,6 +166,7 @@ public sealed partial class Session
             Texts.Tracks.SelectMany(t => t.Cues).Select(c => Timeline.Bpm.Time(c.Beat) + 4).DefaultIfEmpty(0).Max());
         Playback = new(Chart, Timeline.Bpm, SongFiles.Config(p, "ENABLE_MUSIC_CONTROL"));
         Stars = new(Timeline, Chart, Duration, Chart.ObjectName == "obj_custom_gimmick" && SongFiles.Config(p, "ENABLE_STARPARTICLE", false));
+        Profile("Score/index/playback");
         // 区间展开后 tween 越过歌曲末尾是合法的。
         // 保留它并在 Report 中如实给出时间事实，这不算不兼容。
     }

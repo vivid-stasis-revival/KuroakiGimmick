@@ -3,6 +3,7 @@
 set -euo pipefail
 KG_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KG_DOTNET="${KUROAKI_DOTNET:-dotnet}"
+. "$(dirname "${BASH_SOURCE[0]}")/rust-native-common.sh"
 KG_STAGE=''
 kg_cleanup() { if [ -n "${KG_STAGE}" ] && [ -d "${KG_STAGE}" ]; then rm -rf -- "${KG_STAGE}"; fi; }
 trap kg_cleanup EXIT
@@ -45,12 +46,13 @@ kg_publish() {
         "-p:IncludeNativeLibrariesForSelfExtract=${single_file}" -p:PublishTrimmed=false \
         -p:PublishReadyToRun=false -p:DebugType=None -p:DebugSymbols=false \
         "-p:NuGetLockFilePath=${KG_STAGE}/publish.lock.json" 2>&1 | tee "${log}"
+    kg_rust_publish "${rid}" "${binary}"
     case "${rid}" in
         osx-*)
+            [ -s "${binary}/libkg_native_core.dylib" ] || { echo "缺少 macOS Rust 原生库。" >&2; return 1; }
             [ -f "${binary}/KuroakiGimmick" ] || { echo '发布结果缺少 macOS apphost。' >&2; return 1; }
-            # 单文件包必须只有一个可执行文件：散落的 .dylib / .deps.json 说明
-            # PublishSingleFile 没生效，那正是这一步要拦住的回归。
-            macos_executable="$(find "${binary}" -maxdepth 1 -type f -perm -u+x | wc -l | tr -d ' ')"
+            # 单文件托管程序只有一个主可执行文件；kg_native_core.dylib 是必须同目录分发的 Rust 库。
+            macos_executable="$(find "${binary}" -maxdepth 1 -type f -perm -u+x ! -name '*.dylib' | wc -l | tr -d ' ')"
             [ "${macos_executable}" = '1' ] || { echo "macOS 单文件包应只有 1 个可执行文件，实际 ${macos_executable} 个。" >&2; return 1; }
             mkdir -p "${package}/KuroakiGimmick.app/Contents/Resources"
             cp "${KG_ROOT}/Assets/App/Kuroaki.icns" "${package}/KuroakiGimmick.app/Contents/Resources/Kuroaki.icns"
@@ -77,6 +79,7 @@ PLIST
             chmod +x "${binary}/KuroakiGimmick"
             ;;
         win-*)
+            [ -s "${binary}/kg_native_core.dll" ] || { echo "缺少 Windows Rust 原生库。" >&2; return 1; }
             [ -f "${binary}/KuroakiGimmick.exe" ] || { echo '发布结果缺少 Windows 单文件程序。' >&2; return 1; }
             ;;
     esac
@@ -88,8 +91,10 @@ PLIST
     for reference_asset in vsm-reference.json; do
         [ -f "${package}/Assets/Documentation/${reference_asset}" ] || { echo "发布结果缺少语法手册：${reference_asset}" >&2; return 1; }
     done
-    for item in README.md CHANGELOG.md THIRD_PARTY_NOTICES.md; do cp "${KG_ROOT}/${item}" "${package}/${item}"; done
+    for item in README.md CHANGELOG.md THIRD_PARTY_NOTICES.md OPTIMIZATION_ENGINE.md RUSTBRIDGE.md RUSTBRIDGE_ENGINE.md RUST_RUNTIME_V030.md RUSTBRIDGE_CHANGELOG.md; do cp "${KG_ROOT}/${item}" "${package}/${item}"; done
     cp -R "${KG_ROOT}/ThirdParty" "${package}/ThirdParty"
+    mkdir -p "${package}/tests/Regression"
+    cp "${KG_ROOT}/tests/Regression/README.md" "${package}/tests/Regression/README.md"
     mkdir -p "${package}/docs"
     # FFmpeg is optional for preview, required for video export. If explicitly
     # supplied, the caller must provide a binary for the TARGET architecture.

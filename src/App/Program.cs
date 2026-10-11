@@ -3,6 +3,7 @@ using KuroakiGimmick.Core;
 using KuroakiGimmick.Graphics;
 using KuroakiGimmick.Native;
 using KuroakiGimmick.UI;
+using KuroakiGimmick.Bridge;
 
 namespace KuroakiGimmick;
 
@@ -21,7 +22,7 @@ internal static class Program
         CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
         CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
         // 这一串是所有无人值守模式（自测、检查、导出、截图）。cli 为真时失败只写 stderr，不弹消息框卡住脚本。
-        bool cli = args.Any(a => a is "--inspect" or "--render" or "--snapshot" or "--card" or "--smoke-ui" or "--smoke-startup" or "--smoke-mac-menu" or "--smoke-windows-menu" or "--smoke-text-ui" or "--smoke-i18n");
+        bool cli = args.Any(a => a is "--inspect" or "--render" or "--snapshot" or "--card" or "--smoke-ui" or "--smoke-startup" or "--smoke-mac-menu" or "--smoke-windows-menu" or "--smoke-text-ui" or "--smoke-i18n" or "--rust-engine-test" or "--rust-timeline-test" or "--rust-bridge-test" or "--rust-audio-test");
         try
         {
             // 后端覆盖必须早于任何 GPU 设备创建；否则显式 --force-vulkan 仍可能先创建平台默认后端。
@@ -35,6 +36,26 @@ internal static class Program
             if (args.Contains("--help") || args.Contains("-h"))
             {
                 Console.WriteLine(Help);
+                return 0;
+            }
+            if (args.Contains("--rust-audio-test"))
+            {
+                OptimizationAudioBridge.SelfTest();
+                return 0;
+            }
+            if (args.Contains("--rust-engine-test"))
+            {
+                RustEngineBridge.SelfTest();
+                return 0;
+            }
+            if (args.Contains("--rust-timeline-test"))
+            {
+                RustTimelineBridge.SelfTest();
+                return 0;
+            }
+            if (args.Contains("--rust-bridge-test"))
+            {
+                RustNoteBridge.SelfTest();
                 return 0;
             }
             var options = Parse(args);
@@ -368,6 +389,16 @@ internal static class Program
     UI language: --language auto|zh-CN|en (also available in Settings)
     UI localization check: --smoke-i18n [--editor] --out i18n.ppm
     KuroakiGimmick --editor Samples/EditorDemo/demo.sgv.json
+    Native self-tests (no SDL): --rust-bridge-test (motion), --rust-engine-test (VSC/VSM/BPM),
+                               --rust-timeline-test (tracks), --rust-audio-test (PCM decode).
+    Engine overrides (set before launch; override Settings > Performance):
+      KG_RUST_ENGINE=auto|off|verify|required (default auto; compatibility preference selects off)
+      KG_RUST_BRIDGE=auto|off|verify|required (note motion; default follows calculation engine)
+      KG_AUDIO_ENGINE=optimization|nvorbis (default optimization; legacy uses NVorbis/FFmpeg)
+      KG_AUDIO_CACHE=0|1 / KG_PARALLEL_LOADING=0|1 (default 1)
+      KG_RUST_AUDIO_REQUIRED=1 (fail on native decode errors in optimization mode)
+      KG_LOAD_PROFILE=1 / KG_RUST_TIMELINE_PROFILE=1 (load/frame timing logs)
+    Rust engine/timeline/audio tests require a matching kg_native_core sidecar library.
     KuroakiGimmick --manual [--reference vsm.row.57]
     KuroakiGimmick --manual --reference vsm.row.57 --snapshot --out reference.ppm
     KuroakiGimmick /path/project.sgv.json --smoke-text-ui --time 0 --out text-ui.ppm

@@ -27,6 +27,11 @@ public sealed class BpmMap
         IsFixed = fixedBpm.HasValue;
         // offset 只在这里从毫秒转成秒并保存一次，Time/Beat 各自加减一次，别处不得重复应用。
         offset = offsetMs / 1000;
+        if (RustEngineBridge.TryBuildBpm(chart, bpm, offsetMs, fixedBpm, out var nativeSegments) && nativeSegments != null)
+        {
+            Segments.AddRange(nativeSegments);
+            return;
+        }
         Segments.Add(new(0, 0, fixedBpm ?? bpm));
         if (IsFixed)
         {

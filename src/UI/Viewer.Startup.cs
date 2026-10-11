@@ -149,7 +149,7 @@ public sealed partial class Viewer
             DrawStartupTip(left, card.Y + 342, split - left - 25, card.Y + card.H - 90);
             if (Button(L.Get("SETTINGS"), new(left, card.Y + card.H - 69, split - left - 24, 34)))
             {
-                startup = false; settings = true; click = false;
+                startup = false; OpenSettings(); click = false;
             }
 
             Canvas.Fill(new(split, card.Y + 126, 1, card.H - 154), line);

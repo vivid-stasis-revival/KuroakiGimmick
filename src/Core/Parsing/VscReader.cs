@@ -10,6 +10,14 @@ public static class VscReader
 {
     public static Chart Load(string path)
     {
+        if (RustEngineBridge.TryLoadVsc(path, out var native) && native is not null)
+            return native;
+        return LoadOriginal(path);
+    }
+
+    // C# remains the authoritative compatibility fallback and verify oracle.
+    internal static Chart LoadOriginal(string path)
+    {
         if (new FileInfo(path).Length > 128 * 1024 * 1024)
         {
             throw new InvalidDataException("VSC exceeds 128 MiB.");
@@ -106,10 +114,6 @@ public static class VscReader
                     }
                 }
                 chart.Notes.Add(new(time, type, lane, end, extra ?? Note.EmptyExtra, modExtra));
-                if (chart.Notes.Count > 2_000_000)
-                {
-                    throw new InvalidDataException("Too many VSC notes.");
-                }
             }
             catch (Exception ex) when (ex is FormatException or OverflowException)
             {

@@ -1,5 +1,6 @@
 using System.Numerics;
 using KuroakiGimmick.Core;
+using KuroakiGimmick.Bridge;
 
 namespace KuroakiGimmick.Graphics;
 
@@ -45,6 +46,18 @@ public sealed partial class SceneRenderer : IDisposable
     readonly double[] noteYOffsetCache = new double[8];
     readonly double[] noteBoostTimeCache = new double[8];
     readonly double[] noteBoostDistanceCache = new double[8];
+    readonly List<Note> rustNoteCandidates = [];
+    RustNoteBridge.MotionInput[] rustMotionInputs = new RustNoteBridge.MotionInput[256];
+    RustNoteBridge.MotionOutput[] rustMotionOutputs = new RustNoteBridge.MotionOutput[256];
+    void EnsureRustMotionCapacity(int required)
+    {
+        if (rustMotionInputs.Length >= required) return;
+        int length = rustMotionInputs.Length;
+        while (length < required) length = checked(length * 2);
+        Array.Resize(ref rustMotionInputs, length);
+        Array.Resize(ref rustMotionOutputs, length);
+    }
+
     // slash_anycol 持续区间每帧只展开当前仍可见的实例；复用列表避免渲染循环反复分配。
     readonly List<(double Time, uint Seed, int Index)> slashInstanceCache = [];
     Texture? jacketTexture;
@@ -87,6 +100,9 @@ public sealed partial class SceneRenderer : IDisposable
     /// </summary>
     public void Render(Session session, double time, bool notes = true, bool effects = true)
     {
+        // Evaluate every native timeline track in one batch, before the first draw.
+        // C# remains authoritative for aliases, callbacks, frame bindings and fades.
+        session.Timeline.PrepareFrame(time);
         int width = ViewerSettings.ValidWidth(session.Project.RenderWidth), height = width * 9 / 16;
         if (RenderWidth != width)
         {

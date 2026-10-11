@@ -18,8 +18,12 @@ public sealed record AudioData(float[] Samples, int Rate, int Channels)
     }
     /// <summary>时长由采样数推导，单位秒；不读设备状态，也不随窗口刷新率变化。</summary>
     public double Duration => Samples.Length / (double)(Rate * Channels);
-    public static AudioData Decode(string path)
+    public static AudioData Decode(string path) => Decode(path, OptimizationEngineSettings.AudioMode, OptimizationEngineSettings.AudioCache);
+    internal static AudioData Decode(string path, string engine, bool cache)
     {
+        if (engine == "optimization" && OptimizationAudioBridge.TryDecode(path, cache, out var native) && native != null)
+            return native;
+        Console.Error.WriteLine("[KG Audio] engine=legacy (NVorbis for OGG, FFmpeg for other formats)");
         if (Path.GetExtension(path).Equals(".ogg", StringComparison.OrdinalIgnoreCase))
         {
             using var reader = new NVorbis.VorbisReader(path);

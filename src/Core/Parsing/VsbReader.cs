@@ -10,6 +10,13 @@ public static class VsbReader
 {
     public static Chart Load(string path, string? definitionPath = null, string profile = "auto")
     {
+        if (RustEngineBridge.TryLoadVsb(path, definitionPath, profile, out var native) && native != null)
+            return native;
+        return LoadOriginal(path, definitionPath, profile);
+    }
+
+    internal static Chart LoadOriginal(string path, string? definitionPath = null, string profile = "auto")
+    {
         if (new FileInfo(path).Length > 128 * 1024 * 1024)
         {
             throw new InvalidDataException("VSB exceeds the 128 MiB limit.");
@@ -57,10 +64,6 @@ public static class VsbReader
                                 throw Bad(r, f);
                             }
                             ReadNote(r, c);
-                            if (c.Notes.Count > 2_000_000)
-                            {
-                                throw new InvalidDataException("Too many notes.");
-                            }
                         }
                         break;
                     case 224:

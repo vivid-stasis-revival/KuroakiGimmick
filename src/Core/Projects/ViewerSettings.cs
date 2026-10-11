@@ -21,6 +21,13 @@ public sealed class ViewerSettings
         _ => value
     };
     public WorkspaceLayout Workspace { get; set; } = new();
+    // Device-local performance preferences (never saved into a song project).
+    public string CalculationEngine { get; set; } = "optimization";
+    public string AudioEngine { get; set; } = "optimization";
+    public bool ParallelLoading { get; set; } = true;
+    public bool DecodedAudioCache { get; set; } = true;
+    public static string ValidCalculationEngine(string? name) => name == "compatibility" ? "compatibility" : "optimization";
+    public static string ValidAudioEngine(string? name) => name == "nvorbis" ? "nvorbis" : "optimization";
     public bool UiAnimations { get; set; } = true;
     public string UiLanguage { get; set; } = Core.UiLanguage.Auto;
     /// <summary>
@@ -138,6 +145,8 @@ public sealed class ViewerSettings
             }
             var settings = AppJson.Deserialize<ViewerSettings>(data?.ToJsonString() ?? "null", ViewerProject.Json) ?? new();
             settings.Workspace ??= new(); settings.Workspace.Normalize(); settings.UiTheme = ValidTheme(settings.UiTheme);
+            settings.CalculationEngine = ValidCalculationEngine(settings.CalculationEngine);
+            settings.AudioEngine = ValidAudioEngine(settings.AudioEngine);
             settings.UiLanguage = Core.UiLanguage.Normalize(settings.UiLanguage);
             settings.NormalizeRecentProjects();
             return settings;
@@ -170,6 +179,7 @@ public sealed class ViewerSettings
     public void Save(ViewerProject p, string? path = null)
     {
         Workspace ??= new(); Workspace.Normalize(); UiTheme = ValidTheme(UiTheme);
+        CalculationEngine = ValidCalculationEngine(CalculationEngine); AudioEngine = ValidAudioEngine(AudioEngine);
         UiLanguage = Core.UiLanguage.Normalize(UiLanguage);
         NoteAlignment = p.NoteAlignment;
         RenderWidth = p.RenderWidth;
@@ -189,6 +199,7 @@ public sealed class ViewerSettings
     public void Persist(string? path = null)
     {
         Workspace ??= new(); Workspace.Normalize(); UiTheme = ValidTheme(UiTheme);
+        CalculationEngine = ValidCalculationEngine(CalculationEngine); AudioEngine = ValidAudioEngine(AudioEngine);
         UiLanguage = Core.UiLanguage.Normalize(UiLanguage);
         NormalizeRecentProjects();
         path ??= SettingsPath;

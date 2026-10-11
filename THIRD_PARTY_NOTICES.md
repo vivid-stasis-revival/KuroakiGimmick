@@ -10,6 +10,7 @@
 | Shaderc native | Silk.NET.Shaderc.Native 2.23.0 | Apache-2.0; shaderc, glslang, SPIRV-Tools and SPIRV-Headers notices under ThirdParty |
 | SPIRV-Cross native | Silk.NET.SPIRV.Cross.Native 2.23.0 | Apache-2.0 / MIT; included license |
 | Silk.NET native packaging | 2.23.0 | MIT; included license |
+| Symphonia | 0.5.4 facade; enabled 0.5.x codec/container components resolved by Cargo | MPL-2.0; original Rust source is unmodified; source and license references in ThirdParty/Symphonia-NOTICE.txt |
 | NVorbis | 0.10.5 | MIT, included notice |
 | StbImageSharp | 2.30.16 | Public domain / MIT; included license |
 | StbImageWriteSharp | 1.16.7 | Public domain / MIT; included license; used to encode exported info cards as PNG |

@@ -5,6 +5,20 @@ dotnet run --project tests/Regression -c Release
 dotnet run --project tests/Regression -c Release -- --scale
 ```
 
+Engine checks cover VSM trailing-comment warnings, matching C#/Rust diagnostics,
+LF/CRLF/CR input, and oversized VSC/VSB rejection before large buffer allocation.
+The existing parser checks require all notes without extras to share `Note.EmptyExtra`.
+Build with `bash scripts/build-rustbridge.sh` first, then run native regressions on macOS:
+
+```sh
+DYLD_LIBRARY_PATH="$PWD/bin/Release/net8.0" KG_RUST_ENGINE=verify dotnet run --project tests/Regression -c Release
+# Optional high-memory boundary check (over two million BPM changes; requires native library):
+DYLD_LIBRARY_PATH="$PWD/bin/Release/net8.0" KG_RUST_ENGINE=required dotnet run --project tests/Regression -c Release -- --bpm-scale
+```
+
+On Windows/Linux, copy `kg_native_core.dll` / `libkg_native_core.so` to
+`tests/Regression/bin/Release/net8.0/` and set `KG_RUST_ENGINE=verify` before running.
+
 The score oracle implements the previous expanded judgement algorithm. Checks cover exact hit payloads, tick boundaries, fixed/variable BPM, reverse seeks, rolling scores and simultaneous judgements. Scale mode reports synthetic note/index/score construction, managed allocations, retained memory and magnet queries at 10k/100k/500k/1M notes, plus synchronized and staggered long holds with billions of logical judgements. These timings exclude audio, texture loading and GPU rendering.
 
 Issue checks also cover the supplied LR Extra Gimmicks callback/colour contract, zero Custom mod weights, dependency-only Chart Folder exports, staged image names, save/reopen/export, unchanged backup locations and the Windows hidden flag (when run on Windows).

@@ -886,5 +886,21 @@
   "Proxy picker legend": "a = 当前 PRA   * = 有事件 / 画面仍合成全部 Proxy",
   "SELECTED PROXY HIDDEN": "本 P 隐藏 / 其余照常显示",
   "SELECTED PROXY OFFSCREEN": "本 P 出界 / 其余照常显示",
-  "SELECTED PROXY OUTLINE": "本 P 轮廓 / 全部仍合成"
+  "SELECTED PROXY OUTLINE": "本 P 轮廓 / 全部仍合成",
+  "General": "概览",
+  "Audio & Sync": "音频与同步",
+  "Display": "显示",
+  "Interface": "界面",
+  "Workflow": "工作流",
+  "Performance": "性能优化",
+  "Export": "导出",
+  "Calculation Engine": "计算引擎",
+  "Audio Engine": "音频引擎",
+  "Parallel Loading": "并行加载",
+  "Decoded Audio Cache": "音频解码缓存",
+  "Changes apply when opening the next chart. Debug environment overrides take priority.": "下次打开谱面时生效。调试环境变量优先。",
+  "Memory + disk PCM cache; stored in the application cache directory.": "内存与磁盘 PCM 缓存，保存在应用缓存目录。",
+  "RESET PERFORMANCE": "重置性能选项",
+  "ENABLED": "已启用",
+  "DISABLED": "已禁用"
 }

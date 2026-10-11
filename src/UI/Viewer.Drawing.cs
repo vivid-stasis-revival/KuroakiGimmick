@@ -62,8 +62,7 @@ public sealed partial class Viewer
         { ToggleWorkspace(); click = false; }
         if (Button(L.Get("SETTINGS"), new(w - 308, 25, 102, 31), enabled: !Busy))
         {
-            settings = true;
-            help = false;
+            OpenSettings();
         }
         if (Button(L.Get("HELP  H"), new(w - 196, 25, 78, 31)))
         {

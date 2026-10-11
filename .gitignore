@@ -39,3 +39,7 @@ __pycache__/
 # Standalone regression runner outputs.
 /tests/**/bin/
 /tests/**/obj/
+
+# RustBridge artifacts
+/rust/**/target/
+/rust/**/Cargo.lock

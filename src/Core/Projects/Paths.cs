@@ -8,9 +8,9 @@ namespace KuroakiGimmick.Core;
 /// </summary>
 public static class Paths
 {
-    public const string Version = "0.1.4";
-    public const string BuildNumber = "17.7.1";
-    public const string StableBuildRevision = "v0.1.4 / 17.7.1";
+    public const string Version = "0.1.5";
+    public const string BuildNumber = "18.0";
+    public const string StableBuildRevision = "v0.1.5 / 18.0";
     /// <summary>
     /// UI/CLI 显示的构建标识来自程序集 InformationalVersion。CI 可注入 "Nightly / &lt;sha&gt;"，
     /// 正式/本地构建缺省为 StableBuildRevision；避免每次发布还要在多个源码文件里手改版本字符串。
