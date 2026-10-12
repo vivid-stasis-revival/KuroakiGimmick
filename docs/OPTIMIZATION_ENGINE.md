@@ -25,8 +25,8 @@ bash scripts/build-rustbridge.sh
 
 The scripts run Rust unit tests, build the cdylib and C# app, place the native
 library beside the managed executable, then run motion, parser/BPM, Timeline and
-audio self-tests without SDL. CPU regression instructions are in
-[tests/Regression/README.md](tests/Regression/README.md).
+audio self-tests without SDL. Standalone CPU regression projects are retained
+only in the local `tests` workspace and are not tracked or packaged.
 
 A plain `dotnet build` compiles C# only; without the native library, auto mode
 reports the reason and uses the compatibility path. It does not validate Rust.

@@ -36,9 +36,8 @@ __MACOSX/
 __pycache__/
 *.py[cod]
 
-# Standalone regression runner outputs.
-/tests/**/bin/
-/tests/**/obj/
+# Local-only test projects and measurement logs.
+/tests/
 
 # RustBridge artifacts
 /rust/**/target/

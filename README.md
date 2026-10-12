@@ -711,8 +711,7 @@ KuroakiGimmick/
 ├── rust/
 │   └── kg-native-core/
 │
-├── tests/
-│   └── Regression/
+├── docs/
 │
 ├── scripts/
 │
@@ -772,7 +771,7 @@ KuroakiGimmick/
 - 发布脚本
 - NativeAOT 构建脚本
 
-公开源码包含不依赖游戏素材的 CPU 回归与 Rust 原生自测，说明见 [tests/Regression/README.md](tests/Regression/README.md)。不包含内部游戏资源 Dump 脚本。
+公开源码保留 Rust 单元测试和程序内置的无窗口自测（`--rust-bridge-test`、`--rust-engine-test`、`--rust-timeline-test`、`--rust-audio-test`），CI 在 Windows / macOS 上运行。独立的 `tests` 工作区与性能测试记录仅保留本地，不随 Git 仓库或发行包分发。发行包不包含 `docs` 目录；应用内 VSM 手册使用运行时资源。
 
 ## 第三方组件
 

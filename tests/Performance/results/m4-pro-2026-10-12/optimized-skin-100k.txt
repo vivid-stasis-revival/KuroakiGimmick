@@ -1,9 +1,0 @@
-2026-10-12 19:14:25.888 dotnet[976:11807226] ApplePersistence=NO
-[Kuroaki/GPU] backend=metal, shaderFormats=Msl, MetalLib
-[Kuroaki/GPU] device=Apple M4 Pro, driver=unknown, version=unknown
-Note skin: vividstasis-default-note-skin-exact-lanes-v2 / exact lanes / skins: normal, stopmotion, extendnova, stargazers @ <repo>/tests/Performance/bin/Release/net8.0/Assets/NoteSkinFull/NotesExact
-SDL_GPU / metal skin N=100000 CPU record+submit: samples=12 mean=7.464ms P50=10.135ms P95=11.671ms P99=11.671ms max=11.671ms throughput=133.97/s
-fence-completed frame+readback: samples=12 mean=18.878ms P50=20.308ms P95=25.040ms P99=25.040ms max=25.040ms throughput=52.97/s
-recordedBatches/frame=2 uploadBytes/frame=6400000 drawCalls/frame=1
-allocation/frame=925008B sampledPeakWorkingSet=459.9MiB processCpu=0.190s
-{"sampleWindow":4096,"stages":{"Frame":{"count":12,"meanMs":18.878100000000003,"p50Ms":20.3083,"p95Ms":25.0403,"p99Ms":25.0403,"maxMs":25.0403},"GpuRecord":{"count":14,"meanMs":0.1986357142857143,"p50Ms":0.03,"p95Ms":1.8305,"p99Ms":1.8305,"maxMs":1.8305},"GpuUpload":{"count":14,"meanMs":0.3454,"p50Ms":0.1439,"p95Ms":1.2542,"p99Ms":1.2542,"maxMs":1.2542},"GpuSubmit":{"count":14,"meanMs":0.0352,"p50Ms":0.0294,"p95Ms":0.1089,"p99Ms":0.1089,"maxMs":0.1089},"GpuWait":{"count":53,"meanMs":3.2411113207547166,"p50Ms":0.0058,"p95Ms":13.1925,"p99Ms":24.8891,"maxMs":24.8891}},"counters":{"Candidates":0,"VisibleNotes":0,"DrawCalls":14,"Batches":28,"UploadBytes":89600000,"AudioUnderruns":0,"Readbacks":0,"EncodedFrames":0,"AllocatedBytes":51801072,"GcCollections":27,"GcPauseMicroseconds":1334},"workingSet":482983936}

@@ -2,6 +2,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 kg_root="$(pwd -P)"
+# Standalone test projects are local-only and are not distributed with this repository.
+if [ ! -f tests/Performance/Performance.csproj ] || [ ! -f tests/Regression/Regression.csproj ]; then
+    echo 'This script requires the local tests workspace; tests are not included in the Git repository.' >&2
+    exit 2
+fi
 kg_results="${1:-$kg_root/tests/Performance/results/local}"
 mkdir -p "$kg_results"
 cargo test --manifest-path rust/kg-native-core/Cargo.toml > "$kg_results/rust-tests.txt" 2>&1

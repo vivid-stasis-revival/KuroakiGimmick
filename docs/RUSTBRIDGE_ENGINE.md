@@ -47,8 +47,8 @@ KG_RUST_ENGINE=verify dotnet run -c Release --no-build -- --rust-engine-test
 ```
 
 The engine self-test checks actual native execution, VSC/VSM/BPM parity, trailing
-comment warnings and informational VSC v/s anchors. The full CPU regression also
-checks VSB/VSC empty extras and rejection before reading oversized files. See
-[tests/Regression/README.md](tests/Regression/README.md) for native and optional
-high-memory BPM boundary checks. Native decode failures and unsupported input
-retain the original C# implementation in auto/verify modes.
+comment warnings and informational VSC v/s anchors. Standalone CPU regressions
+and high-memory BPM boundary checks are retained only in the local `tests`
+workspace. CI runs the application's built-in self-tests and Rust unit tests.
+Native decode failures and unsupported input retain the original C#
+implementation in auto/verify modes.

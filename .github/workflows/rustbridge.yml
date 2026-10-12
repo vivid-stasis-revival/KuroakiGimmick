@@ -12,7 +12,6 @@ on:
       - 'src/Core/Audio/**'
       - 'src/UI/**'
       - 'src/App/Program.cs'
-      - 'tests/Regression/**'
       - 'scripts/build-rustbridge*'
       - 'scripts/publish-*'
       - 'scripts/rust-native-*'
@@ -67,14 +66,6 @@ jobs:
         run: dotnet run -c Release --no-build -- --rust-audio-test
         env:
           KG_RUST_AUDIO_REQUIRED: '1'
-      - name: Full CPU regressions with native parser parity
-        shell: bash
-        run: |
-          dotnet build tests/Regression/Regression.csproj -c Release -p:PublishAot=false
-          cp "rust/kg-native-core/target/release/${{ matrix.library }}" tests/Regression/bin/Release/net8.0/
-          dotnet run --project tests/Regression -c Release --no-build
-        env:
-          KG_RUST_ENGINE: verify
       - name: NativeAOT publish (macOS ARM64)
         if: runner.os == 'macOS'
         run: dotnet publish -c Release -r osx-arm64 -p:PublishAot=true

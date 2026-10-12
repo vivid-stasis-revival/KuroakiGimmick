@@ -38,15 +38,8 @@ foreach ($Cpu in $Architectures) {
         # Other loose .dll/.deps.json/.runtimeconfig.json still indicate a broken package.
         $LooseBuildFiles = @(Get-ChildItem -LiteralPath $Package -File | Where-Object { $_.Extension -in @('.dll','.json','.pdb') -and $_.Name -ne 'kg_native_core.dll' })
         if ($LooseBuildFiles.Count -gt 0) { throw "Single-file output leaked build files: $($LooseBuildFiles.Name -join ', ')" }
-        foreach ($Item in @('README.md','CHANGELOG.md','THIRD_PARTY_NOTICES.md','OPTIMIZATION_ENGINE.md','RUSTBRIDGE.md','RUSTBRIDGE_ENGINE.md','RUST_RUNTIME_V030.md','RUSTBRIDGE_CHANGELOG.md','ThirdParty')) {
+        foreach ($Item in @('README.md','CHANGELOG.md','THIRD_PARTY_NOTICES.md','ThirdParty')) {
             Copy-Item -LiteralPath (Join-Path $ProjectRoot $Item) -Destination $Package -Recurse
-        }
-        $null = New-Item -ItemType Directory -Force -Path (Join-Path $Package 'tests/Regression')
-        Copy-Item -LiteralPath (Join-Path $ProjectRoot 'tests/Regression/README.md') -Destination (Join-Path $Package 'tests/Regression/README.md')
-        if (Test-Path (Join-Path $ProjectRoot 'docs')) {
-            Copy-Item -LiteralPath (Join-Path $ProjectRoot 'docs') -Destination $Package -Recurse
-        } else {
-            $null = New-Item -ItemType Directory -Force -Path (Join-Path $Package 'docs')
         }
         if ($env:KUROAKI_FFMPEG) {
             Copy-Item -LiteralPath $env:KUROAKI_FFMPEG -Destination (Join-Path $Package 'ffmpeg.exe')
