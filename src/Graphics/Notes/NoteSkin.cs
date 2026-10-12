@@ -14,6 +14,10 @@ public sealed class NoteSkin : IDisposable
     readonly Canvas canvas;
     Dictionary<string, Texture> textures = new(StringComparer.Ordinal);
     NoteSkinProfile profile = null!;
+    Dictionary<string, Rect> atlasRegions = new(StringComparer.Ordinal);
+    sealed record SkinFrame(NoteSkinFrame Frame, Texture Texture, Rect Uv);
+    SkinFrame?[] noteFrames = [], holdHeads = [], holdBodies = [], holdEnds = [];
+    float cachedRotation = float.NaN, cosine = 1, sine;
     public string Description => profile.Description;
     public IReadOnlyList<string> Warnings => profile.Warnings;
     public NoteSkin(Canvas canvas)
@@ -31,37 +35,31 @@ public sealed class NoteSkin : IDisposable
     public void Reload()
     {
         NoteSkinProfile next = NoteSkinProfile.Load(Paths.Assets);
-        var loaded = new Dictionary<string, Texture>(StringComparer.Ordinal);
-        try
-        {
-            foreach (var frame in next.Frames.GroupBy(f => f.File, StringComparer.Ordinal).Select(g => g.First()))
-            {
-                var texture = Texture.Load(canvas.Gpu, frame.File);
-                bool badWidth = frame.ExpectedTextureWidth is int ew && texture.Width != ew;
-                bool badHeight = frame.ExpectedTextureHeight is int eh && texture.Height != eh;
-                if (badWidth || badHeight)
-                {
-                    int aw = texture.Width, ah = texture.Height;
-                    texture.Dispose();
-                    throw new InvalidDataException($"Note texture size does not match its dump manifest: {Path.GetFileName(frame.File)} is {aw}x{ah}, expected {frame.ExpectedTextureWidth?.ToString() ?? "?"}x{frame.ExpectedTextureHeight?.ToString() ?? "?"}.");
-                }
-                loaded[frame.File] = texture;
-            }
-        }
-        catch
-        {
-            foreach (var texture in loaded.Values)
-            {
-                texture.Dispose();
-            }
-            throw;
-        }
+        var (loaded, regions) = NoteTextureAtlas.Load(canvas.Gpu, next);
         // 全部加载成功之后才整体换掉字段，最后再释放旧纹理。顺序反过来会在加载失败时
         // 留下一个既没有旧皮肤也没有新皮肤的对象。
         var old = textures;
+        canvas.Flush();
         textures = loaded;
+        atlasRegions = regions;
         profile = next;
-        foreach (var texture in old.Values)
+        SkinFrame? Wrap(NoteSkinFrame? frame)
+        {
+            if (frame == null) return null;
+            var r = regions[frame.File];
+            return new(frame, loaded[frame.File], new(r.X + frame.UvX * r.W, r.Y + frame.UvY * r.H, frame.UvW * r.W, frame.UvH * r.H));
+        }
+        noteFrames = new SkinFrame?[next.SkinNames.Count * 36];
+        holdHeads = new SkinFrame?[next.SkinNames.Count * 4]; holdBodies = new SkinFrame?[holdHeads.Length]; holdEnds = new SkinFrame?[holdHeads.Length];
+        for (int skin = 0; skin < next.SkinNames.Count; skin++)
+            for (int lane = 0; lane < 4; lane++)
+            {
+                int i = skin * 36 + lane, h = skin * 4 + lane;
+                noteFrames[i] = Wrap(next.Chip(lane, skin)); noteFrames[i + 24] = Wrap(next.ChipMine(lane, skin));
+                if (lane < 3) { noteFrames[i + 4] = Wrap(next.Bumper(lane, skin)); noteFrames[i + 28] = Wrap(next.BumperMine(lane, skin)); noteFrames[i + 32] = Wrap(next.JudgeBumper(lane, skin)); }
+                holdHeads[h] = Wrap(next.HoldHead(lane, skin)); holdBodies[h] = Wrap(next.HoldBody(lane, skin)); holdEnds[h] = Wrap(next.HoldEnd(lane, skin));
+            }
+        foreach (var texture in old.Values.Distinct())
         {
             texture.Dispose();
         }
@@ -131,15 +129,7 @@ public sealed class NoteSkin : IDisposable
     public void Note(int type, int lane, float x, float y, double alpha, float rotation, int skin = 0)
     {
         bool bumper = type is 1 or 7 or 8;
-        NoteSkinFrame? frame = type switch
-        {
-            0 => profile.Chip(lane, skin),
-            1 => profile.Bumper(lane, skin),
-            6 => profile.ChipMine(lane, skin),
-            7 => profile.BumperMine(lane, skin),
-            8 => profile.JudgeBumper(lane, skin),
-            _ => null
-        };
+        SkinFrame? frame = CachedNote(type, lane, skin);
         if (frame == null)
         {
             return;
@@ -179,45 +169,72 @@ public sealed class NoteSkin : IDisposable
         }
         float bodyTop = top + 4, bodyBottom = pressed ? bottom + 4 : bottom - 3;
         float visibleTop = Math.Max(-8, bodyTop), visibleBottom = Math.Min(188, bodyBottom);
-        if (visibleBottom > visibleTop && profile.HoldBody(lane, skin) is { } body)
+        if (visibleBottom > visibleTop && CachedHold(holdBodies, lane, skin) is { } body)
         {
             float relY = (visibleTop - bodyTop) / (bodyBottom - bodyTop);
             float relH = (visibleBottom - visibleTop) / (bodyBottom - bodyTop);
             var uv = RelativeUv(body, 0, relY, 1, relH);
-            canvas.Quad(GetTexture(body), new(x + body.LocalX, visibleTop, body.Width, visibleBottom - visibleTop), Color.White.Alpha(alpha), uv);
+            canvas.NoteSprite(body.Texture, x + body.Frame.LocalX, visibleTop, new(0, 0, body.Frame.Width, visibleBottom - visibleTop), Color.White.Alpha(alpha), uv);
         }
-        Draw(profile.HoldHead(lane, skin), x, top, alpha, 0);
+        Draw(CachedHold(holdHeads, lane, skin), x, top, alpha, 0);
         if (!pressed)
         {
-            Draw(profile.HoldEnd(lane, skin), x, bottom, alpha, 0);
+            Draw(CachedHold(holdEnds, lane, skin), x, bottom, alpha, 0);
         }
     }
 
-    Texture GetTexture(NoteSkinFrame frame) => textures[frame.File];
-    void Draw(NoteSkinFrame? frame, float x, float y, double alpha, float rotation)
+    int Skin(int skin) => skin > 0 && skin < profile.SkinNames.Count ? skin : 0;
+    SkinFrame? CachedNote(int type, int lane, int skin)
     {
-        if (frame == null || alpha <= 0)
+        if (type is not (0 or 1 or 6 or 7 or 8)) return null;
+        if (lane >= 0 && lane < (type is 1 or 7 or 8 ? 3 : 4)) return noteFrames[Skin(skin) * 36 + type * 4 + lane];
+        // Compatibility for API callers with unusual chip lanes; bumper's previous argument validation is retained.
+        var f = type switch { 0 => profile.Chip(lane, skin), 1 => profile.Bumper(lane, skin), 6 => profile.ChipMine(lane, skin),
+            7 => profile.BumperMine(lane, skin), _ => profile.JudgeBumper(lane, skin) };
+        return f == null ? null : new(f, textures[f.File], OriginalFrameUv(f));
+    }
+    SkinFrame? CachedHold(SkinFrame?[] frames, int lane, int skin) => frames[Skin(skin) * 4 + Math.Clamp(lane, 0, 3)];
+    void Draw(SkinFrame? draw, float x, float y, double alpha, float rotation)
+    {
+        if (draw == null || alpha <= 0)
         {
             return;
         }
+        var frame = draw.Frame;
         // LocalX/Y 已经包含 GameMaker 的 TargetX/Y 和精灵原点，不要再加一遍。紧凑 v1 用的是
         // 完整的带留白帧；原始源 v2 可能只取图集里的一块子矩形，再放回原始包围盒内的位置。
-        var transform = Matrix3x2.CreateRotation(-rotation * MathF.PI / 180) * Matrix3x2.CreateTranslation(x, y);
-        var a = new Vector2(frame.LocalX, frame.LocalY);
-        var b = new Vector2(frame.LocalX + frame.Width, frame.LocalY);
-        var c = new Vector2(frame.LocalX, frame.LocalY + frame.Height);
-        var d = new Vector2(frame.LocalX + frame.Width, frame.LocalY + frame.Height);
-        canvas.Polygon(GetTexture(frame), Vector2.Transform(a, transform), Vector2.Transform(b, transform), Vector2.Transform(c, transform),
-            Vector2.Transform(d, transform), Color.White.Alpha(alpha), FrameUv(frame));
+        if (canvas.NoteInstances == null)
+        {
+            var transform = Matrix3x2.CreateRotation(-rotation * MathF.PI / 180) * Matrix3x2.CreateTranslation(x, y);
+            canvas.Polygon(draw.Texture, Vector2.Transform(new(frame.LocalX, frame.LocalY), transform),
+                Vector2.Transform(new(frame.LocalX + frame.Width, frame.LocalY), transform),
+                Vector2.Transform(new(frame.LocalX, frame.LocalY + frame.Height), transform),
+                Vector2.Transform(new(frame.LocalX + frame.Width, frame.LocalY + frame.Height), transform), Color.White.Alpha(alpha), draw.Uv);
+            return;
+        }
+        if (rotation != cachedRotation)
+        {
+            cachedRotation = rotation;
+            (sine, cosine) = MathF.SinCos(-rotation * MathF.PI / 180);
+        }
+        canvas.NoteSprite(draw.Texture, x, y, new(frame.LocalX, frame.LocalY, frame.Width, frame.Height),
+            Color.White.Alpha(alpha), draw.Uv, cosine, sine);
     }
 
-    static Rect FrameUv(NoteSkinFrame frame) => new(frame.UvX, frame.UvY, frame.UvW, frame.UvH);
-    /// <summary>x/y/w/h 是帧内的归一化比例（0-1），映射到该帧在图集中的 UV 子区间，不是图集全局 UV。</summary>
-    static Rect RelativeUv(NoteSkinFrame frame, float x, float y, float w, float h) => new(frame.UvX + frame.UvW * x, frame.UvY + frame.UvH * y,
-        frame.UvW * w, frame.UvH * h);
+    Rect OriginalFrameUv(NoteSkinFrame frame)
+    {
+        var r = atlasRegions[frame.File];
+        return new(r.X + frame.UvX * r.W, r.Y + frame.UvY * r.H, frame.UvW * r.W, frame.UvH * r.H);
+    }
+    Rect RelativeUv(SkinFrame frame, float x, float y, float w, float h)
+    {
+        var uv = frame.Uv;
+        return new(uv.X + uv.W * x, uv.Y + uv.H * y, uv.W * w, uv.H * h);
+    }
+
     public void Dispose()
     {
-        foreach (var texture in textures.Values)
+        foreach (var texture in textures.Values.Distinct())
         {
             texture.Dispose();
         }

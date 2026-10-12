@@ -48,6 +48,7 @@ pub extern "C" fn kg_core_abi_version() -> u32 { ABI_VERSION }
 
 #[inline]
 fn x_from_values(beat_at_time: f64, distance: f64, x_offset: f64, beat_motion: f64) -> f64 {
+    if beat_motion == 0.0 && beat_at_time.is_finite() && distance.is_finite() { return x_offset; }
     // Preserve C# % semantics including negative beat values.
     let beat = (beat_at_time + 0.3) % 2.0;
     let f = beat % 1.0;
@@ -66,7 +67,7 @@ fn x_from_values(beat_at_time: f64, distance: f64, x_offset: f64, beat_motion: f
 fn y_from_values(p: &MotionParams, distance: f64, n: &MotionInput) -> f64 {
     let mut y = p.alignment + 144.0
         - (((distance - n.y_offset) * 0.1) + p.driven * p.beats_per_second * 22.0) * n.scroll
-        - p.wave * 0.2 * (distance * 0.006578947368421052).sin();
+        - if p.wave == 0.0 && distance.is_finite() { 0.0 } else { p.wave * 0.2 * (distance * 0.006578947368421052).sin() };
 
     if p.custom != 0 {
         // Caller gates per-lane boost_distance when global boost_distance == 0.
@@ -170,5 +171,64 @@ mod tests {
         let r=evaluate(&p,&n);
         assert!(r.x_offset.is_finite());
         assert!((r.y-(-80.0+80.0*((200.0_f64+150.0)/200.0).powf(3.0)+140.0)).abs()<1e-9);
+    }
+}
+
+/// Immutable session note layout shared with C#. Candidate indices are the only per-frame note inputs.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct NoteRuntimeData { pub time: f64, pub end: f64, pub lane: u32, pub reserved: u32 }
+
+/// # Safety
+/// Buffers must be aligned, live, non-overlapping and contain the declared number of elements.
+/// No pointer is retained and no allocation/thread scheduling occurs in this kernel.
+#[no_mangle]
+pub unsafe extern "C" fn kg_core_motion_indexed(
+    params: *const MotionParams, notes: *const NoteRuntimeData, note_count: usize,
+    indices: *const u32, count: usize, lanes: *const MotionInput, lane_count: usize,
+    scroll_time: f64, outputs: *mut MotionOutput,
+) -> i32 {
+    if params.is_null() || (count > 0 && (notes.is_null() || indices.is_null() || lanes.is_null() || outputs.is_null())) { return -1; }
+    if note_count > isize::MAX as usize / std::mem::size_of::<NoteRuntimeData>()
+        || count > isize::MAX as usize / std::mem::size_of::<MotionOutput>()
+        || count > isize::MAX as usize / std::mem::size_of::<u32>()
+        || lane_count > isize::MAX as usize / std::mem::size_of::<MotionInput>() { return -2; }
+    if count == 0 { return 0; }
+    match catch_unwind(AssertUnwindSafe(|| {
+        let p = &*params;
+        let notes = std::slice::from_raw_parts(notes, note_count);
+        let indices = std::slice::from_raw_parts(indices, count);
+        let lanes = std::slice::from_raw_parts(lanes, lane_count);
+        let output = std::slice::from_raw_parts_mut(outputs, count);
+        // Validate the whole block before writing, so a failed block can safely use compatibility evaluation.
+        for &i in indices { if i as usize >= notes.len() || notes[i as usize].lane as usize >= lanes.len() { return -2; } }
+        for (&i, o) in indices.iter().zip(output.iter_mut()) {
+            let n = notes[i as usize]; let l = &lanes[n.lane as usize];
+            let input = MotionInput { distance: (n.time - scroll_time) * 1000.0, end_distance: (n.end - scroll_time) * 1000.0,
+                scroll: l.scroll, x_offset: l.x_offset, y_offset: l.y_offset, boost_time: l.boost_time, boost_distance: l.boost_distance };
+            *o = evaluate(p, &input);
+        }
+        0
+    })) { Ok(code) => code, Err(_) => -3 }
+}
+
+#[cfg(test)]
+mod indexed_tests {
+    use super::*;
+    #[test]
+    fn indexed_matches_legacy_and_rejects_bad_indices() {
+        assert_eq!(std::mem::size_of::<NoteRuntimeData>(), 24);
+        let p = MotionParams { beat: 8.5, alignment: 3.0, driven: 2.0, beats_per_second: 2.0, wave: 23.0, beat_motion: 12.0, custom: 1, reserved: 0 };
+        let lanes = [MotionInput { distance: 0.0, end_distance: 0.0, scroll: -1.2, x_offset: 7.0, y_offset: 12.0, boost_time: 500.0, boost_distance: 50.0 }];
+        let notes = [NoteRuntimeData { time: -0.2, end: 4.0, lane: 0, reserved: 0 }, NoteRuntimeData { time: 2.0, end: 2.0, lane: 0, reserved: 0 }];
+        let ids = [1u32, 0u32, 1u32]; let mut out = [MotionOutput::default(); 3];
+        assert_eq!(unsafe {kg_core_motion_indexed(&p, notes.as_ptr(), notes.len(), ids.as_ptr(), ids.len(), lanes.as_ptr(), 1, 1.25, out.as_mut_ptr())}, 0);
+        for (id, actual) in ids.iter().zip(out) {
+            let n = notes[*id as usize]; let l = &lanes[0];
+            let expected = evaluate(&p, &MotionInput {distance: (n.time - 1.25) * 1000.0, end_distance: (n.end - 1.25) * 1000.0, ..*l});
+            assert_eq!(actual.x_offset, expected.x_offset); assert_eq!(actual.y, expected.y); assert_eq!(actual.end_y, expected.end_y);
+        }
+        let bad = [2u32];
+        assert_eq!(unsafe {kg_core_motion_indexed(&p, notes.as_ptr(), notes.len(), bad.as_ptr(), 1, lanes.as_ptr(), 1, 0.0, out.as_mut_ptr())}, -2);
     }
 }

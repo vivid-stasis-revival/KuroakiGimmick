@@ -63,7 +63,7 @@ public sealed partial class Viewer
     {
         EditTrack? helpTrack = hoveredEditTrack ?? (trackHelpVisualActive ? displayedHelpTrack : null);
         string? name = helpTrack is { Window: false } track ? track.Property :
-            selectedClip is Guid id ? editor?.Vsm.Find(id)?.Name : null;
+            selectedClip is Guid id ? EditorFindClip(id)?.Name : null;
         OpenReference(name == null ? null : VsmReference.Shared.MatchMod(name).FirstOrDefault()?.Entry.Id);
     }
     public void OpenReferenceForTest(string? entryId = null) => OpenReference(entryId);

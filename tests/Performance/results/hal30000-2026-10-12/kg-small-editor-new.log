@@ -1,0 +1,136 @@
+pid=65724 switch-memory source=/tmp/kg-small-editor.vsc frames=120
+[RustEngine] VSC parsed: 200 notes, 0 diagnostics, 2.61 ms (auto).
+[RustTimeline] batch evaluator ready: 0 tracks, 0 segments (auto).
+loaded notes=200 events=0 managed=59005728 rss=121470976
+2026-10-12 21:21:09.370 dotnet[65724:418085] ApplePersistence=NO
+[Kuroaki/GPU] backend=metal, shaderFormats=Msl, MetalLib
+[Kuroaki/GPU] device=Apple M4 Pro, driver=unknown, version=unknown
+Note skin: vividstasis-default-note-skin-exact-lanes-v2 / exact lanes / skins: normal, stopmotion, extendnova, stargazers @ <repo>/tests/Performance/bin/Release/net8.0/Assets/NoteSkinFull/NotesExact
+[RustEngine] VSM parsed: 0 events, 0.15 ms (auto).
+[RustBridge 0.1.0] native motion evaluator enabled (auto).
+[RustTimeline] batch evaluator ready: 0 tracks, 0 segments (auto).
+[RustEngine] VSM parsed: 0 events, 0.03 ms (auto).
+[RustEngine] VSM parsed: 0 events, 0.01 ms (auto).
+frame=0 ms=402.61 rss=845529088 managed=215221768
+[RustEngine] VSM parsed: 0 events, 0.02 ms (auto).
+[RustEngine] VSM parsed: 0 events, 0.00 ms (auto).
+frame=1 ms=92.13 rss=913211392 managed=280986904
+frame=2 ms=2.24 rss=896925696 managed=281184280
+frame=3 ms=3.60 rss=897302528 managed=281389880
+frame=4 ms=1.92 rss=897499136 managed=281587256
+frame=5 ms=2.06 rss=898318336 managed=281792856
+frame=6 ms=1.91 rss=898318336 managed=281990232
+frame=7 ms=1.88 rss=898318336 managed=282195832
+frame=8 ms=1.95 rss=898400256 managed=282393208
+frame=9 ms=1.96 rss=898400256 managed=282598808
+frame=10 ms=2.08 rss=898727936 managed=282796184
+frame=11 ms=1.95 rss=898842624 managed=283001536
+frame=12 ms=1.92 rss=898875392 managed=283198912
+frame=13 ms=1.89 rss=898908160 managed=283404512
+frame=14 ms=1.88 rss=898908160 managed=283601888
+frame=15 ms=1.86 rss=898908160 managed=283807488
+frame=16 ms=1.88 rss=898908160 managed=284004864
+frame=17 ms=1.87 rss=898908160 managed=284210464
+frame=18 ms=1.86 rss=898908160 managed=284407840
+frame=19 ms=1.87 rss=898908160 managed=284613440
+frame=20 ms=1.87 rss=898908160 managed=284810816
+frame=21 ms=1.89 rss=898908160 managed=285016416
+frame=22 ms=1.92 rss=898908160 managed=285213792
+frame=23 ms=1.89 rss=898908160 managed=285419392
+frame=24 ms=1.87 rss=898908160 managed=285616768
+frame=25 ms=1.88 rss=898908160 managed=285822368
+frame=26 ms=1.91 rss=898908160 managed=286019744
+frame=27 ms=1.89 rss=898908160 managed=286225344
+frame=28 ms=1.87 rss=898908160 managed=286422720
+frame=29 ms=1.87 rss=898908160 managed=286628320
+frame=30 ms=1.90 rss=898908160 managed=286825696
+frame=31 ms=1.88 rss=898908160 managed=287031296
+frame=32 ms=1.90 rss=898908160 managed=287228672
+frame=33 ms=1.89 rss=898908160 managed=287434272
+frame=34 ms=1.89 rss=898908160 managed=287631648
+frame=35 ms=1.89 rss=898908160 managed=287837248
+frame=36 ms=1.88 rss=898908160 managed=288034624
+frame=37 ms=1.90 rss=898908160 managed=288240224
+frame=38 ms=1.92 rss=898908160 managed=288437600
+frame=39 ms=1.88 rss=898908160 managed=288643200
+frame=40 ms=1.94 rss=898908160 managed=288840576
+frame=41 ms=3.43 rss=898940928 managed=280665648
+frame=42 ms=1.91 rss=898940928 managed=280863024
+frame=43 ms=1.90 rss=898940928 managed=281068624
+frame=44 ms=1.98 rss=898940928 managed=281266000
+frame=45 ms=1.95 rss=898940928 managed=281471600
+frame=46 ms=1.90 rss=898940928 managed=281668976
+frame=47 ms=1.89 rss=898940928 managed=281874576
+frame=48 ms=1.92 rss=898940928 managed=282071952
+frame=49 ms=1.94 rss=898940928 managed=282277552
+frame=50 ms=1.98 rss=898940928 managed=282474928
+frame=51 ms=1.91 rss=898940928 managed=282680528
+frame=52 ms=2.00 rss=898940928 managed=282877904
+frame=53 ms=1.92 rss=898940928 managed=283083504
+frame=54 ms=1.91 rss=898940928 managed=283280880
+frame=55 ms=1.91 rss=898940928 managed=283486480
+frame=56 ms=2.06 rss=898940928 managed=283692080
+frame=57 ms=2.11 rss=898940928 managed=283889456
+frame=58 ms=1.94 rss=898940928 managed=284095056
+frame=59 ms=2.00 rss=898940928 managed=284292432
+frame=60 ms=1.95 rss=898940928 managed=284498032
+frame=61 ms=1.95 rss=898940928 managed=284695408
+frame=62 ms=2.04 rss=898940928 managed=284901008
+frame=63 ms=2.11 rss=898940928 managed=285098384
+frame=64 ms=1.98 rss=898940928 managed=285303984
+frame=65 ms=1.76 rss=898940928 managed=285501360
+frame=66 ms=1.79 rss=898940928 managed=285706960
+frame=67 ms=1.80 rss=898940928 managed=285904336
+frame=68 ms=1.81 rss=898940928 managed=286109936
+frame=69 ms=2.16 rss=898940928 managed=286307312
+frame=70 ms=2.06 rss=898940928 managed=286512912
+frame=71 ms=2.02 rss=898940928 managed=286710288
+frame=72 ms=1.94 rss=898940928 managed=286915888
+frame=73 ms=2.06 rss=898940928 managed=287113264
+frame=74 ms=2.07 rss=898940928 managed=287318864
+frame=75 ms=2.76 rss=899055616 managed=287516240
+frame=76 ms=2.50 rss=899203072 managed=287721840
+frame=77 ms=1.88 rss=899219456 managed=287919216
+frame=78 ms=2.04 rss=899235840 managed=288124816
+frame=79 ms=1.96 rss=899235840 managed=288322192
+frame=80 ms=2.03 rss=899235840 managed=288527792
+frame=81 ms=1.89 rss=899235840 managed=288725168
+frame=82 ms=1.79 rss=899235840 managed=288930768
+frame=83 ms=2.80 rss=899596288 managed=280739224
+frame=84 ms=2.06 rss=899727360 managed=280944824
+frame=85 ms=2.19 rss=899727360 managed=243850840
+frame=86 ms=1.88 rss=782925824 managed=61846736
+frame=87 ms=2.12 rss=782958592 managed=92754496
+frame=88 ms=1.85 rss=782958592 managed=92960096
+frame=89 ms=1.87 rss=782958592 managed=93157472
+frame=90 ms=1.88 rss=782958592 managed=93363072
+frame=91 ms=1.92 rss=782958592 managed=93560448
+frame=92 ms=1.97 rss=782958592 managed=93766048
+frame=93 ms=1.81 rss=782958592 managed=93963424
+frame=94 ms=1.78 rss=782958592 managed=94169024
+frame=95 ms=1.81 rss=782958592 managed=94366400
+frame=96 ms=2.04 rss=782958592 managed=94572000
+frame=97 ms=2.07 rss=782958592 managed=94769376
+frame=98 ms=1.91 rss=782958592 managed=94974976
+frame=99 ms=2.03 rss=782958592 managed=95172352
+frame=100 ms=2.00 rss=782958592 managed=95377952
+frame=101 ms=1.71 rss=782958592 managed=95575328
+frame=102 ms=1.70 rss=782958592 managed=95780928
+frame=103 ms=1.70 rss=782958592 managed=95978304
+frame=104 ms=2.13 rss=782958592 managed=96183904
+frame=105 ms=1.90 rss=782958592 managed=96381280
+frame=106 ms=1.99 rss=782958592 managed=96586880
+frame=107 ms=2.08 rss=782958592 managed=96784256
+frame=108 ms=1.97 rss=782958592 managed=96989856
+frame=109 ms=1.85 rss=782958592 managed=97187232
+frame=110 ms=1.93 rss=782991360 managed=97392832
+frame=111 ms=1.83 rss=782991360 managed=97590208
+frame=112 ms=1.78 rss=782991360 managed=97795808
+frame=113 ms=1.68 rss=782991360 managed=98001408
+frame=114 ms=2.08 rss=782991360 managed=98198784
+frame=115 ms=1.97 rss=782991360 managed=98404384
+frame=116 ms=2.07 rss=782991360 managed=98601760
+frame=117 ms=1.89 rss=782991360 managed=98807360
+frame=118 ms=1.72 rss=782991360 managed=99004736
+frame=119 ms=1.98 rss=782991360 managed=99210336
+{"sampleWindow":4096,"stages":{"UiUpdate":{"count":128,"meanMs":0.02078828125000004,"p50Ms":0.0007,"p95Ms":0.0046,"p99Ms":0.0482,"maxMs":2.4641},"UiDraw":{"count":120,"meanMs":5.60694916666667,"p50Ms":1.6035,"p95Ms":1.8899,"p99Ms":91.2226,"maxMs":388.0241},"EditorNotes":{"count":120,"meanMs":0.06443250000000003,"p50Ms":0.0592,"p95Ms":0.071,"p99Ms":0.0758,"maxMs":0.7177},"Scene":{"count":120,"meanMs":2.5217525,"p50Ms":0.2805,"p95Ms":0.3978,"p99Ms":86.0641,"maxMs":180.6388},"Candidates":{"count":120,"meanMs":0.00781583333333333,"p50Ms":0.0068,"p95Ms":0.0087,"p99Ms":0.0211,"maxMs":0.136},"Rust":{"count":120,"meanMs":0.003680833333333335,"p50Ms":0.0025,"p95Ms":0.0038,"p99Ms":0.0042,"maxMs":0.1227},"Geometry":{"count":120,"meanMs":0.024127499999999986,"p50Ms":0.0155,"p95Ms":0.0195,"p99Ms":0.0234,"maxMs":1.0012},"GpuRecord":{"count":122,"meanMs":0.2588368852459016,"p50Ms":0.2207,"p95Ms":0.2836,"p99Ms":0.4264,"maxMs":4.1742},"GpuUpload":{"count":122,"meanMs":0.023284426229508194,"p50Ms":0.0184,"p95Ms":0.0313,"p99Ms":0.0676,"maxMs":0.3772},"GpuSubmit":{"count":122,"meanMs":0.009268032786885247,"p50Ms":0.0069,"p95Ms":0.0129,"p99Ms":0.0794,"maxMs":0.1493},"GpuWait":{"count":483,"meanMs":0.010546790890269171,"p50Ms":0.0021,"p95Ms":0.0101,"p99Ms":0.0307,"maxMs":1.7079}},"counters":{"TimelineNotes":24000,"Candidates":13800,"VisibleNotes":13800,"DrawCalls":38520,"Batches":43920,"UploadBytes":46461120,"AudioUnderruns":0,"Readbacks":0,"EncodedFrames":0,"AllocatedBytes":0,"GcCollections":0,"GcPauseMicroseconds":0},"workingSet":783073280}

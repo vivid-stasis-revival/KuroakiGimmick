@@ -1,0 +1,13 @@
+2026-10-12 19:45:53.057 dotnet[1733:11855924] ApplePersistence=NO
+[Kuroaki/GPU] backend=metal, shaderFormats=Msl, MetalLib
+[Kuroaki/GPU] device=Apple M4 Pro, driver=unknown, version=unknown
+[RustEngine] VSC parsed: 200 notes, 0 diagnostics, 3.09 ms (auto).
+[RustEngine] VSM parsed: 10000 events, 12.70 ms (auto).
+[RustTimeline] batch evaluator ready: 2 tracks, 10000 segments (auto).
+Note skin: vividstasis-default-note-skin-exact-lanes-v2 / exact lanes / skins: normal, stopmotion, extendnova, stargazers @ <repo>/tests/Performance/bin/Release/net8.0/Assets/NoteSkinFull/NotesExact
+[RustBridge 0.1.0] native motion evaluator enabled (auto).
+SDL_GPU / metal hit N=200 CPU record+submit: samples=4 mean=4.016ms P50=3.881ms P95=4.233ms P99=4.233ms max=4.233ms throughput=249.03/s
+fence-completed frame+readback: samples=4 mean=5.743ms P50=4.419ms P95=9.194ms P99=9.194ms max=9.194ms throughput=174.12/s
+recordedBatches/frame=1517 uploadBytes/frame=1064832 drawCalls/frame=1493
+allocation/frame=1579578B sampledPeakWorkingSet=671.8MiB processCpu=0.145s
+{"sampleWindow":4096,"stages":{"Frame":{"count":4,"meanMs":5.74325,"p50Ms":4.4189,"p95Ms":9.1942,"p99Ms":9.1942,"maxMs":9.1942},"Scene":{"count":6,"meanMs":18.580683333333333,"p50Ms":3.0204,"p95Ms":95.7643,"p99Ms":95.7643,"maxMs":95.7643},"Candidates":{"count":6,"meanMs":0.0258,"p50Ms":0.0001,"p95Ms":0.1542,"p99Ms":0.1542,"maxMs":0.1542},"GpuRecord":{"count":6,"meanMs":0.9075833333333332,"p50Ms":0.4377,"p95Ms":3.1625,"p99Ms":3.1625,"maxMs":3.1625},"GpuUpload":{"count":6,"meanMs":0.19671666666666665,"p50Ms":0.0547,"p95Ms":0.7246,"p99Ms":0.7246,"maxMs":0.7246},"GpuSubmit":{"count":6,"meanMs":0.07801666666666668,"p50Ms":0.0245,"p95Ms":0.2932,"p99Ms":0.2932,"maxMs":0.2932},"GpuWait":{"count":21,"meanMs":0.6972809523809526,"p50Ms":0.0063,"p95Ms":4.8009,"p99Ms":5.3656,"maxMs":5.3656}},"counters":{"Candidates":0,"VisibleNotes":0,"DrawCalls":8958,"Batches":9102,"UploadBytes":6388992,"AudioUnderruns":0,"Readbacks":0,"EncodedFrames":0,"AllocatedBytes":223411352,"GcCollections":23,"GcPauseMicroseconds":3008},"workingSet":703692800}

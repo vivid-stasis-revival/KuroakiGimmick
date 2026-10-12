@@ -1,0 +1,12 @@
+2026-10-12 18:54:20.256 dotnet[483:11772691] ApplePersistence=NO
+[Kuroaki/GPU] backend=metal, shaderFormats=Msl, MetalLib
+[Kuroaki/GPU] device=Apple M4 Pro, driver=unknown, version=unknown
+[RustEngine] VSC parsed: 1000000 notes, 0 diagnostics, 207.71 ms (auto).
+[RustTimeline] batch evaluator ready: 0 tracks, 0 segments (auto).
+Note skin: vividstasis-default-note-skin-exact-lanes-v2 / exact lanes / skins: normal, stopmotion, extendnova, stargazers @ <repo>/tests/Performance/bin/Release/net8.0/Assets/NoteSkinFull/NotesExact
+[RustBridge 0.1.0] native motion evaluator enabled (auto).
+SDL_GPU / metal uniform N=1000000 CPU record+submit: samples=8 mean=0.393ms P50=0.349ms P95=0.642ms P99=0.642ms max=0.642ms throughput=2545.34/s
+fence-completed frame+readback: samples=8 mean=1.064ms P50=0.713ms P95=3.153ms P99=3.153ms max=3.153ms throughput=939.95/s
+recordedBatches/frame=31 uploadBytes/frame=51200
+allocation/frame=954589B peakWorkingSet=0.0MiB processCpu=0.137s
+{"sampleWindow":4096,"stages":{"Frame":{"count":8,"meanMs":1.0638875,"p50Ms":0.7128,"p95Ms":3.1534,"p99Ms":3.1534,"maxMs":3.1534},"Scene":{"count":10,"meanMs":10.58794,"p50Ms":0.2566,"p95Ms":103.0656,"p99Ms":103.0656,"maxMs":103.0656},"Candidates":{"count":10,"meanMs":0.022619999999999998,"p50Ms":0.0038,"p95Ms":0.1876,"p99Ms":0.1876,"maxMs":0.1876},"Rust":{"count":10,"meanMs":0.0165,"p50Ms":0.0022,"p95Ms":0.1439,"p99Ms":0.1439,"maxMs":0.1439},"Geometry":{"count":10,"meanMs":0.11040000000000001,"p50Ms":0.0098,"p95Ms":1.0092,"p99Ms":1.0092,"maxMs":1.0092},"GpuRecord":{"count":10,"meanMs":0.30873999999999996,"p50Ms":0.0523,"p95Ms":2.6029,"p99Ms":2.6029,"maxMs":2.6029},"GpuUpload":{"count":10,"meanMs":0.08437000000000001,"p50Ms":0.0362,"p95Ms":0.4207,"p99Ms":0.4207,"maxMs":0.4207},"GpuSubmit":{"count":10,"meanMs":0.019370000000000005,"p50Ms":0.01,"p95Ms":0.0789,"p99Ms":0.0789,"maxMs":0.0789},"GpuWait":{"count":30,"meanMs":0.4248266666666668,"p50Ms":0.0142,"p95Ms":2.3965,"p99Ms":7.4535,"maxMs":7.4535}},"counters":{"Candidates":580,"VisibleNotes":580,"DrawCalls":70,"Batches":310,"UploadBytes":512000,"AudioUnderruns":0,"Readbacks":0,"EncodedFrames":0,"AllocatedBytes":646128296,"GcCollections":55,"GcPauseMicroseconds":4999},"workingSet":929857536}

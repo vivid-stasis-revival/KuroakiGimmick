@@ -17,7 +17,7 @@ public sealed partial class Viewer
     {
         target = -1;
         if (editor == null || prGridMode == 2 || imageCanvas || textCanvas || desktopPreview) return false;
-        var selected = selectedClip is Guid id ? editor.Vsm.Clips.FirstOrDefault(c => c.Id == id) : null;
+        var selected = selectedClip is Guid id ? EditorFindClip(id) : null;
         bool selectedPr = selected?.Name.StartsWith("pr", StringComparison.OrdinalIgnoreCase) == true;
         bool hoveredPr = hoveredEditTrack is { Window: false, Target: >= 0 } track &&
             track.Property.StartsWith("pr", StringComparison.OrdinalIgnoreCase);

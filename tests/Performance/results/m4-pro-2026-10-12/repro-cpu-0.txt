@@ -1,0 +1,7 @@
+million notes+events index/cache construction=180.767ms
+original full density+two note scans (same binary BPM helper): samples=12 mean=56.047ms P50=39.240ms P95=136.229ms P99=136.229ms max=136.229ms throughput=17.84/s
+cached density+two interval queries: samples=12 mean=0.285ms P50=0.271ms P95=1.068ms P99=1.068ms max=1.068ms throughput=3507.95/s
+same-time candidates=10000 query=0.415ms
+same-time candidates=100000 query=0.559ms
+same-time candidates=1000000 query=6.505ms
+PASS CPU scale and zero query allocations

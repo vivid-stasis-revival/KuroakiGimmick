@@ -54,7 +54,7 @@ public sealed partial class Viewer
         if (editor == null) return;
         if (textRevision == editor.Revision && textMap == Current.Timeline.Bpm) return;
         textCache = editor.EditableTexts(); textSampler = new(editor.Vsm, Current.Timeline.Bpm);
-        if (textAnimation is Guid animation && editor.Vsm.Find(animation) == null) textAnimation = null;
+        if (textAnimation is Guid animation && EditorFindClip(animation) == null) textAnimation = null;
         textMap = Current.Timeline.Bpm; textRevision = editor.Revision;
     }
     /// <summary>
@@ -199,7 +199,7 @@ public sealed partial class Viewer
         void Button(string label, Action action)
         { if (Row(out float y) && EButton(label, new(r.X, y, r.W, 27), enabled: !transport.Playing, key: "text-action:" + label)) TextAction(action); }
         Field(L.Get("At / beat"), VsmDocument.Ui(textAt), value => { double beat = VsmDocument.Number(value); if (Math.Abs(beat) > 1e8) throw new FormatException(L.Get("Beat out of range.")); textAnimation = null; textAt = beat; transport.Seek(Current.Timeline.Bpm.Time(beat)); });
-        if (textAnimation is Guid animId && editor.Vsm.Find(animId) is { } animation)
+        if (textAnimation is Guid animId && EditorFindClip(animId) is { } animation)
         {
             Button(L.Get("EDIT START") + (!textAnimationEnd ? " *" : ""), () => SelectTextAnimation(animation, false));
             Button(L.Get("EDIT END") + (textAnimationEnd ? " *" : ""), () => SelectTextAnimation(animation, true));
@@ -230,20 +230,30 @@ public sealed partial class Viewer
         Button(L.Get("+ FADE IN"), () => editor.SetTextProperties(id, textAt, new Dictionary<string, double> { ["textalp"] = 1 },
             Current.Timeline.Bpm, textDuration, textEase, new Dictionary<string, double> { ["textalp"] = 0 }));
         Button(L.Get("RAW ANIMATION EVENTS"), () => { expandedTextTracks.Add(id); layoutRevision = -1; textInspector = false; selectedClip = editor.Vsm.Clips.FirstOrDefault(c => CustomText.TryMod(c.Name, out _, out var target) && target == id)?.Id; });
-        foreach (var clip in editor.Vsm.Clips.Where(c => c.Duration > 0 && CustomText.TryMod(c.Name, out _, out var target) && target == id)
-            .GroupBy(c => (c.Beat, c.Duration, c.Ease)).Select(g => g.First()))
+        EnsureTimelineClipIndex();
+        var animations = timelineTextAnimations.GetValueOrDefault(id) ?? [];
+        int firstAnimation = Math.Clamp(inspectorScroll - rows, 0, animations.Length);
+        int endAnimation = Math.Min(animations.Length, firstAnimation + visible + 1);
+        rows += firstAnimation;
+        for (int i = firstAnimation; i < endAnimation; i++)
         {
-            var motionClip = clip;
-            Button(L.Get("ANIMATION @ ") + VsmDocument.Ui(clip.Beat), () => SelectTextAnimation(motionClip, true));
+            var motionClip = animations[i];
+            Button(L.Get("ANIMATION @ ") + VsmDocument.Ui(motionClip.Beat), () => SelectTextAnimation(motionClip, true));
         }
-        foreach (var cue in track.Cues)
+        rows += animations.Length - endAnimation;
+        int firstCue = Math.Clamp(inspectorScroll - rows, 0, track.Cues.Count);
+        int endCue = Math.Min(track.Cues.Count, firstCue + visible + 1);
+        rows += firstCue;
+        for (int i = firstCue; i < endCue; i++)
         {
-            var selected = cue;
-            Button(L.Get("CUE @ ") + VsmDocument.Ui(cue.Beat) + " / " + ImageShortText(cue.Text.Replace('\n', ' '), r.W * .45f, 11), () => { textAnimation = null; textAt = selected.Beat; transport.Seek(Current.Timeline.Bpm.Time(textAt)); inspectorScroll = 0; });
+            var selected = track.Cues[i];
+            Button(L.Get("CUE @ ") + VsmDocument.Ui(selected.Beat) + " / " + ImageShortText(selected.Text.Replace('\n', ' '), r.W * .45f, 11), () => { textAnimation = null; textAt = selected.Beat; transport.Seek(Current.Timeline.Bpm.Time(textAt)); inspectorScroll = 0; });
         }
+        rows += track.Cues.Count - endCue;
         // Content 显示的是目标拍之前最后一条仍然生效的 cue。移动/删除也必须针对同一条，
         // 不能拿任意 textAt 去做精确浮点查找；否则面板明明显示着字幕，按钮却会 no-op 或抛 Single() 的通用异常。
-        var activeCue = track.Cues.LastOrDefault(c => c.Beat <= textAt + 1e-9);
+        int activeCueIndex = SortedSearch.UpperBound(track.Cues, textAt + 1e-9, static c => c.Beat) - 1;
+        var activeCue = activeCueIndex >= 0 ? track.Cues[activeCueIndex] : null;
         Field(L.Get("Move cue to"), VsmDocument.Ui(textAt), value =>
         {
             if (activeCue == null) throw new InvalidOperationException(L.Get("No text cue exists at or before the target beat."));

@@ -1,0 +1,67 @@
+PASS score oracle: mixed notes, variable/fixed BPM, negative times, tick boundaries, stacked hits, long holds, reverse seeks, rolling scores and effect windows
+PASS note index and motion bounds: crossing holds, magnet oracle, future stack, reverse/zero scroll, wave, boost and offsets
+[RustTimeline] batch evaluator ready: 0 tracks, 0 segments (verify).
+[RustTimeline] batch evaluator ready: 0 tracks, 0 segments (verify).
+[RustTimeline] batch evaluator ready: 1 tracks, 1 segments (verify).
+[RustTimeline] batch evaluator ready: 1 tracks, 2 segments (verify).
+PASS proxy alpha: Base and Custom start at 0, authored overrides isolated
+[RustTimeline] batch evaluator ready: 3 tracks, 3 segments (verify).
+[RustTimeline] batch evaluator ready: 0 tracks, 0 segments (verify).
+[RustTimeline] batch evaluator ready: 0 tracks, 0 segments (verify).
+[RustTimeline] batch evaluator ready: 1 tracks, 1 segments (verify).
+[RustTimeline] batch evaluator ready: 0 tracks, 0 segments (verify).
+[RustTimeline] batch evaluator ready: 0 tracks, 0 segments (verify).
+PASS issues #31/#32/#33: base ambient particles, global lane mods and 60 Hz slash spans
+[RustEngine] VSM parsed: 12 events, 6.96 ms (verify).
+[RustTimeline] batch evaluator ready: 1 tracks, 2 segments (verify).
+[RustTimeline] batch evaluator ready: 0 tracks, 0 segments (verify).
+PASS #36: LR callbacks, colours, batches, brace ranges and zero mod weight
+[RustEngine] VSM parsed: 1 events, 0.07 ms (verify).
+[RustEngine] VSM parsed: 1 events, 0.09 ms (verify).
+[RustEngine] VSM parsed: 1 events, 0.06 ms (verify).
+[RustEngine] VSC parsed: 1 notes, 0 diagnostics, 1.15 ms (verify).
+[RustTimeline] batch evaluator ready: 0 tracks, 0 segments (verify).
+[RustEngine] VSM parsed: 0 events, 0.04 ms (verify).
+[RustEngine] VSM parsed: 0 events, 0.02 ms (verify).
+[RustEngine] VSC parsed: 1 notes, 0 diagnostics, 0.07 ms (verify).
+[RustEngine] VSM parsed: 0 events, 0.01 ms (verify).
+[RustTimeline] batch evaluator ready: 0 tracks, 0 segments (verify).
+[RustEngine] VSM parsed: 0 events, 0.05 ms (verify).
+[RustEngine] VSM parsed: 0 events, 0.03 ms (verify).
+PASS #40: dependency-only export, portable references, Assets option and backup location/hidden flag
+[RustEngine] VSM parsed: 3 events, 0.07 ms (verify).
+[RustTimeline] batch evaluator ready: 1 tracks, 1 segments (verify).
+[RustTimeline] batch evaluator ready: 1 tracks, 1 segments (verify).
+[RustTimeline] batch evaluator ready: 1 tracks, 1 segments (verify).
+[RustTimeline] batch evaluator ready: 1 tracks, 1 segments (verify).
+[RustEngine] VSM parsed: 1 events, 0.03 ms (verify).
+[RustTimeline] batch evaluator ready: 1 tracks, 1 segments (verify).
+PASS Lorelei: side motion, frames, lifetime, callbacks, scope and countdown HUD / seeks
+[RustEngine] VSM parsed: 3 events, 0.08 ms (verify).
+[RustTimeline] batch evaluator ready: 2 tracks, 3 segments (verify).
+[RustEngine] VSM parsed: 3 events, 0.05 ms (verify).
+[RustEngine] VSM parsed: 3 events, 0.02 ms (verify).
+[RustTimeline] batch evaluator ready: 2 tracks, 3 segments (verify).
+PASS #43: layout-only track ordering, event identity, no-op drag, new tracks, undo/redo, copy isolation and save/reopen
+[RustEngine] VSM parsed: 1 events, 0.03 ms (auto).
+[RustEngine] VSM parsed: 1 events, 0.01 ms (auto).
+[RustEngine] VSM parsed: 1 events, 0.00 ms (auto).
+[RustEngine] VSM parsed: 1 events, 0.01 ms (auto).
+[RustEngine] VSC: Chart exceeds the 128 MiB limit.. Falling back to C#.
+[RustEngine] VSM parsed: 1 events, 0.08 ms (verify).
+[RustEngine] VSM parsed: 1 events, 0.01 ms (verify).
+[RustEngine] VSM parsed: 1 events, 0.01 ms (verify).
+[RustEngine] VSM parsed: 1 events, 0.01 ms (verify).
+PASS engine compatibility: trailing-comment warnings, source locations, newline formats and pre-read file limits
+[RustEngine] VSC parsed: 4 notes, 0 diagnostics, 0.09 ms (verify).
+[RustEngine] VSB parsed: 2 notes, 32.85 ms (verify).
+PASS parsers and tips loader
+PASS performance: stable interval queries, crossing holds, negative/reverse time, cached beats, BPM endpoints, density invalidation and zero query allocation
+scale N=10,000: build=7.1ms retained=2.5MiB allocated=3.4MiB magnet10k=3.4ms storedHits=10000 checkpoints=5
+scale N=100,000: build=21.7ms retained=23.8MiB allocated=31.1MiB magnet10k=4.9ms storedHits=100000 checkpoints=7
+scale N=500,000: build=137.4ms retained=115.2MiB allocated=143.4MiB magnet10k=5.2ms storedHits=500000 checkpoints=8
+scale N=1,000,000: build=179.7ms retained=230.4MiB allocated=286.8MiB magnet10k=2.0ms storedHits=1000000 checkpoints=9
+long holds N=100,000 logicalHits=10,000,200,000: build=15.4ms allocated=31.4MiB storedHits=200000 checkpoints=2
+staggered long holds N=10,000 logicalHits=1,000,020,000: build=9.3ms checkpoints=3
+staggered seek=30,000s: 0.6ms
+ALL REGRESSIONS PASSED

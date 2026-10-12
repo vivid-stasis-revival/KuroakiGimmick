@@ -211,6 +211,8 @@ try
 finally { Directory.Delete(temp, true); }
 Console.WriteLine("PASS parsers and tips loader");
 
+PerformanceRegression.Run();
+
 if (args.Contains("--scale"))
 {
     foreach (int size in new[] { 10000, 100000, 500000, 1000000 })

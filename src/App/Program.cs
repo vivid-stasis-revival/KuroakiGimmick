@@ -22,7 +22,7 @@ internal static class Program
         CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
         CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
         // 这一串是所有无人值守模式（自测、检查、导出、截图）。cli 为真时失败只写 stderr，不弹消息框卡住脚本。
-        bool cli = args.Any(a => a is "--inspect" or "--render" or "--snapshot" or "--card" or "--smoke-ui" or "--smoke-startup" or "--smoke-mac-menu" or "--smoke-windows-menu" or "--smoke-text-ui" or "--smoke-i18n" or "--rust-engine-test" or "--rust-timeline-test" or "--rust-bridge-test" or "--rust-audio-test");
+        bool cli = args.Any(a => a is "--inspect" or "--render" or "--snapshot" or "--card" or "--smoke-ui" or "--smoke-workspace-memory" or "--smoke-startup" or "--smoke-mac-menu" or "--smoke-windows-menu" or "--smoke-text-ui" or "--smoke-i18n" or "--rust-engine-test" or "--rust-timeline-test" or "--rust-bridge-test" or "--rust-audio-test");
         try
         {
             // 后端覆盖必须早于任何 GPU 设备创建；否则显式 --force-vulkan 仍可能先创建平台默认后端。
@@ -119,7 +119,7 @@ internal static class Program
             {
                 throw new InvalidDataException("Load a chart or VSM before exporting.");
             }
-            using var host = new Host(cli);
+            using var host = new Host(cli && !options.ContainsKey("smoke-workspace-memory"));
             Console.Error.WriteLine("Build: " + Paths.BuildRevision);
             Console.Error.WriteLine("GPU: " + host.Device);
             if (options.ContainsKey("render"))
@@ -180,9 +180,15 @@ internal static class Program
                 Console.WriteLine(Path.GetFullPath(output));
                 return options.ContainsKey("strict") && session.Chart.Diagnostics.Any(d => d.Error) ? 2 : 0;
             }
-            string? startupTestSettings = options.ContainsKey("smoke-startup")
+            bool workspaceMemoryTest = options.ContainsKey("smoke-workspace-memory");
+            string? startupTestSettings = options.ContainsKey("smoke-startup") || workspaceMemoryTest
                 ? Path.Combine(Path.GetTempPath(), "kuroaki-startup-settings-" + Guid.NewGuid().ToString("N"), "settings.json") : null;
-            using var viewer = new Viewer(host, session, silent: cli, applyPreferences: !changed,
+            if (workspaceMemoryTest)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(startupTestSettings!)!);
+                if (File.Exists(ViewerSettings.SettingsPath)) File.Copy(ViewerSettings.SettingsPath, startupTestSettings!);
+            }
+            using var viewer = new Viewer(host, session, silent: cli && !workspaceMemoryTest, applyPreferences: !changed,
                 uiLanguage: options.GetValueOrDefault("language"), showStartup: path == null && (!cli || options.ContainsKey("smoke-startup")),
                 initialPath: path, settingsPath: startupTestSettings);
             // 单帧截图必须抓到最终布局，而不是入场动画那一帧全透明的画面。
@@ -251,6 +257,12 @@ internal static class Program
                 }
                 return options.ContainsKey("strict") && session.Chart.Diagnostics.Any(d => d.Error) ? 2 : 0;
             }
+            if (workspaceMemoryTest)
+            {
+                try { viewer.SmokeWorkspaceMemory(); }
+                finally { if (File.Exists(startupTestSettings)) File.Delete(startupTestSettings); }
+                return 0;
+            }
             viewer.Run();
             return 0;
         }
@@ -278,6 +290,11 @@ internal static class Program
             }
             return 1;
         }
+        finally
+        {
+            try { PerformanceStats.WriteConfiguredReport(); }
+            catch (IOException ex) { Console.Error.WriteLine("Profile report: " + ex.Message); }
+        }
     }
 
     /// <summary>
@@ -298,7 +315,7 @@ internal static class Program
             "snapshot",
             "card",
             "smoke-ui",
-            "smoke-startup",
+            "smoke-workspace-memory", "smoke-startup",
             "smoke-mac-menu",
             "smoke-windows-menu",
             "smoke-text-ui",

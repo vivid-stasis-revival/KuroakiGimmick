@@ -49,6 +49,7 @@ public sealed partial class Canvas : IDisposable
         Vertex(c.X, c.Y, q.X, q.Y + q.H, color);
         Vertex(b.X, b.Y, q.X + q.W, q.Y, color);
         Vertex(d.X, d.Y, q.X + q.W, q.Y + q.H, color);
+        if (vertices.Count >= 48 * 8192) Flush();
     }
 
     /// <summary>提交已变换的四个角，供轨道透视/旋转使用，不再次变换输入坐标。</summary>
@@ -62,6 +63,7 @@ public sealed partial class Canvas : IDisposable
         Vertex(c.X, c.Y, q.X, q.Y + q.H, color);
         Vertex(b.X, b.Y, q.X + q.W, q.Y, color);
         Vertex(d.X, d.Y, q.X + q.W, q.Y + q.H, color);
+        if (vertices.Count >= 48 * 8192) Flush();
     }
 
     public void Fill(Rect r, Color c) => Quad(White, r, c);
@@ -80,6 +82,7 @@ public sealed partial class Canvas : IDisposable
         Vertex(r.X, r.Y + r.H, uv.X, uv.Y + uv.H, bottom);
         Vertex(r.X + r.W, r.Y, uv.X + uv.W, uv.Y, top);
         Vertex(r.X + r.W, r.Y + r.H, uv.X + uv.W, uv.Y + uv.H, bottom);
+        if (vertices.Count >= 48 * 8192) Flush();
     }
 
     /// <summary>以两端点的中点构造一条水平矩形再旋转到目标角度；thickness 与坐标同为逻辑单位。</summary>

@@ -1,0 +1,21 @@
+PASS score oracle: mixed notes, variable/fixed BPM, negative times, tick boundaries, stacked hits, long holds, reverse seeks, rolling scores and effect windows
+PASS note index and motion bounds: crossing holds, magnet oracle, future stack, reverse/zero scroll, wave, boost and offsets
+PASS proxy alpha: Base and Custom start at 0, authored overrides isolated
+PASS issues #31/#32/#33: base ambient particles, global lane mods and 60 Hz slash spans
+PASS #36: LR callbacks, colours, batches, brace ranges and zero mod weight
+PASS #40: dependency-only export, portable references, Assets option and backup location/hidden flag
+PASS Lorelei: side motion, frames, lifetime, callbacks, scope and countdown HUD / seeks
+PASS #43: layout-only track ordering, event identity, no-op drag, new tracks, undo/redo, copy isolation and save/reopen
+[RustEngine] VSM parsed: 1 events, 1.90 ms (auto).
+[RustEngine] VSM parsed: 1 events, 0.01 ms (auto).
+[RustEngine] VSM parsed: 1 events, 0.00 ms (auto).
+[RustEngine] VSM parsed: 1 events, 0.01 ms (auto).
+[RustEngine] VSC: Chart exceeds the 128 MiB limit.. Falling back to C#.
+[RustEngine] VSM parsed: 1 events, 0.91 ms (verify).
+[RustEngine] VSM parsed: 1 events, 0.01 ms (verify).
+[RustEngine] VSM parsed: 1 events, 0.01 ms (verify).
+[RustEngine] VSM parsed: 1 events, 0.01 ms (verify).
+PASS engine compatibility: trailing-comment warnings, source locations, newline formats and pre-read file limits
+PASS parsers and tips loader
+PASS performance: stable interval queries, crossing holds, negative/reverse time, cached beats, BPM endpoints, density invalidation and zero query allocation
+ALL REGRESSIONS PASSED

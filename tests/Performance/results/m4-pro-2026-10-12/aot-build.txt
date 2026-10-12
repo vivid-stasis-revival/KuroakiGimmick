@@ -1,0 +1,8 @@
+  Determining projects to restore...
+  Restored <repo>/KuroakiGimmick.csproj (in 2.99 sec).
+<repo>/src/Bridge/RustTimelineBridge.cs(201,21): warning CS0652: Comparison to integral constant is useless; the constant is outside the range of type 'int' [<repo>/KuroakiGimmick.csproj]
+<repo>/src/Graphics/Effects/NativeGimmickRenderer.StarcrashersLate.cs(62,54): warning CS8602: Dereference of a possibly null reference. [<repo>/KuroakiGimmick.csproj]
+  KuroakiGimmick -> <repo>/bin/Release/net8.0/osx-arm64/KuroakiGimmick.dll
+  Generating native code
+  ld: warning: -ld_classic is deprecated and will be removed in a future release
+  KuroakiGimmick -> /private/tmp/kg-performance-aot/

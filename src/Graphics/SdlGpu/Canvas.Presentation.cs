@@ -6,6 +6,7 @@ public sealed partial class Canvas
     // 顶点 alpha 只在显式的 UI 作用域内被乘一次。Begin 会把它重置为 1；
     // 场景渲染与导出从不进入这种作用域，产出的顶点因此保持不变。
     float presentationOpacity = 1;
+    internal float PresentationOpacity => presentationOpacity;
     /// <summary>与外层作用域相乘嵌套；Dispose 时恢复进入前的值。</summary>
     public IDisposable Opacity(float opacity) => new OpacityScope(this, opacity);
     /// <summary>忽略外层淡入淡出，把呈现透明度重置为绝对的 1，退出作用域后恢复。</summary>

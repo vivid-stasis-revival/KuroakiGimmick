@@ -28,12 +28,26 @@ public sealed unsafe partial class GpuDevice : IDisposable
     readonly nint window;
     readonly bool hidden;
     readonly List<Batch> batches = [];
+    const int MaxRecordedFloatCount = 64 * 1024 * 1024 / sizeof(float);
+    const int MaxRecordedBatches = 16384;
+    readonly Queue<SubmissionFence> presentationFences = new(2);
     readonly List<float> vertices = [];
     readonly Dictionary<int, Texture> textures = [];
 
-    nint vertexBuffer, uploadBuffer;
-
-    uint vertexCapacity;
+    sealed class SubmissionFence(nint handle)
+    {
+        nint handle = handle;
+        public bool Complete(nint device) => handle == 0 || SDL_QueryGPUFence(device, handle);
+        public void Release(nint device) { if (handle != 0) { SDL_ReleaseGPUFence(device, handle); handle = 0; } }
+    }
+    sealed class MeshSlot
+    {
+        public nint Vertex, Upload;
+        public uint Capacity;
+        public SubmissionFence? Fence;
+    }
+    readonly MeshSlot[] meshSlots = [new(), new(), new()];
+    int meshCursor;
 
     // 批次必须持有提交时不再变化的状态快照；不能保留可继续写入的 uniform 数组引用。
     // 用 value-type batch + ArrayPool 避免 Vulkan 路径每帧制造成百上千个短命数组/对象，
@@ -46,6 +60,14 @@ public sealed unsafe partial class GpuDevice : IDisposable
         GPUTextureSamplerBinding[]? Textures = null, int TextureCount = 0,
         IntRect? Clip = null, BlendFactor Source = BlendFactor.SourceAlpha,
         BlendFactor Destination = BlendFactor.InverseSourceAlpha, uint First = 0, uint Count = 0);
+
+    /// <summary>Poll the bounded main-window GPU queue before building another frame. The SDL event pump keeps running under GPU backpressure.</summary>
+    public bool PresentationReady()
+    {
+        while (presentationFences.TryPeek(out var fence) && fence.Complete(Handle))
+        { presentationFences.Dequeue(); fence.Release(Handle); }
+        return presentationFences.Count < 2;
+    }
 
     /// <summary>沿用输入版本的平台选择、双帧在途上限及隐藏窗口 present 策略。</summary>
     public GpuDevice(nint window, bool hidden)
@@ -200,8 +222,20 @@ public sealed unsafe partial class GpuDevice : IDisposable
     internal void Draw(Target? target, int width, int height, Shader shader, Texture primary, IntRect? clip, BlendFactor source,
         BlendFactor destination, ReadOnlySpan<float> data)
     {
-        uint first = (uint)vertices.Count / 8;
-        uint count = (uint)data.Length / 8;
+        if (data.Length > MaxRecordedFloatCount)
+        {
+            int quantum = shader.Instanced ? 16 : 48; // complete instances or quad triangle pairs
+            int block = MaxRecordedFloatCount / quantum * quantum;
+            for (int offset = 0; offset < data.Length; offset += block)
+                Draw(target, width, height, shader, primary, clip, source, destination, data.Slice(offset, Math.Min(block, data.Length - offset)));
+            return;
+        }
+        // Split enormous logical frames at a memory boundary. Subsequent passes LOAD the prior result;
+        // primitives and transparent layers are neither removed nor reordered.
+        if (vertices.Count > 0 && (vertices.Count > MaxRecordedFloatCount - data.Length || batches.Count >= MaxRecordedBatches)) Submit();
+        uint stride = shader.Instanced ? 64u : 32u;
+        uint first = checked((uint)vertices.Count * 4);
+        uint count = (uint)data.Length * 4 / stride;
         vertices.AddRange(data);
         nint targetId = target?.Texture.Id ?? 0;
 
@@ -212,7 +246,7 @@ public sealed unsafe partial class GpuDevice : IDisposable
             var last = batches[^1];
             if (last.Clear == null && ReferenceEquals(last.Shader, shader) && last.Target == targetId &&
                 last.Width == width && last.Height == height && last.Source == source && last.Destination == destination &&
-                last.First + last.Count == first && SameRect(last.Clip, clip) &&
+                last.First + last.Count * stride == first && SameRect(last.Clip, clip) &&
                 SameBytes(shader.VertexUniforms, last.VertexUniforms, last.VertexUniformLength) &&
                 SameBytes(shader.FragmentUniforms, last.FragmentUniforms, last.FragmentUniformLength) &&
                 SameBindings(last, shader, primary))
@@ -267,13 +301,12 @@ public sealed unsafe partial class GpuDevice : IDisposable
         finally
         {
             SDL_WaitForGPUIdle(Handle);
-            if (vertexBuffer != 0)
+            while (presentationFences.TryDequeue(out var fence)) fence.Release(Handle);
+            foreach (var slot in meshSlots)
             {
-                SDL_ReleaseGPUBuffer(Handle, vertexBuffer);
-            }
-            if (uploadBuffer != 0)
-            {
-                SDL_ReleaseGPUTransferBuffer(Handle, uploadBuffer);
+                slot.Fence?.Release(Handle);
+                if (slot.Vertex != 0) SDL_ReleaseGPUBuffer(Handle, slot.Vertex);
+                if (slot.Upload != 0) SDL_ReleaseGPUTransferBuffer(Handle, slot.Upload);
             }
             DestroyGpuDeviceForWindow(Handle, window);
             Handle = 0;

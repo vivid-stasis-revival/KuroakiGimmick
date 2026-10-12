@@ -1,0 +1,12 @@
+2026-10-12 19:45:13.803 dotnet[1711:11854780] ApplePersistence=NO
+[Kuroaki/GPU] backend=metal, shaderFormats=Msl, MetalLib
+[Kuroaki/GPU] device=Apple M4 Pro, driver=unknown, version=unknown
+[RustEngine] VSC parsed: 200 notes, 0 diagnostics, 3.57 ms (auto).
+[RustTimeline] batch evaluator ready: 0 tracks, 0 segments (auto).
+Note skin: vividstasis-default-note-skin-exact-lanes-v2 / exact lanes / skins: normal, stopmotion, extendnova, stargazers @ <repo>/tests/Performance/bin/Release/net8.0/Assets/NoteSkinFull/NotesExact
+[RustBridge 0.1.0] native motion evaluator enabled (verify).
+SDL_GPU / metal scene N=200 CPU record+submit: samples=30 mean=0.213ms P50=0.188ms P95=0.386ms P99=0.397ms max=0.397ms throughput=4691.61/s
+fence-completed frame+readback: samples=30 mean=1.331ms P50=0.598ms P95=4.373ms P99=4.679ms max=4.679ms throughput=751.14/s
+recordedBatches/frame=67 uploadBytes/frame=23168 drawCalls/frame=43
+allocation/frame=940586B sampledPeakWorkingSet=587.6MiB processCpu=0.155s
+{"sampleWindow":4096,"stages":{"Frame":{"count":30,"meanMs":1.331316666666667,"p50Ms":0.5981,"p95Ms":4.3733,"p99Ms":4.6789,"maxMs":4.6789},"Scene":{"count":32,"meanMs":2.9790906249999995,"p50Ms":0.1263,"p95Ms":0.395,"p99Ms":90.794,"maxMs":90.794},"Candidates":{"count":32,"meanMs":0.013115624999999994,"p50Ms":0.0084,"p95Ms":0.0117,"p99Ms":0.1542,"maxMs":0.1542},"Rust":{"count":32,"meanMs":0.026868750000000007,"p50Ms":0.0167,"p95Ms":0.0267,"p99Ms":0.3226,"maxMs":0.3226},"Geometry":{"count":32,"meanMs":0.056115625,"p50Ms":0.0266,"p95Ms":0.0365,"p99Ms":0.955,"maxMs":0.955},"GpuRecord":{"count":32,"meanMs":0.16058437500000003,"p50Ms":0.0452,"p95Ms":0.0944,"p99Ms":3.6132,"maxMs":3.6132},"GpuUpload":{"count":32,"meanMs":0.022459374999999997,"p50Ms":0.0046,"p95Ms":0.0607,"p99Ms":0.4366,"maxMs":0.4366},"GpuSubmit":{"count":32,"meanMs":0.015371875,"p50Ms":0.008,"p95Ms":0.0324,"p99Ms":0.1367,"maxMs":0.1367},"GpuWait":{"count":125,"meanMs":0.17874079999999987,"p50Ms":0.001,"p95Ms":0.5821,"p99Ms":3.6099,"maxMs":5.5017}},"counters":{"Candidates":6400,"VisibleNotes":6400,"DrawCalls":1376,"Batches":2144,"UploadBytes":741376,"AudioUnderruns":0,"Readbacks":0,"EncodedFrames":0,"AllocatedBytes":228586472,"GcCollections":34,"GcPauseMicroseconds":4607},"workingSet":615464960}

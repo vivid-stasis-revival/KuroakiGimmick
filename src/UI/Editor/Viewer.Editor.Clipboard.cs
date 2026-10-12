@@ -21,7 +21,7 @@ public sealed partial class Viewer
         if (editor == null) return;
         var clips = SelectedClipList();
         if (clips.Length == 0 && imageInspector && ActiveImageGroup is { } group) clips = group.Clips;
-        if (clips.Length == 0 && selectedClip is Guid id && editor.Vsm.Find(id) is { } single) clips = [single];
+        if (clips.Length == 0 && selectedClip is Guid id && EditorFindClip(id) is { } single) clips = [single];
         var windows = new List<JsonObject>();
         if (clips.Length == 0 && selectedWindowEvent >= 0 && selectedWindowEvent < (editor.Windows.Events?.Count ?? 0)
             && editor.Windows.Events![selectedWindowEvent] is JsonObject e)

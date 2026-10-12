@@ -29,6 +29,7 @@ public static class NoteMotion
     /// <summary>已求值参数版横向偏移；渲染热路径按 lane 缓存 mod 后调用，避免逐 Note 重复查时间轴。</summary>
     public static double XFromValues(double beatAtTime, double distance, double xOffset, double beatMotion)
     {
+        if (beatMotion == 0 && double.IsFinite(beatAtTime) && double.IsFinite(distance)) return xOffset;
         double beat = (beatAtTime + .3) % 2, f = beat % 1, amount = 0;
         if (f < .3)
         {
@@ -49,7 +50,7 @@ public static class NoteMotion
     public static double YFromScroll(double distance, double yOffset, double driven, double beatsPerSecond, double scroll, double wave)
     {
         return 144 - (((distance - yOffset) * .1) + driven * beatsPerSecond * 22) * scroll
-            - wave * .2 * Math.Sin(distance * .006578947368421052);
+            - (wave == 0 && double.IsFinite(distance) ? 0 : wave * .2 * Math.Sin(distance * .006578947368421052));
     }
 
     /// <summary>纵向位置。144 是判定线的 y，0.1 是毫秒到逻辑像素的原版系数；这些数值不是可调参数。</summary>

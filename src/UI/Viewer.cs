@@ -119,6 +119,7 @@ public sealed partial class Viewer : IDisposable
     /// </summary>
     public void Run()
     {
+        long frameStart = Stopwatch.GetTimestamp();
         while (!quit)
         {
             while (Sdl.SDL_PollEvent(out var e))
@@ -126,14 +127,19 @@ public sealed partial class Viewer : IDisposable
                 Handle(e);
             }
             Update();
+            if (quit) break;
+            if (!host.Gpu.PresentationReady()) { Sdl.SDL_Delay(1); continue; }
             Draw();
             host.Gpu.Submit(present: true);
             PresentNativeWindows();
+            PerformanceStats.Record(PerformanceStats.Stage.Frame, Stopwatch.GetElapsedTime(frameStart).TotalMilliseconds);
+            frameStart = Stopwatch.GetTimestamp();
             if (!transport.Playing && !Busy)
             {
                 Sdl.SDL_Delay(8);
             }
         }
+        PerformanceStats.WriteConfiguredReport();
     }
 
     /// <summary>
@@ -451,6 +457,7 @@ public sealed partial class Viewer : IDisposable
         transport.Dispose();
         cardRenderer?.Dispose();
         uiTarget?.Dispose();
+        timelineNotePainter?.Dispose();
         Renderer.Dispose();
         fonts.Dispose();
         logo.Dispose();
