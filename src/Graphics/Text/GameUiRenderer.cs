@@ -178,10 +178,12 @@ public sealed partial class GameUiRenderer : IDisposable
     }
 
     /// <summary>
-    /// 用统计数字精灵右对齐画一个整数。字距取一个源像素，与原版面板一致。
+    /// 用统计数字精灵右对齐画一个整数。字距取一个源像素，与原版面板一致；超过
+    /// <paramref name="maxWidth"/> 时整串等比缩小，避免高位数值向左压进统计条。
     /// 资源缺失时返回 false，由调用方退回文字。
     /// </summary>
-    public bool DrawStatNumber(Session session, float rightX, float y, float scale, int value)
+    public bool DrawStatNumber(Session session, float rightX, float y, float scale, int value,
+        float maxWidth = float.PositiveInfinity)
     {
         Use(session.GameUi);
         if (current?.Data == null || !current.Data.Sprites.TryGetValue("sp_font_techstat", out var sprite))
@@ -190,7 +192,7 @@ public sealed partial class GameUiRenderer : IDisposable
         }
         string text = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
         var glyphs = new List<(Texture Texture, Rect Bounds)>(text.Length);
-        float total = 0;
+        float sourceWidth = 0;
         foreach (char c in text)
         {
             if (c is < '0' or > '9' || c - '0' >= sprite.Frames.Count)
@@ -203,23 +205,37 @@ public sealed partial class GameUiRenderer : IDisposable
                 return false;
             }
             glyphs.Add((Image(file), bounds));
-            total += bounds.W * scale;
+            sourceWidth += bounds.W;
         }
         if (glyphs.Count == 0)
         {
             return false;
         }
-        total += scale * (glyphs.Count - 1);
-        float pen = rightX - total;
+        sourceWidth += glyphs.Count - 1;
+        float drawScale = FitScale(sourceWidth * scale, scale, maxWidth);
+        float pen = rightX - sourceWidth * drawScale;
+        // 缩小的整串在原字号占据的高度里居中；正常宽度时 offset 为 0，旧布局完全不动。
+        float top = y + glyphs.Max(g => g.Bounds.H) * (scale - drawScale) / 2;
         foreach (var (texture, bounds) in glyphs)
         {
             // 只取不透明区域那一块：源图四周留白，整张贴会把数字排得过散。
             var uv = new Rect(bounds.X / texture.Width, bounds.Y / texture.Height,
                 bounds.W / texture.Width, bounds.H / texture.Height);
-            canvas.Quad(texture, new(pen, y, bounds.W * scale, bounds.H * scale), Color.White, uv);
-            pen += (bounds.W + 1) * scale;
+            canvas.Quad(texture, new(pen, top, bounds.W * drawScale, bounds.H * drawScale), Color.White, uv);
+            pen += (bounds.W + 1) * drawScale;
         }
         return true;
+    }
+
+    /// <summary>把一段已量好的内容限制到最大宽度；未超宽时必须原样返回请求倍率。</summary>
+    internal static float FitScale(float requestedWidth, float requestedScale, float maxWidth)
+    {
+        if (!(requestedWidth > 0) || !(requestedScale > 0) || !(maxWidth > 0)
+            || !float.IsFinite(requestedWidth) || requestedWidth <= maxWidth)
+        {
+            return requestedScale;
+        }
+        return requestedScale * maxWidth / requestedWidth;
     }
 
     /// <summary>数字精灵的不透明包围盒，按文件缓存；无法读取或整张透明时返回 null。</summary>

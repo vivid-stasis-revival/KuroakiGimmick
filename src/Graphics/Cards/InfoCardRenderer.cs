@@ -193,7 +193,9 @@ public sealed class InfoCardRenderer : IDisposable
         canvas.Border(Panel(1, 1, PanelW - 2, PanelH - 2), Bg0, PanelScale);
         // 六项时行距 14、五项时 16，与标签精灵的两种排布对应。
         float[] rowY = gimmick ? [5, 19, 33, 47, 61, 75] : [5, 21, 37, 53, 69];
-        const float barX = 86, barMax = 78, barH = 10, valueRight = 214;
+        const float barX = 86, barMax = 78, barH = 10, valueGap = 4, valueRight = 214;
+        // 数值只能使用满条右侧的独立列，并与条保留四个面板像素。高位数值缩小，不反向侵占标签或条。
+        float valueMaxWidth = (valueRight - (barX + barMax + valueGap)) * PanelScale;
         bool labels = gameUi.DrawStatLabels(session, Panel(8, 6, 0, 0).X, Panel(8, 6, 0, 0).Y, 2 * PanelScale, gimmick);
         for (int i = 0; i < shown.Length; i++)
         {
@@ -205,12 +207,14 @@ public sealed class InfoCardRenderer : IDisposable
                 fonts.Text(canvas, name, Panel(10, y + 1, 0, 0).X, Panel(10, y + 1, 0, 0).Y, 9 * PanelScale, TextColor, monospaced: true);
             }
             int rounded = SongStats.Round(value);
-            if (!gameUi.DrawStatNumber(session, Panel(valueRight, y + 1, 0, 0).X, Panel(valueRight, y + 1, 0, 0).Y, PanelScale * 2, rounded))
+            if (!gameUi.DrawStatNumber(session, Panel(valueRight, y + 1, 0, 0).X, Panel(valueRight, y + 1, 0, 0).Y,
+                PanelScale * 2, rounded, valueMaxWidth))
             {
                 string number = rounded.ToString(CultureInfo.InvariantCulture);
                 float size = 9 * PanelScale;
-                fonts.Text(canvas, number, Panel(valueRight, y, 0, 0).X - fonts.Measure(number, size, monospaced: true),
-                    Panel(valueRight, y, 0, 0).Y, size, TextColor, monospaced: true);
+                float fitted = GameUiRenderer.FitScale(fonts.Measure(number, size, monospaced: true), size, valueMaxWidth);
+                fonts.Text(canvas, number, Panel(valueRight, y, 0, 0).X - fonts.Measure(number, fitted, monospaced: true),
+                    Panel(valueRight, y, 0, 0).Y + (size - fitted) / 2, fitted, TextColor, monospaced: true);
             }
             if (value <= 0)
             {
