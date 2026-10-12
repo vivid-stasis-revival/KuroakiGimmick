@@ -1,4 +1,0 @@
-2026-10-12 15:58:54.142 dotnet[49965:11418986] ApplePersistence=NO
-[Kuroaki/GPU] backend=metal, shaderFormats=Msl, MetalLib
-[Kuroaki/GPU] device=Apple M4 Pro, driver=unknown, version=unknown
-PASS note shaders: SPIR-V, MSL and HLSL translation (D3D bytecode/runtime still requires Windows)

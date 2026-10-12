@@ -129,15 +129,7 @@ PLIST
         [ -f "${package}/${asset}" ] || { echo "发布结果缺少资源：${asset}" >&2; return 1; }
     done
     for item in README.md CHANGELOG.md THIRD_PARTY_NOTICES.md; do cp "${KG_AOT_ROOT}/${item}" "${package}/${item}"; done
-    mkdir -p "${package}/docs"
-    [ ! -d "${KG_AOT_ROOT}/docs" ] || cp -R "${KG_AOT_ROOT}/docs/." "${package}/docs/"
-    for item in OPTIMIZATION_ENGINE.md RUSTBRIDGE.md RUSTBRIDGE_ENGINE.md RUST_RUNTIME_V030.md RUSTBRIDGE_CHANGELOG.md PERFORMANCE.md; do
-        [ ! -f "${KG_AOT_ROOT}/${item}" ] || cp "${KG_AOT_ROOT}/${item}" "${package}/${item}"
-    done
     cp -R "${KG_AOT_ROOT}/ThirdParty" "${package}/ThirdParty"
-    mkdir -p "${package}/tests/Regression"
-    cp "${KG_AOT_ROOT}/tests/Regression/README.md" "${package}/tests/Regression/README.md"
-    mkdir -p "${package}/docs"
     if [ -n "${KUROAKI_FFMPEG:-}" ]; then
         [ -f "${KUROAKI_FFMPEG}" ] || { echo 'KUROAKI_FFMPEG 文件不存在。' >&2; return 1; }
         case "${rid}" in

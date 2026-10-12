@@ -1,8 +1,0 @@
-2026-10-12 19:45:46.076 dotnet[1727:11855690] ApplePersistence=NO
-[Kuroaki/GPU] backend=metal, shaderFormats=Msl, MetalLib
-[Kuroaki/GPU] device=Apple M4 Pro, driver=unknown, version=unknown
-[RustEngine] VSC parsed: 1000 notes, 0 diagnostics, 2.68 ms (auto).
-[RustTimeline] batch evaluator ready: 0 tracks, 0 segments (auto).
-Note skin: vividstasis-default-note-skin-exact-lanes-v2 / exact lanes / skins: normal, stopmotion, extendnova, stargazers @ <repo>/tests/Performance/bin/Release/net8.0/Assets/NoteSkinFull/NotesExact
-PASS export encoder-failure: original preserved, pending frames/resources cleaned
-{"sampleWindow":4096,"stages":{},"counters":{"Candidates":0,"VisibleNotes":0,"DrawCalls":0,"Batches":0,"UploadBytes":0,"AudioUnderruns":0,"Readbacks":0,"EncodedFrames":0,"AllocatedBytes":0,"GcCollections":0,"GcPauseMicroseconds":0},"workingSet":608141312}

@@ -158,16 +158,15 @@ jobs:
           source scripts/rust-native-common.sh
           kg_rust_publish '${{ matrix.rid }}' 'artifacts/${{ matrix.rid }}'
 
-      - name: Include release guides and dependency notices
+      - name: Include package readme and dependency notices
         shell: bash
         run: |
           set -euo pipefail
           output='artifacts/${{ matrix.rid }}'
-          cp README.md CHANGELOG.md THIRD_PARTY_NOTICES.md OPTIMIZATION_ENGINE.md \
-            RUSTBRIDGE.md RUSTBRIDGE_ENGINE.md RUST_RUNTIME_V030.md RUSTBRIDGE_CHANGELOG.md "$output/"
+          cp README.md CHANGELOG.md THIRD_PARTY_NOTICES.md "$output/"
           cp -R ThirdParty "$output/"
-          mkdir -p "$output/tests/Regression"
-          cp tests/Regression/README.md "$output/tests/Regression/README.md"
+          test ! -d "$output/docs"
+          test ! -d "$output/tests"
 
       - name: Verify native output and embedded version
         shell: bash

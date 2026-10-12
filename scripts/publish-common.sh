@@ -91,11 +91,8 @@ PLIST
     for reference_asset in vsm-reference.json; do
         [ -f "${package}/Assets/Documentation/${reference_asset}" ] || { echo "发布结果缺少语法手册：${reference_asset}" >&2; return 1; }
     done
-    for item in README.md CHANGELOG.md THIRD_PARTY_NOTICES.md OPTIMIZATION_ENGINE.md RUSTBRIDGE.md RUSTBRIDGE_ENGINE.md RUST_RUNTIME_V030.md RUSTBRIDGE_CHANGELOG.md; do cp "${KG_ROOT}/${item}" "${package}/${item}"; done
+    for item in README.md CHANGELOG.md THIRD_PARTY_NOTICES.md; do cp "${KG_ROOT}/${item}" "${package}/${item}"; done
     cp -R "${KG_ROOT}/ThirdParty" "${package}/ThirdParty"
-    mkdir -p "${package}/tests/Regression"
-    cp "${KG_ROOT}/tests/Regression/README.md" "${package}/tests/Regression/README.md"
-    mkdir -p "${package}/docs"
     # FFmpeg is optional for preview, required for video export. If explicitly
     # supplied, the caller must provide a binary for the TARGET architecture.
     if [ -n "${KUROAKI_FFMPEG:-}" ]; then

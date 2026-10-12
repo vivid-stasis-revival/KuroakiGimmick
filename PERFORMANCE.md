@@ -2,7 +2,7 @@
 
 本地基线为 `ee223188620763d15e70ae9c3aded0faa87ee6d8`（v0.1.5 / 18.0），开始时工作区干净。已直接修改 C# / Rust、构建并测试；没有提交、推送或创建 Release。旧代码通过 `git archive` 导出到工作区外进行比较，没有重置当前仓库。完整 Scene 基线也重新构建了基线版本 Rust 库。
 
-实测环境：macOS 15.7、Apple M4 Pro、SDL_GPU Metal、.NET 8.0.22，Release JIT；另验证 osx-arm64 NativeAOT 发布和启动。GPU 压力基准为 640×360，完整场景逻辑坐标仍是 320×180。使用相同本地资产。原始输出在 [results/m4-pro-2026-10-12](tests/Performance/results/m4-pro-2026-10-12/)，复现方式在 [README](tests/Performance/README.md) 与 [performance-check.sh](scripts/performance-check.sh)。
+实测环境：macOS 15.7、Apple M4 Pro、SDL_GPU Metal、.NET 8.0.22，Release JIT；另验证 osx-arm64 NativeAOT 发布和启动。GPU 压力基准为 640×360，完整场景逻辑坐标仍是 320×180。使用相同本地资产。原始输出和测试源码保留在本地 `tests/Performance` 工作区，现已从 Git 跟踪移除。复现脚本 [performance-check.sh](scripts/performance-check.sh) 需要该本地工作区；公开 CI 使用 Rust 单元测试及应用内置自测。
 
 ## HAL30000 真实编辑器回归（后续修复）
 
@@ -140,14 +140,16 @@ Profiling 默认关闭，启用和统计边界见测试 README。`GpuWait` 单�
 - [src/UI/Viewer.Drawing.cs](src/UI/Viewer.Drawing.cs)
 - [src/UI/Viewer.Input.cs](src/UI/Viewer.Input.cs)
 - [src/UI/Viewer.cs](src/UI/Viewer.cs)
-- [tests/Performance/Performance.csproj](tests/Performance/Performance.csproj)
-- [tests/Performance/Program.cs](tests/Performance/Program.cs)
-- [tests/Performance/README.md](tests/Performance/README.md)
-- [tests/Regression/PerformanceRegression.cs](tests/Regression/PerformanceRegression.cs)
-- [tests/Regression/Program.cs](tests/Regression/Program.cs)
+- `tests/Performance/Performance.csproj`（仅本地）
+- `tests/Performance/Program.cs`（仅本地）
+- `tests/Performance/README.md`（仅本地）
+- `tests/Regression/PerformanceRegression.cs`（仅本地）
+- `tests/Regression/Program.cs`（仅本地）
 
 性能原始结果目录和本报告也为新增文件。未自动提交。
 
 最终再次运行完整 `performance-check.sh` 成功，包括全部压力场景、Rust verify、回退像素比对、粒子像素比对、异步读回、音频、失败/取消和导出探测；输出记录在结果目录 `repro-check.txt` 和 `repro-*` 文本。
 
 本次 HAL 回归另修改/新增：`src/Core/Models/Chart.cs`、`src/Graphics/SdlGpu/TimelineNotePainter.cs`、`src/Graphics/SdlGpu/Canvas.Presentation.cs`、`src/UI/Viewer.WorkspaceMemorySmoke.cs`、`tests/Performance/SwitchMemory.cs`、`scripts/workspace-memory-check.py`、`scripts/publish-aot-common.sh`。发布脚本适配用户将文档移至 docs 的工作区调整；未恢复或覆盖用户文档移动。
+
+后续打包调整：独立 `tests` 工作区已从 Git 跟踪移除并保留在本地，`.gitignore` 忽略整个目录。发行包不再包含 `docs`、测试说明或开发性能报告。NativeAOT Actions 与本地 Bash/PowerShell 打包均只复制 README、CHANGELOG、第三方声明及 ThirdParty；应用运行时 VSM 手册资源保留。两种 RID 的 Actions 文件复制步骤、PowerShell 复制、macOS NativeAOT 实际 ZIP 目录检查、四组原生自测和签名验证通过。Windows 的完整 NativeAOT 产物由 CI 验证。

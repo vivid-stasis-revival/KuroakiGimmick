@@ -1,2 +1,0 @@
-audio UI stall=3000ms supplyCycles=276 observedUnderruns=0
-PASS audio pause, seek, delay, mute, speed, chart control, dispose
