@@ -162,7 +162,7 @@ public sealed partial class SceneRenderer
         {
             // 房间里深度 100 的 hold 装饰是固定的，夹在轨道对象 (200) 与音符之间；它不能进入移动的 proxy。
             // 所以在这里中途合成一次，画完固定判定装饰后再回到透明的 field 目标继续。
-            CompositeField(session, t, session.Chart.Mods.Any(e => e.Proxy >= 0), clearFooter: false);
+            CompositeField(session, t, session.HasProxyEvents, clearFooter: false);
             nativeGimmick.DrawStage(session, t, GimmickStages.FixedJudgment, drawNotes);
             canvas.Begin(field, RenderWidth, RenderHeight, 320, 180, new(0, 0, 0, 0));
         }
@@ -280,6 +280,7 @@ public sealed partial class SceneRenderer
             canvas.Clip(new(0, 0, 320, TrackBottom));
             // Preserve original draw ordering, clipping, blend layers and SDL_GPU output.
             // Only the note movement numerics are replaceable by a native batch.
+            int visibleCount = 0;
             void DrawOne(Note n, double y, double endY, double motionX)
             {
                 int lane = n.Type is 1 or 7 or 8 ? 4 + n.Lane : n.Lane;
@@ -287,6 +288,7 @@ public sealed partial class SceneRenderer
                     ? alphaByLane[lane]
                     : noteAlpha * M("notealpind" + lane);
                 if (Math.Max(y, endY) < -25 || Math.Min(y, endY) > 205) return;
+                visibleCount++;
                 float x = (float)(NoteSkin.LaneX(n.Type, n.Lane) + motionX);
                 if (n.Type == 2)
                 {
@@ -302,83 +304,75 @@ public sealed partial class SceneRenderer
                 }
             }
 
-            bool nativeEvaluated = false;
-            if (RustNoteBridge.Enabled)
+            var motionParams = new RustNoteBridge.MotionParams
             {
-                // NoteIndex gives us a bounded, start-sorted candidate stream. Reuse buffers
-                // across frames rather than allocating FFI payloads for every frame/note.
-                rustNoteCandidates.Clear();
-                foreach (var n in session.NoteIndex.Candidates(visualTime, latestStart))
+                Beat = beat, Alignment = alignment, Driven = driven, BeatsPerSecond = bpmAtBeat / 60,
+                Wave = wave, BeatMotion = beatMotion, Custom = custom ? 1u : 0u
+            };
+            bool useRust = RustNoteBridge.Enabled;
+            for (int lane = 0; lane < rustLaneInputs.Length; lane++)
+                rustLaneInputs[lane] = new() { Scroll = scrollByLane[lane], XOffset = xOffsetByLane[lane],
+                    YOffset = yOffsetByLane[lane], BoostTime = boostTimeByLane[lane], BoostDistance = boostDistanceByLane[lane] };
+
+            void EvaluateChunk(int count, bool validLanes)
+            {
+                PerformanceStats.Add(PerformanceStats.Counter.Candidates, count);
+                bool evaluated = useRust && validLanes && RustNoteBridge.TryEvaluateIndexed(motionParams,
+                    session.NoteIndex.Runtime, rustCandidateIndices, rustLaneInputs, scrollTime, rustMotionOutputs, count);
+                if (useRust && !evaluated)
                 {
-                    if (n.Time * 1000 > drawUntil) break;
-                    rustNoteCandidates.Add(n);
-                }
-                int count = rustNoteCandidates.Count;
-                if (count > 0)
-                {
-                    EnsureRustMotionCapacity(count);
+                    using var prepare = PerformanceStats.Measure(PerformanceStats.Stage.Candidates);
                     for (int i = 0; i < count; i++)
                     {
-                        var n = rustNoteCandidates[i];
-                        int lane = n.Type is 1 or 7 or 8 ? 4 + n.Lane : n.Lane;
-                        double scroll = lane >= 0 && lane < scrollByLane.Length
-                            ? scrollByLane[lane]
-                            : NoteMotion.ScrollMultiplier(scrollSpeed, M("scrollind" + lane), velocity);
-                        double laneYOffset = lane >= 0 && lane < yOffsetByLane.Length
-                            ? yOffsetByLane[lane] : yOffset + M("yoffsetind" + lane);
-                        double laneXOffset = lane >= 0 && lane < xOffsetByLane.Length
-                            ? xOffsetByLane[lane] : xOffset + M("xoffsetind" + lane);
-                        double laneBoostTime = lane >= 0 && lane < boostTimeByLane.Length
-                            ? boostTimeByLane[lane] : boostTime + M("boost_timeind" + lane);
-                        double laneBoostDistance = lane >= 0 && lane < boostDistanceByLane.Length
-                            ? boostDistanceByLane[lane]
-                            : boostDistance == 0 ? 0 : boostDistance + M("boost_distanceind" + lane);
-                        rustMotionInputs[i] = new RustNoteBridge.MotionInput
+                        var n = rustNoteCandidates[i]; int lane = n.Type is 1 or 7 or 8 ? n.Lane + 4 : n.Lane;
+                        rustMotionInputs[i] = lane >= 0 && lane < rustLaneInputs.Length ? rustLaneInputs[lane] : new()
                         {
-                            Distance = (n.Time - scrollTime) * 1000,
-                            EndDistance = (n.End - scrollTime) * 1000,
-                            Scroll = scroll,
-                            XOffset = laneXOffset,
-                            YOffset = laneYOffset,
-                            BoostTime = laneBoostTime,
-                            BoostDistance = laneBoostDistance
+                            Scroll = NoteMotion.ScrollMultiplier(scrollSpeed, M("scrollind" + lane), velocity),
+                            XOffset = xOffset + M("xoffsetind" + lane), YOffset = yOffset + M("yoffsetind" + lane),
+                            BoostTime = boostTime + M("boost_timeind" + lane),
+                            BoostDistance = boostDistance == 0 ? 0 : boostDistance + M("boost_distanceind" + lane)
                         };
+                        rustMotionInputs[i].Distance = (n.Time - scrollTime) * 1000;
+                        rustMotionInputs[i].EndDistance = (n.End - scrollTime) * 1000;
                     }
-                    var motionParams = new RustNoteBridge.MotionParams
-                    {
-                        Beat = beat,
-                        Alignment = alignment,
-                        Driven = driven,
-                        BeatsPerSecond = bpmAtBeat / 60,
-                        Wave = wave,
-                        BeatMotion = beatMotion,
-                        Custom = custom ? 1u : 0u
-                    };
-                    nativeEvaluated = RustNoteBridge.TryEvaluate(motionParams, rustMotionInputs, rustMotionOutputs, count);
-                    if (nativeEvaluated)
-                    {
-                        for (int i = 0; i < count; i++)
-                        {
-                            var motion = rustMotionOutputs[i];
-                            DrawOne(rustNoteCandidates[i], motion.Y, motion.EndY, motion.XOffset);
-                        }
-                    }
+                    using var nativeTiming = PerformanceStats.Measure(PerformanceStats.Stage.Rust);
+                    evaluated = RustNoteBridge.TryEvaluate(motionParams, rustMotionInputs, rustMotionOutputs, count);
                 }
-                else nativeEvaluated = true; // No notes: do not call native code with empty arrays.
-            }
-            if (!nativeEvaluated)
-            {
-                // Trusted original C# path: unchanged formulas, always available even
-                // without the cdylib or after a native/managed mismatch in verify mode.
-                foreach (var n in session.NoteIndex.Candidates(visualTime, latestStart))
+                using var geometryTiming = PerformanceStats.Measure(PerformanceStats.Stage.Geometry);
+                for (int i = 0; i < count; i++)
                 {
-                    if (n.Time * 1000 > drawUntil) break;
-                    int lane = n.Type is 1 or 7 or 8 ? 4 + n.Lane : n.Lane;
-                    double distance = (n.Time - scrollTime) * 1000;
-                    double endDistance = (n.End - scrollTime) * 1000;
-                    DrawOne(n, Y(distance, lane), Y(endDistance, lane), X(distance, lane));
+                    var n = rustNoteCandidates[i];
+                    if (evaluated) { var o = rustMotionOutputs[i]; DrawOne(n, o.Y, o.EndY, o.XOffset); }
+                    else
+                    {
+                        int lane = n.Type is 1 or 7 or 8 ? n.Lane + 4 : n.Lane;
+                        double distance = (n.Time - scrollTime) * 1000, endDistance = (n.End - scrollTime) * 1000;
+                        DrawOne(n, Y(distance, lane), Y(endDistance, lane), X(distance, lane));
+                    }
+                    rustNoteCandidates[i] = null!; // do not retain an old session after a switch
                 }
             }
+            int chunk = 0; bool validLanes = true;
+            var candidates = session.NoteIndex.Visible(visualTime, latestStart).GetEnumerator();
+            bool available = true;
+            while (available)
+            {
+                using (PerformanceStats.Measure(PerformanceStats.Stage.Candidates))
+                {
+                    while (chunk < MotionChunkSize && (available = candidates.MoveNext()))
+                    {
+                        var entry = candidates.Current; var n = entry.Value.Note;
+                        if (n.Time * 1000 > drawUntil) { available = false; break; }
+                        rustNoteCandidates[chunk] = n; rustCandidateIndices[chunk] = (uint)candidates.CurrentIndex;
+                        int lane = n.Type is 1 or 7 or 8 ? n.Lane + 4 : n.Lane;
+                        validLanes &= lane >= 0 && lane < rustLaneInputs.Length;
+                        chunk++;
+                    }
+                }
+                if (chunk > 0) EvaluateChunk(chunk, validLanes);
+                chunk = 0; validLanes = true;
+            }
+            PerformanceStats.Add(PerformanceStats.Counter.VisibleNotes, visibleCount);
             // 命中特效在原版是深度 -375 的独立实例，压在音符（-350）之上，共用同一块轨道裁剪。
             DrawJudgmentEffects(session, t);
             canvas.Clip(null);

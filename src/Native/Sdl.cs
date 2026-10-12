@@ -206,6 +206,9 @@ public static partial class Sdl
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     public static extern void SDL_Delay(uint ms);
 
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    public static extern void SDL_PumpEvents();
+
     // -------------------------------------------------------------------------
     // 原生对话框
     // -------------------------------------------------------------------------

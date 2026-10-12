@@ -33,10 +33,10 @@ public sealed partial class Viewer
     void DrawImageGroupClips(string id, float y, bool interactive)
     {
         if (editor == null) return;
-        foreach (var group in ImageGroups(id))
+        foreach (var entry in VisibleImageGroups(id))
         {
-            double start = group.Beat;
-            double end = group.Editable ? group.End(Current.Timeline.Bpm) : group.Clips.Max(VsmVisualEnd);
+            var group = entry.Value;
+            double start = entry.Start, end = entry.End;
             if (imageGroupDrag is { } drag && drag.Group.Id == group.Id) (start, end) = ImageGroupDragRange(drag);
             float x = BeatX(start), width = Math.Max(10, BeatX(end) - x);
             if (x + width < editorTracksRect.X || x > editorTracksRect.X + editorTracksRect.W) continue;

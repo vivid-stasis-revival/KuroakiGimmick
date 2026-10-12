@@ -1,0 +1,12 @@
+2026-10-12 19:45:30.895 dotnet[1718:11855266] ApplePersistence=NO
+[Kuroaki/GPU] backend=metal, shaderFormats=Msl, MetalLib
+[Kuroaki/GPU] device=Apple M4 Pro, driver=unknown, version=unknown
+[RustEngine] VSC parsed: 10000 notes, 0 diagnostics, 12.01 ms (auto).
+[RustTimeline] batch evaluator ready: 0 tracks, 0 segments (auto).
+Note skin: vividstasis-default-note-skin-exact-lanes-v2 / exact lanes / skins: normal, stopmotion, extendnova, stargazers @ <repo>/tests/Performance/bin/Release/net8.0/Assets/NoteSkinFull/NotesExact
+[RustBridge 0.1.0] native motion evaluator enabled (verify).
+SDL_GPU / metal holds N=10000 CPU record+submit: samples=8 mean=3.205ms P50=3.153ms P95=3.434ms P99=3.434ms max=3.434ms throughput=312.00/s
+fence-completed frame+readback: samples=8 mean=9.019ms P50=6.255ms P95=14.546ms P99=14.546ms max=14.546ms throughput=110.88/s
+recordedBatches/frame=100 uploadBytes/frame=1300544 drawCalls/frame=76
+allocation/frame=946173B sampledPeakWorkingSet=674.6MiB processCpu=0.170s
+{"sampleWindow":4096,"stages":{"Frame":{"count":8,"meanMs":9.01865,"p50Ms":6.2548,"p95Ms":14.5464,"p99Ms":14.5464,"maxMs":14.5464},"Scene":{"count":10,"meanMs":13.0742,"p50Ms":2.9853,"p95Ms":99.3219,"p99Ms":99.3219,"maxMs":99.3219},"Candidates":{"count":30,"meanMs":0.17038333333333328,"p50Ms":0.1437,"p95Ms":0.2949,"p99Ms":1.202,"maxMs":1.202},"Rust":{"count":30,"meanMs":0.2401566666666667,"p50Ms":0.1577,"p95Ms":0.536,"p99Ms":2.6154,"maxMs":2.6154},"Geometry":{"count":30,"meanMs":0.7638966666666666,"p50Ms":0.7782,"p95Ms":1.9325,"p99Ms":2.1752,"maxMs":2.1752},"GpuRecord":{"count":10,"meanMs":0.36072000000000004,"p50Ms":0.0816,"p95Ms":2.8054,"p99Ms":2.8054,"maxMs":2.8054},"GpuUpload":{"count":10,"meanMs":0.14516,"p50Ms":0.0396,"p95Ms":0.6623,"p99Ms":0.6623,"maxMs":0.6623},"GpuSubmit":{"count":10,"meanMs":0.05059,"p50Ms":0.0255,"p95Ms":0.2289,"p99Ms":0.2289,"maxMs":0.2289},"GpuWait":{"count":37,"meanMs":1.7582594594594594,"p50Ms":0.006,"p95Ms":10.8256,"p99Ms":14.7064,"maxMs":14.7064}},"counters":{"Candidates":100000,"VisibleNotes":100000,"DrawCalls":760,"Batches":1000,"UploadBytes":13005440,"AudioUnderruns":0,"Readbacks":0,"EncodedFrames":0,"AllocatedBytes":223382608,"GcCollections":22,"GcPauseMicroseconds":4048},"workingSet":706691072}

@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using KuroakiGimmick.Native;
+using KuroakiGimmick.Core;
 using static KuroakiGimmick.Native.Sdl;
 
 namespace KuroakiGimmick.Graphics;
@@ -8,28 +9,22 @@ namespace KuroakiGimmick.Graphics;
 public sealed unsafe partial class GpuDevice : IDisposable
 {
     /// <summary>仅扩容共享顶点/上传缓冲，最少分配 1 MiB；不逐帧分配或缩容。</summary>
-    void EnsureVertices(uint size)
+    void EnsureVertices(MeshSlot slot, uint size)
     {
-        if (size <= vertexCapacity)
+        if (size <= slot.Capacity)
         {
             return;
         }
-        if (vertexBuffer != 0)
-        {
-            SDL_ReleaseGPUBuffer(Handle, vertexBuffer);
-        }
-        if (uploadBuffer != 0)
-        {
-            SDL_ReleaseGPUTransferBuffer(Handle, uploadBuffer);
-        }
-        vertexBuffer = uploadBuffer = 0;
-        vertexCapacity = Math.Max(size, 1024 * 1024);
-        vertexBuffer = Check(SDL_CreateGPUBuffer(Handle, new GPUBufferCreateInfo
-        {
-            usage = 1,
-            size = vertexCapacity
-        }), "Create vertex buffer");
-        uploadBuffer = Transfer(vertexCapacity);
+        ulong grown = Math.Max(1024UL * 1024, Math.Max(size, (ulong)slot.Capacity * 2));
+        uint capacity = checked((uint)Math.Min(grown, uint.MaxValue));
+        nint nextVertex = Check(SDL_CreateGPUBuffer(Handle, new GPUBufferCreateInfo { usage = 1, size = capacity }), "Create vertex buffer");
+        nint nextUpload;
+        try { nextUpload = Transfer(capacity); }
+        catch { SDL_ReleaseGPUBuffer(Handle, nextVertex); throw; }
+        // This slot's fence completed before growth/reuse; old resources are no longer being read by any command.
+        if (slot.Vertex != 0) SDL_ReleaseGPUBuffer(Handle, slot.Vertex);
+        if (slot.Upload != 0) SDL_ReleaseGPUTransferBuffer(Handle, slot.Upload);
+        slot.Vertex = nextVertex; slot.Upload = nextUpload; slot.Capacity = capacity;
     }
 
     /// <summary>与本 pass 内已推送的 uniform 快照逐字节比较，用于跳过重复 push；长度不同即判不等。</summary>
@@ -71,6 +66,17 @@ public sealed unsafe partial class GpuDevice : IDisposable
         return true;
     }
 
+    bool SubmitTracked(nint command, MeshSlot? mesh, bool presentation)
+    {
+        if (mesh == null && !presentation) return SDL_SubmitGPUCommandBuffer(command);
+        nint handle = SDL_SubmitGPUCommandBufferAndAcquireFence(command);
+        if (handle == 0) { SDL_WaitForGPUIdle(Handle); return false; } // exceptional path: never reuse an untracked upload
+        var fence = new SubmissionFence(handle);
+        if (mesh != null) mesh.Fence = fence;
+        if (presentation) presentationFences.Enqueue(fence);
+        return true;
+    }
+
     /// <summary>一次 copy pass 上传全部顶点，随后消费批次。即使窗口无交换链纹理，离屏导出仍继续。</summary>
     public void Submit(bool present = false, nint presentWindow = 0)
     {
@@ -79,15 +85,20 @@ public sealed unsafe partial class GpuDevice : IDisposable
         {
             return;
         }
-        nint command = Check(SDL_AcquireGPUCommandBuffer(Handle), "Acquire render command"), pass = 0;
+        nint command, pass = 0;
+        using (PerformanceStats.Measure(PerformanceStats.Stage.GpuWait)) command = Check(SDL_AcquireGPUCommandBuffer(Handle), "Acquire render command");
+        PerformanceStats.Add(PerformanceStats.Counter.Batches, batches.Count);
         bool acquired = false;
+        MeshSlot? mesh = null;
+        nint vertexBuffer = 0, uploadBuffer = 0;
         try
         {
             nint swapchain = 0;
             uint swapWidth = 0, swapHeight = 0, swapchainFormat = 0;
             if (present && (!hidden || presentWindow != 0))
             {
-                Require(SDL_WaitAndAcquireGPUSwapchainTexture(command, outputWindow, out swapchain, out swapWidth, out swapHeight));
+                using (PerformanceStats.Measure(PerformanceStats.Stage.GpuWait))
+                    Require(SDL_WaitAndAcquireGPUSwapchainTexture(command, outputWindow, out swapchain, out swapWidth, out swapHeight));
                 acquired = swapchain != 0;
                 if (acquired)
                 {
@@ -98,9 +109,19 @@ public sealed unsafe partial class GpuDevice : IDisposable
             }
             if (vertices.Count > 0)
             {
+                using var uploadTiming = PerformanceStats.Measure(PerformanceStats.Stage.GpuUpload);
                 uint size = checked((uint)vertices.Count * 4);
-                EnsureVertices(size);
-                nint mapped = Check(SDL_MapGPUTransferBuffer(Handle, uploadBuffer, true), "Map vertex upload");
+                mesh = meshSlots[meshCursor]; meshCursor = (meshCursor + 1) % meshSlots.Length;
+                if (mesh.Fence is { } previous)
+                {
+                    using var backpressure = PerformanceStats.Measure(PerformanceStats.Stage.GpuWait);
+                    while (!previous.Complete(Handle)) { SDL_PumpEvents(); SDL_Delay(1); }
+                    previous.Release(Handle); mesh.Fence = null;
+                }
+                EnsureVertices(mesh, size); vertexBuffer = mesh.Vertex; uploadBuffer = mesh.Upload;
+                PerformanceStats.Add(PerformanceStats.Counter.UploadBytes, size);
+                nint mapped;
+                using (PerformanceStats.Measure(PerformanceStats.Stage.GpuWait)) mapped = Check(SDL_MapGPUTransferBuffer(Handle, uploadBuffer, false), "Map vertex upload");
                 CollectionsMarshal.AsSpan(vertices).CopyTo(new Span<float>((void*)mapped, vertices.Count));
                 SDL_UnmapGPUTransferBuffer(Handle, uploadBuffer);
                 nint copy = Check(SDL_BeginGPUCopyPass(command), "Begin vertex upload");
@@ -111,12 +132,12 @@ public sealed unsafe partial class GpuDevice : IDisposable
                 {
                     buffer = vertexBuffer,
                     size = size
-                }, true);
+                }, false);
                 SDL_EndGPUCopyPass(copy);
             }
 
             nint activeTarget = 0, boundPipeline = 0;
-            bool vertexBufferBound = false;
+            uint boundVertexOffset = uint.MaxValue;
             IntRect? boundScissor = null;
             Shader? uniformShader = null, samplerShader = null;
             byte[]? boundVertexUniforms = null, boundFragmentUniforms = null;
@@ -124,6 +145,7 @@ public sealed unsafe partial class GpuDevice : IDisposable
             GPUTextureSamplerBinding[]? boundTextures = null;
             int boundTextureCount = 0;
 
+            var recordTiming = PerformanceStats.Measure(PerformanceStats.Stage.GpuRecord);
             foreach (var batch in batches)
             {
                 nint target = batch.Target == 0 ? swapchain : batch.Target;
@@ -167,7 +189,7 @@ public sealed unsafe partial class GpuDevice : IDisposable
                     // 原生 GPU 状态一律按 render pass 局部看待：每开一个 pass 就清空托管侧缓存，
                     // 避免代码依赖某个后端跨 pass 保留 pipeline、scissor 或 uniform 状态。
                     boundPipeline = 0;
-                    vertexBufferBound = false;
+                    boundVertexOffset = uint.MaxValue;
                     boundScissor = null;
                     uniformShader = null;
                     samplerShader = null;
@@ -199,13 +221,14 @@ public sealed unsafe partial class GpuDevice : IDisposable
                     boundScissor = scissor;
                 }
 
-                if (!vertexBufferBound)
+                if (boundVertexOffset != batch.First)
                 {
                     SDL_BindGPUVertexBuffers(pass, 0, new GPUBufferBinding
                     {
-                        buffer = vertexBuffer
+                        buffer = vertexBuffer,
+                        offset = batch.First
                     }, 1);
-                    vertexBufferBound = true;
+                    boundVertexOffset = batch.First;
                 }
 
                 bool sameUniformShader = ReferenceEquals(uniformShader, shader);
@@ -243,16 +266,21 @@ public sealed unsafe partial class GpuDevice : IDisposable
                 boundTextures = batch.Textures;
                 boundTextureCount = batch.TextureCount;
 
-                SDL_DrawGPUPrimitives(pass, batch.Count, 1, batch.First, 0);
+                SDL_DrawGPUPrimitives(pass, shader.Instanced ? 6u : batch.Count, shader.Instanced ? batch.Count : 1u, 0, 0);
+                KuroakiGimmick.Core.PerformanceStats.Add(KuroakiGimmick.Core.PerformanceStats.Counter.DrawCalls, 1);
             }
             if (pass != 0)
             {
                 SDL_EndGPURenderPass(pass);
                 pass = 0;
             }
+            recordTiming.Dispose();
             var submit = command;
             command = 0;
-            Require(SDL_SubmitGPUCommandBuffer(submit));
+            using (PerformanceStats.Measure(PerformanceStats.Stage.GpuSubmit))
+            {
+                Require(SubmitTracked(submit, mesh, acquired && presentWindow == 0));
+            }
         }
         finally
         {
@@ -265,7 +293,7 @@ public sealed unsafe partial class GpuDevice : IDisposable
                 // 已经取得交换链纹理的命令缓冲只能 Submit，SDL 禁止 Cancel。
                 if (acquired)
                 {
-                    SDL_SubmitGPUCommandBuffer(command);
+                    SubmitTracked(command, mesh, presentWindow == 0);
                 }
                 else
                 {

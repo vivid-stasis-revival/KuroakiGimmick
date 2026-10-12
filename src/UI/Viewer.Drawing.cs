@@ -16,6 +16,7 @@ public sealed partial class Viewer
     /// <summary>绘制预览、检查面板和设置覆盖层；使用 Renderer.Final 展示场景而不是再实现一套预览逻辑。</summary>
     public void Draw(int? forcedWidth = null, int? forcedHeight = null)
     {
+        using var performanceScope = PerformanceStats.Measure(PerformanceStats.Stage.UiDraw);
         var dims = WindowSize();
         int w = forcedWidth ?? dims.W, h = forcedHeight ?? dims.H, pw = forcedWidth ?? dims.Pw, ph = forcedHeight ?? dims.Ph;
         if (w <= 0 || h <= 0 || pw <= 0 || ph <= 0)
@@ -197,16 +198,8 @@ public sealed partial class Viewer
         Canvas.Fill(seek, panel);
         // 事件密度直接由已加载文件统计，从不使用占位波形数据。
         int bins = Math.Max(1, (int) cw / 4);
-        var density = new int[bins];
-        foreach (var m in Current.Chart.Mods)
-        {
-            int bin = (int)(Current.Timeline.Bpm.Time(m.Beat) / Current.Duration * bins);
-            if (bin >= 0 && bin < bins)
-            {
-                density[bin]++;
-            }
-        }
-        int peak = Math.Max(1, density.Max());
+        var density = Current.EventDensity.Bins(bins, Current.Duration);
+        int peak = Current.EventDensity.Peak;
         for (int i = 0; i < bins; i++)
         {
             float bar = 3 + 30 * MathF.Sqrt(density[i] / (float) peak);
@@ -231,7 +224,7 @@ public sealed partial class Viewer
         Label(L.Get("EVENTS"), cx, infoY + 16);
         Text(Current.Chart.Mods.Count.ToString("N0"), cx, infoY + 34, 19, white, true);
         Label(L.Get("NOTES"), cx + cw * .27f, infoY + 16);
-        Text(Current.Chart.Notes.Count(n => n.Type is not (3 or 4 or 5)).ToString("N0"), cx + cw * .27f, infoY + 34, 19, white, true);
+        Text(Current.NoteIndex.Count.ToString("N0"), cx + cw * .27f, infoY + 34, 19, white, true);
         Label("BPM", cx + cw * .52f, infoY + 16);
         Text(Current.Timeline.Bpm.BpmAtBeat(Current.Timeline.Bpm.Beat(time)).ToString("0.##"), cx + cw * .52f, infoY + 34, 19, white, true);
         Label(L.Get("PREVIEW"), cx + cw * .77f, infoY + 16);

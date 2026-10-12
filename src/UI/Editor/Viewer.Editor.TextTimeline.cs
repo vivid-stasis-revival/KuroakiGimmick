@@ -18,12 +18,16 @@ public sealed partial class Viewer
     void DrawTextGroupClips(string id, float y, bool interactive)
     {
         if (editor == null) return;
-        foreach (var group in editor.Vsm.Clips.Where(c => CustomText.TryMod(c.Name, out _, out var target) && target == id)
-            .GroupBy(c => (c.Beat, c.Duration, c.Ease)))
+        EnsureTimelineClipIndex();
+        if (!timelineTextIndices.TryGetValue(id, out var index)) return;
+        timelineVisibleText.Clear();
+        foreach (var e in index.Overlap(beatStart - 10 / pixelsPerBeat, beatStart + editorTracksRect.W / pixelsPerBeat)) timelineVisibleText.Add(e);
+        timelineVisibleText.Sort(static (a, b) => a.Order.CompareTo(b.Order));
+        foreach (var entry in timelineVisibleText)
         {
-            var clip = group.First(); float x = BeatX(clip.Beat), width = Math.Max(10, BeatX(group.Max(VsmVisualEnd)) - x);
-            if (x + width < editorTracksRect.X || x > editorTracksRect.X + editorTracksRect.W) continue;
-            bool raw = group.Any(c => c.RepeatEnd != null || c.From is "_" or "573613" || c.To is "_" or "573613" || c.Proxy != -1);
+            var group = entry.Value;
+            var clip = group.Clip; float x = BeatX(clip.Beat), width = Math.Max(10, BeatX(group.End) - x);
+            bool raw = group.Raw;
             bool selected = selectedTextId == id && (textAnimation == clip.Id ||
                 textInspector && textAnimation == null && clip.Duration == 0 && Math.Abs(textAt - clip.Beat) < 1e-9);
             var box = new Rect(x, y + 6, width, 23);

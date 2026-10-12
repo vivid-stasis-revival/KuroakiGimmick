@@ -16,7 +16,7 @@ public sealed unsafe partial class GpuDevice : IDisposable
 
 
     /// <summary>返回一行像素在 transfer buffer 中占用的字节数：D3D12 必须按 256 字节对齐，Metal/Vulkan 用紧密的 width*4。</summary>
-    int TextureRowPitch(int width)
+    internal int TextureRowPitch(int width)
     {
         int tight = checked(width * 4);
         return Direct3D12 ? checked((tight + 255) & ~255) : tight;
@@ -121,7 +121,8 @@ public sealed unsafe partial class GpuDevice : IDisposable
             var submit = command;
             command = 0;
             fence = Check(SDL_SubmitGPUCommandBufferAndAcquireFence(submit), "Submit readback");
-            Require(SDL_WaitForGPUFences(Handle, true, fence, 1));
+            using (KuroakiGimmick.Core.PerformanceStats.Measure(KuroakiGimmick.Core.PerformanceStats.Stage.GpuWait))
+                Require(SDL_WaitForGPUFences(Handle, true, fence, 1));
             nint mapped = Check(SDL_MapGPUTransferBuffer(Handle, transfer, false), "Map readback");
             try
             {

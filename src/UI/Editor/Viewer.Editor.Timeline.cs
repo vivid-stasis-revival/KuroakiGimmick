@@ -13,6 +13,8 @@ namespace KuroakiGimmick.UI;
 /// </summary>
 public sealed partial class Viewer
 {
+    TimelineNotePainter? timelineNotePainter;
+    bool timelineNotePainterFailed;
     /// <summary>
     /// 时间轴音符块的两色，直接量自玩家自己导出的音符皮肤像素：每个精灵都是 1px 亮边 + 一片暗底。
     /// chip 轨 0-1 取 sp_note_chip_normal 帧 0、2-3 取帧 1；bumper 三条依次是 sp_note_bumper_normal 的
@@ -189,32 +191,49 @@ public sealed partial class Viewer
         bool timelineInteractive = !UiOverlayVisible && !Busy && !ImageGestureActive;
         // 画两趟：先 bumper 后 chip。同一拍上 chip 落在 bumper 的色带里，后画才不会被盖掉。
         Note? picked = null; int pickedRows = 5; double pickedBeat = 0;
-        for (int pass = 0; pass < 2; pass++)
+        var visibleNotes = Current.NoteIndex.Visible(Current.Timeline.Bpm.Time(beatStart), Current.Timeline.Bpm.Time(endBeat));
+        if (Canvas.NoteInstances != null && timelineNotePainter == null && !timelineNotePainterFailed && Environment.GetEnvironmentVariable("KG_TIMELINE_INSTANCING") != "off")
         {
-            foreach (var n in Current.Chart.Notes)
+            try { timelineNotePainter = new(Canvas); }
+            catch (Exception ex) { timelineNotePainterFailed = true; Console.Error.WriteLine("Timeline instances unavailable: " + ex.Message); }
+        }
+        using (PerformanceStats.Measure(PerformanceStats.Stage.EditorNotes))
+        {
+            long drawnNotes = 0;
+            for (int pass = 0; pass < 2; pass++)
             {
-                if ((n.Type is 1 or 7 or 8) != (pass == 0) || Renderer.NoteLanes(n.Type, n.Lane) is not { } rows) continue;
-                double beat = Current.Timeline.Bpm.Beat(n.Time), tail = Current.Timeline.Bpm.Beat(Math.Max(n.Time, n.End));
-                if (tail < beatStart || beat > endBeat) continue;
-                float nx = BeatX(beat), ny = noteY + rows.First * 13 + 2, nh = (rows.Last - rows.First + 1) * 13 - 4;
-                var (fill, edge) = NoteBlockColors(n.Type, n.Lane);
-                if (tail > beat)
-                    Canvas.Fill(new(nx, ny + nh / 2 - 2, Math.Max(2, BeatX(tail) - nx), 4), Color.Hex(n.Lane < 2 ? 0xB4BEFFu : 0xFFB4C7u).Alpha(.5));
-                var hit = new Rect(nx - 3, ny, 7, nh);
-                // 精灵本身就是 1px 亮边 + 暗底两色，这里照抄这个结构：暗底铺满，亮边描一圈。
-                Canvas.Fill(hit, fill);
-                var rim = selectedNoteTime == n.Time ? white : edge;
-                Canvas.Fill(new(hit.X, hit.Y, hit.W, 1), rim);
-                Canvas.Fill(new(hit.X, hit.Y + hit.H - 1, hit.W, 1), rim);
-                Canvas.Fill(new(hit.X, hit.Y, 1, hit.H), rim);
-                Canvas.Fill(new(hit.X + hit.W - 1, hit.Y, 1, hit.H), rim);
-                // 命中的块里取最窄的那个：bumper 的色带盖住整列，否则它下面的 chip 永远点不中。
-                int rowCount = rows.Last - rows.First + 1;
-                if (timelineInteractive && click && rowCount < pickedRows && timeArea.Contains(mouseX, mouseY) && hit.Contains(mouseX, mouseY))
+                foreach (var item in visibleNotes)
                 {
-                    picked = n; pickedRows = rowCount; pickedBeat = beat;
+                    var n = item.Value.Note;
+                    if ((n.Type is 1 or 7 or 8) != (pass == 0) || Renderer.NoteLanes(n.Type, n.Lane) is not { } rows) continue;
+                    double beat = item.Value.Beat, tail = item.Value.EndBeat;
+                    if (tail < beatStart || beat > endBeat) continue;
+                    float nx = BeatX(beat), ny = noteY + rows.First * 13 + 2, nh = (rows.Last - rows.First + 1) * 13 - 4;
+                    if (tail > beat)
+                        Canvas.Fill(new(nx, ny + nh / 2 - 2, Math.Max(2, BeatX(tail) - nx), 4), Color.Hex(n.Lane < 2 ? 0xB4BEFFu : 0xFFB4C7u).Alpha(.5));
+                    drawnNotes++;
+                    var hit = new Rect(nx - 3, ny, 7, nh);
+                    // 精灵本身就是 1px 亮边 + 暗底两色，这里照抄这个结构：暗底铺满，亮边描一圈。
+                    if (timelineNotePainter != null) timelineNotePainter.Draw(n.Type, n.Lane, hit, selectedNoteTime == n.Time);
+                    else
+                    {
+                        var (fill, edge) = NoteBlockColors(n.Type, n.Lane);
+                        Canvas.Fill(hit, fill);
+                        var rim = selectedNoteTime == n.Time ? white : edge;
+                        Canvas.Fill(new(hit.X, hit.Y, hit.W, 1), rim);
+                        Canvas.Fill(new(hit.X, hit.Y + hit.H - 1, hit.W, 1), rim);
+                        Canvas.Fill(new(hit.X, hit.Y, 1, hit.H), rim);
+                        Canvas.Fill(new(hit.X + hit.W - 1, hit.Y, 1, hit.H), rim);
+                    }
+                    // 命中的块里取最窄的那个：bumper 的色带盖住整列，否则它下面的 chip 永远点不中。
+                    int rowCount = rows.Last - rows.First + 1;
+                    if (timelineInteractive && click && rowCount < pickedRows && timeArea.Contains(mouseX, mouseY) && hit.Contains(mouseX, mouseY))
+                    {
+                        picked = n; pickedRows = rowCount; pickedBeat = beat;
+                    }
                 }
             }
+            PerformanceStats.Add(PerformanceStats.Counter.TimelineNotes, drawnNotes);
         }
         if (picked != null)
         {
@@ -240,7 +259,7 @@ public sealed partial class Viewer
         textTimelineHeight = editorTracksRect.H;
         trackScroll = Math.Clamp(trackScroll, 0, Math.Max(0, editTracks.Count - visibleRows));
         ScrollTrackOrder(visibleRows);
-        var clips = editor.Vsm.Clips.ToArray();
+        EnsureTimelineClipIndex();
         hoveredEditTrack = null;
         // 片段与轨道行的几何每帧重建。选框求交、右键命中都读这两张表，而不是各自再算一遍坐标。
         clipHits.Clear(); rowHits.Clear();
@@ -321,7 +340,7 @@ public sealed partial class Viewer
             {
                 // 剧情区间画在片段之前，因此片段始终压在上面——可点可拖的东西不该被背景挡住。
                 if (IsEpisodeTrack(track)) DrawEpisodeSpans(y);
-                foreach (var c in clips.Where(c => c.TrackKey == track.Key))
+                foreach (var c in VisibleTimelineClips(track.Key))
                     DrawEventClip(y, c.Beat, VsmVisualEnd(c), c.RepeatEnd != null ? $"{c.RepeatCount}x / {c.From}>{c.To}" : $"{c.From}>{c.To}", selectedClip == c.Id, false, c, null, -1, timelineInteractive);
                 // 区间接住漏掉片段的那些点击，排在片段之后：那 9 像素仍然优先，拖拽也仍然只从片段上开始。
                 if (IsEpisodeTrack(track) && timelineInteractive) ClickEpisodeSpans();

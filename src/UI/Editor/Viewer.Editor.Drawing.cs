@@ -198,7 +198,7 @@ public sealed partial class Viewer
                 int index = proxyPickerPage * 16 + i;
                 if (index >= proxyCount) break;
                 int col = i % 2, row = i / 2;
-                int clips = editor.Vsm.Clips.Count(c => c.Proxy == index);
+                int clips = EditorClipCount(index);
                 string alpha = pending || index >= Current.Chart.Proxies ? "?" :
                     Current.Timeline.Get("pra", now, index).ToString("0.#", CultureInfo.InvariantCulture);
                 string item = $"P{index}" + (clips > 0 ? "*" : "") + " a" + alpha;
@@ -229,7 +229,7 @@ public sealed partial class Viewer
         if (SourceButton(L.Get(gridLabel), new(x + half + 6, y + proxyOffset + 216, half, 28))) prGridMode = (prGridMode + 1) % 3;
         if (newProxy >= 0 && newProxy < proxyCount)
         {
-            bool hasAlpha = editor?.Vsm.Clips.Any(c => c.Proxy == newProxy && c.Name.Equals("pra", StringComparison.OrdinalIgnoreCase)) == true;
+            bool hasAlpha = EditorHasProxyAlpha(newProxy);
             // Base and Custom share the same actual initial state: PRA=0.
             // The previous Custom-only +PRA path assumed pra=1 at startup,
             // which is false because loadMods creates proxies after Create.
@@ -358,7 +358,7 @@ public sealed partial class Viewer
             if (run == null) Text(label, r.X + 2, y + 8, 11, muted, max: r.W - 4);
             else if (EButton(label, new(r.X, y, r.W, 27), key: "inspector-row:" + index)) run();
         }
-        if (selectedClip is Guid id && editor.Vsm.Find(id) is { } c)
+        if (selectedClip is Guid id && EditorFindClip(id) is { } c)
         {
             Field(L.Get("Mod"), c.Name, v => EditClip(m => m with { Name = v }, L.Get("Change mod")));
             Field(L.Get("Beat"), VsmDocument.Ui(c.Beat), v => { double b = VsmDocument.Number(v); EditClip(m => m with { Beat = b, RepeatEnd = m.RepeatEnd + b - m.Beat }, L.Get("Set beat")); });
@@ -406,7 +406,7 @@ public sealed partial class Viewer
             Text(L.Get("Notes are read-only timing references."), r.X, r.Y + 96, 11, muted, max: r.W);
             Text(L.Get("Click a note, then add a gimmick"), r.X, r.Y + 122, 11, muted, max: r.W);
             Text(L.Get("or a WindowMovement event."), r.X, r.Y + 143, 11, muted, max: r.W);
-            Text(L.Format($"{editor.Vsm.Clips.Count():N0} editable source clips"), r.X, r.Y + 181, 11, muted);
+            Text(L.Format($"{EditorClipCount():N0} editable source clips"), r.X, r.Y + 181, 11, muted);
             Text(L.Format($"{editor.Vsm.PreservedLineCount:N0} other lines preserved"), r.X, r.Y + 204, 11, muted);
             Text(L.Get("Unknowns remain in the source file."), r.X, r.Y + 233, 11, soft, max: r.W);
         }

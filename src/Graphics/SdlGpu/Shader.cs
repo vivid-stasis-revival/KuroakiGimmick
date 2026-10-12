@@ -20,10 +20,12 @@ public sealed unsafe class Shader : IDisposable
     /// <summary>下标是 fragment 中 sampler 的声明顺序，值是该 sampler 取用的纹理单元号。</summary>
     internal int[] SamplerUnits { get; }
     bool disposed;
+    internal bool Instanced { get; }
     /// <summary>先编译再建立原生对象；第二个 stage 创建失败时释放第一个。</summary>
-    public Shader(GpuDevice gpu, string vertex, string fragment)
+    public Shader(GpuDevice gpu, string vertex, string fragment, bool instanced = false)
     {
         this.gpu = gpu;
+        Instanced = instanced;
         this.vertex = ShaderCompiler.Compile(vertex, true, gpu.ShaderFormat);
         this.fragment = ShaderCompiler.Compile(fragment, false, gpu.ShaderFormat);
         VertexUniforms = new byte[this.vertex.Uniforms.Length * 16];
@@ -67,9 +69,10 @@ public sealed unsafe class Shader : IDisposable
         }
         GPUVertexBufferDescription buffer = new()
         {
-            pitch = 32
+            pitch = Instanced ? 64u : 32u,
+            input_rate = Instanced ? 1u : 0u
         };
-        GPUVertexAttribute* attributes = stackalloc GPUVertexAttribute[3];
+        GPUVertexAttribute* attributes = stackalloc GPUVertexAttribute[4];
         attributes[0] = new()
         {
             location = 0,
@@ -88,6 +91,10 @@ public sealed unsafe class Shader : IDisposable
             format = 12,
             offset = 16
         };
+        if (Instanced)
+        {
+            for (uint i = 0; i < 4; i++) attributes[i] = new() { location = i, format = 12, offset = i * 16 };
+        }
         GPUColorTargetDescription color = new()
         {
             format = format,
@@ -114,7 +121,7 @@ public sealed unsafe class Shader : IDisposable
                 vertex_buffer_descriptions = (nint)( & buffer),
                 num_vertex_buffers = 1,
                 vertex_attributes = (nint)attributes,
-                num_vertex_attributes = 3
+                num_vertex_attributes = Instanced ? 4u : 3u
             },
             target_info = new()
             {

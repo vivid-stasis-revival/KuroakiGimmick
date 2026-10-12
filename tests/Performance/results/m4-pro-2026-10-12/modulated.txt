@@ -1,0 +1,13 @@
+2026-10-12 19:14:21.185 dotnet[970:11807032] ApplePersistence=NO
+[Kuroaki/GPU] backend=metal, shaderFormats=Msl, MetalLib
+[Kuroaki/GPU] device=Apple M4 Pro, driver=unknown, version=unknown
+[RustEngine] VSC parsed: 20000 notes, 0 diagnostics, 17.02 ms (auto).
+[RustEngine] VSM parsed: 10005 events, 16.25 ms (auto).
+[RustTimeline] batch evaluator ready: 7 tracks, 10005 segments (auto).
+Note skin: vividstasis-default-note-skin-exact-lanes-v2 / exact lanes / skins: normal, stopmotion, extendnova, stargazers @ <repo>/tests/Performance/bin/Release/net8.0/Assets/NoteSkinFull/NotesExact
+[RustBridge 0.1.0] native motion evaluator enabled (verify).
+SDL_GPU / metal modulated N=10000 CPU record+submit: samples=8 mean=2.950ms P50=2.843ms P95=3.314ms P99=3.314ms max=3.314ms throughput=338.96/s
+fence-completed frame+readback: samples=8 mean=5.588ms P50=5.420ms P95=7.025ms P99=7.025ms max=7.025ms throughput=178.96/s
+recordedBatches/frame=68 uploadBytes/frame=650560 drawCalls/frame=44
+allocation/frame=941857B sampledPeakWorkingSet=658.6MiB processCpu=0.170s
+{"sampleWindow":4096,"stages":{"Frame":{"count":8,"meanMs":5.5878625,"p50Ms":5.4201,"p95Ms":7.0248,"p99Ms":7.0248,"maxMs":7.0248},"Scene":{"count":10,"meanMs":14.04178,"p50Ms":2.7056,"p95Ms":111.4839,"p99Ms":111.4839,"maxMs":111.4839},"Candidates":{"count":30,"meanMs":0.16683666666666666,"p50Ms":0.1287,"p95Ms":0.3564,"p99Ms":1.1721,"maxMs":1.1721},"Rust":{"count":30,"meanMs":0.43237666666666674,"p50Ms":0.4037,"p95Ms":0.7642,"p99Ms":2.8053,"maxMs":2.8053},"Geometry":{"count":30,"meanMs":0.48674333333333336,"p50Ms":0.4696,"p95Ms":1.611,"p99Ms":1.7875,"maxMs":1.7875},"GpuRecord":{"count":10,"meanMs":0.4586200000000001,"p50Ms":0.0737,"p95Ms":3.9075,"p99Ms":3.9075,"maxMs":3.9075},"GpuUpload":{"count":10,"meanMs":0.19934000000000002,"p50Ms":0.0313,"p95Ms":1.353,"p99Ms":1.353,"maxMs":1.353},"GpuSubmit":{"count":10,"meanMs":0.044579999999999995,"p50Ms":0.0222,"p95Ms":0.1391,"p99Ms":0.1391,"maxMs":0.1391},"GpuWait":{"count":37,"meanMs":0.8560324324324325,"p50Ms":0.0047,"p95Ms":3.8429,"p99Ms":8.1284,"maxMs":8.1284}},"counters":{"Candidates":100000,"VisibleNotes":100000,"DrawCalls":440,"Batches":680,"UploadBytes":6505600,"AudioUnderruns":0,"Readbacks":0,"EncodedFrames":0,"AllocatedBytes":231218848,"GcCollections":34,"GcPauseMicroseconds":996},"workingSet":689913856}

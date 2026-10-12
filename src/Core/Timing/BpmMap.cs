@@ -69,18 +69,10 @@ public sealed class BpmMap
         }
     }
 
-    /// <summary>拍 → 秒（含 offset）。线性扫描取最后一个起点不晚于 beat 的分段；分段数很少，不值得二分。</summary>
+    /// <summary>拍 → 秒（含 offset）。二分查询最后一个起点不晚于 beat 的分段。</summary>
     public double Time(double beat)
     {
-        var s = Segments[0];
-        foreach (var x in Segments)
-        {
-            if (x.Beat > beat)
-            {
-                break;
-            }
-            s = x;
-        }
+        var s = Segments[Math.Max(0, SortedSearch.UpperBound(Segments, beat, static s => s.Beat) - 1)];
         return s.Time + (beat - s.Beat) * 60 / s.Bpm + offset;
     }
 
@@ -88,30 +80,15 @@ public sealed class BpmMap
     public double Beat(double time)
     {
         time -= offset;
-        var s = Segments[0];
-        foreach (var x in Segments)
-        {
-            if (x.Time > time)
-            {
-                break;
-            }
-            s = x;
-        }
+        var s = Segments[Math.Max(0, SortedSearch.UpperBound(Segments, time, static s => s.Time) - 1)];
         return s.Beat + (time - s.Time) * s.Bpm / 60;
     }
 
     /// <summary>该拍所在分段的 BPM。按拍查询不涉及 offset，因此这里不做 offset 修正。</summary>
     public double BpmAtBeat(double beat)
     {
-        var s = Segments[0];
-        foreach (var x in Segments)
-        {
-            if (x.Beat > beat)
-            {
-                break;
-            }
-            s = x;
-        }
+        if (double.IsNaN(beat)) return Segments[^1].Bpm;
+        var s = Segments[Math.Max(0, SortedSearch.UpperBound(Segments, beat, static s => s.Beat) - 1)];
         return s.Bpm;
     }
 }

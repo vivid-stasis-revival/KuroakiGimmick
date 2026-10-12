@@ -46,17 +46,12 @@ public sealed partial class SceneRenderer : IDisposable
     readonly double[] noteYOffsetCache = new double[8];
     readonly double[] noteBoostTimeCache = new double[8];
     readonly double[] noteBoostDistanceCache = new double[8];
-    readonly List<Note> rustNoteCandidates = [];
-    RustNoteBridge.MotionInput[] rustMotionInputs = new RustNoteBridge.MotionInput[256];
-    RustNoteBridge.MotionOutput[] rustMotionOutputs = new RustNoteBridge.MotionOutput[256];
-    void EnsureRustMotionCapacity(int required)
-    {
-        if (rustMotionInputs.Length >= required) return;
-        int length = rustMotionInputs.Length;
-        while (length < required) length = checked(length * 2);
-        Array.Resize(ref rustMotionInputs, length);
-        Array.Resize(ref rustMotionOutputs, length);
-    }
+    const int MotionChunkSize = 4096;
+    readonly Note[] rustNoteCandidates = new Note[MotionChunkSize];
+    readonly uint[] rustCandidateIndices = new uint[MotionChunkSize];
+    readonly RustNoteBridge.MotionInput[] rustLaneInputs = new RustNoteBridge.MotionInput[8];
+    readonly RustNoteBridge.MotionInput[] rustMotionInputs = new RustNoteBridge.MotionInput[MotionChunkSize];
+    readonly RustNoteBridge.MotionOutput[] rustMotionOutputs = new RustNoteBridge.MotionOutput[MotionChunkSize];
 
     // slash_anycol 持续区间每帧只展开当前仍可见的实例；复用列表避免渲染循环反复分配。
     readonly List<(double Time, uint Seed, int Index)> slashInstanceCache = [];
@@ -75,6 +70,7 @@ public sealed partial class SceneRenderer : IDisposable
         holdOverlay = Common("sp_holdnote_overlay");
         dustTextures = Enumerable.Range(0, 4).Select(i => Common("pt_diamonddust_" + i)).ToArray();
         noteParticles = Enumerable.Range(0, 5).Select(i => Common("sp_noteparticle_" + i)).ToArray();
+        BuildJudgmentAtlas(g);
         proxyShader = new(g, Canvas.VertexSource, Shader.AdaptGml(File.ReadAllText(Path.Combine(Paths.Assets, "Shaders", "proxy.frag"))));
         projectiveProxyShader = new(g, ProxyProjectionVertexSource,
             Shader.AdaptGml(File.ReadAllText(Path.Combine(Paths.Assets, "Shaders", "proxy.frag"))));
@@ -100,6 +96,7 @@ public sealed partial class SceneRenderer : IDisposable
     /// </summary>
     public void Render(Session session, double time, bool notes = true, bool effects = true)
     {
+        using var performanceScope = PerformanceStats.Measure(PerformanceStats.Stage.Scene);
         // Evaluate every native timeline track in one batch, before the first draw.
         // C# remains authoritative for aliases, callbacks, frame bindings and fades.
         session.Timeline.PrepareFrame(time);
@@ -120,7 +117,7 @@ public sealed partial class SceneRenderer : IDisposable
         // Base Draw_64 and Custom Draw_74 sample the gameplay application surface, but not every HUD object.
         // PAUSE / Escape / score belong to the sampled source; combo、判定与底部信息在 proxy 之后按各自层级补画。
         bool applicationProxy = session.Chart.ObjectName is "obj_base_gimmick" or "obj_custom_gimmick"
-            && session.Chart.Proxies > 0 && session.Chart.Mods.Any(e => e.Proxy >= 0);
+            && session.Chart.Proxies > 0 && session.HasProxyEvents;
         canvas.Begin(scene, RenderWidth, RenderHeight, 320, 180, new Color(0, 0, 0));
         nativeGimmick.DrawBackground(scene, session, time, effects);
         nativeGimmick.DrawRoomLayers(scene, session, time);
@@ -197,7 +194,7 @@ public sealed partial class SceneRenderer : IDisposable
         DrawImages(session, time, -250, -200);
         canvas.Flush();
         // 特殊原生对象保留分段合成；Base / Custom 先组装完整画面再统一采样。
-        bool proxyMode = !applicationProxy && session.Chart.Mods.Any(e => e.Proxy >= 0);
+        bool proxyMode = !applicationProxy && session.HasProxyEvents;
         DrawNotes(session, time, notes);
         CompositeField(session, time, proxyMode, clearFooter: session.NativeGimmick.Data?.ClearProxyFooter ?? true);
         // Base / Custom 只把 PAUSE / Escape / score 放进 application proxy。
@@ -348,6 +345,7 @@ public sealed partial class SceneRenderer : IDisposable
         gameUi.Dispose();
         sceneFont.Dispose();
         noteSkin.Dispose();
+        if (judgmentAtlas != null) foreach (var texture in judgmentAtlas.Values.Distinct()) texture.Dispose();
         laneTexture.Dispose();
         holdOverlay.Dispose();
         foreach (var texture in dustTextures.Concat(noteParticles))

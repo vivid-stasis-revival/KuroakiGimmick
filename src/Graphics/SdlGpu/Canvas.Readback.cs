@@ -9,6 +9,10 @@ namespace KuroakiGimmick.Graphics;
 /// <summary>读回与 PPM 截图，只处理像素数据，不隐式修改渲染状态。</summary>
 public sealed partial class Canvas : IDisposable
 {
+    public GpuReadback CreateReadback(Target target) => new(Gpu, target.Texture.Width, target.Texture.Height, Gpu.TextureRowPitch(target.Texture.Width));
+
+    public void BeginReadback(GpuReadback slot, Target target) { Flush(); slot.Begin(target.Texture); }
+
     /// <summary>读回前先 Flush 掉挂起的几何；返回左上角为原点、紧密排列的 RGBA8。</summary>
     public byte[] Read(Target target)
     {

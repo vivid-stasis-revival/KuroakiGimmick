@@ -14,6 +14,11 @@ public sealed partial class Session
     /// <summary>自动演奏的判定表；命中特效与计分 HUD 共用这一份，保证画面上炸开的那一下和数字跳的那一下是同一次判定。</summary>
     public ScoreState Score { get; }
     public NoteIndex NoteIndex { get; }
+    public EventDensity EventDensity { get; }
+    public bool HasProxyEvents { get; }
+    readonly (string Path, long Length, long Written)? noteSourceStamp;
+    readonly Chart? vscSource;
+    readonly (double Bpm, double Offset, double? Fixed, string? Definition, string Profile) noteBpmSettings;
     public Windows.WindowMotionConfig WindowMotion { get; }
     public CustomImages Images { get; }
     public AudioData? Audio { get; }
@@ -89,11 +94,24 @@ public sealed partial class Session
         long audioStarted = Stopwatch.GetTimestamp();
         System.Threading.Tasks.Task<AudioData>? audioJob = parallel
             ? System.Threading.Tasks.Task.Run(() => AudioData.Decode(audioPath!, audioEngine, audioCache)) : null;
-        Chart = p.Chart == null ? new Chart
+        static (string, long, long)? Stamp(string? file)
         {
-            Title = p.Title ?? Path.GetFileNameWithoutExtension(p.Gimmick ?? "UNTITLED")
-        }: p.Chart.EndsWith(".vsc", StringComparison.OrdinalIgnoreCase) ? VscReader.Load(p.Chart) : VsbReader.Load(p.Chart, p.GimmickDefinition,
-            p.Profile);
+            if (file == null) return null;
+            var info = new FileInfo(file);
+            return info.Exists ? (info.FullName, info.Length, info.LastWriteTimeUtc.Ticks) : null;
+        }
+        var beforeNoteRead = Stamp(p.Chart);
+        if (p.Chart?.EndsWith(".vsc", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            // Editor VSM/layout revisions do not alter VSC notes. Keep the pristine parser result,
+            // not a previously augmented Chart (which would accumulate scene diagnostics/metadata).
+            vscSource = beforeNoteRead.HasValue && reuseAudioFrom?.noteSourceStamp == beforeNoteRead
+                ? reuseAudioFrom?.vscSource : null;
+            vscSource ??= VscReader.Load(p.Chart);
+            Chart = vscSource.CopyForSession();
+        }
+        else Chart = p.Chart == null ? new Chart { Title = p.Title ?? Path.GetFileNameWithoutExtension(p.Gimmick ?? "UNTITLED") }
+            : VsbReader.Load(p.Chart, p.GimmickDefinition, p.Profile);
         // 编辑器传入的是尚未落盘的 VSM 文本，直接替换 mod 表；两条路径产出同一份 Chart，预览与保存后结果一致。
         if (editedVsm != null)
             VsmReader.ReplaceModsText(Chart, editedVsm, p.Gimmick ?? "editor.vsm");
@@ -158,8 +176,18 @@ public sealed partial class Session
         Timeline = new(Chart, p, Audio?.Duration ?? Chart.Duration, Fx, NativeGimmick);
         Profile("Timeline construct");
         // 判定表依赖 BpmMap 求长条的每拍毫秒数，所以必须排在 Timeline 之后。
-        Score = new(Chart, Timeline.Bpm);
-        NoteIndex = new(Chart.Notes);
+        noteSourceStamp = Stamp(p.Chart);
+        if (noteSourceStamp != beforeNoteRead) noteSourceStamp = null; // source changed during load: never reuse a mixed snapshot
+        noteBpmSettings = (p.Bpm, p.OffsetMs, NativeGimmick.Data?.FixedBpm, p.GimmickDefinition, p.Profile);
+        // Notes are read-only in the editor. VSM/layout revisions reuse the immutable note snapshot;
+        // a changed chart file or timing configuration always rebuilds it on the existing load worker.
+        bool reuseNotes = reuseAudioFrom != null && (noteSourceStamp.HasValue && reuseAudioFrom.noteSourceStamp == noteSourceStamp
+            || p.Chart == null && reuseAudioFrom.Project.Chart == null)
+            && reuseAudioFrom.noteBpmSettings == noteBpmSettings;
+        NoteIndex = reuseNotes ? reuseAudioFrom!.NoteIndex : new(Chart.Notes, Timeline.Bpm);
+        Score = reuseNotes ? reuseAudioFrom!.Score : new(Chart, Timeline.Bpm);
+        EventDensity = new(Chart, Timeline.Bpm);
+        HasProxyEvents = Chart.Mods.Any(static e => e.Proxy >= 0);
         Checker = Checkerboard.Load(p, Chart, Timeline);
         // 时长取音频优先；无音频时取谱面、时间轴尾部和最后一条文本 cue 之后的富余，三者取最大，避免演出被提前截断。
         Duration = Audio?.Duration ?? Math.Max(Math.Max(Chart.Duration, Timeline.End + .5),

@@ -1,44 +1,63 @@
+using System.Collections;
+using System.Runtime.InteropServices;
+
 namespace KuroakiGimmick.Core;
 
-/// <summary>Immutable session index. Start-time ordering preserves draw order; subtree end maxima retain crossing holds.</summary>
+[StructLayout(LayoutKind.Sequential)]
+public readonly struct NoteRuntimeData(double time, double end, uint lane)
+{
+    public readonly double Time = time, End = end;
+    public readonly uint Lane = lane, Reserved = 0;
+}
+
+/// <summary>Immutable session snapshot. Beat conversion and native note payload are built once, never per frame.</summary>
 public sealed class NoteIndex
 {
-    readonly Note[] notes;
-    readonly double[] maxEnd;
-    public NoteIndex(IReadOnlyList<Note> source)
+    public readonly record struct Item(Note Note, double Beat, double EndBeat);
+    readonly IntervalIndex<Item> index;
+    internal NoteRuntimeData[] Runtime { get; }
+    public int Count => index.Entries.Count;
+    public NoteIndex(IReadOnlyList<Note> source, BpmMap? map = null)
     {
-        notes = source.Where(n => n.Type is not (3 or 4 or 5)).ToArray();
-        maxEnd = new double[Math.Max(1, notes.Length * 4)];
-        if (notes.Length > 0) Build(1, 0, notes.Length);
-    }
-    double Build(int node, int lo, int hi)
-    {
-        if (hi - lo == 1) return maxEnd[node] = notes[lo].End;
-        int mid = lo + (hi - lo) / 2;
-        return maxEnd[node] = Math.Max(Build(node * 2, lo, mid), Build(node * 2 + 1, mid, hi));
+        int count = 0;
+        for (int i = 0; i < source.Count; i++) if (source[i].Type is not (3 or 4 or 5)) count++;
+        var items = new IntervalIndex<Item>.Entry[count];
+        int next = 0;
+        for (int i = 0; i < source.Count; i++)
+        {
+            var n = source[i];
+            if (n.Type is 3 or 4 or 5) continue;
+            items[next++] = new(new(n, map?.Beat(n.Time) ?? double.NaN, map?.Beat(Math.Max(n.Time, n.End)) ?? double.NaN), n.Time, n.End, i);
+        }
+        index = new(items, owned: true);
+        Runtime = new NoteRuntimeData[count];
+        for (int i = 0; i < Runtime.Length; i++)
+        {
+            var n = index.Entries[i].Value.Note;
+            Runtime[i] = new(n.Time, n.End, unchecked((uint)(n.Type is 1 or 7 or 8 ? n.Lane + 4 : n.Lane)));
+        }
     }
     public double? NearestBeat(double beat, BpmMap map)
     {
-        int i = SortedSearch.LowerBound(notes, map.Time(beat), n => n.Time);
-        double? left = i > 0 ? map.Beat(notes[i - 1].Time) : null;
-        double? right = i < notes.Length ? map.Beat(notes[i].Time) : null;
+        int i = SortedSearch.LowerBound(index.Entries, map.Time(beat), static n => n.Start);
+        double? left = i > 0 ? map.Beat(index.Entries[i - 1].Start) : null;
+        double? right = i < Count ? map.Beat(index.Entries[i].Start) : null;
         return left == null ? right : right == null || beat - left.Value <= right.Value - beat ? left : right;
     }
-    public IEnumerable<Note> Candidates(double earliestEnd, double latestStart)
+    public IntervalIndex<Item>.Query Visible(double earliestEnd, double latestStart) => index.Overlap(earliestEnd, latestStart);
+    public Query Candidates(double earliestEnd, double latestStart) => new(Visible(earliestEnd, latestStart));
+    public readonly struct Query(IntervalIndex<Item>.Query query) : IEnumerable<Note>
     {
-        int end = SortedSearch.UpperBound(notes, latestStart, n => n.Time);
-        if (end == 0) yield break;
-        // One bounded traversal stack per query, not an iterator allocation at every tree node.
-        var stack = new Stack<(int Node, int Lo, int Hi)>(32);
-        stack.Push((1, 0, notes.Length));
-        while (stack.TryPop(out var range))
-        {
-            var (node, lo, hi) = range;
-            if (lo >= end || maxEnd[node] < earliestEnd) continue;
-            if (hi - lo == 1) { yield return notes[lo]; continue; }
-            int mid = lo + (hi - lo) / 2;
-            if (mid < end) stack.Push((node * 2 + 1, mid, hi));
-            stack.Push((node * 2, lo, mid));
-        }
+        public Enumerator GetEnumerator() => new(query.GetEnumerator());
+        IEnumerator<Note> IEnumerable<Note>.GetEnumerator() => GetEnumerator();
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+    public struct Enumerator(IntervalIndex<Item>.Enumerator source) : IEnumerator<Note>
+    {
+        public Note Current => source.Current.Value.Note;
+        object IEnumerator.Current => Current;
+        public bool MoveNext() => source.MoveNext();
+        public void Dispose() { }
+        public void Reset() => throw new NotSupportedException();
     }
 }

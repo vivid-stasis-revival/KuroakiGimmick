@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Buffers;
 using KuroakiGimmick.Graphics;
 
 namespace KuroakiGimmick.Core;
@@ -21,6 +22,10 @@ public sealed class VideoExport : IDisposable
     readonly string temporary;
     readonly ChartPlaybackRoute route;
     byte[]? pending;
+    readonly GpuReadback[] readbacks;
+    readonly Queue<GpuReadback> downloads = new(3);
+    int rendered, nextSlot;
+    readonly int frameBytes;
     bool inputCompleted, finalized;
     public ExportOptions Options { get; }
     public int Frame { get; private set; }
@@ -100,25 +105,38 @@ public sealed class VideoExport : IDisposable
         // 必须一直异步抽干 stderr，否则 ffmpeg 写满管道缓冲区会死锁；出错时它也是唯一的错误信息来源。
         stderr = process.StandardError.ReadToEndAsync();
         target = new(c.Gpu, options.Width, options.Height);
+        frameBytes = checked(options.Width * options.Height * 4);
+        readbacks = new GpuReadback[3];
+        try { for (int i = 0; i < readbacks.Length; i++) readbacks[i] = c.CreateReadback(target); }
+        catch { foreach (var slot in readbacks) slot?.Dispose(); target.Dispose(); process.Kill(); process.Dispose(); throw; }
         // 容量 2：渲染线程最多领先编码器两帧，既能重叠 GPU 与编码耗时，又不会把整段视频堆在内存里。
         frames = System.Threading.Channels.Channel.CreateBounded<byte[]>(new System.Threading.Channels.BoundedChannelOptions(2)
         {
             SingleReader = true,
             SingleWriter = true
         });
+        var encodingToken = cancel.Token;
+        var encodingInput = process.StandardInput.BaseStream;
         writer = Task.Run(async() =>
         {
             try
             {
-                await foreach (var bytes in frames.Reader.ReadAllAsync(cancel.Token))
+                await foreach (var bytes in frames.Reader.ReadAllAsync(encodingToken))
                 {
-                    await process.StandardInput.BaseStream.WriteAsync(bytes, cancel.Token);
+                    try
+                    {
+                        using var timing = PerformanceStats.Measure(PerformanceStats.Stage.EncoderWrite);
+                        await encodingInput.WriteAsync(bytes.AsMemory(0, frameBytes), encodingToken);
+                        PerformanceStats.Add(PerformanceStats.Counter.EncodedFrames, 1);
+                    }
+                    finally { ArrayPool<byte>.Shared.Return(bytes); }
                 }
             }
             finally
             {
                 // 无论正常结束还是被取消，都要关闭 stdin：ffmpeg 靠输入流结束来收尾封装。
-                process.StandardInput.Close();
+                while (frames.Reader.TryRead(out var abandoned)) ArrayPool<byte>.Shared.Return(abandoned);
+                encodingInput.Close();
             }
         });
     }
@@ -150,18 +168,25 @@ public sealed class VideoExport : IDisposable
                 pending = null;
                 Frame++;
             }
-            if (Frame < TotalFrames)
+            if (downloads.TryPeek(out var oldest) && oldest.Ready)
             {
-                renderer.Render(session, route.ChartAt(Frame / (double) Options.Fps), Options.Notes, Options.Effects);
+                pending = ArrayPool<byte>.Shared.Rent(frameBytes);
+                if (!oldest.TryCopy(pending)) throw new InvalidOperationException("Signalled readback became unavailable.");
+                downloads.Dequeue();
+                if (!frames.Writer.TryWrite(pending)) return;
+                pending = null; Frame++;
+            }
+            if (rendered < TotalFrames && downloads.Count < readbacks.Length)
+            {
+                using var frameTiming = PerformanceStats.Measure(PerformanceStats.Stage.Frame);
+                renderer.Render(session, route.ChartAt(rendered / (double) Options.Fps), Options.Notes, Options.Effects);
                 canvas.Pass(target, renderer.Final.Texture, canvas.Basic);
-                pending = canvas.Read(target);
-                if (frames.Writer.TryWrite(pending))
-                {
-                    pending = null;
-                    Frame++;
-                }
+                var slot = readbacks[nextSlot];
+                canvas.BeginReadback(slot, target);
+                downloads.Enqueue(slot); nextSlot = (nextSlot + 1) % readbacks.Length; rendered++;
                 return;
             }
+            if (Frame < TotalFrames) return; // GPU or encoder backpressure: return to the SDL event pump.
             if (!inputCompleted)
             {
                 frames.Writer.TryComplete();
@@ -197,7 +222,7 @@ public sealed class VideoExport : IDisposable
         {
             if (!process.HasExited)
             {
-                process.Kill();
+                process.Kill(entireProcessTree: true);
             }
         }
         catch (InvalidOperationException)
@@ -242,6 +267,8 @@ public sealed class VideoExport : IDisposable
             {
             }
         }
+        if (pending != null) { ArrayPool<byte>.Shared.Return(pending); pending = null; }
+        foreach (var slot in readbacks) slot.Dispose();
         target.Dispose();
         process.Dispose();
         cancel.Dispose();

@@ -1,0 +1,85 @@
+warning: constant `MAX_CHART` is never used
+ --> src/chart.rs:6:7
+  |
+6 | const MAX_CHART: u64 = 128 * 1024 * 1024;
+  |       ^^^^^^^^^
+  |
+  = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `MAX_VSM` is never used
+ --> src/chart.rs:7:7
+  |
+7 | const MAX_VSM: u64 = 64 * 1024 * 1024;
+  |       ^^^^^^^
+
+warning: field `title` is never read
+  --> src/chart.rs:34:9
+   |
+33 | pub struct Chart {
+   |            ----- field in this struct
+34 |     pub title: String,
+   |         ^^^^^
+   |
+   = note: `Chart` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: methods `duration` and `playable_count` are never used
+  --> src/chart.rs:58:12
+   |
+56 | impl Chart {
+   | ---------- methods in this implementation
+57 |     pub fn stable_sort(&mut self) { self.notes.sort_by(|a,b| a.time.partial_cmp(&b.time).unwrap_or(std::cmp::Ordering::Equal)); }
+58 |     pub fn duration(&self) -> f64 { self.notes.iter().map(|n| n.end.max(n.time)).fold(0.0, f64::max) }
+   |            ^^^^^^^^
+59 |     pub fn playable_count(&self) -> usize { self.notes.iter().filter(|n| !matches!(n.kind, 3|4|5)).count() }
+   |            ^^^^^^^^^^^^^^
+
+warning: function `read_limited` is never used
+  --> src/chart.rs:73:4
+   |
+73 | fn read_limited(path: &Path, limit: u64) -> Result<Vec<u8>> {
+   |    ^^^^^^^^^^^^
+
+warning: function `load` is never used
+  --> src/chart.rs:78:8
+   |
+78 | pub fn load(path: &Path) -> Result<Chart> {
+   |        ^^^^
+
+warning: function `load_vsm` is never used
+   --> src/chart.rs:270:8
+    |
+270 | pub fn load_vsm(path: &Path, c:&mut Chart)->Result<()> {
+    |        ^^^^^^^^
+
+warning: `kg_native_core` (lib) generated 7 warnings
+warning: `kg_native_core` (lib test) generated 7 warnings (7 duplicates)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.07s
+     Running unittests src/lib.rs (rust/kg-native-core/target/debug/deps/kg_native_core-4a2bfb2b5e0d779d)
+
+running 18 tests
+test chart::unbounded_note_tests::vsc_more_than_two_million_notes ... ignored, allocates more than two million notes; run explicitly for stress testing
+test tests::abi_layout ... ok
+test tests::custom_boost_and_negative_beat ... ok
+test tests::batch_and_edge_cases ... ok
+test timeline_runtime::tests::invalid_layout_is_rejected ... ok
+test timeline_runtime::tests::track_ties_initial_reverse_seek_and_proxy_isolation ... ok
+test timeline_runtime::tests::layout_and_easing_boundary ... ok
+test indexed_tests::indexed_matches_legacy_and_rejects_bad_indices ... ok
+test source_ffi::tests::bpm_packet ... ok
+test source_ffi::tests::vsc_csm340_modextra_and_stable_order ... ok
+test source_ffi::tests::binary_vsb_fixture ... ok
+test source_ffi::tests::wire_roundtrip_shape ... ok
+test source_ffi::tests::malformed_vsc_still_falls_back_to_csharp_diagnostics ... ok
+test source_ffi::tests::vsc_ignored_timing_anchors_are_informational ... ok
+test source_ffi::tests::vsm_ranges_and_metadata ... ok
+test source_ffi::tests::vsm_trailing_comments_preserve_values_and_pack_warning ... ok
+test audio::tests::cache_header_rejects_bad_stamp_and_truncation ... ok
+test audio::tests::rust_decodes_wav_and_hits_memory_cache ... ok
+
+test result: ok. 17 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests kg_native_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

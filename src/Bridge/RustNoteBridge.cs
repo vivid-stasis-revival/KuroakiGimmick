@@ -10,6 +10,7 @@ namespace KuroakiGimmick.Bridge;
 /// </summary>
 internal static unsafe partial class RustNoteBridge
 {
+    internal static bool IndexedKernelAvailable => !indexedUnavailable && Enabled;
     // Rust #[repr(C)] mirror; all double fields are in exactly the same order.
     [StructLayout(LayoutKind.Sequential)]
     internal struct MotionParams
@@ -44,6 +45,43 @@ internal static unsafe partial class RustNoteBridge
     [LibraryImport(Library, EntryPoint = "kg_core_motion_batch")]
     private static partial int NativeBatch(MotionParams* parameters, MotionInput* inputs, nuint count, MotionOutput* outputs);
 
+    [LibraryImport(Library, EntryPoint = "kg_core_motion_indexed")]
+    private static partial int NativeIndexed(MotionParams* parameters, NoteRuntimeData* notes, nuint noteCount,
+        uint* indices, nuint count, MotionInput* lanes, nuint laneCount, double scrollTime, MotionOutput* outputs);
+    static bool indexedUnavailable;
+    internal static bool TryEvaluateIndexed(MotionParams parameters, NoteRuntimeData[] notes, uint[] indices,
+        MotionInput[] lanes, double scrollTime, MotionOutput[] outputs, int count)
+    {
+        if (indexedUnavailable || !EnsureAvailable() || count == 0) return false;
+        if (count < 0 || count > indices.Length || count > outputs.Length) throw new ArgumentOutOfRangeException(nameof(count));
+        try
+        {
+            using var timing = PerformanceStats.Measure(PerformanceStats.Stage.Rust);
+            fixed (NoteRuntimeData* n = notes)
+            fixed (uint* i = indices)
+            fixed (MotionInput* l = lanes)
+            fixed (MotionOutput* o = outputs)
+            {
+                int rc = NativeIndexed(&parameters, n, (nuint)notes.Length, i, (nuint)count, l, (nuint)lanes.Length, scrollTime, o);
+                if (rc != 0) return Disable($"Indexed evaluator returned error {rc}.", false);
+            }
+            if (Mode == "verify")
+            {
+                for (int i = 0; i < count; i++)
+                {
+                    var n = notes[indices[i]]; var input = lanes[n.Lane];
+                    input.Distance = (n.Time - scrollTime) * 1000; input.EndDistance = (n.End - scrollTime) * 1000;
+                    var expected = Reference(parameters, input); var actual = outputs[i];
+                    if (!Near(expected.XOffset, actual.XOffset) || !Near(expected.Y, actual.Y) || !Near(expected.EndY, actual.EndY))
+                        return Disable($"Indexed motion mismatch at candidate {i}.", false);
+                }
+            }
+            return true;
+        }
+        catch (EntryPointNotFoundException) { indexedUnavailable = true; return false; } // older compatible cdylib: use legacy batch
+        catch (Exception e) when (e is DllNotFoundException or BadImageFormatException) { return Disable(e.Message, false); }
+    }
+
     internal static bool Enabled => Mode != "off" && EnsureAvailable();
 
     private static bool EnsureAvailable(bool force = false)
@@ -65,7 +103,7 @@ internal static unsafe partial class RustNoteBridge
             }
             try
             {
-                if (Marshal.SizeOf<MotionParams>() != 56 || Marshal.SizeOf<MotionInput>() != 56 || Marshal.SizeOf<MotionOutput>() != 24)
+                if (Marshal.SizeOf<NoteRuntimeData>() != 24 || Marshal.SizeOf<MotionParams>() != 56 || Marshal.SizeOf<MotionInput>() != 56 || Marshal.SizeOf<MotionOutput>() != 24)
                     throw new InvalidOperationException("RustBridge C ABI struct layout mismatch.");
                 uint abi = GetAbi();
                 if (abi != Abi) throw new InvalidOperationException($"RustBridge ABI mismatch: expected 0x{Abi:X8}, got 0x{abi:X8}.");

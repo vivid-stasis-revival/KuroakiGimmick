@@ -85,6 +85,10 @@ public static unsafe partial class Sdl
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     public static extern nint SDL_SubmitGPUCommandBufferAndAcquireFence(nint command);
 
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool SDL_QueryGPUFence(nint device, nint fence);
+
     // fences 用 in 传数组首元素，count 为元素个数；all 为 false 表示任意一个完成即返回。
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]

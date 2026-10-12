@@ -52,12 +52,12 @@ public sealed partial class SceneRenderer
     {
         var map = session.Timeline;
         bool holdTicks = session.Project.GameUiEnabled && session.Project.GameUiHoldEffects;
-        foreach (var h in session.Score.HitsBetween(t - IndicatorLife, t, holdTicks))
+        void DrawHit(ScoreState.Hit h)
         {
             // 地雷在原版 autoplay 分支里只结算不出特效。长条中途的节拍点是独立开关。
             if (h.Kind == ScoreState.HitKind.Mine || (h.Kind == ScoreState.HitKind.HoldTick && !holdTicks))
             {
-                continue;
+                return;
             }
             double age = t - h.Time;
             bool wide = h.Kind == ScoreState.HitKind.Wide;
@@ -77,7 +77,7 @@ public sealed partial class SceneRenderer
                 // 原版 obj_pressed_holds 对每个 piece 只传 arg7：没有指示框，也没有音符颗粒，只有两簇钻尘。
                 DrawHitDust(cx - 11, cy, age, seed + 128, -.4f, -1.3f, DustLife, judgementColors[JudgementTier]);
                 DrawHitDust(cx + 11, cy, age, seed + 192, .4f, -1.3f, DustLife, judgementColors[JudgementTier]);
-                continue;
+                return;
             }
             DrawHitIndicator(cx, cy, age, wide);
             if (wide)
@@ -109,6 +109,26 @@ public sealed partial class SceneRenderer
                 DrawHitDust(cx + 11, cy, age, seed + 192, .4f, -1.3f, DustLife, judgementColors[JudgementTier]);
             }
         }
+        judgmentTemplates.Clear();
+        foreach (var h in session.Score.HitsBetween(t - IndicatorLife, t, holdTicks))
+        {
+            if (!judgmentSingleTexture || judgmentWhite == null) { DrawHit(h); continue; }
+            var key = (h.Time, h.Lane, h.Kind, h.Lead);
+            if (judgmentTemplates.TryGetValue(key, out var template))
+            { canvas.AppendInstances(judgmentWhite, judgmentTemplateBuffers[template.Slot].AsSpan(0, template.Count)); continue; }
+            if (judgmentTemplates.Count >= 256) { DrawHit(h); continue; }
+            int slot = judgmentTemplates.Count;
+            if (slot == judgmentTemplateBuffers.Count) judgmentTemplateBuffers.Add([]);
+            float[] buffer = judgmentTemplateBuffers[slot];
+            canvas.StartInstanceCapture(judgmentWhite);
+            int count;
+            try { DrawHit(h); }
+            finally { count = canvas.FinishInstanceCapture(ref buffer); }
+            judgmentTemplateBuffers[slot] = buffer;
+            judgmentTemplates[key] = (slot, count);
+            // Every hit still emits every sprite, in the original sequence; only identical calculations are reused.
+            canvas.AppendInstances(judgmentWhite, buffer.AsSpan(0, count));
+        }
     }
 
     /// <summary>
@@ -121,6 +141,7 @@ public sealed partial class SceneRenderer
     /// </summary>
     void DrawComboParticles(Session session, double t)
     {
+        if (!session.Project.GameUiEnabled || session.Project.GameUiCombo <= 0) return;
         foreach (var hit in session.Score.HitsBetween(t - ComboDustAlpha * ComboDustLife / 240, t))
         {
             // 字宽要按这次判定当时的连击数来量，不能用当前帧的：数字位数一变，喷射点会整体外扩。
@@ -167,14 +188,14 @@ public sealed partial class SceneRenderer
         float x1 = MathF.Round(cx - dx), x2 = MathF.Round(wide ? cx + dx : cx - 1 + dx);
         float y1 = MathF.Round(cy - dy), y2 = MathF.Round(cy + dy);
         var color = judgementColors[JudgementTier].Alpha(alpha);
-        canvas.Fill(new(x1, y1, x2 - x1 + 1, 1), color);
-        canvas.Fill(new(x1, y2, x2 - x1 + 1, 1), color);
+        JudgmentFill(new(x1, y1, x2 - x1 + 1, 1), color);
+        JudgmentFill(new(x1, y2, x2 - x1 + 1, 1), color);
         // 矩形刚张开的那一帧上下边重合，左右两条竖边高度为负。原版靠精灵翻转糊过去，
         // 这里直接不画：负高度会在 GPU 上变成一个反向四边形。
         if (y2 - y1 > 1)
         {
-            canvas.Fill(new(x1, y1 + 1, 1, y2 - y1 - 1), color);
-            canvas.Fill(new(x2, y1 + 1, 1, y2 - y1 - 1), color);
+            JudgmentFill(new(x1, y1 + 1, 1, y2 - y1 - 1), color);
+            JudgmentFill(new(x2, y1 + 1, 1, y2 - y1 - 1), color);
         }
     }
 
@@ -198,7 +219,7 @@ public sealed partial class SceneRenderer
             float vx = (Timeline.Hash(seed + (uint) i * 2) * 2 - 1) * .75f;
             float vy = (Timeline.Hash(seed + (uint) i * 2 + 1) * 2 - 1) * .4f;
             float x = cx + vx * travel, y = cy + vy * travel;
-            canvas.Quad(noteParticles[JudgementTier], new(x - half, y - half, half * 2, half * 2), Color.White.Alpha(alpha), angle: 45);
+            JudgmentQuad(noteParticles[JudgementTier], new(x - half, y - half, half * 2, half * 2), Color.White.Alpha(alpha), angle: 45);
         }
     }
 
@@ -227,7 +248,7 @@ public sealed partial class SceneRenderer
             // irandom(image_number) 取的是 0..4 的闭区间，而精灵只有四帧，4 会被 GameMaker 绕回 0，
             // 所以第 0 帧的出现概率是其余帧的两倍。照搬这个偏斜。
             var texture = dustTextures[(int)(Timeline.Hash(seed + (uint) i * 2 + 128) * 5) % dustTextures.Length];
-            canvas.Quad(texture, new(cx + vx * travel - 4, cy + vy * travel - 4, 9, 9), color);
+            JudgmentQuad(texture, new(cx + vx * travel - 4, cy + vy * travel - 4, 9, 9), color);
         }
     }
 }

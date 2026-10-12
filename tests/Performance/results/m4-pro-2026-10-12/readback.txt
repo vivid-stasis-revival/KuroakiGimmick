@@ -1,0 +1,4 @@
+2026-10-12 19:37:07.064 dotnet[1463:11838631] ApplePersistence=NO
+[Kuroaki/GPU] backend=metal, shaderFormats=Msl, MetalLib
+[Kuroaki/GPU] device=Apple M4 Pro, driver=unknown, version=unknown
+PASS async readback: 24 ordered frames, three-slot reuse, target overwrites, in-flight disposal

@@ -13,6 +13,19 @@ public enum VscDialect { Legacy, Csm340 }
 /// </summary>
 public sealed class Chart
 {
+    public Chart() { }
+
+    // Session owns this shallow copy. Immutable note records are shared, while all mutable
+    // collections/metadata remain separate from the unmodified parser snapshot.
+    internal Chart CopyForSession()
+    {
+        var copy = new Chart { Title = Title, ObjectName = ObjectName, Proxies = Proxies,
+            ProxyCountDeclared = ProxyCountDeclared, VscDialect = VscDialect };
+        copy.Notes.AddRange(Notes); copy.Mods.AddRange(Mods); copy.PerFrame.AddRange(PerFrame);
+        copy.Diagnostics.AddRange(Diagnostics); copy.ImageNames.UnionWith(ImageNames); copy.TextNames.UnionWith(TextNames);
+        foreach (var entry in Metadata) copy.Metadata.Add(entry.Key, entry.Value);
+        return copy;
+    }
     public string Title { get; set; } = "UNTITLED";
     public string ObjectName { get; set; } = "obj_base_gimmick";
     public int Proxies { get; set; } = 1;

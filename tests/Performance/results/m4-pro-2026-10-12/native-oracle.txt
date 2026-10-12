@@ -1,0 +1,2 @@
+[RustBridge 0.1.0] native motion evaluator enabled (verify).
+PASS RustBridge 0.1.0: ABI and 32,768 native-vs-managed note evaluations

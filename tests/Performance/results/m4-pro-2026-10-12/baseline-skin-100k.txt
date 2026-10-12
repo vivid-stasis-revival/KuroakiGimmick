@@ -1,0 +1,8 @@
+2026-10-12 15:38:40.010 dotnet[44673:11375327] ApplePersistence=NO
+[Kuroaki/GPU] backend=metal, shaderFormats=Msl, MetalLib
+[Kuroaki/GPU] device=Apple M4 Pro, driver=unknown, version=unknown
+Note skin: vividstasis-default-note-skin-exact-lanes-v2 / exact lanes / skins: normal, stopmotion, extendnova, stargazers @ /private/tmp/kg-baseline-tests/bin/Release/net8.0/Assets/NoteSkinFull/NotesExact
+SDL_GPU / metal skin N=100000 CPU record+submit: samples=12 mean=79.716ms P50=78.433ms P95=107.157ms P99=107.157ms max=107.157ms throughput=12.54/s
+fence-completed frame+readback: samples=12 mean=85.747ms P50=84.594ms P95=107.565ms P99=107.565ms max=107.565ms throughput=11.66/s
+recordedBatches/frame=83078 uploadBytes/frame=19200000
+allocation/frame=42786781B peakWorkingSet=0.0MiB processCpu=1.381s

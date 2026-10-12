@@ -1,0 +1,9 @@
+2026-10-12 19:45:44.335 dotnet[1725:11855607] ApplePersistence=NO
+[Kuroaki/GPU] backend=metal, shaderFormats=Msl, MetalLib
+[Kuroaki/GPU] device=Apple M4 Pro, driver=unknown, version=unknown
+[RustEngine] VSC parsed: 1000 notes, 0 diagnostics, 2.77 ms (auto).
+[RustTimeline] batch evaluator ready: 0 tracks, 0 segments (auto).
+Note skin: vividstasis-default-note-skin-exact-lanes-v2 / exact lanes / skins: normal, stopmotion, extendnova, stargazers @ <repo>/tests/Performance/bin/Release/net8.0/Assets/NoteSkinFull/NotesExact
+[RustBridge 0.1.0] native motion evaluator enabled (verify).
+PASS export cancel: original preserved, pending frames/resources cleaned
+{"sampleWindow":4096,"stages":{"Frame":{"count":2,"meanMs":45.869099999999996,"p50Ms":1.1227,"p95Ms":90.6155,"p99Ms":90.6155,"maxMs":90.6155},"Scene":{"count":2,"meanMs":42.4778,"p50Ms":0.2055,"p95Ms":84.7501,"p99Ms":84.7501,"maxMs":84.7501},"Candidates":{"count":2,"meanMs":0.09715,"p50Ms":0.0002,"p95Ms":0.1941,"p99Ms":0.1941,"maxMs":0.1941},"GpuRecord":{"count":2,"meanMs":1.4050500000000001,"p50Ms":0.1949,"p95Ms":2.6152,"p99Ms":2.6152,"maxMs":2.6152},"GpuUpload":{"count":2,"meanMs":0.23875000000000002,"p50Ms":0.0543,"p95Ms":0.4232,"p99Ms":0.4232,"maxMs":0.4232},"GpuSubmit":{"count":2,"meanMs":0.04315,"p50Ms":0.002,"p95Ms":0.0843,"p99Ms":0.0843,"maxMs":0.0843},"GpuWait":{"count":4,"meanMs":0.14615,"p50Ms":0.0009,"p95Ms":0.574,"p99Ms":0.574,"maxMs":0.574}},"counters":{"Candidates":0,"VisibleNotes":0,"DrawCalls":12,"Batches":62,"UploadBytes":2304,"AudioUnderruns":0,"Readbacks":0,"EncodedFrames":0,"AllocatedBytes":198780424,"GcCollections":19,"GcPauseMicroseconds":1802},"workingSet":667205632}

@@ -186,6 +186,7 @@ public sealed partial class Viewer
     /// <summary>在窗口线程接收加载结果、同步播放状态，并逐步推进导出任务。</summary>
     void Update()
     {
+        using var performanceScope = PerformanceStats.Measure(PerformanceStats.Stage.UiUpdate);
         // 排空主线程队列：对话框回调等其他线程的结果只能在这里、由窗口线程执行；单个动作抛异常不影响其余动作。
         while (actions.TryDequeue(out var a))
         {

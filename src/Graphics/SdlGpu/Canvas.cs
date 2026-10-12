@@ -39,6 +39,7 @@ public sealed partial class Canvas : IDisposable
     public float SnapY(float y) => PixelScaleY > 0 ? MathF.Round(y * PixelScaleY) / PixelScaleY : y;
 
     public Shader Basic { get; }
+    internal Shader? NoteInstances { get; }
 
     /// <summary>1×1 的不透明白纹理；纯色填充借它走与带纹理绘制完全相同的管线。</summary>
     public Texture White { get; }
@@ -76,6 +77,11 @@ public sealed partial class Canvas : IDisposable
         Gpu = gpu;
         Basic = new(gpu, VertexSource,
             "#version 450\nin vec2 v_vTexcoord;in vec4 v_vColour;uniform sampler2D gm_BaseTexture;out vec4 fragColor;void main(){fragColor=texture(gm_BaseTexture,v_vTexcoord)*v_vColour;}");
+        if (Environment.GetEnvironmentVariable("KG_NOTE_INSTANCING") != "off")
+        {
+            try { NoteInstances = new(gpu, NoteInstanceVertexSource, NoteInstanceFragmentSource, instanced: true); }
+            catch (Exception ex) { Console.Error.WriteLine("Note instancing unavailable; using geometry: " + ex.Message); }
+        }
         White = new(gpu, 1, 1, [255, 255, 255, 255]);
     }
 
@@ -160,6 +166,7 @@ public sealed partial class Canvas : IDisposable
         Gpu.Submit();
         White.Dispose();
         Basic.Dispose();
+        NoteInstances?.Dispose();
     }
 }
 

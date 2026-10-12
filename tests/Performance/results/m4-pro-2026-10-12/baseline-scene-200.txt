@@ -1,0 +1,11 @@
+2026-10-12 15:46:35.286 dotnet[46781:11392698] ApplePersistence=NO
+[Kuroaki/GPU] backend=metal, shaderFormats=Msl, MetalLib
+[Kuroaki/GPU] device=Apple M4 Pro, driver=unknown, version=unknown
+[RustEngine] VSC parsed: 200 notes, 0 diagnostics, 2.95 ms (auto).
+[RustTimeline] batch evaluator ready: 0 tracks, 0 segments (auto).
+Note skin: vividstasis-default-note-skin-exact-lanes-v2 / exact lanes / skins: normal, stopmotion, extendnova, stargazers @ /private/tmp/kg-baseline-tests/bin/Release/net8.0/Assets/NoteSkinFull/NotesExact
+[RustBridge 0.1.0] native motion evaluator enabled (auto).
+SDL_GPU / metal scene N=200 CPU record+submit: samples=30 mean=0.419ms P50=0.392ms P95=0.564ms P99=0.615ms max=0.615ms throughput=2386.88/s
+fence-completed frame+readback: samples=30 mean=2.274ms P50=0.842ms P95=6.355ms P99=11.885ms max=11.885ms throughput=439.75/s
+recordedBatches/frame=226 uploadBytes/frame=48768
+allocation/frame=970144B peakWorkingSet=0.0MiB processCpu=0.167s

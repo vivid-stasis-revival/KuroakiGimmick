@@ -49,7 +49,7 @@ public sealed partial class Viewer
 
     /// <summary>选择集里真实存在的片段，按源文件顺序。</summary>
     VsmDocument.Clip[] SelectedClipList() =>
-        editor == null ? [] : editor.Vsm.Clips.Where(c => selectedClips.Contains(c.Id)).ToArray();
+        CachedSelectedClipList();
 
     /// <summary>把选择集收敛成单个片段（或清空）。所有"只选中一个"的入口都走这里，保证两份状态不会分叉。</summary>
     void SetClipSelection(Guid? id)
@@ -63,7 +63,7 @@ public sealed partial class Viewer
     void SyncPickedProxy(Guid? id)
     {
         if (id is not Guid g || editor == null) return;
-        var clip = editor.Vsm.Find(g);
+        var clip = EditorFindClip(g);
         if (clip is { Proxy: >= 0 } && clip.Name.StartsWith("pr", StringComparison.OrdinalIgnoreCase))
             newProxy = clip.Proxy;
     }

@@ -50,7 +50,7 @@ public sealed partial class Viewer
     int proxyPickerPage;
     // 0 = 选中 PR 系事件时自动显示，1 = 常显，2 = 关闭。
     int prGridMode;
-    int EditableProxyCount => editor?.Vsm.ProxyCount ?? Current.Chart.Proxies;
+    int EditableProxyCount => editor == null ? Current.Chart.Proxies : EditorProxyCount();
     /// <summary>只在首次向未初始化的 proxy 写事件时补一条可见性初值，不覆盖作者已有的 pra 曲线。</summary>
     void EnsureProxyInitiallyVisible(int target, string name)
     {
@@ -201,14 +201,21 @@ public sealed partial class Viewer
             compilingDocument = editor; compilingRevision = editor.Revision;
             // 实时预览和最终保存/导出必须消费同一份 canonical VSM；否则 inspector 已显示 14.125，
             // renderer 仍可能从未规范化源文本重新读回 14.1250138333。
-            string text = editor.Vsm.NormalizedText, imageText = editor.Images.Text, imageRoot = editor.Images.ResourceRoot;
+            // Immutable line records can safely cross to the load worker. Normalize large VSM text there,
+            // rather than spending seconds formatting a million source events in the SDL event pump.
+            var vsmLines = editor.Vsm.Lines.ToArray();
+            string imageText = editor.Images.Text, imageRoot = editor.Images.ResourceRoot;
             var windows = editor.CompiledWindows(); var p = editor.Project.Copy();
             var textSources = editor.TextSources.ToDictionary(x => x.Key, x => x.Value);
             p.RenderWidth = Current.Project.RenderWidth; p.PreviewVolume = Current.Project.PreviewVolume;
             p.AudioDelayMs = Current.Project.AudioDelayMs; p.VisualDelayMs = Current.Project.VisualDelayMs;
             p.GameUiEnabled = Current.Project.GameUiEnabled;
             var old = Current; string? path = editor.SavedProjectPath ?? old.ProjectPath;
-            editorBuild = Task.Run(() => new Session(p, path, text, windows, old, imageText, imageRoot, textSources));
+            editorBuild = Task.Run(() =>
+            {
+                var source = new VsmDocument(); source.Restore(vsmLines);
+                return new Session(p, path, source.NormalizedText, windows, old, imageText, imageRoot, textSources);
+            });
         }
         if (editorMode && loopEnabled && transport.Playing)
         {
@@ -308,7 +315,7 @@ public sealed partial class Viewer
     /// <summary>就地替换当前选中的片段，保留原 Id，因此事件身份和源文件中的行序都不变。</summary>
     void EditClip(Func<VsmDocument.Clip, VsmDocument.Clip> apply, string name)
     {
-        if (editor == null || selectedClip is not Guid id || editor.Vsm.Find(id) is not { } c) return;
+        if (editor == null || selectedClip is not Guid id || EditorFindClip(id) is not { } c) return;
         // 校验放在模态回调里做：值非法时模态保持打开，而不是静默关闭把输入丢掉。
         editor.Change(name, () => editor.Vsm.Replace(apply(c))); layoutRevision = -1; message = name;
     }
@@ -378,7 +385,7 @@ public sealed partial class Viewer
             EnsureProxyInitiallyVisible(target, name);
             editor.Vsm.Add(clip);
         });
-        if (editor.Vsm.Find(clip.Id) != null)
+        if (EditorFindClip(clip.Id) != null)
         { selectedClip = clip.Id; selectedWindowEvent = -1; inspectorScroll = 0; FocusAddedTrack(name, target, beat); }
     }
     /// <summary>新增 WindowMovement 事件。时间轴按拍操作，写进 JSON 的 t / 时长一律先经 BPM map 换算成秒。</summary>
@@ -426,7 +433,7 @@ public sealed partial class Viewer
         }
         if (BatchSelection) { DuplicateClips(); return; }
         double destination = InsertionBeat;
-        if (selectedClip is Guid id && editor.Vsm.Find(id) is { } c)
+        if (selectedClip is Guid id && EditorFindClip(id) is { } c)
         {
             if (Math.Abs(destination - c.Beat) < 1e-7) destination += Math.Max(.25, c.End - c.Beat);
             var copy = c with { Id = Guid.NewGuid(), Beat = destination, RepeatEnd = c.RepeatEnd + destination - c.Beat };
