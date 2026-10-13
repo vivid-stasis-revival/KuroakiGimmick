@@ -230,7 +230,8 @@ public sealed partial class Viewer
         // 而播放中途 seek / 循环回跳时 beatStart 跟着播放头一起跳，播放头始终钉在同一列，不会甩屏。
         // 位移走 UiMotion（单调 UI 时钟）而不是自己按帧积分，因此与帧率无关；关掉 UI 动画就退化成瞬时锁定，截图仍然确定。
         if (editorMode && editorFollow && transport.Playing && editorTracksRect.W > 0 &&
-            !panActive && !marqueeActive && !editorScrub && editDrag == null && !ImageGestureActive)
+            !panActive && !marqueeActive && !editorScrub && editDrag == null && !ImageGestureActive &&
+            touchNavigation != TouchNavigation.Timeline)
         {
             double beat = Current.Timeline.Bpm.Beat(transport.Position), span = editorTracksRect.W / pixelsPerBeat;
             float target = (float)(span * FollowAnchor), actual = (float)(beat - beatStart);

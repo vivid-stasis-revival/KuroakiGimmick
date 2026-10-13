@@ -5,6 +5,10 @@ namespace KuroakiGimmick.Native;
 /// <summary>SDL 事件联合体与输入接口，显式偏移量属于原生 ABI。</summary>
 public static partial class Sdl
 {
+    // SDL3 touch input: FingerDown/Up/Motion/Canceled (0x700-0x703).
+    public const uint FingerDown = 0x700, FingerUp = 0x701, FingerMotion = 0x702, FingerCanceled = 0x703;
+    public const uint TouchMouseId = uint.MaxValue; // SDL_TOUCH_MOUSEID
+
     // -------------------------------------------------------------------------
     // 事件 / 输入
     // -------------------------------------------------------------------------
@@ -34,6 +38,13 @@ public static partial class Sdl
         public uint Type;
 
         [FieldOffset(16)] public uint WindowID;
+        [FieldOffset(20)] public uint MouseWhich; // SDL_MouseMotionEvent/SDL_MouseButtonEvent.which
+        // SDL_TouchFingerEvent differs from mouse layout. Read only for Finger* types.
+        [FieldOffset(16)] public ulong TouchID;
+        [FieldOffset(24)] public ulong FingerID;
+        [FieldOffset(32)] public float FingerX;
+        [FieldOffset(36)] public float FingerY;
+        [FieldOffset(52)] public uint FingerWindowID;
         [FieldOffset(24)] public nint TextData;
         [FieldOffset(24)] public float WheelX;
         [FieldOffset(26)] public byte Clicks;

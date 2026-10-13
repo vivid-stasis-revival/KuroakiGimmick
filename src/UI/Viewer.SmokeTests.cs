@@ -197,6 +197,7 @@ public sealed partial class Viewer
             throw new Exception("Official reference index did not render its Markdown table.");
         CloseReference();
         Draw(1440, 940);
+        SmokeTouchUi();
     }
 }
 
