@@ -1,830 +1,384 @@
-<p align="center">   <img src="Assets/App/Kuroaki.png" width="200" alt="KuroakiGimmick"> </p>
+<p align="center">
+  <img src="Assets/App/Kuroaki.png" width="200" alt="KuroakiGimmick Logo">
+</p>
 
 <h1 align="center">KuroakiGimmick</h1>
 
-<p align="center">   面向《vivid/stasis》的谱面演出预览与编辑工具。<br>   在同一条时间轴上编排 gimmick、图片、字幕、场景效果与窗口运动，并直接检查它们在实际歌曲场景中的表现。 </p>
+<p align="center">
+  为《vivid/stasis》制作的谱面演出预览与编辑工具。<br>
+  在同一条时间轴上编排 gimmick、图片、字幕、场景效果和窗口运动，并在歌曲场景中检查实际表现。
+</p>
 
-<p align="center">   <img src="https://img.shields.io/badge/version-0.1.5_%2F_18.0-94cddd?style=flat-square" alt="v0.1.5 / Build 18.0">   <img src="https://img.shields.io/badge/C%23-.NET_8-b5a3e8?style=flat-square" alt="C# / .NET 8">   <img src="https://img.shields.io/badge/renderer-SDL3_GPU-94cddd?style=flat-square" alt="SDL3 GPU">   <img src="https://img.shields.io/badge/UI-中文_%2F_English-e8a4bd?style=flat-square" alt="中文 / English"> </p>
+<p align="center">
+  <img src="https://img.shields.io/badge/version-0.1.5_%2F_18.0-94cddd?style=flat-square" alt="v0.1.5 / Build 18.0">
+  <img src="https://img.shields.io/badge/C%23-.NET_8-b5a3e8?style=flat-square" alt="C# / .NET 8">
+  <img src="https://img.shields.io/badge/renderer-SDL3_GPU-94cddd?style=flat-square" alt="SDL3 GPU">
+  <img src="https://img.shields.io/badge/engine-C%23_%2B_Rust-b5a3e8?style=flat-square" alt="C# + Rust">
+  <img src="https://img.shields.io/badge/UI-中文_%2F_English-e8a4bd?style=flat-square" alt="中文 / English">
+</p>
 
-<p align="center">   <a href="#关于-kuroakigimmick">关于</a> ·   <a href="#主要功能">功能</a> ·   <a href="#快速开始">快速开始</a> ·   <a href="#编辑与导出">编辑与导出</a> ·   <a href="#命令行">命令行</a> ·   <a href="#构建">构建</a> ·   <a href="#特别感谢">特别感谢</a> </p>
+<p align="center">
+  <a href="#项目定位">项目定位</a> ·
+  <a href="#功能">功能</a> ·
+  <a href="#快速开始">快速开始</a> ·
+  <a href="#编辑与导出">编辑与导出</a> ·
+  <a href="#构建与发布">构建与发布</a> ·
+  <a href="#开发与文档">开发与文档</a> ·
+  <a href="#特别感谢">特别感谢</a>
+</p>
+
+<table align="center">
+  <tr><th align="center">macOS</th><th align="center">Windows</th><th align="center">Linux</th></tr>
+  <tr>
+    <td align="center">Metal / SDL3 GPU<br>Apple Silicon 已实际使用</td>
+    <td align="center">Direct3D 12 / SDL3 GPU<br>需要可用的 D3D12 设备</td>
+    <td align="center">暂无交互式图形后端<br>不列为支持平台</td>
+  </tr>
+</table>
 
 > [!IMPORTANT]
-> 本仓库只提供 **KuroakiGimmick 本身的源码、应用资源及可公开分发的第三方组件**。
->
-> 《vivid/stasis》的游戏素材不会随仓库分发。完整场景预览及部分功能需要用户自行准备合法取得的本地游戏资源。
+> 本仓库只提供 **KuroakiGimmick 的源码、应用资源及可公开分发的第三方组件**。
+> 《vivid/stasis》的游戏素材不会随仓库分发。完整场景预览及部分功能需要自行准备合法取得的本地游戏资源。
 
-## 关于 KuroakiGimmick
+## 项目定位
 
-**KuroakiGimmick**是一套为《vivid/stasis》演出制作而设计的预览与编辑工具。
+**KuroakiGimmick（K/G）** 主要解决的是《vivid/stasis》的 **谱面演出制作、预览与验证**。
 
-它可以读取谱面和演出数据，把：
+它将音符、HUD、VSM gimmick、图片、字幕、Custom Proxy 和窗口事件放进同一套时间轴与歌曲场景中。与其每改一个参数就进游戏重新检查，不如先在编辑器里定位、预览、调整，再把结果导出去。
 
-- 音符
-- HUD
-- VSM gimmick
-- 图片
-- 字幕
-- Custom Proxy
-- 场景效果
-- 窗口运动
+项目并不是完整的音符制谱器，也不打算重新实现整个 GameMaker Runtime。对于无法完整模拟的原生行为，K/G 会尽量提供兼容实现及诊断信息；真正的结果仍然以游戏本体为准。
 
-放进同一套时间轴和场景渲染系统中进行预览与编辑。
+这一点很重要。**能把场景渲染出来，不代表每一种 gimmick 都已经正确还原。**
 
-KuroakiGimmick 的目标不是重新实现整个 GameMaker Runtime，也不是成为完整的音符制谱器。
+## 功能
 
-它更关心的是：
+| 功能 | 支持内容 |
+| --- | --- |
+| **谱面与演出预览** | 读取 VSB / VSC、VSM、VSP、SGV 及相关图片、音频和字幕；在 GAME SCENE 中预览 Note、Lane、HUD、判定与演出。 |
+| **时间轴编辑** | 编辑事件时间、持续时间、From / To、Easing 和 Proxy；支持吸附、循环试听、时间标记、批量操作、Loop 拆分／合并、撤销与重做。 |
+| **图片动画** | IMAGE CANVAS 编辑初始姿态、位置、缩放、旋转、透明度、关键帧、运动路径与资源替换。 |
+| **文字与字幕** | TEXT CANVAS 编辑多行文字、排版、RGB 颜色、对齐、换行宽度及 MOVE / FADE 动画。 |
+| **直接场景编辑** | 在 GAME SCENE 双击图片或文本对象并拖动修改 X/Y；编辑手柄不受场景后处理影响。 |
+| **场景与原生演出** | Custom Proxy、图片 Layer、Film、粒子、Room FX、Shader、Note 位移，以及部分 Custom / 原生 gimmick。 |
+| **窗口演出** | 虚拟桌面、真实辅助窗口、部分 ExtCustomGimmick 窗口事件、Proxy 内容绑定与多窗口预览。 |
+| **Custom Episode** | 将 `custom_episode` 剧情数据展开到时间轴，配合播放、定位、截图和视频输出进行检查。 |
+| **工程与导出** | 保存 SGV；导出 VSM、VSM + cgmk config、VSP + assets、Chart Folder、Info Card 或 MP4。 |
+| **工作区与工具** | 中文／English、界面设置、F1 离线参数文档、轨道说明、跨实例选择集复制，以及命令行检查／渲染。 |
+| **Optimization Engine** | Rust 负责解析、BPM、音符运动、音频解码和 Timeline 基础轨道批量求值；保留 C# 兼容路径与诊断开关。 |
 
-> **这个演出到底会长什么样，以及我要怎么把它改成我想要的样子。**
-
-对于无法完整模拟的原生 GameMaker 行为，K/G 会尽量提供可检查的兼容实现与明确提示，而不是假装预览器和游戏本体完全一致。
-
-最终效果仍应以实际游戏运行结果为准。
-
-## 主要功能
-
-### 🎬 演出预览
-
-支持读取和组合：
-
-- VSB / VSC 谱面
-- VSM 演出
-- VSP 图片声明
-- SGV 工程
-- 图片与字幕资源
-- 部分 Custom Gimmick / 原生 gimmick
-- 部分 ExtCustomGimmick 窗口演出
-
-在歌曲场景中同时预览：
-
-- Note
-- Lane
-- HUD
-- 判定效果
-- 图片
-- 字幕
-- Proxy
-- Shader / FX
-- Window Movement
-
-### ✏️ 时间轴编辑
-
-可以直接编辑：
-
-- 事件时间
-- 持续时间
-- From / To
-- Easing
-- Proxy
-- 图片姿态
-- 字幕
-- 窗口事件
-
-并支持：
-
-- 音符吸附
-- 时间标记
-- 循环试听
-- 批量操作
-- Loop 拆分 / 合并
-- 撤销 / 重做
-- 跨实例复制与粘贴
-
-选择集可以通过系统剪贴板在两个 KuroakiGimmick 实例之间传递，也可以直接作为文本发送给其他人。
-
-时间轴左侧可拖动轨道名称或三线手柄调整显示顺序；图片、文字组使用手柄整组移动，展开的通道会一起跟随。靠近列表上下边缘会自动滚动，按 Esc 可以取消，一次移动对应一次撤销。顺序保存在 SGV 工程中，不改变谱面事件的执行顺序。
-
-添加 gimmick 页面的搜索框遵循设置中的 Inline/Modal 输入方式。Inline 模式会随输入实时筛选；Enter 提交搜索词，Esc 取消本次输入。
-
-### 🖼️ 图片对象
-
-提供独立的 **IMAGE CANVAS**。
-
-支持编辑：
-
-- 初始位置
-- 缩放
-- 旋转
-- 透明度
-- 动画关键帧
-- 路径
-- 动画端点
-- 图片替换
-
-可以通过：
-
-```
-INITIAL
-KEY HERE
-START / END
-CONTINUE
-```
-
-等操作直接编排图片运动。
-
-### 💬 字幕与文字对象
-
-提供 **TEXT CANVAS**，支持：
-
-- 多行文字
-- 位置
-- 缩放
-- 旋转
-- 透明度
-- RGB 颜色
-- 对齐
-- 行距
-- 自动换行宽度
-- MOVE
-- FADE IN
-- FADE OUT
-
-字幕内容与视觉动画可以分别编辑。
-
-### 🪟 Window Movement
-
-KuroakiGimmick 包含窗口运动预览系统。
-
-支持：
-
-- 虚拟桌面预览
-- 真实辅助窗口
-- 部分 ExtCustomGimmick 窗口事件
-- Proxy 与窗口内容绑定
-- 多窗口演出预览
-
-由于真实窗口行为依赖操作系统，部分效果仍应在目标平台实际验证。
-
-### 🎨 场景与特效
-
-目前包含对多种演出行为的支持，例如：
-
-- Custom Proxy
-- 图片 Layer
-- Film
-- 粒子
-- Room FX
-- Shader
-- Note 位移
-- 部分原生 gimmick
-- Custom / ExtCustom 行为
-
-预览和视频导出尽可能共用相同的主要渲染流程。
-
-具体兼容范围请以程序内诊断信息、F1 参考以及最终游戏实机表现为准。
-
-### 📖 Custom Episode
-
-KuroakiGimmick 支持在谱面演出中预览 `custom_episode`。
-
-对应的剧情数据可以展开到时间轴中，使：
-
-- 正常播放
-- 时间轴拖动
-- 反向定位
-- 场景截图
-- 视频导出
-
-尽可能保持一致。
-
-对于游戏本体中会被跳过、无法直接重现或依赖特殊场景状态的剧情步骤，K/G 会通过诊断信息提示，而不是静默吞掉。
-
-### 🌐 中英双语
-
-界面支持：
-
-- 跟随系统
-- 中文
-- English
-
-位置：
-
-```
-SETTINGS / 设置 → Language
-```
-
-语言设置只影响 KuroakiGimmick 界面，不会修改工程中的字幕、标识符或谱面内容。
-
-## 支持平台
-
-| 平台    | 图形后端               | 状态                           |
-| ------- | ---------------------- | ------------------------------ |
-| macOS   | Metal / SDL3 GPU       | 支持，Apple Silicon 已实际使用 |
-| Windows | Direct3D 12 / SDL3 GPU | 支持                           |
-| Linux   | -                      | 暂无交互式图形后端             |
-
-Windows 需要可用的 **Direct3D 12**。
-
-macOS 使用 **Metal**。
-
-“能够编译”和“实际上能正常跑”并不是同一件事。
-
-很遗憾，编译器没有义务替人类测试 GPU 驱动。
+K/G 的重点是**演出**，而不只是把 VSM 文本换一种方式显示出来。预览与视频输出尽可能共用相同的主要渲染流程，但这不等于真实窗口、操作系统桌面和游戏原生状态都会被录进视频。
 
 ## 快速开始
 
 ### 环境要求
 
-| 项目                | 要求                                       |
-| ------------------- | ------------------------------------------ |
-| .NET                | .NET 8 SDK，或能够构建 `net8.0` 的后续 SDK |
-| macOS               | Metal                                      |
-| Windows             | Direct3D 12                                |
-| 完整场景资源        | 用户自行准备的本地 `Assets/`               |
-| Rust                | stable 工具链（rustup / cargo / rustc），用于优化引擎及发行构建 |
-| Ogg/Vorbis          | Symphonia；兼容路径使用内置 NVorbis |
-| 其他音频 / 视频导出 | 支持的 WAV / FLAC / MP3 / AAC 等由 Symphonia 解码；其他格式、兼容音频路径及视频导出需要 FFmpeg |
+| 项目 | 要求 |
+| --- | --- |
+| .NET | .NET 8 SDK，或能够构建 `net8.0` 的后续 SDK |
+| Rust | stable 工具链（rustup / cargo / rustc），用于 Optimization Engine 和正式发行构建 |
+| macOS | Metal，使用 SDL3 GPU |
+| Windows | Direct3D 12，使用 SDL3 GPU |
+| 游戏素材 | 用户自行准备的本地 `Assets/`；仓库内 `Assets/App/` 仅为应用自身资源 |
+| 音频 | Symphonia 负责支持的格式；兼容路径仍可使用内置 NVorbis |
+| 视频与部分兼容解码 | FFmpeg，可通过 `PATH` 或 `KUROAKI_FFMPEG` 指定 |
 
 首次恢复 NuGet 包需要网络连接。
 
+**编译通过不等于运行通过。** 这不是文字游戏，尤其在 GPU 驱动开始闹脾气的时候。
+
 ### 编译
 
-```
+在仓库根目录执行：
+
+```bash
 dotnet restore KuroakiGimmick.csproj --locked-mode
 bash scripts/build-rustbridge.sh
 ```
 
-Windows 使用 `pwsh -File scripts/build-rustbridge.ps1`。构建脚本会测试 Rust、编译 C#、复制原生库并执行四项无 SDL 自测。只需 C# 兼容路径时仍可运行 `dotnet build KuroakiGimmick.csproj -c Release --no-restore`；未放置原生库时默认优化引擎会记录原因并回退。
+Windows PowerShell：
+
+```powershell
+dotnet restore KuroakiGimmick.csproj --locked-mode
+pwsh -File scripts/build-rustbridge.ps1
+```
+
+构建脚本会编译 C# 与 Rust、复制对应原生库并运行四项不需要 SDL 窗口的自测。
+
+如果只需要 C# 兼容路径，也可以构建托管程序：
+
+```bash
+dotnet build KuroakiGimmick.csproj -c Release --no-restore
+```
+
+没有匹配的 `kg_native_core` 原生库时，默认模式会记录原因并回退；要求必须启用 Rust 的模式则不会悄悄回退。
 
 ### 启动
 
-直接启动：
-
-```
+```bash
 dotnet run --project KuroakiGimmick.csproj -c Release --no-build
 ```
 
-直接打开 SGV 工程：
+打开指定 SGV 工程：
 
-```
+```bash
 dotnet run --project KuroakiGimmick.csproj -c Release --no-build -- \
   --editor /path/to/project.sgv.json
 ```
 
-macOS：
+macOS 启动脚本：
 
-```
+```bash
 bash scripts/run-editor.command /path/to/project.sgv.json
 ```
 
 Windows PowerShell：
 
-```
+```powershell
 .\scripts\run-editor.ps1 -Project 'C:\Charts\project.sgv.json'
 ```
 
-FFmpeg 可以直接加入 `PATH`，也可以通过：
-
-```
-KUROAKI_FFMPEG
-```
-
-指定。
+界面语言可在 **SETTINGS / 设置 → Language** 中选择跟随系统、中文或 English。语言设置只影响应用界面，不会改写工程中的字幕内容、谱面标识符或原始数据。
 
 ## 编辑与导出
 
-一个通常的工作流程：
+常用流程并不复杂：
 
-### 1. 打开谱面或工程
+1. **打开谱面或工程**：通过 `OPEN CHART / VSM` 导入 VSB、VSC、VSM、SGV 或歌曲目录，也可以拖入对应文件。需要额外素材时使用 `+ FILES / RESOURCES`。
+2. **编辑演出**：按 `Tab` 在 Viewer / Editor 间切换；在时间轴中修改事件，并用 `IMAGES`、`TEXT`、`SCENE` 检查图片、字幕和实际歌曲场景。
+3. **保存工程**：使用 `SAVE / SAVE AS` 保存 `.sgv.json`。SGV 可以引用外部资源，移动工程时请一并保留对应资源及相对路径。
+4. **检查并导出**：先用 `REVIEW FILES` 查看输出文件与警告，再执行 `EXPORT COPY`。默认不覆盖既有导出文件。
 
-使用：
+### 编辑器的一些细节
 
-```
-OPEN CHART / VSM
-```
+- **时间轴**：可以拖动轨道名称或手柄调整显示顺序；图片和文字组会整体跟随，轨道显示顺序不会改变实际事件执行顺序。一次完整拖动对应一次 Undo。
+- **跨实例复制**：选择集可以通过系统剪贴板在两个 K/G 实例之间传递，也可作为文本发送。
+- **谱面兼容**：读取 CSM 3.4.0 VSC 的 `modExtra` 字段时会保留原始元数据与格式，不会把旧 VSC 自动升级成新版方言；同难度 VSM 缺失时仍可按现有规则回退到 `GLOBAL.vsm`。
+- **搜索**：添加 gimmick 页面的搜索框跟随设置中的 Inline / Modal 输入模式；Inline 实时筛选，Enter 提交，Esc 取消当前输入。
+- **IMAGE CANVAS**：`INITIAL` 修改初始姿态，`KEY HERE` 写入当前时间点，`START / END` 与 `CONTINUE` 用于运动路径和动画端点。
+- **TEXT CANVAS**：文字内容和视觉动画分别编辑；支持 `MOVE`、`FADE IN`、`FADE OUT`，以及多行、对齐、行距、RGB 颜色和自动换行。
+- **GAME SCENE**：可直接双击并拖动图片或文字对象修改当前拍的 X/Y。拖动松手时只提交一次 Undo；动态值、冲突状态或不安全的变换仍需使用原始编辑方式。
+- **Custom Episode**：播放、反向定位、截图和视频导出尽可能保持一致。需要特殊游戏状态或不能复现的剧情步骤会给出诊断信息。
+- **Window Movement**：真实辅助窗口依赖目标操作系统；虚拟桌面、窗口位置以及多个真实原生窗口不会合成为普通视频的单一画面。
 
-打开：
+### 导出格式
 
-- VSB / VSC
-- VSM
-- SGV
-- 歌曲目录
+| 模式 | 输出 |
+| --- | --- |
+| **VSM** | 当前演出文本 |
+| **VSM + cgmk config** | VSM 及其窗口配置 |
+| **VSP + assets** | VSP 与实际引用的图片资源 |
+| **Chart Folder** | 当前难度的谱面演出、VSP、图片、字幕等资源，以及可重新打开的预览工程 |
+| **Info Card** | 当前难度的 16:9 乐曲信息卡片 |
+| **Video** | H.264 / AAC MP4，录制歌曲场景 |
 
-也可以直接拖入对应文件或目录。
+**VSP + assets** 只收集 VSP 真正引用的图片，保留可用的原文件名并改写为可移动的相对路径；可以选择图片与 VSP 同目录，或放入 `Assets/`。它不会顺手把 VSM、音频与整个谱面目录一起塞进去。
 
-通过：
+**Chart Folder** 只收集当前难度真正需要的文件，不复制其它难度、未引用素材或 `.kuroaki` 备份。工程备份仍保留在原工程旁的 `.kuroaki/`；导出不负责安装游戏扩展，也不会修改原歌曲目录。
 
-```
-+ FILES / RESOURCES
-```
+**Info Card** 支持不同输出分辨率；**Video** 的普通歌曲场景与真实窗口演出是两回事，后者仍应在目标系统检查。
 
-附加：
+设置中的 **Overwrite exports / 允许导出覆盖文件** 默认为关闭。开启后同名文件会在成功导出时替换；Chart Folder 会按文件合并而不是删除其它未导出文件，原谱面源文件仍受保护。命令行可使用 `--overwrite` 单次允许覆盖。
 
-- 图片
-- 音频
-- 曲绘
-- VSP
-- 其他工程资源
+### 常用快捷键
 
-### 2. 编辑演出
+| 快捷键 | 操作 |
+| --- | --- |
+| `Tab` | Viewer / Editor 切换 |
+| `Space` | 播放 / 暂停 |
+| `Ctrl/⌘ + O` | 打开 |
+| `Ctrl/⌘ + S` | 保存 |
+| `Ctrl/⌘ + Shift + S` | 另存为 |
+| `Ctrl/⌘ + Z` | 撤销 |
+| `Ctrl/⌘ + Shift + Z` | 重做 |
+| `Ctrl/⌘ + C / V` | 复制／粘贴选择集 |
+| `E` / `Shift + E` | 创建或激活时间标记／取消固定标记 |
+| `A` / `B` / `L` | 设置循环起点／终点／开关循环 |
+| `F1` | 打开离线手册 |
+| 长按 `W` | 查看轨道详细说明 |
+| `Esc` | 取消当前操作／关闭真实窗口预览 |
 
-按：
+## 引擎与诊断
 
-```
-Tab
-```
+v0.1.5 / Build 18.0 起，K/G 使用 **Optimization (Rust)** 承担一部分性能敏感的计算。当前原生 crate 版本为 `0.3.0-alpha.0`：
 
-切换 Viewer / Editor。
+- Rust：VSC / VSB / VSM 解析、BPM 构建、音符运动、Symphonia 音频解码及 Timeline 基础轨道批量求值；
+- C#：事件语义、回调、逐帧绑定、编辑模型、SDL 播放和 GPU 渲染；
+- 两者提供兼容回退与一致性验证路径，但并不意味着所有逻辑都转到了 Rust。
 
-在时间轴中添加或修改事件，并使用：
+可在 **设置 → Performance** 中调整优化引擎及音频路径，重新打开谱面后生效；环境变量的优先级高于设置。
 
-- `IMAGES`
-- `TEXT`
-- `SCENE`
+| 开关 | 用途 |
+| --- | --- |
+| `KG_RUST_ENGINE=auto\|off\|verify\|required` | 控制解析、BPM、Timeline；`verify` 对比两套结果，`required` 禁止静默回退。 |
+| `KG_RUST_BRIDGE` | 单独控制音符运动；未设置时跟随计算引擎配置。 |
+| `KG_AUDIO_ENGINE=optimization\|nvorbis` | 选择音频路径。 |
+| `KG_RUST_AUDIO_REQUIRED=1` | 要求 Rust 音频路径必须可用。 |
 
-完成对应内容的编辑和最终预览。
+`verify` 是一致性检查，不适合拿来跑性能基准。音频缓存、并行加载、原生库位置以及 ABI 说明见下方的 [技术文档](#开发与文档)。
 
-### 3. 保存工程
+VSM 行尾 `//` 注释可以读取，但会产生 warning；C# 和 Rust 会报告一致的诊断。送回原游戏前仍应移除这些注释。独立注释行与裸 `mods` 标记的兼容性错误诊断仍然保留。
 
-使用：
+### 命令行
 
-```
-SAVE
-SAVE AS
-```
-
-保存 `.sgv.json` 工程及相关编辑数据。
-
-SGV 可以引用外部资源，因此移动工程时请同时保留对应文件及相对路径结构。
-
-在 **GAME SCENE** 中可以直接双击图片或文本对象进行选择；选中后拖动即可修改当前拍的 X/Y。拖拽只在松手时提交一次，因此一次移动对应一个 Undo。编辑手柄位于最终后处理之上，不会被 `uialpha`、Proxy 或屏幕 FX 一起隐藏。
-
-### 4. 检查并导出
-
-使用：
-
-```
-REVIEW FILES
-```
-
-检查即将输出的文件和警告。
-
-确认后执行：
-
-```
-EXPORT COPY
-```
-
-KuroakiGimmick 不会无提示覆盖已有导出目录。
-
-## 导出格式
-
-| 模式                  | 输出                                     |
-| --------------------- | ---------------------------------------- |
-| **VSM**               | 当前演出文本                             |
-| **VSM + cgmk config** | VSM 与对应窗口配置                       |
-| **VSP + assets**      | 单独导出 VSP 与其引用的图片资源          |
-| **Chart Folder**      | 当前难度演出及 VSP、图片、字幕等所需资源 |
-| **Info Card**         | 当前难度的 16:9 乐曲信息卡片             |
-| **Video**             | H.264 / AAC MP4                          |
-
-### VSP + assets
-
-VSP + assets 只打包当前图片声明与它实际引用的图片。导出的 VSP 会改写为可移动的相对路径；可以按设置把图片放在 VSP 同目录，或统一放进 `Assets/`。不会额外夹带 VSM、音频、字幕或整个谱面目录。
-
-### Chart Folder
-
-Chart Folder 会整理当前难度需要的资源，并生成可重新打开的预览工程。
-
-只收集当前谱面、编辑后的演出与配置、图片声明引用的图片、字幕以及当前难度使用的歌曲资源和本地预览依赖，不再复制整个源目录。其它难度、未引用素材、`.kuroaki` 备份与工作副本不会进入导出。
-
-工程备份仍保留在工程旁的 `.kuroaki/` 中。Windows 保存时会为该目录设置隐藏属性；macOS 使用前导点隐藏目录。
-
-它：
-
-- 不负责安装游戏扩展；
-- 不保证收集其他难度的全部外部依赖；
-- 不会覆盖原歌曲目录。
-
-### Info Card
-
-可以根据当前谱面与歌曲信息生成乐曲信息卡片。
-
-支持不同输出分辨率，并尽量保持文字和图形在高分辨率输出下清晰，而不是简单把低分辨率结果硬拉大。
-
-### Video
-
-视频导出只记录歌曲场景。
-
-以下内容不会被合成为单一视频画面：
-
-- 虚拟桌面
-- 系统窗口位置
-- 多个真实原生窗口
-
-真实窗口演出应在目标系统中单独检查。
-
-## 常用快捷键
-
-| 快捷键               | 操作                            |
-| -------------------- | ------------------------------- |
-| `Tab`                | Viewer / Editor 切换            |
-| `Space`              | 播放 / 暂停                     |
-| `Ctrl/⌘ + O`         | 打开                            |
-| `Ctrl/⌘ + S`         | 保存                            |
-| `Ctrl/⌘ + Shift + S` | 另存为                          |
-| `Ctrl/⌘ + Z`         | 撤销                            |
-| `Ctrl/⌘ + Shift + Z` | 重做                            |
-| `Ctrl/⌘ + C`         | 复制选择集                      |
-| `Ctrl/⌘ + V`         | 粘贴选择集                      |
-| `E`                  | 创建 / 激活时间标记             |
-| `Shift + E`          | 取消固定标记                    |
-| `A`                  | 设置循环起点                    |
-| `B`                  | 设置循环终点                    |
-| `L`                  | 开关循环                        |
-| `F1`                 | 打开离线文档                    |
-| 长按 `W`             | 查看轨道详细说明                |
-| `Esc`                | 取消当前操作 / 关闭真实窗口预览 |
-
-## 命令行
-
-KuroakiGimmick 同时提供命令行模式。
+<details>
+<summary>检查、乐曲卡片、截图与视频渲染</summary>
 
 查看完整参数：
 
-```
+```bash
 dotnet run -c Release --no-build -- --help
 ```
 
-### 检查谱面
+检查谱面指定时间点：
 
-```
+```bash
 dotnet run -c Release --no-build -- \
-  --inspect /path/chart.vsb \
-  --time 45
+  --inspect /path/chart.vsb --time 45
 ```
 
-### 生成乐曲信息卡片
+生成乐曲信息卡片：
 
-```
+```bash
 dotnet run -c Release --no-build -- \
-  --card /path/FINALE.vsb \
-  --out card.png \
-  --width 1920
+  --card /path/FINALE.vsb --out card.png --width 1920
 ```
 
-可用宽度：
+卡片宽度可选 `1280`、`1920`、`2560`、`3840`。
 
-```
-1280
-1920
-2560
-3840
-```
+截图：
 
-### 场景截图
-
-```
+```bash
 dotnet run -c Release --no-build -- \
-  --snapshot /path/project.sgv.json \
-  --scene \
-  --time 45 \
-  --out frame.ppm \
-  --report frame.json \
-  --strict
+  --snapshot /path/project.sgv.json --scene --time 45 \
+  --out frame.ppm --report frame.json --strict
 ```
 
-### 视频渲染
+视频导出：
 
-```
+```bash
 dotnet run -c Release --no-build -- \
-  --render /path/project.sgv.json \
-  --start 30 \
-  --end 45 \
-  --fps 60 \
-  --width 1920 \
-  --out clip.mp4 \
-  --strict
+  --render /path/project.sgv.json --start 30 --end 45 \
+  --fps 60 --width 1920 --out clip.mp4 --strict
 ```
 
-截图和视频渲染需要可用的 GPU 后端。
+`--strict` 会将对应渲染错误作为命令失败返回。截图和视频渲染需要可用的 GPU 后端；`--inspect` 不能代替图形兼容性验证。
 
-`--strict` 会在对应渲染错误发生时返回命令失败。
+单次设置语言可传入 `--language zh-CN`、`--language en` 或 `--language auto`。实际支持的参数始终以 `--help` 为准。
 
-设置底部的“允许导出覆盖文件”（Overwrite exports）控制所有导出的同名文件处理，默认关闭，重启后保留。
-开启后会在导出成功时替换已有输出；谱面文件夹按文件合并，保留本次未导出的其他文件，原谱面源文件仍受保护。
-命令行导出也读取此设置，可添加 `--overwrite` 单次开启覆盖。
+</details>
 
-### 引擎与诊断
+## 构建与发布
 
-默认使用 Optimization (Rust) 计算和音频引擎，并开启并行加载、PCM 缓存；可在设置 → Performance 中切换，重新打开谱面后生效。环境变量优先于设置。
+当前应用版本为 **v0.1.5 / Build 18.0**；最终版本号以 [`KuroakiGimmick.csproj`](KuroakiGimmick.csproj) 为准。
 
-`KG_RUST_ENGINE=auto|off|verify|required` 控制解析、BPM 和 Timeline；`KG_RUST_BRIDGE` 单独控制音符运动，未设置时随计算引擎开关。`verify` 比较 C#/Rust 结果，`required` 在原生路径失败时退出。音频单独使用 `KG_AUDIO_ENGINE=optimization|nvorbis` 和 `KG_RUST_AUDIO_REQUIRED=1`。完整开关、原生库位置和验证命令见 [优化引擎说明](OPTIMIZATION_ENGINE.md)。
+发行脚本会为目标 RID 编译、打包匹配架构的 `kg_native_core` 库。跨架构构建 Rust 时还需要对应 target 与链接器；不要把能交叉编译 C# 误当成原生库也自动跟着跨平台了。
 
-VSM 行尾 `//` 注释会被读取并产生 warning，C# 与 Rust 行为一致；进入原游戏前仍应移除注释。独立注释行和裸 `mods` 标记保留兼容性错误诊断。
+### .NET 发行包
 
-### 指定语言
+macOS：
 
-```
---language zh-CN
---language en
---language auto
-```
-
-完整参数始终以：
-
-```
---help
-```
-
-为准。
-
-## 构建
-
-当前版本：
-
-**v0.1.5 / Build 18.0**
-
-发行脚本需要 Rust 工具链，并为目标 RID 编译、打包匹配架构的 `kg_native_core` 动态库。跨架构构建还需要对应 Rust target 和链接器。
-
-实际版本号以：
-
-```
-KuroakiGimmick.csproj
-```
-
-为准。
-
-### macOS
-
-```
+```bash
 # arm64 / x64 / all
 bash scripts/publish-mac.sh arm64
 ```
 
-### 从 macOS 构建 Windows .NET 单文件版本
+从 macOS 构建 Windows .NET 单文件版本：
 
-```
+```bash
 # x64 / arm64 / all
 bash scripts/publish-win.sh x64
 ```
 
-### Windows
+Windows PowerShell：
 
-```
+```powershell
 .\scripts\publish-windows.ps1 -Arch x64
 ```
 
-输出类似：
+输出目录类似：
 
-```
+```text
 dist/
 └── KuroakiGimmick-v0.1.5-<RID>-18.0-<timestamp>/
 ```
 
-并生成对应 ZIP。
+同时生成对应 ZIP；使用 `all` 会分别构建两个架构，macOS 不自动生成 Universal Binary。
 
-使用 `all` 时分别产生两个架构。
+### NativeAOT
 
-macOS 不生成 Universal Binary。
+K/G 也支持 NativeAOT 发行：
 
-## NativeAOT
-
-KuroakiGimmick 支持 NativeAOT 构建。
-
-### macOS
-
-```
+```bash
+# macOS，必须在目标 macOS 环境构建
 bash scripts/publish-aot-mac.sh arm64
-```
 
-### Windows
-
-```
+# Windows，必须在目标 Windows 环境构建
 bash scripts/publish-aot-win.sh x64
 ```
 
-NativeAOT 必须在目标操作系统上完成构建。
+Windows NativeAOT 还需要相应架构的 Visual Studio C++ Build Tools。NativeAOT 输出包含原生可执行文件、SDL3、shaderc、SPIRV-Cross、Rust Optimization Engine 和其它必需原生库，**不能只拿走一个可执行文件**。
 
-Windows NativeAOT 还需要对应架构的 Visual Studio C++ Build Tools。
+直接执行 `dotnet publish -c Release -r <rid>` 时，Release + RID 默认选择 NativeAOT，但不会自动编译或复制 Rust 原生库；正式发行请使用对应脚本。需要原有的 .NET 单文件模式时可显式指定 `-p:PublishAot=false -p:PublishSingleFile=true`。普通 `dotnet build` 不受该默认值影响。
 
-NativeAOT 输出包含：
+macOS 构建在条件允许时使用 ad-hoc 签名，不执行 Apple notarization。
 
-- KuroakiGimmick 原生可执行文件
-- SDL3
-- shaderc
-- SPIRV-Cross
-- Rust Optimization Engine（`libkg_native_core.dylib` / `kg_native_core.dll`）
-- 其他所需原生动态库
+发布包中只应包含有权分发的内容。K/G 不会把原版游戏资源变成可以任意再分发的资源。
 
-这些文件必须作为完整目录一起保留。
+## 开发与文档
 
-### `dotnet publish`
+### 项目结构
 
-直接执行：
-
-```
-dotnet publish -c Release -r <rid>
-```
-
-时，Release + RID 默认选择 NativeAOT。直接执行 `dotnet publish` 不会自动构建或复制 Rust 库；发行请使用上述脚本，或自行放置匹配架构的原生库。
-
-如果需要原有的 .NET 单文件发布：
-
-```
--p:PublishAot=false -p:PublishSingleFile=true
-```
-
-普通：
-
-```
-dotnet build
-```
-
-不受影响。
-
-macOS 构建在条件允许时使用 ad-hoc 签名，但不会执行 Apple notarization。
-
-## 游戏资源
-
-KuroakiGimmick **不会公开分发《vivid/stasis》的游戏 Assets**。
-
-公开仓库中的：
-
-```
-Assets/App/
-```
-
-只包含 KuroakiGimmick 自身使用的应用资源。
-
-以下内容不会作为游戏资源进入公开仓库：
-
-```
-Assets/       除 Assets/App/ 外的本地游戏资源
-Samples/
-Integrations/
-bin/
-obj/
-dist/
-```
-
-开发与完整预览所需的《vivid/stasis》资源需要用户自行从合法取得的本地游戏副本中准备。
-
-本项目不会授予任何《vivid/stasis》游戏素材的重新分发权。
-
-## 兼容性边界
-
-KuroakiGimmick 不执行任意 GML，也不完整模拟 GameMaker。
-
-因此这些内容可能只能部分预览：
-
-- 依赖游戏运行时内部状态的逻辑；
-- 尚未实现的原生对象；
-- 动态创建或修改的特殊实例；
-- 与操作系统窗口生命周期强绑定的行为；
-- 特定游戏版本的内部逻辑；
-- 尚未适配的专用 gimmick。
-
-复杂演出建议同时使用：
-
-1. Editor 时间轴；
-2. `SCENE` 场景预览；
-3. 兼容性 / 诊断信息；
-4. 最终游戏实机验证。
-
-如果 KuroakiGimmick 与游戏本体表现不同：
-
-> **游戏本体说了算。**
-
-## 项目结构
-
-```
+```text
 KuroakiGimmick/
-├── .github/
-│   └── workflows/
-│
+├── .github/workflows/         CI 与发布
 ├── src/
-│   ├── App/
-│   ├── Bridge/
-│   ├── Core/
-│   ├── Graphics/
-│   ├── Native/
-│   └── UI/
-│
-├── Assets/
-│   └── App/
-│
-├── Resources/
-│   └── Fonts/
-│
-├── ThirdParty/
-│
-├── rust/
-│   └── kg-native-core/
-│
-├── docs/
-│
-├── scripts/
-│
+│   ├── App/                   入口与应用状态
+│   ├── Bridge/                C# / Rust 桥接
+│   ├── Core/                  解析、模型、编辑、Timeline、导出
+│   ├── Graphics/              场景、特效、文字、SDL3 GPU
+│   ├── Native/                原生平台接口
+│   └── UI/                    Viewer、Editor、菜单、本地化
+├── rust/kg-native-core/       Optimization Engine
+├── Assets/App/                应用自身素材
+├── Resources/Fonts/           界面字体
+├── ThirdParty/                第三方声明与相关资源
+├── docs/                      开发与优化引擎文档
+├── scripts/                   构建、发布与资源处理脚本
 ├── KuroakiGimmick.csproj
 ├── CHANGELOG.md
-├── THIRD_PARTY_NOTICES.md
-└── README.md
+└── THIRD_PARTY_NOTICES.md
 ```
 
-### `src/Core`
+公开仓库不包含本地游戏资源、`Samples/`、`Integrations/`、构建产物或单独的本地测试工作区。Rust 单元测试与程序内置的无窗口自测仍然保留；CI 在 Windows / macOS 上执行相关检查。
 
-包含：
+### 技术文档
 
-- Assets
-- Audio
-- Definitions
-- Documentation
-- Editing
-- Export
-- Models
-- Parsing
-- Projects
-- Serialization
-- Timeline
-- Timing
-- Windows
+- [更新日志](CHANGELOG.md)
+- [Rust Optimization Engine：开关、构建与发布](docs/OPTIMIZATION_ENGINE.md)
+- [音符运动与 ABI](docs/RUSTBRIDGE.md)
+- [谱面解析与 BPM](docs/RUSTBRIDGE_ENGINE.md)
+- [Timeline Runtime](docs/RUST_RUNTIME_V030.md)
+- [第三方许可证与声明](THIRD_PARTY_NOTICES.md)
+- [字体资源说明](Resources/Fonts/README.md)
 
-### `src/Graphics`
+K/G 内置的 F1 文档用于谱师查看 gimmick 与操作说明；开发文档则解释渲染、原生桥接和运行路径。两者不是一回事。
 
-包含：
+### 兼容性边界
 
-- Cards
-- Effects
-- Notes
-- Primitives
-- Scene
-- SDL3 GPU
-- Text
-- Windows
+K/G **不会执行任意 GML**，也不完整模拟 GameMaker。以下内容可能只能部分预览：
 
-### `src/UI`
+- 依赖原游戏运行时内部状态、特定游戏版本或专用场景的逻辑；
+- 尚未实现的原生对象、动态实例或特殊回调；
+- 与操作系统窗口生命周期强绑定的行为；
+- 尚未适配的 Custom / ExtCustom gimmick。
 
-包含：
+建议通过时间轴、`SCENE`、兼容性诊断信息以及最终游戏实机共同验证。遇到两边不一致，**游戏本体说了算**。
 
-- Viewer
-- Editor
-- 原生菜单
-- 动画
-- 本地化
-- UI 状态与交互
+### 游戏资源与许可证
 
-### `scripts/`
+公开仓库的 `Assets/App/` 只包含 K/G 自身使用的图标等应用资源。游戏图像、音符皮肤、音频、谱面、演出素材等必须由用户自行准备合法取得的本地副本。
 
-包含：
-
-- 资源处理辅助工具
-- 发布脚本
-- NativeAOT 构建脚本
-
-公开源码保留 Rust 单元测试和程序内置的无窗口自测（`--rust-bridge-test`、`--rust-engine-test`、`--rust-timeline-test`、`--rust-audio-test`），CI 在 Windows / macOS 上运行。独立的 `tests` 工作区与性能测试记录仅保留本地，不随 Git 仓库或发行包分发。发行包不包含 `docs` 目录；应用内 VSM 手册使用运行时资源。
-
-## 第三方组件
-
-KuroakiGimmick 使用了包括但不限于：
-
-- .NET
-- SDL3 / SDL3-CS
-- Silk.NET
-- Shaderc
-- SPIRV-Cross
-- NVorbis
-- Symphonia（Rust 音频解码）
-- StbImageSharp
-- StbImageWriteSharp
-- StbTrueTypeSharp
-- Noto Sans SC
-- Fusion Pixel
-
-各组件的版权及许可证信息见：
-
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
-
-以及：
-
-```
-ThirdParty/
-```
-
-字体资源与其他第三方内容具有各自独立的许可证。
-
-## 许可证
-
-KuroakiGimmick **源代码**的使用、修改与分发条件以仓库中的：
-
-```
-LICENSE
-```
-
-为准。
-
-本仓库使用的第三方组件、字体及其他第三方资源仍遵循其各自的许可证与版权声明。
-
-详细信息请参阅：
-
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
-
-以及：
-
-```
-ThirdParty/
-```
-
-KuroakiGimmick 的源码许可证不会替代或重新授权这些第三方内容。
+KuroakiGimmick 与《vivid/stasis》开发团队不存在官方隶属、合作或背书关系。项目源码的使用、修改与再分发应以仓库实际提供的项目级许可或权利人授权为准；第三方组件、字体和游戏内容仍遵循各自的许可证与版权要求。仓库公开不等于所有依赖素材都可以随意再分发。
 
 ## 特别感谢
 
@@ -836,21 +390,11 @@ KuroakiGimmick 的源码许可证不会替代或重新授权这些第三方内�
 
 ### [Bingshuang412](https://github.com/Frollsy)
 
-感谢提供 `custom_episode` 以及更多 gimmick 的**设计思路与方案**。
-
-同时感谢在开发过程中提供的部分 Bug 反馈、使用意见和功能建议。
+感谢提供 `custom_episode` 以及更多 gimmick 的**设计思路与方案**，以及开发过程中的 Bug 反馈、使用意见和功能建议。
 
 ### vivid/stasis 交流群
 
-感谢 vs交流群 中所有使用过 KuroakiGimmick 的人。
-
-也感谢所有：
-
-- 提交过 Bug 的；
-- 提供过功能建议的；
-- 帮忙测试过新版本的；
-- 踩中过各种奇怪边界情况的；
-- 把什么东西炸掉以后还能回来详细告诉我“我是怎么炸的”的人。
+感谢所有用过 KuroakiGimmick、提出建议、帮忙测试、踩过边界问题，以及把程序炸掉之后还愿意回来提供复现步骤和日志的人。
 
 这些反馈真的帮了很多。
 
@@ -866,39 +410,12 @@ KuroakiGimmick 的源码许可证不会替代或重新授权这些第三方内�
 
 ### vivid/stasis
 
-感谢 hajimeli 以及参与制作 vivid/stasis 的所有开发者和创作者。
+感谢 hajimeli 以及参与制作《vivid/stasis》的开发者与创作者。
 
-KuroakiGimmick 是非官方项目，与 hajimeli **不存在官方隶属、合作或背书关系**。
-
-《vivid/stasis》及其游戏内容的相关权利归各自权利人所有。
+K/G 是独立的非官方社区项目。《vivid/stasis》及其游戏内容的相关权利归各自权利人所有。
 
 最后，也感谢所有在 KuroakiGimmick 还没完全准备好的时候，就敢点开它的人。
 
 至少程序炸掉以后，我们通常还能得到一份日志。
 
 通常。
-
-### 欢迎页趣味 tips
-
-编辑 `Assets/tips.json`，格式是 JSON 字符串数组，例如：
-
-```json
-[
-  "第一条 tip",
-  "第二条 tip"
-]
-```
-
-每次打开欢迎页随机选一条，连续打开尽量不重复。内容按原文显示；会去掉首尾空白、重复项和超过 512 字符的条目。空数组表示不显示 tips。文件损坏或缺失时回退到程序内置副本；不会访问网络。发行包中同样保留这个可编辑文件。
-
-
-## Rust Optimization Engine
-
-当前引擎 crate 版本为 `0.3.0-alpha.0`，应用版本为 `v0.1.5 / 18.0`。Rust 负责 VSC/VSB/VSM 解析、BPM 构建、音符运动、Symphonia 音频解码和 Timeline 基础轨道批量求值；C# 负责事件语义、回调、逐帧绑定、编辑模型、SDL 播放和 GPU 渲染。
-
-- [优化引擎、开关与发布](OPTIMIZATION_ENGINE.md)
-- [音符运动与 ABI](RUSTBRIDGE.md)
-- [谱面解析与 BPM](RUSTBRIDGE_ENGINE.md)
-- [Timeline Runtime](RUST_RUNTIME_V030.md)
-
-性能需要在目标平台和实际谱面上验证；`verify` 会计算两套结果，适合检查一致性，不适合性能基准。
