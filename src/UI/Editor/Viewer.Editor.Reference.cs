@@ -15,7 +15,7 @@ public sealed partial class Viewer
     // 本地离线文档阅读器：章节树 / 正文 / 页面大纲。
     // 阅读状态与动画永远不会进入编辑文档或游戏时间轴。
     bool referenceOpen, referenceSearchFocus, referenceSelectAll, referenceOutlineOpen, referenceOutlineHidden, referenceOutlineCoversArticle;
-    string referenceQuery = "", referenceSelected = "vsm.prepare", referenceComposition = "";
+    string referenceQuery = "", referenceSelected = "kg-guide:00", referenceComposition = "";
     string referenceStatus = "", referenceLayoutKey = "";
     double referenceStatusUntil;
     float referenceAlpha, referenceListScroll, referenceListMax, referenceBodyScroll, referenceBodyMax;
@@ -94,20 +94,38 @@ public sealed partial class Viewer
         referenceNav.Clear();
         if (!string.IsNullOrWhiteSpace(referenceQuery))
         {
-            foreach (var e in referenceResults) referenceNav.Add(new(e.Name, e.Id, 0, false, false));
+            foreach (var e in referenceResults)
+                referenceNav.Add(new(e.Name, e.Id, 0, false, false));
             return;
         }
-        foreach (string source in new[] { "vsm格式说明.md", "Custom Gimmick说明.md" })
+
+        // 不再将侧栏固定为两份历史 Markdown：新版 JSON 包含无 Source 的教程、
+        // 来自详细手册的 CSM 新参数，以及按对象登记的官方私有 Gimmick。
+        // 每组只展示顶层项目，原版章节的参数仍然沿用原有的展开机制。
+        void AddGroup(string title, IEnumerable<VsmReference.Entry> pages)
         {
-            referenceNav.Add(new(source.StartsWith("vsm", StringComparison.Ordinal) ? "VSM" : "Custom Gimmick", "", 0, false, true));
-            foreach (var section in catalogue.Entries.Where(e => e.Kind == "section" && e.Source == source))
+            var roots = pages.ToArray();
+            if (roots.Length == 0) return;
+            referenceNav.Add(new(title, "", 0, false, true));
+            foreach (var entry in roots)
             {
-                referenceNav.Add(new(section.Name, section.Id, 0, true, false));
-                if (referenceExpanded.Contains(section.Id))
-                    foreach (var child in catalogue.Entries.Where(e => e.ParentId == section.Id))
+                bool hasChildren = catalogue.Entries.Any(e => e.ParentId == entry.Id);
+                referenceNav.Add(new(entry.Name, entry.Id, 0, hasChildren, false));
+                if (hasChildren && referenceExpanded.Contains(entry.Id))
+                    foreach (var child in catalogue.Entries.Where(e => e.ParentId == entry.Id))
                         referenceNav.Add(new(child.Name, child.Id, 1, false, false));
             }
         }
+
+        AddGroup("K/G · 使用指南", catalogue.Entries.Where(e => e.Kind == "guide"));
+        AddGroup("VSM", catalogue.Entries.Where(e =>
+            e.Kind == "section" && e.Source == "vsm格式说明.md"));
+        AddGroup("Custom Gimmick", catalogue.Entries.Where(e =>
+            e.Kind == "section" && e.Source == "Custom Gimmick说明.md"));
+        AddGroup("CSM · 新增参数", catalogue.Entries.Where(e =>
+            e.Kind == "mod" && e.Category.StartsWith("CSM 1.13+ /", StringComparison.Ordinal)));
+        AddGroup("官方 obj · 来源索引", catalogue.Entries.Where(e =>
+            e.Kind == "section" && e.Category == "官方 obj / 来源登记"));
     }
     /// <summary>
     /// 切换当前条目。history 为 false 时不记历史，供前进 / 后退自身调用，免得递归污染历史栈；
