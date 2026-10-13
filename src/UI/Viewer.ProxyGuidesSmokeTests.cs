@@ -231,6 +231,7 @@ public sealed partial class Viewer
         SelectProxyFromGuide(0); prGridShowCrop = false; Frame();
         Console.WriteLine("PASS proxy isolation: real source render, separate output, unchanged next frame/export/VSM, hidden proxy has no ghost frame, wide crop uses lane reference");
         SmokeProxyFooter();
+        SmokeProxyPicking();
         SmokeProxyLabelUiMotion();
     }
 }

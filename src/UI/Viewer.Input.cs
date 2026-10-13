@@ -21,6 +21,7 @@ public sealed partial class Viewer
         if (HandleStartupInput(e)) return;
         if (HandleTrackOrderInput(e)) return;
         if (HandlePrGridGesture(e)) return; // Floating PR calibration HUD owns its header drag and [+] toggle.
+        if (HandleProxySceneGesture(e)) return; // Plain double-click yields to images/text; Shift explicitly picks a proxy.
         if (HandleSceneDirectGesture(e)) return;
         if (HandleTextGesture(e)) return;
         if (HandleActiveImageGesture(e)) return;

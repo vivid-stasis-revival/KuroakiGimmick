@@ -116,7 +116,7 @@ public sealed partial class Viewer
             if (key != referenceLayoutKey)
             {
                 referencePage = ReferenceArticleLayout.Build(selected, centerW - 20,
-                    (text, size, bold) => fonts.Measure(text, size, unified: true, bold: bold));
+                    (text, size, bold, mono) => fonts.Measure(text, size, monospaced: mono, unified: true, bold: bold));
                 referenceLayoutKey = key;
             }
             referenceBodyMax = Math.Max(0, referencePage.Height - referenceBodyRect.H);
@@ -240,8 +240,8 @@ public sealed partial class Viewer
                 for (int col = 0; col < item.Lines.Length; col++)
                 {
                     for (int row = 0; row < item.Lines[col].Length; row++)
-                        Text(item.Lines[col][row], x + 12, y + 8 + row * 25, 15,
-                            col == 0 && item.Link.Length > 0 ? DocsAccent : DocsText, max: item.Widths[col] - 24, unified: true, bold: head);
+                        DrawReferenceRichLine(item.RichLines![col][row], x + 12, y + 8 + row * 25, 15,
+                            col == 0 && item.Link.Length > 0 ? DocsAccent : DocsText);
                     x += item.Widths[col];
                 }
                 if (referenceOpen && over && click)
@@ -251,13 +251,13 @@ public sealed partial class Viewer
             {
                 Canvas.Fill(box, Theme.PanelAlt);
                 Canvas.Border(box, Theme.Border);
-                Text(L.Get("CODE"), box.X + 14, box.Y + 10, 10, DocsMuted, unified: true);
+                Text(L.Get("CODE") + (item.Anchor.Length > 0 ? " / " + item.Anchor : ""), box.X + 14, box.Y + 10, 10, DocsMuted, max: box.W - 105, unified: true);
                 // 复制按钮会画在裁剪区之外，只有整颗按钮都在正文视口内时才允许响应点击。
                 var button = new Rect(box.X + box.W - 75, box.Y + 6, 64, 26);
                 bool buttonVisible = button.Y >= referenceBodyRect.Y && button.Y + button.H <= referenceBodyRect.Y + referenceBodyRect.H;
                 if (ReferenceButton(L.Get("复制"), button, enabled: buttonVisible && articleInput, key: entry.Id + ":code:" + itemIndex)) CopyReferenceText(item.Text);
                 for (int row = 0; row < item.Lines[0].Length; row++)
-                    Text(item.Lines[0][row], box.X + 14, box.Y + 40 + row * 26, 16, Mix(Theme.Text, Theme.AccentSoft, .22f), max: box.W - 28, unified: true);
+                    Text(item.Lines[0][row], box.X + 14, box.Y + 40 + row * 26, 16, Mix(Theme.Text, Theme.AccentSoft, .22f), mono: true, max: box.W - 28, unified: true);
             }
             else
             {
@@ -269,11 +269,26 @@ public sealed partial class Viewer
                 }
                 if (list) Canvas.Fill(new(box.X + 3, box.Y + 11, 4, 4), DocsMuted);
                 for (int row = 0; row < item.Lines[0].Length; row++)
-                    Text(item.Lines[0][row], box.X + (note ? 14 : list ? 20 : 0), box.Y + (note ? 10 : 0) + row * (heading ? 30 : 28),
-                        heading ? 20 : 17, heading ? DocsText : HelpBodyColor, max: box.W - (note ? 28 : list ? 20 : 0), unified: true, bold: heading);
+                    DrawReferenceRichLine(item.RichLines![0][row], box.X + (note ? 14 : list ? 20 : 0),
+                        box.Y + (note ? 10 : 0) + row * (heading ? 30 : 28), heading ? 20 : 17, heading ? DocsText : HelpBodyColor);
             }
         }
         Canvas.Clip(null);
+    }
+
+    void DrawReferenceRichLine(ReferenceInlineLayout.Line line, float x, float y, float size, Color color)
+    {
+        foreach (var run in line.Runs)
+        {
+            bool code = run.Style.HasFlag(ReferenceMarkdown.Style.Code);
+            if (code) Canvas.Fill(new(x + run.X, y - 1, run.Width, size + 5), Theme.PanelRaised);
+            var ink = code ? DocsAccent : color;
+            fonts.Text(Canvas, run.Text, x + run.X + run.Padding, y, size, ink, monospaced: code,
+                maxWidth: Math.Max(0, run.Width - run.Padding * 2) + .5f, unified: true,
+                bold: run.Style.HasFlag(ReferenceMarkdown.Style.Bold), italic: run.Style.HasFlag(ReferenceMarkdown.Style.Emphasis));
+            if (run.Style.HasFlag(ReferenceMarkdown.Style.Strike))
+                Canvas.Line(x + run.X, y + size * .6f, x + run.X + run.Width, y + size * .6f, 1, ink);
+        }
     }
 
     /// <summary>

@@ -24,6 +24,17 @@ public readonly record struct ProxyGeometry
     public Rect Source => new(Math.Min(Left, Right), Math.Min(Top, Bottom), Math.Abs(Right - Left), Math.Abs(Bottom - Top));
     public Rect UV => new(Left / 320, Top / 180, (Right - Left) / 320, (Bottom - Top) / 180);
 
+    /// <summary>Lane reference shared by guide rendering and picking, excluding extra background/UI in a wide crop.</summary>
+    public Rect TrackRegion(double waveX = 0, double waveY = 0)
+    {
+        var s = Source;
+        float left = Math.Max(s.X, 113 - (float)Math.Abs(waveX));
+        float right = Math.Min(s.X + s.W, 208 + (float)Math.Abs(waveX));
+        float top = Math.Max(s.Y, -(float)Math.Abs(waveY));
+        float bottom = Math.Min(s.Y + s.H, 165 + (float)Math.Abs(waveY));
+        return new(left, top, Math.Max(0, right - left), Math.Max(0, bottom - top));
+    }
+
     public static ProxyGeometry Sample(Timeline timeline, double time, int target, bool custom)
     {
         double M(string name) => timeline.Get(name, time, target);

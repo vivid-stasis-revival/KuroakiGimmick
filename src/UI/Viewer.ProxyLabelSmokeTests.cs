@@ -58,6 +58,7 @@ public sealed partial class Viewer
         Current = new Session(new ViewerProject { Bpm = 120, Profile = "core", RoomPreset = "none", GameUiEnabled = false },
             editedVsm: ProxyLabelRotationVsm);
         editor = new EditorDocument(Current); renderedRevision = editor.Revision; layoutRevision = -1;
+        editorMode = true;
         SetClipSelection(null); newProxy = 0; prGridSelection = null;
         prGridMode = 1; prGridShowIds = true;
         prGridSolo = prGridShowCrop = prGridHudExpanded = false;

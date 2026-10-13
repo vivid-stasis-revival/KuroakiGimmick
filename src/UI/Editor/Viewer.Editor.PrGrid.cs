@@ -101,7 +101,7 @@ public sealed partial class Viewer
         Row($"shfl {mask.FadeLeft:0.###}   shfr {mask.FadeRight:0.###} / " + L.Get("UV fade"), Theme.AccentStrong);
         Row(exitX, Theme.Text);
         Row(exitY, Theme.Text);
-        Row(L.Get("Click a P label to select / < > switch proxy"), Theme.Muted);
+        Row(L.Get("Double-click track / Shift: prefer proxy"), Theme.Muted);
     }
 
     bool HandlePrGridGesture(Sdl.Event e)
@@ -177,8 +177,9 @@ public sealed partial class Viewer
 
     void DrawPrCalibrationGrid(Rect viewport, double time)
     {
-        prGridHudRect = default; prGridLabels.Clear();
+        prGridHudRect = default; prGridLabels.Clear(); proxyPickFrame = null;
         if (!TryPrGridTarget(out int target) || viewport.W < 80 || viewport.H < 80) return;
+        proxyPickFrame = new(Current, viewport, time, prGridSoloRendered ? prGridSoloTarget : null);
         float scaleX = viewport.W / 320, scaleY = viewport.H / 180;
         Vector2 Pixel(Vector2 logical) => new(viewport.X + logical.X * scaleX, viewport.Y + logical.Y * scaleY);
         Vector2 Point(float x, float y) => Pixel(new(x, y));

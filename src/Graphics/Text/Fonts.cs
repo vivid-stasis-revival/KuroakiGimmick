@@ -59,7 +59,7 @@ public sealed partial class Fonts : IDisposable
     /// 不再存在需要切换到独立文档字体的情况。
     /// </summary>
     public void Text(Canvas c, string text, float x, float y, float size, Color color,
-        bool monospaced = false, float maxWidth = float.MaxValue, bool unified = false, bool bold = false)
+        bool monospaced = false, float maxWidth = float.MaxValue, bool unified = false, bool bold = false, bool italic = false)
     {
         // 按当前绘制目标的像素密度决定栅格尺寸：窗口是 1x/2x，4K 卡片导出是 3x。
         int pixelSize = Math.Max(1, (int)MathF.Round(size * c.PixelScaleY));
@@ -95,9 +95,16 @@ public sealed partial class Fonts : IDisposable
                 float w = glyph.W * toLogical, h = glyph.H * toLogical;
                 // 等宽模式把字形在它的格子里居中；宽字形的格子就是它自身，居中不产生偏移。
                 float left = monospaced ? x + (advance - w) / 2 : x + glyph.OffsetX * toLogical;
-                c.Quad(atlas, new(left, y + glyph.OffsetY * toLogical, w, h), color,
-                    new(glyph.X / (float)UiFont.AtlasSize, glyph.Y / (float)UiFont.AtlasSize,
-                        glyph.W / (float)UiFont.AtlasSize, glyph.H / (float)UiFont.AtlasSize));
+                float gy = y + glyph.OffsetY * toLogical;
+                var uv = new Rect(glyph.X / (float)UiFont.AtlasSize, glyph.Y / (float)UiFont.AtlasSize,
+                    glyph.W / (float)UiFont.AtlasSize, glyph.H / (float)UiFont.AtlasSize);
+                if (italic)
+                {
+                    float topSlant = (size - (gy - y)) * .15f, bottomSlant = (size - (gy - y) - h) * .15f;
+                    c.Polygon(atlas, new(left + topSlant, gy), new(left + w + topSlant, gy),
+                        new(left + bottomSlant, gy + h), new(left + w + bottomSlant, gy + h), color, uv);
+                }
+                else c.Quad(atlas, new(left, gy, w, h), color, uv);
             }
             x += advance;
         }

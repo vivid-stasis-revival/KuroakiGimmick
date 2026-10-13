@@ -22,7 +22,7 @@ internal static class Program
         CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
         CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
         // 这一串是所有无人值守模式（自测、检查、导出、截图）。cli 为真时失败只写 stderr，不弹消息框卡住脚本。
-        bool cli = args.Any(a => a is "--inspect" or "--render" or "--snapshot" or "--card" or "--smoke-ui" or "--smoke-workspace-memory" or "--smoke-startup" or "--smoke-mac-menu" or "--smoke-windows-menu" or "--smoke-proxy-guides" or "--smoke-text-ui" or "--smoke-i18n" or "--rust-engine-test" or "--rust-timeline-test" or "--rust-bridge-test" or "--rust-audio-test");
+        bool cli = args.Any(a => a is "--inspect" or "--render" or "--snapshot" or "--card" or "--smoke-ui" or "--smoke-workspace-memory" or "--smoke-startup" or "--smoke-mac-menu" or "--smoke-windows-menu" or "--smoke-proxy-guides" or "--proxy-pick-test" or "--reference-layout-test" or "--smoke-text-ui" or "--smoke-i18n" or "--rust-engine-test" or "--rust-timeline-test" or "--rust-bridge-test" or "--rust-audio-test");
         try
         {
             // 后端覆盖必须早于任何 GPU 设备创建；否则显式 --force-vulkan 仍可能先创建平台默认后端。
@@ -38,6 +38,8 @@ internal static class Program
                 Console.WriteLine(Help);
                 return 0;
             }
+            if (args.Contains("--proxy-pick-test")) return ProxyPickingChecks.Run();
+            if (args.Contains("--reference-layout-test")) return ReferenceMarkdownChecks.Run();
             if (args.Contains("--rust-audio-test"))
             {
                 OptimizationAudioBridge.SelfTest();
@@ -413,6 +415,8 @@ internal static class Program
     UI language: --language auto|zh-CN|en (also available in Settings)
     Proxy preview: --snapshot --proxy 4 [--proxy-solo] [--proxy-crop] --time 60
     Proxy guide check: --smoke-proxy-guides --time 0 --out proxy-guides.ppm
+    Proxy picking (no SDL): --proxy-pick-test
+    Documentation Markdown/layout (no SDL): --reference-layout-test
     UI localization check: --smoke-i18n [--editor] --out i18n.ppm
     KuroakiGimmick --editor Samples/EditorDemo/demo.sgv.json
     Native self-tests (no SDL): --rust-bridge-test (motion), --rust-engine-test (VSC/VSM/BPM),

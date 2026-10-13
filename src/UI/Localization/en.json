@@ -887,6 +887,8 @@
   "LANE FULLY COVERED": "LANE FULLY COVERED",
   "Only this proxy is shown": "Only this proxy is shown",
   "Lane reference / all proxies shown": "Lane reference / all proxies shown",
+  "Double-click track / Shift: prefer proxy": "Double-click track / Shift: prefer proxy",
+  "Selected proxy in scene: ": "Selected proxy in scene: ",
   "SOURCE CROP": "SOURCE CROP",
   "REVERSED": "REVERSED",
   "SELECT PROXY": "Select proxy",

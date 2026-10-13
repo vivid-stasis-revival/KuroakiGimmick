@@ -13,15 +13,7 @@ public sealed partial class Viewer
 
     // The source rectangle may include a full screen of background/UI. The lane reference
     // is explicitly separate, so its bounds cannot be mistaken for the complete proxy crop.
-    static Rect ProxyTrackRegion(ProxyGeometry g, double waveX = 0, double waveY = 0)
-    {
-        var s = g.Source;
-        float left = Math.Max(s.X, 113 - (float)Math.Abs(waveX));
-        float right = Math.Min(s.X + s.W, 208 + (float)Math.Abs(waveX));
-        float top = Math.Max(s.Y, -(float)Math.Abs(waveY));
-        float bottom = Math.Min(s.Y + s.H, 165 + (float)Math.Abs(waveY));
-        return new(left, top, Math.Max(0, right - left), Math.Max(0, bottom - top));
-    }
+    static Rect ProxyTrackRegion(ProxyGeometry g, double waveX = 0, double waveY = 0) => g.TrackRegion(waveX, waveY);
 
     /// <summary>Read-only CLI preview setup for reproducing an author's chart at a precise time.</summary>
     public void ConfigureProxyPreview(int target, bool solo, bool sourceCrop)

@@ -887,6 +887,8 @@
   "LANE FULLY COVERED": "轨道参考范围完全被遮盖",
   "Only this proxy is shown": "当前仅显示此 Proxy",
   "Lane reference / all proxies shown": "轨道参考框 / 正在显示全部 Proxy",
+  "Double-click track / Shift: prefer proxy": "双击轨道选择 / Shift：优先选 Proxy",
+  "Selected proxy in scene: ": "已在场景中选中 Proxy：",
   "SOURCE CROP": "源区域裁剪",
   "REVERSED": "反向裁剪",
   "SELECT PROXY": "选择 Proxy",

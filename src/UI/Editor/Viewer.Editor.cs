@@ -156,6 +156,7 @@ public sealed partial class Viewer
         CloseInline(); CloseClipMenu(); selectedClips.Clear(); marqueeActive = false; marqueePending = null; panActive = false;
         selectedClip = null; selectedWindowEvent = -1; selectedNoteTime = null; editDrag = null; hoveredEditTrack = null;
         prGridSelection = null; prGridLabels.Clear(); prGridShowIds = true; prGridShowCrop = prGridSolo = prGridSoloRendered = false;
+        proxyPickFrame = null;
         trackHelpWHeld = false; trackHelpWDownAt = 0; displayedHelpTrack = null; motion.Snap("track-help-visible", 0);
         trackScroll = inspectorScroll = 0; newProxy = -1; windowToolsExpanded = false; proxyPanelExpanded = false; proxyPickerPage = 0; prGridMode = 0; prGridStep = 20; prGridHudOffsetX = float.NaN; prGridHudOffsetY = 8; prGridHudExpanded = prGridHudDragging = false; prGridHudRect = default; editorSourceScroll = 0; motion.Snap("timeline-track-scroll", 0); motion.Snap("inspector-scroll", 0); beatStart = 0; windowTimelineConfig = null; nativeWindows?.Dispose(); nativeWindows = null;
         if (editorMode) OpenEditor();

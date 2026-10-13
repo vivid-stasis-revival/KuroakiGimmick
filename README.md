@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.5_%2F_18.0-94cddd?style=flat-square" alt="v0.1.5 / Build 18.0">
+  <img src="https://img.shields.io/badge/version-0.1.5_%2F_18.0.1-94cddd?style=flat-square" alt="v0.1.5 / Build 18.0.1">
   <img src="https://img.shields.io/badge/C%23-.NET_8-b5a3e8?style=flat-square" alt="C# / .NET 8">
   <img src="https://img.shields.io/badge/renderer-SDL3_GPU-94cddd?style=flat-square" alt="SDL3 GPU">
   <img src="https://img.shields.io/badge/engine-C%23_%2B_Rust-b5a3e8?style=flat-square" alt="C# + Rust">
@@ -153,11 +153,12 @@ Windows PowerShell：
 - **时间轴**：可以拖动轨道名称或手柄调整显示顺序；图片和文字组会整体跟随，轨道显示顺序不会改变实际事件执行顺序。一次完整拖动对应一次 Undo。
 - **跨实例复制**：选择集可以通过系统剪贴板在两个 K/G 实例之间传递，也可作为文本发送。
 - **谱面兼容**：读取 CSM 3.4.0 VSC 的 `modExtra` 字段时会保留原始元数据与格式，不会把旧 VSC 自动升级成新版方言；同难度 VSM 缺失时仍可按现有规则回退到 `GLOBAL.vsm`。
+- **F1 文档**：正文支持 Markdown 表格、行内代码、粗体、强调、删除线与代码围栏；宽表格在窄窗口中按字段展开，代码复制保留原文。可运行 `--reference-layout-test` 在无窗口环境检查文档解析与排版。
 - **搜索**：添加 gimmick 页面的搜索框跟随设置中的 Inline / Modal 输入模式；Inline 实时筛选，Enter 提交，Esc 取消当前输入。
 - **IMAGE CANVAS**：`INITIAL` 修改初始姿态，`KEY HERE` 写入当前时间点，`START / END` 与 `CONTINUE` 用于运动路径和动画端点。
 - **TEXT CANVAS**：文字内容和视觉动画分别编辑；支持 `MOVE`、`FADE IN`、`FADE OUT`，以及多行、对齐、行距、RGB 颜色和自动换行。
 - **GAME SCENE**：可直接双击并拖动图片或文字对象修改当前拍的 X/Y。拖动松手时只提交一次 Undo；动态值、冲突状态或不安全的变换仍需使用原始编辑方式。
-- **Proxy 辅助显示**：选择 P 编号或 `pr*/sh*` 事件后，默认显示逻辑网格和轨道参考框；“完整取景框”可额外显示包含背景／UI 的取景区域。隐藏的 Proxy 只显示状态提示，不画可见轨道框。点击画面中的编号或 `< / >` 切换目标；浮窗的 `20px` 切换 10／5／20 间距，`[+]` 展开数值。遮盖斜线和渐变边界按完整 `320×180` 源图的 UV 计算。
+- **Proxy 辅助显示**：选择 P 编号或 `pr*/sh*` 事件后，默认显示逻辑网格和轨道参考框；“完整取景框”可额外显示包含背景／UI 的取景区域。隐藏的 Proxy 只显示状态提示，不画可见轨道框。PR 网格显示时可双击轨道参考区域选中 Proxy；普通双击优先选择图片／文字，`Shift + 双击` 可穿过图片直接选 Proxy。重叠时优先选择最上层且未被遮盖的轨道，隐藏 Proxy 不参与命中。也可点击画面中的编号或 `< / >` 切换目标；浮窗的 `20px` 切换 10／5／20 间距，`[+]` 展开数值。遮盖斜线和渐变边界按完整 `320×180` 源图的 UV 计算。
 - **Proxy 单独预览**：点击浮窗中的“全部 Proxy（点击隔离）”切换为“只看 Pn”，检查这一份 Proxy 实际合成的内容；再点一次恢复全部。Base／Custom Proxy 使用同一套源画面、变换和场景后处理，固定连击等 HUD 不属于单个 Proxy。“只看”只是编辑器视图，不改 PRA、谱面文件、窗口输出或视频导出。
 - **Custom Episode**：播放、反向定位、截图和视频导出尽可能保持一致。需要特殊游戏状态或不能复现的剧情步骤会给出诊断信息。
 - **Window Movement**：真实辅助窗口依赖目标操作系统；虚拟桌面、窗口位置以及多个真实原生窗口不会合成为普通视频的单一画面。
@@ -271,7 +272,7 @@ dotnet run -c Release --no-build -- \
 
 ## 构建与发布
 
-当前应用版本为 **v0.1.5 / Build 18.0**；最终版本号以 [`KuroakiGimmick.csproj`](KuroakiGimmick.csproj) 为准。
+当前应用版本为 **v0.1.5 / Build 18.0.1**；最终版本号以 [`KuroakiGimmick.csproj`](KuroakiGimmick.csproj) 为准。
 
 发行脚本会为目标 RID 编译、打包匹配架构的 `kg_native_core` 库。跨架构构建 Rust 时还需要对应 target 与链接器；不要把能交叉编译 C# 误当成原生库也自动跟着跨平台了。
 
@@ -301,7 +302,7 @@ Windows PowerShell：
 
 ```text
 dist/
-└── KuroakiGimmick-v0.1.5-<RID>-18.0-<timestamp>/
+└── KuroakiGimmick-v0.1.5-<RID>-18.0.1-<timestamp>/
 ```
 
 同时生成对应 ZIP；使用 `all` 会分别构建两个架构，macOS 不自动生成 Universal Binary。
