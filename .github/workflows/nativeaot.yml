@@ -194,6 +194,12 @@ jobs:
             exit 1
           fi
 
+      - name: Verify reference Markdown in the actual published executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          'artifacts/${{ matrix.rid }}/${{ matrix.executable }}' --reference-layout-test
+
       - name: Verify RustBridge in the actual published executable
         shell: bash
         run: |

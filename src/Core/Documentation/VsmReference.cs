@@ -27,7 +27,8 @@ internal sealed class VsmReference
         public Block() { }
         public string Kind { get; init; } = "paragraph";
         public string Text { get; init; } = "";
-        public string Language { get; init; } = "";
+        // Optional in the JSON index; source-generated deserialization may supply null when omitted.
+        public string? Language { get; init; }
         public string[] Columns { get; init; } = [];
         public string[][] Rows { get; init; } = [];
         public string[] RowLinks { get; init; } = [];

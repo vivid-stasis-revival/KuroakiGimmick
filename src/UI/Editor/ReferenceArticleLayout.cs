@@ -54,7 +54,7 @@ internal static class ReferenceArticleLayout
                 // Only presentation wraps; the Copy button always receives the exact code.
                 var lines = CodeLines(block.Text, width - 32, text => measure(text, 16, false, true));
                 float height = 40 + Math.Max(1, lines.Length) * 26 + 14;
-                items.Add(new("code", top, height, [lines], [width], block.Text, Anchor: block.Language));
+                items.Add(new("code", top, height, [lines], [width], block.Text, Anchor: block.Language ?? ""));
                 top += height + 20;
             }
             else if (block.Kind == "table" && block.Columns.Length > 0)

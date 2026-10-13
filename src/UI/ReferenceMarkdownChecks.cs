@@ -50,6 +50,23 @@ internal static class ReferenceMarkdownChecks
 
             using var fonts = new Fonts();
             float Measure(string text, float size, bool weight, bool mono) => fonts.Measure(text, size, monospaced: mono, unified: true, bold: weight);
+            // Use the production source-generated JSON path: direct object initializers did not
+            // reproduce the missing Language field in the default F1 page's code block.
+            var codeLanguages = VsmReference.FromJson("""
+                {"SchemaVersion":1,"Entries":[{"Id":"code-language","Kind":"guide","Name":"Code",
+                  "Source":"","ParentId":"","Category":"","Summary":"","MatchPattern":"",
+                  "Body":[],"Context":[],"Notes":[],"Blocks":[
+                    {"Kind":"code","Text":"omitted"},
+                    {"Kind":"code","Text":"null","Language":null},
+                    {"Kind":"code","Text":"empty","Language":""},
+                    {"Kind":"code","Text":"named","Language":"gml"}
+                  ]}],"Sources":[]}
+                """).Entries.Single();
+            var codePage = ReferenceArticleLayout.Build(codeLanguages, 640, Measure);
+            Check(codePage.Items.Select(i => i.Anchor).SequenceEqual(new[] { "", "", "", "gml" }),
+                "Optional code languages are not safe for drawing");
+            Check(codePage.Items.Select(i => i.Text).SequenceEqual(new[] { "omitted", "null", "empty", "named" }),
+                "Optional language handling changed copyable code");
             void ValidatePage(VsmReference.Entry document, float width)
             {
                 var page = ReferenceArticleLayout.Build(document, width, Measure);
@@ -57,13 +74,20 @@ internal static class ReferenceMarkdownChecks
                 float previousBottom = 0;
                 foreach (var item in page.Items)
                 {
+                    Check(item.Text != null && item.Link != null && item.Anchor != null,
+                        "Drawing metadata is null: " + document.Id + " / " + item.Kind);
+                    Check(item.Lines.Length == item.Widths.Length && item.Lines.All(column => column.All(line => line != null)),
+                        "Drawing columns are invalid: " + document.Id);
                     Check(item.Top >= previousBottom - .01f && item.Height > 0, "Blocks overlap: " + document.Id);
                     previousBottom = item.Top + item.Height;
                     Check(Math.Abs(item.Widths.Sum() - Math.Max(80, width)) < .05f, "Columns exceed article width: " + document.Id);
                     if (item.Kind == "code") continue;
-                    Check(item.RichLines != null, "Rich text missing: " + document.Id);
+                    Check(item.RichLines != null && item.RichLines.Length == item.Lines.Length,
+                        "Rich text missing: " + document.Id);
                     for (int col = 0; col < item.RichLines!.Length; col++)
                     {
+                        Check(item.RichLines[col].Length == item.Lines[col].Length,
+                            "Drawing rows do not match rich text: " + document.Id);
                         float available = item.Widths[col] - (item.Kind.StartsWith("table-", StringComparison.Ordinal) ? 24 : item.Kind == "callout" ? 28 : item.Kind == "list-item" ? 20 : 0);
                         foreach (var line in item.RichLines[col])
                         {

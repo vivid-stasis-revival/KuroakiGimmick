@@ -183,6 +183,20 @@ public sealed partial class Viewer
             settings = false;
             Current.Project.GameUiFont = saved;
         }
+        // Exercise the real F1 renderer, including the default page's code block without a
+        // language tag. Layout-only tests previously skipped the metadata read by this path.
+        OpenReferenceForTest("kg-guide:00");
+        Draw(1440, 940);
+        if (!referenceOpen || !referencePage.Items.Any(item => item.Kind == "code" && item.Anchor == ""))
+            throw new Exception("Default reference page did not render its unlabelled code block.");
+        referenceBodyScroll = referenceBodyMax;
+        Draw(1440, 940);
+        OpenReferenceForTest("kg-official:obj_astellion_gimmick");
+        Draw(1440, 940);
+        if (!referencePage.Items.Any(item => item.Kind == "table-row"))
+            throw new Exception("Official reference index did not render its Markdown table.");
+        CloseReference();
+        Draw(1440, 940);
     }
 }
 
