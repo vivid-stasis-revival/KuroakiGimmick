@@ -146,6 +146,7 @@ public sealed partial class Viewer
     /// </summary>
     void ResetEditorForLoad()
     {
+        CancelTouchInput();
         CancelTrackOrder();
         ResetTextObjects();
         ResetImageObjects();

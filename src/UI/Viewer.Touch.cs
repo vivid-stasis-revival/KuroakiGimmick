@@ -60,7 +60,11 @@ public sealed partial class Viewer
         // SDL_TouchFingerEvent.windowID lives at byte 52, unlike mouse.windowID at byte 16.
         if (e.FingerWindowID != 0 && e.FingerWindowID != Sdl.SDL_GetWindowID(host.Window))
             return true;
-        if (!float.IsFinite(e.FingerX) || !float.IsFinite(e.FingerY)) return true;
+        if (!float.IsFinite(e.FingerX) || !float.IsFinite(e.FingerY))
+        {
+            if (e.Type == Sdl.FingerCanceled) CancelTouchInput();
+            return true;
+        }
 
         var id = (Device: e.TouchID, Finger: e.FingerID);
         var contact = ReadTouchContact(e);
@@ -86,7 +90,7 @@ public sealed partial class Viewer
                     Vector2.DistanceSquared(touchLastTapUi, contact.Ui) < 24 * 24 ? (byte)2 : (byte)1;
                 SendTouchMouse(0x401, contact, clicks);
             }
-            else if (touchContacts.Count == 2)
+            else if (touchContacts.Count == 2 && !touchHadMulti)
             {
                 // Never commit the first finger's edit when a second finger joins.
                 touchHadMulti = true;
@@ -192,7 +196,7 @@ public sealed partial class Viewer
         touchGestureCenter = (first + second) * .5f;
         touchGestureDistance = Vector2.Distance(first, second);
 
-        if (!editorMode || Busy || settings || UiOverlayVisible) return;
+        if (!editorMode || Busy || settings || UiBlockingOverlayVisible) return;
         if (editorTimelineRect.Contains(first.X, first.Y) &&
             editorTimelineRect.Contains(second.X, second.Y))
         {
