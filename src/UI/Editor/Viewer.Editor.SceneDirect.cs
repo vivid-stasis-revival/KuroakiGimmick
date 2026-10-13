@@ -202,7 +202,7 @@ public sealed partial class Viewer
             return e.Type is >= 0x300 and <= 0x403;
         }
 
-        if (!editorMode || settings || UiOverlayVisible || Busy || imageCanvas || textCanvas || desktopPreview) return false;
+        if (!editorMode || settings || UiOverlayVisible || Busy || imageCanvas || textCanvas || desktopPreview || prGridSoloRendered) return false;
         if (e.Type != 0x401 || e.Button != 1) return false;
         mouseX = e.X; mouseY = e.Y;
         if (!previewImage.Contains(mouseX, mouseY)) return false;

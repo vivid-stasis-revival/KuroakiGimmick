@@ -94,7 +94,10 @@ public sealed partial class SceneRenderer : IDisposable
     /// Base / Custom 组装完整 application surface 后统一变换 Proxy；特殊原生对象保留分段变换。
     /// 分辨率变化时先 Flush 再整批缩放全部目标，不允许只缩放其中一个。
     /// </summary>
-    public void Render(Session session, double time, bool notes = true, bool effects = true)
+    public void Render(Session session, double time, bool notes = true, bool effects = true) =>
+        RenderFrame(session, time, notes, effects, Final);
+
+    void RenderFrame(Session session, double time, bool notes, bool effects, Target output)
     {
         using var performanceScope = PerformanceStats.Measure(PerformanceStats.Stage.Scene);
         // Evaluate every native timeline track in one batch, before the first draw.
@@ -110,7 +113,8 @@ public sealed partial class SceneRenderer : IDisposable
             customEffects.Resize(width, height);
             nativeGimmick.Resize(width, height);
         }
-        BeginWindowCapture(session);
+        if (inspectionProxy == null) BeginWindowCapture(session);
+        if (output.Texture.Width != width || output.Texture.Height != height) output.Resize(width, height);
         PrepareImages(session);
         var timeline = session.Timeline;
         double M(string n, int p = -1) => timeline.Get(n, time, p);
@@ -130,18 +134,18 @@ public sealed partial class SceneRenderer : IDisposable
             ? Environment.GetEnvironmentVariable("KUROAKI_SC_MASK_VIEW") : null;
         if (scMaskProbe == "before-mask")
         {
-            canvas.Pass(Final, scene.Texture, canvas.Basic);
+            canvas.Pass(output, scene.Texture, canvas.Basic);
             return;
         }
         nativeGimmick.DrawMask(scene, session, time);
         if (scMaskProbe == "mask")
         {
-            canvas.Pass(Final, nativeGimmick.StarcrashersMaskProbeTexture, canvas.Basic);
+            canvas.Pass(output, nativeGimmick.StarcrashersMaskProbeTexture, canvas.Basic);
             return;
         }
         if (scMaskProbe == "after-mask")
         {
-            canvas.Pass(Final, scene.Texture, canvas.Basic);
+            canvas.Pass(output, scene.Texture, canvas.Basic);
             return;
         }
         nativeSequence.Backgrounds(scene, session, time, effects);
@@ -239,7 +243,7 @@ public sealed partial class SceneRenderer : IDisposable
             // Combo / judgement 属于 Draw GUI，留到 Final；歌曲信息、难度与 sequence HUD 仍参加后处理，
             // 但不进入 proxy。保留原来 fixed HUD 对 hom 的淡出语义。
             canvas.Begin(scene, RenderWidth, RenderHeight, 320, 180);
-            using (canvas.Opacity((float) Math.Clamp(1 - M("hom"), 0, 1)))
+            using (canvas.Opacity(inspectionProxy == null ? (float)Math.Clamp(1 - M("hom"), 0, 1) : 0))
             {
                 gameUi.DrawFixedHud(session, time);
                 nativeSequence.Hud(session, time);
@@ -264,28 +268,30 @@ public sealed partial class SceneRenderer : IDisposable
         bool commonPost = session.NativeGimmick.Data?.UseCommonPostProcessing ?? true;
         if (!effects)
         {
-            canvas.Pass(Final, scene.Texture, canvas.Basic);
+            canvas.Pass(output, scene.Texture, canvas.Basic);
         }
         else if (session.NativeGimmick.Data?.PostModes.Count > 0)
         {
             if (commonPost)
             {
-                customEffects.Render(Final, scene.Texture, session, time, (output, input) => nativeGimmick.RenderPost(output, input, session, time));
+                customEffects.Render(output, scene.Texture, session, time, (postOutput, input) => nativeGimmick.RenderPost(postOutput, input, session, time));
             }
             else
             {
-                nativeGimmick.RenderPost(Final, scene.Texture, session, time);
+                nativeGimmick.RenderPost(output, scene.Texture, session, time);
             }
         }
         else if (commonPost)
         {
-            customEffects.Render(Final, scene.Texture, session, time);
+            customEffects.Render(output, scene.Texture, session, time);
         }
         else
         {
-            canvas.Pass(Final, scene.Texture, canvas.Basic);
+            canvas.Pass(output, scene.Texture, canvas.Basic);
         }
-        canvas.Begin(Final, RenderWidth, RenderHeight, 320, 180);
+        // The inspection image contains only the selected proxy, without fixed combo/story HUD.
+        if (inspectionProxy != null) { canvas.Flush(); return; }
+        canvas.Begin(output, RenderWidth, RenderHeight, 320, 180);
         // o_combodisplay / judgement 属于固定 GUI，不进入 application proxy，也不跟 uialpha 淡出。
         gameUi.DrawGuiHud(session, time);
         DrawComboParticles(session, time);
@@ -362,6 +368,8 @@ public sealed partial class SceneRenderer : IDisposable
         windowField?.Dispose();
         proxyShader.Dispose();
         projectiveProxyShader.Dispose();
+        proxyGuideShader?.Dispose();
+        proxyInspection?.Dispose();
         fieldComposite.Dispose();
     }
 }

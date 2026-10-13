@@ -40,6 +40,12 @@ public sealed partial class Viewer
         var time = transport.Position;
         // 本帧全部 GPU 工作从这里开始，只在窗口线程执行：先渲染场景，再把 UI 画到离屏 uiTarget。
         Renderer.Render(Current, time, notes, effects);
+        prGridSoloRendered = false;
+        if (editorMode && prGridSolo && TryPrGridTarget(out int proxyTarget) && SceneRenderer.CanInspectProxy(Current))
+        {
+            Renderer.RenderProxyInspection(Current, time, proxyTarget, notes, effects);
+            prGridSoloRendered = true; prGridSoloTarget = proxyTarget;
+        }
         // 信息卡片有自己的离屏目标，必须在 UI 合成开始之前画完，中途不再切换渲染目标。
         RenderInfoCard();
         Canvas.Begin(uiTarget, pw, ph, w, h, bg);

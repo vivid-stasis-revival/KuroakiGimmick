@@ -64,7 +64,7 @@ public sealed partial class Viewer
     {
         if (id is not Guid g || editor == null) return;
         var clip = EditorFindClip(g);
-        if (clip is { Proxy: >= 0 } && clip.Name.StartsWith("pr", StringComparison.OrdinalIgnoreCase))
+        if (clip is { Proxy: >= 0 })
             newProxy = clip.Proxy;
     }
 
@@ -80,6 +80,7 @@ public sealed partial class Viewer
             {
                 selectedClips.Remove(id);
                 selectedClip = selectedClips.Count > 0 ? selectedClips.First() : null;
+                SyncPickedProxy(selectedClip);
                 return;
             }
         }
@@ -139,6 +140,7 @@ public sealed partial class Viewer
         selectedClips.Clear();
         foreach (var c in copies) selectedClips.Add(c.Id);
         selectedClip = copies[0].Id;
+        SyncPickedProxy(selectedClip);
     }
 
     void ConvertSelectedLoops(bool split)
@@ -152,6 +154,7 @@ public sealed partial class Viewer
         selectedClips.Clear();
         foreach (var id in next) selectedClips.Add(id);
         selectedClip = next.FirstOrDefault();
+        SyncPickedProxy(selectedClip);
         inspectorScroll = 0;
     }
 
@@ -199,6 +202,7 @@ public sealed partial class Viewer
         // 主选中项被框走了就换成框里最靠前的那个，inspector 不会因为一次框选变成空面板。
         Guid firstHit = clipHits.FirstOrDefault(h => selectedClips.Contains(h.Id)).Id;
         selectedClip = firstHit == Guid.Empty ? null : firstHit;
+        SyncPickedProxy(selectedClip);
     }
 
     /// <summary>松开左键：结束选框。选择集在拖的过程中已经逐帧更新过，这里只收尾并报数。</summary>
@@ -326,6 +330,7 @@ public sealed partial class Viewer
                     selectedClips.Clear();
                     foreach (var c in editor.Vsm.Clips.Where(c => c.TrackKey == track.Key)) selectedClips.Add(c.Id);
                     selectedClip = selectedClips.Count > 0 ? selectedClips.First() : null;
+                    SyncPickedProxy(selectedClip);
                     selectedWindowEvent = -1; inspectorScroll = 0;
                     message = L.Format($"Selected {selectedClips.Count} clips on {track.Label}.");
                 }));

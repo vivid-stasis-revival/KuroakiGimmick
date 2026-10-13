@@ -22,7 +22,7 @@ internal static class Program
         CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
         CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
         // 这一串是所有无人值守模式（自测、检查、导出、截图）。cli 为真时失败只写 stderr，不弹消息框卡住脚本。
-        bool cli = args.Any(a => a is "--inspect" or "--render" or "--snapshot" or "--card" or "--smoke-ui" or "--smoke-workspace-memory" or "--smoke-startup" or "--smoke-mac-menu" or "--smoke-windows-menu" or "--smoke-text-ui" or "--smoke-i18n" or "--rust-engine-test" or "--rust-timeline-test" or "--rust-bridge-test" or "--rust-audio-test");
+        bool cli = args.Any(a => a is "--inspect" or "--render" or "--snapshot" or "--card" or "--smoke-ui" or "--smoke-workspace-memory" or "--smoke-startup" or "--smoke-mac-menu" or "--smoke-windows-menu" or "--smoke-proxy-guides" or "--smoke-text-ui" or "--smoke-i18n" or "--rust-engine-test" or "--rust-timeline-test" or "--rust-bridge-test" or "--rust-audio-test");
         try
         {
             // 后端覆盖必须早于任何 GPU 设备创建；否则显式 --force-vulkan 仍可能先创建平台默认后端。
@@ -192,7 +192,7 @@ internal static class Program
                 uiLanguage: options.GetValueOrDefault("language"), showStartup: path == null && (!cli || options.ContainsKey("smoke-startup")),
                 initialPath: path, settingsPath: startupTestSettings);
             // 单帧截图必须抓到最终布局，而不是入场动画那一帧全透明的画面。
-            if (options.ContainsKey("snapshot") || options.ContainsKey("smoke-ui") || options.ContainsKey("smoke-startup") || options.ContainsKey("smoke-text-ui") || options.ContainsKey("smoke-i18n")) viewer.SetUiAnimationsForTest(false);
+            if (options.ContainsKey("snapshot") || options.ContainsKey("smoke-ui") || options.ContainsKey("smoke-startup") || options.ContainsKey("smoke-text-ui") || options.ContainsKey("smoke-proxy-guides") || options.ContainsKey("smoke-i18n")) viewer.SetUiAnimationsForTest(false);
             if (options.ContainsKey("smoke-startup"))
             {
                 string output = Path.GetFullPath(options.GetValueOrDefault("out", "KuroakiStartup.ppm"));
@@ -213,6 +213,8 @@ internal static class Program
                 return 0;
             }
             if (options.ContainsKey("editor")) viewer.OpenEditor();
+            if (options.TryGetValue("proxy", out var proxyId))
+                viewer.ConfigureProxyPreview(int.Parse(proxyId, CultureInfo.InvariantCulture), options.ContainsKey("proxy-solo"), options.ContainsKey("proxy-crop"));
             if (options.ContainsKey("settings"))
             {
                 viewer.OpenSettings();
@@ -225,6 +227,7 @@ internal static class Program
                 Console.WriteLine("UI shortcuts, frame stepping and export markers passed.");
             }
             if (options.ContainsKey("smoke-text-ui")) viewer.SmokeTextUi();
+            if (options.ContainsKey("smoke-proxy-guides")) viewer.SmokeProxyGuides();
             // --snapshot --card 截的是带覆盖层的界面；单独 --card 写出的是卡片本身。
             if (options.ContainsKey("card") && options.ContainsKey("snapshot")) viewer.OpenInfoCard();
             if (options.ContainsKey("card") && !options.ContainsKey("snapshot"))
@@ -239,7 +242,7 @@ internal static class Program
                 Console.WriteLine(output);
                 return options.ContainsKey("strict") && session.Chart.Diagnostics.Any(d => d.Error) ? 2 : 0;
             }
-            if (options.ContainsKey("snapshot") || options.ContainsKey("smoke-ui") || options.ContainsKey("smoke-text-ui") || options.ContainsKey("smoke-i18n"))
+            if (options.ContainsKey("snapshot") || options.ContainsKey("smoke-ui") || options.ContainsKey("smoke-text-ui") || options.ContainsKey("smoke-proxy-guides") || options.ContainsKey("smoke-i18n"))
             {
                 // --time 单位是秒，缺省取 45 秒这一通常已进入演出主体的位置。
                 double time = options.TryGetValue("time", out var t) ? double.Parse(t, CultureInfo.InvariantCulture) : 45;
@@ -319,17 +322,21 @@ internal static class Program
             "smoke-mac-menu",
             "smoke-windows-menu",
             "smoke-text-ui",
+            "smoke-proxy-guides",
             "smoke-i18n",
             "no-notes",
             "no-fx",
             "no-ui",
             "scene",
+            "proxy-solo",
+            "proxy-crop",
             "settings",
             // Main 在解析之前就消费掉了，这里登记只是为了它不撞上"Unknown option"。
             "force-vulkan"
         };
         var values = new HashSet<string>
         {
+            "proxy",
             "language",
             "reference",
             "window-motion",
@@ -404,6 +411,8 @@ internal static class Program
     Info card:  --card chart.vsb --out card.png [--width 1280|1920|2560|3840]
                         (16:9 PNG for the chart's difficulty; default follows Settings)
     UI language: --language auto|zh-CN|en (also available in Settings)
+    Proxy preview: --snapshot --proxy 4 [--proxy-solo] [--proxy-crop] --time 60
+    Proxy guide check: --smoke-proxy-guides --time 0 --out proxy-guides.ppm
     UI localization check: --smoke-i18n [--editor] --out i18n.ppm
     KuroakiGimmick --editor Samples/EditorDemo/demo.sgv.json
     Native self-tests (no SDL): --rust-bridge-test (motion), --rust-engine-test (VSC/VSM/BPM),

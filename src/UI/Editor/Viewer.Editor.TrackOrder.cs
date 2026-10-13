@@ -33,6 +33,8 @@ public sealed partial class Viewer
     void BeginTrackOrder(EditTrack track)
     {
         if (editor == null || Busy || editDrag != null || ImageGestureActive) return;
+        if (!track.Window && track.Target >= 0 && track.ImageId == null && track.TextId == null)
+            newProxy = track.Target;
         draggedTrackKey = TrackRoot(track); draggedTrackLabel = track.Label;
         trackDragStartY = mouseY; trackOrderMoved = trackDropValid = false;
         trackScrollTick = uptime.Elapsed.TotalSeconds;

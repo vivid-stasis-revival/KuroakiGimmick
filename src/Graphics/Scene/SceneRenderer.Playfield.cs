@@ -17,7 +17,7 @@ public sealed partial class SceneRenderer
     /// </summary>
     void CompositeField(Session session, double time, bool proxyMode, bool clearFooter)
     {
-        CaptureWindowField(session);
+        if (inspectionProxy == null) CaptureWindowField(session);
         var timeline = session.Timeline;
         bool separateHudFooter = session.Chart.ObjectName is "obj_base_gimmick" or "obj_custom_gimmick";
         double M(string name, int proxy = -1) => timeline.Get(name, time, proxy);
@@ -28,7 +28,7 @@ public sealed partial class SceneRenderer
         {
             canvas.Quad(field.Texture, new(0, 0, 320, 180), Color.White, shader: fieldComposite);
         }
-        else
+        else if (inspectionProxy == null)
         {
             canvas.Quad(field.Texture, new(0, 0, 81, 180), Color.White.Alpha(1 - M("hom")), new(0, 0, 81f / 320, 1), shader: fieldComposite);
             canvas.Quad(field.Texture, new(239, 0, 81, 180), Color.White.Alpha(1 - M("hom")), new(239f / 320, 0, 81f / 320, 1),
@@ -57,55 +57,14 @@ public sealed partial class SceneRenderer
         // 启用 proxy 的谱面用自己的 proxy 副本替换中央游玩轨道；索引从大到小，即从后往前绘制。
         for (int p = proxyMode ? session.Chart.Proxies - 1 : -1; p >= 0; p--)
         {
+            if (inspectionProxy is int only && only != p) continue;
             bool custom = session.Chart.ObjectName == "obj_custom_gimmick";
-            var alpha = M("pra", p);
-            if (alpha <= 0)
-            {
-                continue;
-            }
-            double scale = M("przm", p) * M("przmb", p) * M("przmc", p), sx = scale * M("przx", p) * Math.Cos(M("prrx", p) * Math.PI / 180),
-                sy = scale * M("przy", p) * Math.Cos(M("prry", p) * Math.PI / 180);
-            // Custom charts magnify tiny source patches to make full-screen masks.
-            // The original draw accepts these scales; rejecting >50 drops authored backgrounds.
-            if (!double.IsFinite(sx) || !double.IsFinite(sy) ||
-                (!custom && (Math.Abs(sx) > 50 || Math.Abs(sy) > 50)))
-            {
-                continue;
-            }
-            double x = M("prx", p) + M("prxb", p) + M("prxc", p) + M("prxd", p), y = M("pry", p) + M("pryb", p) + M("pryc", p) + M("pryd", p);
-            float angle = (float)((M("prrz", p) + M("prrzb", p)) * M("rotdir"));
-            float left = 113 - (float) M("shxa", p), right = 208 + (float) M("shxa", p), top = 0, bottom = TrackBottom;
-            // .08/0 与 .35/.35 是原版的默认取景；只有被谱面改写过才切换到自定义裁剪边界。
-            if (M("prct", p) != .08 || M("prcb", p) != 0)
-            {
-                top = (float)(180 * M("prcb", p) - 1);
-                bottom = (float)(180 - Math.Ceiling(180 * M("prct", p)));
-            }
-            if (M("prcl", p) != .35 || M("prcr", p) != .35)
-            {
-                left = (float) M("prcl", p);
-                right = (float) M("prcr", p);
-            }
-            // 以 (160,82) 为轴心：先平移到原点，再缩放、旋转、剪切，最后平移回去并叠加 proxy 偏移。
-            // 次序照搬原版，交换任意两步都会改变旋转与剪切的复合结果。
-            // Custom draws at left - (113 - shxa), then applies MToOrigin(-47,-82).
-            // MatrixRotateZ uses +sin in M[1], unlike draw_sprite's angle convention.
-            float originX = custom ? 160 - (float) M("shxa", p) : 160;
-            var matrix = Matrix3x2.CreateTranslation(-originX, -82) * Matrix3x2.CreateScale((float) sx,
-                (float) sy) * Matrix3x2.CreateRotation((custom ? angle : -angle) * MathF.PI / 180) * new Matrix3x2(1, -(float) M("prsy", p), -(float) M("prsx", p),
-                1, 0, 0) * Matrix3x2.CreateTranslation(160 + (float) x, 82 + (float) y);
+            if (M("pra", p) <= 0) continue;
+            var geometry = ProxyGeometry.Sample(timeline, time, p, custom);
+            if (geometry.Alpha <= 0 || !geometry.Renderable) continue;
             canvas.Flush();
-            bool projective = custom && (M("prtrX", p) != 0 || M("prtrY", p) != 0);
-            var shader = projective ? projectiveProxyShader : proxyShader;
-            if (projective)
-            {
-                shader.Vec2("proxyOrigin", originX, 82);
-                shader.Vec2("proxyScale", sx, sy);
-                shader.Vec2("proxyRotation", Math.Cos(angle * Math.PI / 180), Math.Sin(angle * Math.PI / 180));
-                shader.Vec2("proxyTrapezoid", M("prtrX", p), M("prtrY", p));
-                shader.Vec2("proxySkew", -M("prsx", p), -M("prsy", p));
-                shader.Vec2("proxyTranslation", 160 + x, 82 + y);
-            }
+            var shader = geometry.Projective ? projectiveProxyShader : proxyShader;
+            if (geometry.Projective) geometry.ApplyProjection(shader);
             shader.Float("Time", timeline.Bpm.Beat(time));
             shader.Vec2("Texel", 1.0 / 320, 1.0 / 180);
             foreach (var (uniform, mod) in new[]
@@ -115,22 +74,16 @@ public sealed partial class SceneRenderer
                 ("xamp", "shxa"),
                 ("yspd", "shys"),
                 ("yperiod", "shyp"),
-                ("yamp", "shya"),
-                ("ct", "shct"),
-                ("ft", "shft"),
-                ("cb", "shcb"),
-                ("fb", "shfb"),
-                ("cl", "shcl"),
-                ("fl", "shfl"),
-                ("cr", "shcr"),
-                ("fr", "shfr")
+                ("yamp", "shya")
             })
             {
                 shader.Float(uniform, M(mod, p));
             }
-            Vector2 Point(float px, float py) => projective ? new(px, py) : Vector2.Transform(new(px, py), matrix);
-            canvas.Polygon(field.Texture, Point(left, top), Point(right, top), Point(left, bottom), Point(right, bottom), Color.White.Alpha(alpha),
-                new(left / 320, top / 180, (right - left) / 320, (bottom - top) / 180), shader);
+            ProxyMask.Sample(timeline, time, p).Apply(shader);
+            Vector2 Point(float px, float py) => geometry.Projective ? new(px, py) : Vector2.Transform(new(px, py), geometry.Affine);
+            canvas.Polygon(field.Texture, Point(geometry.Left, geometry.Top), Point(geometry.Right, geometry.Top),
+                Point(geometry.Left, geometry.Bottom), Point(geometry.Right, geometry.Bottom),
+                Color.White.Alpha(geometry.Alpha), geometry.UV, shader);
             canvas.Flush();
         }
         canvas.Flush();

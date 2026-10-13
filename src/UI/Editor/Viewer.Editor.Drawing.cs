@@ -54,8 +54,9 @@ public sealed partial class Viewer
             else if (desktopPreview) DrawDesktop(frame, time);
             else
             {
-                Canvas.Quad(Renderer.Final.Texture, previewImage, Color.White);
-                DrawSceneDirectManipulation(previewImage, time);
+                if (prGridSoloRendered && (!TryPrGridTarget(out int selectedProxy) || selectedProxy != prGridSoloTarget)) prGridSoloRendered = false;
+                Canvas.Quad(prGridSoloRendered ? Renderer.ProxyInspectionTexture! : Renderer.Final.Texture, previewImage, Color.White);
+                if (!prGridSoloRendered) DrawSceneDirectManipulation(previewImage, time);
                 DrawPrCalibrationGrid(previewImage, time);
             }
         }

@@ -48,7 +48,7 @@ public sealed partial class Viewer
     bool windowToolsExpanded;
     bool proxyPanelExpanded;
     int proxyPickerPage;
-    // 0 = 选中 PR 系事件时自动显示，1 = 常显，2 = 关闭。
+    // 0 = 选中 Proxy 事件（包括 sh 遮盖）时自动显示，1 = 常显，2 = 关闭。
     int prGridMode;
     int EditableProxyCount => editor == null ? Current.Chart.Proxies : EditorProxyCount();
     /// <summary>只在首次向未初始化的 proxy 写事件时补一条可见性初值，不覆盖作者已有的 pra 曲线。</summary>
@@ -155,8 +155,9 @@ public sealed partial class Viewer
         editor = null; editorBuild = null; compilingDocument = null; renderedRevision = compilingRevision = layoutRevision = -1;
         CloseInline(); CloseClipMenu(); selectedClips.Clear(); marqueeActive = false; marqueePending = null; panActive = false;
         selectedClip = null; selectedWindowEvent = -1; selectedNoteTime = null; editDrag = null; hoveredEditTrack = null;
+        prGridSelection = null; prGridLabels.Clear(); prGridShowIds = true; prGridShowCrop = prGridSolo = prGridSoloRendered = false;
         trackHelpWHeld = false; trackHelpWDownAt = 0; displayedHelpTrack = null; motion.Snap("track-help-visible", 0);
-        trackScroll = inspectorScroll = 0; newProxy = -1; windowToolsExpanded = false; proxyPanelExpanded = false; proxyPickerPage = 0; prGridMode = 0; prGridHudOffsetX = float.NaN; prGridHudOffsetY = 8; prGridHudExpanded = prGridHudDragging = false; prGridHudRect = default; editorSourceScroll = 0; motion.Snap("timeline-track-scroll", 0); motion.Snap("inspector-scroll", 0); beatStart = 0; windowTimelineConfig = null; nativeWindows?.Dispose(); nativeWindows = null;
+        trackScroll = inspectorScroll = 0; newProxy = -1; windowToolsExpanded = false; proxyPanelExpanded = false; proxyPickerPage = 0; prGridMode = 0; prGridStep = 20; prGridHudOffsetX = float.NaN; prGridHudOffsetY = 8; prGridHudExpanded = prGridHudDragging = false; prGridHudRect = default; editorSourceScroll = 0; motion.Snap("timeline-track-scroll", 0); motion.Snap("inspector-scroll", 0); beatStart = 0; windowTimelineConfig = null; nativeWindows?.Dispose(); nativeWindows = null;
         if (editorMode) OpenEditor();
     }
     /// <summary>时间轴总长（秒），取谱面时长、音符结束与所有 WindowMovement 事件结束的最大值，末尾各留 0.5 秒余量。</summary>
