@@ -25,8 +25,8 @@ public static class ProxyWindowLayout
             // 裁剪区默认值（prct=.08 / prcb=0 / prcl=prcr=.35）表示"未被谱面改写"，此时沿用原版的固定矩形；
             // 一旦有一侧被改写，才切到按 mod 值计算——这样旧资源的像素级取值不会因为引入新公式而漂移。
             double defLeft = 113 - M("shxa"), left = defLeft, right = left + 95 + 2 * M("shxa"), top = 0, bottom = 165;
-            if (M("prct") != .08 || M("prcb") != 0) { top = 180 * M("prcb") - 1; bottom = 180 - Math.Ceiling(180 * M("prct")); }
-            if (M("prcl") != .35 || M("prcr") != .35) { left = M("prcl"); right = M("prcr"); }
+            if (!ProxyCropDefaults.Matches(M("prct"), .08) || M("prcb") != 0) { top = 180 * M("prcb") - 1; bottom = 180 - Math.Ceiling(180 * M("prct")); }
+            if (!ProxyCropDefaults.Matches(M("prcl"), .35) || !ProxyCropDefaults.Matches(M("prcr"), .35)) { left = M("prcl"); right = M("prcr"); }
             // 裁剪区中心相对原版锚点 (47, 82) 的偏移先按缩放拉伸，再随 Z 轴旋转，保证旋转以窗口中心而非画布原点为轴。
             double w = right - left, h = bottom - top, dx = (left - defLeft + w * .5 - 47) * sx, dy = (top + h * .5 - 82) * sy;
             double x = 160 + M("prx") + M("prxb") + M("prxc") + M("prxd") + dx * Math.Cos(angle) - dy * Math.Sin(angle);

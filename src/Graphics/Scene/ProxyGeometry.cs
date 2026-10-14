@@ -47,9 +47,9 @@ public readonly record struct ProxyGeometry
         float angle = (float)((M("prrz") + M("prrzb")) * timeline.Get("rotdir", time));
         if(mode00)angle=(float)(M("prrz")+M("prrzb"));
         float left = 113 - (float)M("shxa"), right = 208 + (float)M("shxa"), top = 0, bottom = 165;
-        if (!mode00 && (M("prct") != .08 || M("prcb") != 0))
+        if (!mode00 && (!ProxyCropDefaults.Matches(M("prct"), .08) || M("prcb") != 0))
         { top = (float)(180 * M("prcb") - 1); bottom = (float)(180 - Math.Ceiling(180 * M("prct"))); }
-        if (!mode00 && (M("prcl") != .35 || M("prcr") != .35))
+        if (!mode00 && (!ProxyCropDefaults.Matches(M("prcl"), .35) || !ProxyCropDefaults.Matches(M("prcr"), .35)))
         { left = (float)M("prcl"); right = (float)M("prcr"); }
         var origin = new Vector2(custom ? 160 - (float)M("shxa") : 160, 82);
         var affine = Matrix3x2.CreateTranslation(-origin) * Matrix3x2.CreateScale((float)sx, (float)sy) *
