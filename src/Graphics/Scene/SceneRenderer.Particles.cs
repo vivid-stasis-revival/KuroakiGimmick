@@ -14,7 +14,7 @@ public sealed partial class SceneRenderer
     /// </summary>
     void DrawParticles(Session session, double time, bool burstsOnly = false)
     {
-        if (session.Chart.ObjectName == "obj_plaudite_gimmick") return;
+        if (session.NativeGimmick.HasBehavior("jacket-particles")) return;
         var timeline = session.Timeline;
         double alpha = timeline.Get("particle_alpha", time);
         var now = timeline.ParticleOffset(time);

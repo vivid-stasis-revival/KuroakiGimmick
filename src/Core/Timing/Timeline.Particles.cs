@@ -129,9 +129,9 @@ public sealed partial class Timeline
             return;
         }
         double destroyAt = double.PositiveInfinity;
-        if (chart.ObjectName == "obj_stargazers_gimmick")
+        if (Native?.Data?.HasBehavior("ambient-lifecycle")==true)
             for (int frame = 0; frame <= frames; frame++)
-                if (Get("uialpha", frame / 60.0) <= 0) { destroyAt = frame / 60.0; break; }
+                if (Get(Native!.Data!.Behavior("ambient-lifecycle")!.Text("destroyMod","uialpha"), frame / 60.0) <= Native.Data.Behavior("ambient-lifecycle")!.Number("destroyThreshold",0)) { destroyAt = frame / 60.0; break; }
         // o_csm_particle_system：每两个 60 Hz tick 调用一次生成。
         // spawn_particles_area(...,1,1.5,1)，High/默认 bgparticles=1：
         // 同一个随机位置生成两颗粒子，速度和帧号各自独立。

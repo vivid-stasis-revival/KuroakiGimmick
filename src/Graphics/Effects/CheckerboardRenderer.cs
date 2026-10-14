@@ -80,7 +80,7 @@ public sealed class CheckerboardRenderer : IDisposable
         }
         canvas.Begin(target, width, height, 320, 180);
         // Only the native Angelstar object supplies curcolor in the source.
-        var tint = session.Chart.ObjectName == "obj_angelstar_gimmick"
+        var tint = session.NativeGimmick.HasBehavior("checker-tint")
             ? Color.Hsv((float)session.Timeline.Get("curcolor", time) / 255, 1) : Color.Hex(0xFF0000);
         canvas.Quad(pattern.Texture, new(0, 0, 320, 180), tint.Alpha(alpha), shader: composite);
     }

@@ -10,7 +10,7 @@ public sealed partial class NativeGimmickRenderer
         return current?.Data?.SceneComposite switch
         {
             "desktop"=>RenderDesktopComposite(output,input,session,time,textRenderer),
-            "self" or "stopmotion"=>RenderStopmotionComposite(output,input,session,time),
+            "filter-chain"=>RenderFilterChain(output,input,session,time),
             _=>false
         };
     }

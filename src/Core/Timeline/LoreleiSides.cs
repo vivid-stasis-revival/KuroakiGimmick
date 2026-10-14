@@ -6,8 +6,7 @@ public static class LoreleiSides
     public const double Lifetime = 1.0 / 3;
     public static bool IsCallback(string name) => name is "lr_sides_blue" or "lr_sides_red"
         or "lr_sides_rev_blue" or "lr_sides_rev_red";
-    public static bool SupportsObject(string name) => name is "obj_custom_gimmick"
-        or "obj_distortedfate_gimmick" or "obj_firstbreath_gimmick";
+    public static bool Supports(Timeline timeline,bool customProtocol)=>customProtocol||timeline.Native?.Data?.HasBehavior("grid-sides")==true;
     public readonly record struct Side(double X, double Y, int Direction, int Frame, double Alpha);
     public static IEnumerable<Side> At(string name, double age)
     {

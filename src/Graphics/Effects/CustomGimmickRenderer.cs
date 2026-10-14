@@ -104,8 +104,8 @@ public sealed class CustomGimmickRenderer : IDisposable
     /// <summary>Lorelei 实例只画自身侧条，不产生 Apocalypse 的拖尾；xscale 的符号决定镜像。</summary>
     public void DrawLoreleiSides(Session session, double time)
     {
-        if (!LoreleiSides.SupportsObject(session.Chart.ObjectName)) return;
-        string sprite = session.Chart.ObjectName == "obj_firstbreath_gimmick" ? "sp_firstbreath_sidething" : "sp_lorelei_sidething";
+        if(session.Chart.ObjectName!="obj_custom_gimmick"&&!session.NativeGimmick.HasBehavior("grid-sides"))return;
+        string sprite=session.NativeGimmick.Behavior("grid-sides")?.Text("sides","sp_lorelei_sidething")??"sp_lorelei_sidething";
         var callbacks = session.Timeline.Callbacks;
         for (int i = SortedSearch.LowerBound(callbacks, time - LoreleiSides.Lifetime, e => e.Time);
             i < callbacks.Count && callbacks[i].Time <= time; i++)
@@ -125,8 +125,8 @@ public sealed class CustomGimmickRenderer : IDisposable
     /// <summary>DF 装饰：两条侧线、白底和可裁剪的网格。网格按 df_grid_top/bottom 同时裁几何与 UV，拉伸贴图不等价。</summary>
     public void DrawDf(Session session, double time)
     {
-        bool firstBreath = session.Chart.ObjectName == "obj_firstbreath_gimmick";
-        bool native = firstBreath || session.Chart.ObjectName == "obj_distortedfate_gimmick";
+        bool firstBreath=session.NativeGimmick.Behavior("grid-sides")?.Flag("redBackground")==true;
+        bool native=session.NativeGimmick.HasBehavior("grid-sides");
         if (!native && !session.DfEnabled) return;
         double M(string name) => session.Timeline.Get(name, time);
         double lineAlpha = native ? 1 : M("df_sideline_alpha");
@@ -136,12 +136,12 @@ public sealed class CustomGimmickRenderer : IDisposable
             canvas.Quad(line, new(left, 0, 1, 180), Color.White.Alpha(lineAlpha));
             canvas.Quad(line, new(right, 0, 1, 180), Color.White.Alpha(lineAlpha));
         }
-        if (native && M("lr_mountain_bg") > 0 && Image(session, firstBreath ? "sp_firstbreath_mountain_0" : "sp_lorelei_mountain_0") is { } mountain)
+        if (native && M("lr_mountain_bg") > 0 && Image(session, (session.NativeGimmick.Behavior("grid-sides")?.Text("mountain","sp_lorelei_mountain")??"sp_lorelei_mountain")+"_0") is { } mountain)
             canvas.Quad(mountain, new(0, 0, 320, 180), Color.White.Alpha(M("lr_mountain_bg")));
         if (M("df_whitebg") > 0) canvas.Fill(new(-1, -1, 322, 182),
             (firstBreath ? Color.GameMaker(255) : Color.White).Alpha(M("df_whitebg")));
         float top = (float)Math.Clamp(M("df_grid_top"), 0, 180), bottom = (float)Math.Clamp(M("df_grid_bottom"), 0, 180);
-        if (bottom > top && M("df_grid_alpha") > 0 && Image(session, firstBreath ? "sp_fb_grid_0" : "sp_df_grid_0") is { } grid)
+        if (bottom > top && M("df_grid_alpha") > 0 && Image(session, (session.NativeGimmick.Behavior("grid-sides")?.Text("grid","sp_df_grid")??"sp_df_grid")+"_0") is { } grid)
             canvas.Quad(grid, new(0, top, 320, bottom - top), Color.White.Alpha(M("df_grid_alpha")), new(0, top / 180, 1, (bottom - top) / 180));
         if(native)DrawDfFlashes(session,time);
     }

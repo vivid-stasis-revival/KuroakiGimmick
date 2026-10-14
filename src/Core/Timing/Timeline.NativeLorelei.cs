@@ -18,12 +18,12 @@ public sealed partial class Timeline
 {
     private bool AddNativeLorelei(ModEvent e, double start, double duration, ref double color)
     {
-        if (chart.ObjectName == "obj_distortedfate_gimmick")
+        if (Native?.Data?.HasBehavior("palette-slash")==true)
         {
             if (e.Name == "lr_slash_color") color = NativeLorelei.Recolor(e.Order);
             else LoreleiSlashes.Add(new(start, 1, color, e.Order));
         }
-        else if (chart.ObjectName == "obj_firstbreath_gimmick")
+        else if (Native?.Data?.HasBehavior("duration-slash")==true)
         {
             // Native callback arguments are startMs, durationMs, v1, v2, ease.
             // Both names spawn red; lr_slash_color additionally spawns black.

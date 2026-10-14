@@ -12,7 +12,7 @@ public sealed partial class Timeline
     }
 
     /// <summary>一次回调触发。Time 单位秒；Index 是全局触发序号，既用于 LatestOnly 判定同一 drawing 的最后一次触发，也让稳定排序后保留声明顺序。</summary>
-    public record Callback(double Time, string Name, double Value, int Index);
+    public record Callback(double Time, string Name, double Value, int Index, int SourceOrder = -1);
     /// <summary>slash_anycol 的持续生成区间；Start/End 为秒，Index 继承全局 callback 序号，用于确定性随机种子和同刻稳定顺序。</summary>
     public record SlashSpan(double Start, double End, int TickCount, int Index);
     /// <summary>烘焙好的粒子。Time/Death/Life 单位秒，但都由 60 Hz 逻辑 tick 推导；X/Y/Vx/Vy 在 320×180 逻辑空间，速度是每 tick 位移。</summary>
@@ -50,7 +50,7 @@ public sealed partial class Timeline
         // freeze 的两个回调点分别落在事件起点和终点，后者可能排在后续事件之后，所以先攒起来最后统一排序。
         List<(double Time, double Value, ModEvent Event)> freezeLatches = [];
         int callbackSequence = 0;
-        double loreleiColor = c.ObjectName == "obj_distortedfate_gimmick" ? NativeLorelei.Palette[0] : 16777215;
+        double loreleiColor = Native?.Data?.HasBehavior("palette-slash")==true ? NativeLorelei.Palette[0] : 16777215;
         // 事件先按拍、再按声明顺序展开，这是整条链路的稳定顺序来源。
         foreach (var e in c.Mods.OrderBy(x => x.Beat).ThenBy(x => x.Order))
         {
@@ -63,6 +63,20 @@ public sealed partial class Timeline
             // 拍 → 秒：起点查 BPM map，时长按事件起点所在分段的 BPM 折算。
             // 与原版一致，跨变速点的 tween 不重新积分，整段沿用起点的 BPM。
             double start = Bpm.Time(e.Beat), span = e.Duration * 60 / Bpm.BpmAtBeat(e.Beat);
+            if(Native?.Data?.Signals.TryGetValue(e.Name,out var route)==true)
+            {
+                if(route.MinimumExclusive is { } minimum && e.To<=minimum)continue;
+                if(route.Operation=="random-write")
+                {
+                    string target=route.Target!;
+                    if(!Tracks.TryGetValue((target,-1),out var writes))Tracks[(target,-1)]=writes=[];
+                    double value=Math.Floor(Hash(unchecked((uint)e.Order*route.SeedMultiplier+route.SeedOffset))*route.RandomScale);
+                    writes.Add(new(start,0,value,value,"linear",e));
+                }
+                else Callbacks.Add(new(start,route.Signal,e.To,callbackSequence++,e.Order));
+                End=Math.Max(End,route.AbsoluteEnd??start+route.Lifetime);
+                continue;
+            }
             if(c.ObjectName=="obj_custom_gimmick" && e.Name is "sg_endblip" or "sg_endblip_destroy")
             {
                 Callbacks.Add(new(start,e.Name,e.To,callbackSequence++));
@@ -72,7 +86,7 @@ public sealed partial class Timeline
                 (sourceSequence.Story.Any(cue=>cue.Trigger==e.Name)||sourceSequence.AudioCues.Any(cue=>cue.Trigger==e.Name)
                     ||sourceSequence.MusicFades.Any(fade=>fade.Trigger==e.Name)||sourceSequence.SongSeeks.Any(seek=>seek.Trigger==e.Name)
                     ||sourceSequence.SceneActions.Any(action=>action.Trigger==e.Name));
-            if(StopmotionState.IsCallback(c.ObjectName,e.Name)||Native?.Data?.Interludes.Any(i=>i.Trigger==e.Name)==true||storyCallback)
+            if(Native?.Data?.Interludes.Any(i=>i.Trigger==e.Name)==true||storyCallback)
             {
                 Callbacks.Add(new(start,e.Name,e.To,callbackSequence++));
                 End=Math.Max(End,start+(e.Name=="self_gravefg"?8:0));
@@ -105,47 +119,8 @@ public sealed partial class Timeline
                 Callbacks.Add(new(start, e.Name, e.To, callbackSequence++));
                 continue;
             }
-            if (c.ObjectName == "obj_plaudite_gimmick" && (e.Name.StartsWith("setup_co_", StringComparison.Ordinal)
-                || e.Name is "plaudite_slash_saturday" or "plaudite_slash_dawn" or "plaudite_slash_neutral" or "plaudite_pburst" or "plaudite_ending_event"))
-            {
-                Callbacks.Add(new(start, e.Name, e.To, callbackSequence++));
-                End = Math.Max(End, start + (e.Name == "plaudite_ending_event" ? 7 : e.Name == "plaudite_pburst" ? 4 : 1));
-                continue;
-            }
-            if (c.ObjectName == "obj_multigrode_gimmick" && e.Name == "refreshdialogue")
-            {
-                Callbacks.Add(new(start, e.Name, e.To, callbackSequence++));
-                End = Math.Max(End, start);
-                continue;
-            }
-            if (c.ObjectName == "obj_stargazers_gimmick" && e.Name is "sides" or "starspawn" or "sg_endblip")
-            {
-                Callbacks.Add(new(start, e.Name, e.To, callbackSequence++));
-                End = Math.Max(End, start + (e.Name == "sg_endblip" ? 1 : 4));
-                continue;
-            }
-            if (c.ObjectName == "obj_lastwish_gimmick" && e.Name == "lwtext")
-            {
-                Callbacks.Add(new(start, e.Name, e.To, callbackSequence++));
-                End = Math.Max(End, start + 1);
-                continue;
-            }
-            if (c.ObjectName is "obj_distortedfate_gimmick" or "obj_firstbreath_gimmick" or "obj_custom_gimmick" && e.Name == "df_sideline2")
-            {
-                Callbacks.Add(new(start, e.Name, e.To, callbackSequence++));
-                End = Math.Max(End, start + .75);
-                continue;
-            }
-            if (c.ObjectName == "obj_angelstar_gimmick" && e.Name == "recolor")
-            {
-                // Source callback has no arguments and ignores ease/proxy/value.
-                var recolorKey = ("curcolor", -1);
-                if (!Tracks.TryGetValue(recolorKey, out var colors)) Tracks[recolorKey] = colors = [];
-                double hue = Math.Floor(Hash(unchecked((uint)e.Order * 17 + 9127)) * 256);
-                colors.Add(new(start, 0, hue, hue, "linear", e));
-                End = Math.Max(End, start);
-                continue;
-            }
+            if(c.ObjectName=="obj_custom_gimmick"&&e.Name=="df_sideline2")
+            {Callbacks.Add(new(start,e.Name,e.To,callbackSequence++,e.Order));End=Math.Max(End,start+.75);continue;}
             if (Native?.Data?.SideCallbacks.ContainsKey(e.Name) == true)
             {
                 // Most native callbacks ignore their arguments; Unraveling's
@@ -155,21 +130,9 @@ public sealed partial class Timeline
                 End = Math.Max(End, start + 1);
                 continue;
             }
-            // Starcrashers registers these as extraModCallbacks, NOT ordinary value tracks.
-            // v2 (e.To) supplies arg3, the particle repeat count.
-            if (c.ObjectName == "obj_starcrashers_gimmick" && (StarcrashersObjects.IsInstanceCallback(e.Name) || e.Name is
-                "chorus_satalli_alli_particles" or "chorus_satalli_sat_particles" or "ending_coroutine"))
-            {
-                Callbacks.Add(new(start, e.Name, e.To, callbackSequence++));
-                End = Math.Max(End, e.Name == "ending_coroutine" ? 222.58 : start + 8);
-                continue;
-            }
             if (LoreleiSides.IsCallback(e.Name) && Native?.Data?.Callbacks.ContainsKey(e.Name) != true)
             {
-                // First Breath registers reverse-blue without a callback.
-                if (c.ObjectName == "obj_firstbreath_gimmick" && e.Name == "lr_sides_rev_blue")
-                { SourceNoOps.Add(new(e.Name, e.SourceLine, e.Beat, "The source registers reverse-blue as an unused scalar, without spawning sides.")); continue; }
-                if (!LoreleiSides.SupportsObject(c.ObjectName))
+                if (c.ObjectName!="obj_custom_gimmick"&&Native?.Data?.HasBehavior("grid-sides")!=true)
                     SourceNoOps.Add(new(e.Name, e.SourceLine, e.Beat, "Lorelei sides require a Custom, Distorted Fate or First Breath gimmick object."));
                 else
                 {
@@ -303,7 +266,7 @@ public sealed partial class Timeline
             }
             // 573613 是 VSM 里 "_" 的原版哨兵：取该时刻轨道上的当前值作为端点。
             // checker_set 的起点固定按 0 算，而不是沿用已有轨道值。
-            var atStart = e.Name == "angelstar_checker_set" || c.ObjectName == "obj_tutorial_gimmick" &&
+            var atStart = e.Name == "angelstar_checker_set" || Native?.Data?.HasBehavior("instruction-panel")==true &&
                 e.Name is "sg_endblip" or "sg_endblip_destroy" ? 0 : Evaluate(list, start, Initial(e.Name, e.Proxy));
             var from = e.From == 573613 ? atStart : e.From;
             var to = e.To == 573613 ? atStart : e.To;
@@ -354,7 +317,7 @@ public sealed partial class Timeline
         }
         foreach (var f in c.PerFrame)
         {
-            if (Native?.Data?.PerFrameBindings.ContainsKey(f.Function) != true && !NativeFunctionTimeline.Supports(c.ObjectName,f.Function))
+            if (Native?.Data?.PerFrameBindings.ContainsKey(f.Function) != true && !NativeFunctionTimeline.Supports(Native?.Data,f.Function))
             {
                 c.Diagnostics.Add(new("renderer", 0, $"Unsupported per-frame function: {f.Function}"));
             }

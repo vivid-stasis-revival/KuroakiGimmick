@@ -13,6 +13,7 @@ public sealed partial class NativeGimmickRenderer : IDisposable
     private readonly Target background;
     private readonly Target filtered;
     private readonly Target mask;
+    private readonly Shader roomLayerComposite;
     private NativeGimmickProfile? current;
     private GimmickDrawScheduler? scheduler;
     private readonly Dictionary<(string Path, bool Repeat, bool Linear), Texture> textures = [];
@@ -35,6 +36,8 @@ public sealed partial class NativeGimmickRenderer : IDisposable
         background = new(canvas.Gpu, 320, 180);
         filtered = new(canvas.Gpu, 320, 180);
         mask = new(canvas.Gpu, 320, 180);
+        roomLayerComposite = new(canvas.Gpu, Canvas.VertexSource,
+            "#version 330 core\nin vec2 v_vTexcoord;in vec4 v_vColour;uniform sampler2D gm_BaseTexture;out vec4 fragColor;void main(){vec4 c=texture(gm_BaseTexture,v_vTexcoord);if(c.a>0.)c.rgb/=c.a;fragColor=c*v_vColour;}");
     }
 
     /// <summary>先 Flush 再缩放两块离屏目标，避免仍在队列中的批次引用旧尺寸纹理。</summary>
@@ -224,7 +227,7 @@ public sealed partial class NativeGimmickRenderer : IDisposable
             while(index<text.Length){var overlay=text[index++];drawText?.Invoke(overlay);}
         }
         canvas.Flush();
-        DrawLastwishText(session, time);
+        DrawSpriteLyricsText(session, time);
     }
     private void Draw(Session session, GimmickDrawing drawing, double age, double time, int eventIndex)
     {
@@ -237,12 +240,11 @@ public sealed partial class NativeGimmickRenderer : IDisposable
             ? drawing.Frame + Math.Floor(Math.Max(0, age) * drawing.FramesPerSecond)
             : session.Timeline.Get(drawing.FrameMod, time);
         if (drawing.Bindings.TryGetValue("frame", out var frameBinding)) frameValue = frameBinding.Value(session.Timeline, time);
-        if(session.Chart.ObjectName=="obj_ram_gimmick" && drawing.Sprite=="sp_ram_plane")
+        if(current.Behavior("reset-animation") is { } animation && drawing.Sprite==animation.Text("sprite",""))
         {
-            double start=0;
-            double reset=session.Timeline.Bpm.Time(152);
+            double start=0,reset=session.Timeline.Bpm.Time(animation.Number("resetBeat",0));
             if(time>reset)start=(Math.Floor(reset*60+1e-8)+1)/60.0;
-            frameValue=Math.Clamp(Math.Floor((Math.Max(0,time-start)+1.0/60)*18-1e-8),0,60);
+            frameValue=Math.Clamp(Math.Floor((Math.Max(0,time-start)+1.0/60)*animation.Number("fps",1)-1e-8),0,animation.Number("lastFrame",0));
         }
         if (!double.IsFinite(frameValue)) return;
         int frame = (int)((frameValue % sprite.Frames.Count + sprite.Frames.Count) % sprite.Frames.Count);
@@ -255,7 +257,13 @@ public sealed partial class NativeGimmickRenderer : IDisposable
         double packedColor = drawing.Bindings.TryGetValue("color", out var colorBinding)
             ? colorBinding.Value(session.Timeline, time) : drawing.ColorBgr;
         if (!double.IsFinite(packedColor) || packedColor < 0 || packedColor > 0xFFFFFF) return;
+        if(!GimmickLifecycle.At(drawing.Lifecycle,session.Timeline.Callbacks,time))return;
         Color color = Color.GameMaker((uint)packedColor);
+        if(drawing.HsvTint is { } tint)
+        {
+            var hsv=Color.Hsv((float)tint.Hue.Value(session.Timeline,time),(float)tint.Saturation);
+            color=new(hsv.R*(float)tint.Brightness,hsv.G*(float)tint.Brightness,hsv.B*(float)tint.Brightness);
+        }
         if (drawing.Random is { } random)
         {
             uint seed = unchecked((uint) Math.Max(0, eventIndex) * random.SeedMultiplier + random.SeedOffset);
@@ -321,12 +329,13 @@ public sealed partial class NativeGimmickRenderer : IDisposable
         ReleaseSessionResources();
         background.Dispose();
         filtered.Dispose();
-        DisposeStarcrashersObjects();
+        DisposeMaskedStarFieldState();
         DisposePostTargets();
-        DisposeStopmotionTargets();
+        DisposeFilterChainTargets();
         DisposeDesktopTargets();
-        DisposeStopmotionTargets();
+        DisposeFilterChainTargets();
         mask.Dispose();
+        roomLayerComposite.Dispose();
     }
 }
 

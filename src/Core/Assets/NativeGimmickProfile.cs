@@ -42,6 +42,8 @@ public sealed class NativeGimmickProfile
     public bool HasStage(string stage) => Data != null && (Data.Overlays.Any(drawing => drawing.Stage == stage)
         || Data.Callbacks.Values.Any(drawings => drawings.Any(drawing => drawing.Stage == stage)));
     public bool Supports(string mod) => supported.Contains(mod);
+    public bool HasBehavior(string type) => Data?.HasBehavior(type)==true;
+    public GimmickBehaviorDefinition? Behavior(string type) => Data?.Behavior(type);
     public bool IsModeAvailable(GimmickShaderMode mode) => !invalidModes.Contains(mode);
 
     /// <summary>去重相同的运行期错误，避免每帧编译失败或贴图缺失淹没报告。</summary>
@@ -94,9 +96,19 @@ public sealed class NativeGimmickProfile
                     "External object definition not found; using the definition embedded in this build. Assets: " + result.AssetsRoot));
             }
             GimmickValidation.Validate(definition);
-            result.ResourceRoom = project.NativeRoom ?? definition.SourceRoom;
             result.SongContext = NativeSongContext.Resolve(project, songRoot);
-            result.SongContext.ApplyDefaults(definition);
+            definition = result.SongContext.ApplyDefinition(definition);
+            foreach(var behavior in definition.Behaviors)
+                foreach(var (role,name) in behavior.Mods)
+                    if(role!=name)
+                    {
+                        if(definition.ModAliases.TryGetValue(role,out var existing)&&existing!=name)
+                            throw new InvalidDataException("Ambiguous component mod role: "+role);
+                        definition.ModAliases[role]=name;
+                        if(!definition.Defaults.ContainsKey(name)&&definition.Defaults.TryGetValue(role,out var initial))definition.Defaults[name]=initial;
+                    }
+            GimmickValidation.Validate(definition);
+            result.ResourceRoom = project.NativeRoom ?? definition.SourceRoom;
             if (project.Profile == "auto" && definition.ObjectName != chart.ObjectName)
             {
                 throw new InvalidDataException($"Object definition is for {definition.ObjectName}, not {chart.ObjectName}.");
@@ -221,6 +233,14 @@ public sealed class NativeGimmickProfile
                 result.Fail(name, "Missing required sprite entry: " + name);
             }
         }
+        foreach(var behavior in definition.Behaviors)
+            foreach(var (role,name) in behavior.Sprites)
+                if(role!=name && result.Sprites.TryGetValue(name,out var sprite))
+                {
+                    if(result.Sprites.TryGetValue(role,out var existing)&&!ReferenceEquals(existing,sprite))
+                        throw new InvalidDataException("Ambiguous component sprite role: "+role);
+                    result.Sprites[role]=sprite;
+                }
         foreach (var (name, texture) in definition.Textures)
         {
             try
@@ -359,8 +379,10 @@ public sealed class NativeGimmickProfile
     /// <summary>汇总本对象声明能处理的全部 mod 名，供时间轴判断哪些 mod 有归属；只收集名字，不求值。</summary>
     private void IndexSupportedMods(GimmickDefinition definition)
     {
-        supported.UnionWith(NativeGimmickCapabilities.Mods(definition.ObjectName));
-        supported.UnionWith(NativeFunctionTimeline.Inputs(definition.ObjectName));
+        supported.UnionWith(NativeGimmickCapabilities.Mods(definition));
+        supported.UnionWith(definition.FunctionPrograms.Values.SelectMany(program=>program.Inputs));
+        supported.UnionWith(definition.Signals.Keys);
+        foreach(var rule in definition.SkinRules)if(rule.Mod!=null)supported.Add(rule.Mod);
         if (definition.Sequence is { } sequence)
         {
             supported.UnionWith(sequence.Mods.Values);
@@ -389,7 +411,7 @@ public sealed class NativeGimmickProfile
             supported.UnionWith(outputs.Keys);
         }
         IEnumerable<GimmickDrawing> drawings = definition.Overlays.Concat(definition.Callbacks.Values.SelectMany(items => items))
-            .Concat(definition.MaskLayers);
+            .Concat(definition.MaskLayers).Concat(definition.RoomLayers.SelectMany(layer=>layer.Drawings));
         if (definition.Background is { } background) drawings = drawings.Append(background.Drawing);
         foreach (var drawing in drawings)
         {
@@ -399,6 +421,7 @@ public sealed class NativeGimmickProfile
             }
             if (drawing.FrameMod != null) supported.Add(drawing.FrameMod);
             foreach (var scalar in drawing.Bindings.Values) ScalarMods(scalar);
+            if(drawing.HsvTint is { } tint)ScalarMods(tint.Hue);
         }
         foreach (var layer in definition.RoomLayers)
         {

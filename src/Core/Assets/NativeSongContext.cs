@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace KuroakiGimmick.Core;
 
@@ -11,6 +12,7 @@ public sealed record NativeSongContext(int? SongId, string Source)
     public bool InBetweenspace { get; init; }
     public string? SongName { get; init; }
     public string? Room { get; init; }
+    public Dictionary<string,JsonElement> Variables { get; init; } = [];
 
     public static NativeSongContext Resolve(ViewerProject project, string? songRoot)
     {
@@ -21,7 +23,7 @@ public sealed record NativeSongContext(int? SongId, string Source)
             name = SongInfo.Read(songRoot)?.Effective(SongFiles.Difficulty(project.Chart ?? project.Gimmick ?? "")).Name;
         NativeSongContext Context(int? id, string source) => new(id, source)
         { ObscureInfo = project.NativeObscureInfo, DisablePause = project.NativeDisablePause, PlauditeTrueEnding = project.NativePlauditeTrueEnding,
-            InBetweenspace = project.NativeInBetweenspace, SongName = name, Room = project.NativeRoom };
+            InBetweenspace = project.NativeInBetweenspace, SongName = name, Room = project.NativeRoom, Variables = project.GimmickContext };
         if (project.NativeSongId is { } explicitId)
         {
             if (explicitId < 0) throw new InvalidDataException("NativeSongId must be nonnegative.");
@@ -52,107 +54,51 @@ public sealed record NativeSongContext(int? SongId, string Source)
 
     public void ApplyDefaults(GimmickDefinition definition)
     {
-        // cc.Create initializes this before the gimmick's Create event. Preserve
-        // any explicit child-object assignment rather than overriding it globally.
         if (ObscureInfo && !definition.Defaults.ContainsKey("uialpha")) definition.Defaults["uialpha"] = 0;
-        ApplyStoryRoomGuards(definition);
-        // obj_sekaisen_gimmick.Create_0 compares global.song_id_last with 205.
-        // The unknown/default branch is the source's ordinary 0/100 initialization.
-        if (definition.ObjectName == "obj_sekaisen_gimmick" && SongId == 205)
-        {
-            definition.Defaults["sekaisen_arrow_point"] = 100;
-            definition.Defaults["sekaisen_target_point"] = 0;
-        }
-        if (definition.ObjectName == "obj_distortedfate_gimmick")
-        {
-            definition.Defaults["uialpha"] = ObscureInfo ? 0 : 1;
-            definition.Defaults["df_countdown"] = SongName == "Renatus" ? 244.11 : 0;
-        }
-        if (definition.ObjectName == "obj_angelstar_gimmick" && definition.Sequence is { } sequence)
-        {
-            if (DisablePause) sequence.AutomaticTriggers["angelstar_ending"] = 179;
-            else sequence.AutomaticTriggers.Remove("angelstar_ending");
-        }
-        if (definition.ObjectName == "obj_stargazers_gimmick") definition.HudBeforePost = !InBetweenspace;
-        if (definition.ObjectName == "obj_astellion_gimmick" && (Room ?? definition.SourceRoom) != "scene_gameplay_fl_astellion")
-        {
-            definition.Defaults["uialpha"] = 1;
-            definition.Defaults["bgalph"] = 1;
-            definition.Background = null;
-            definition.Overlays.Clear();
-            definition.ReplaceJudgmentOverlay = false;
-            definition.DisableJacketMultiply = false;
-            definition.AmbientParticles = true;
-            definition.RoomPreset = "gameplay";
-        }
-        if (definition.ObjectName == "obj_plaudite_gimmick" && definition.Sequence is { } plaudite)
-        {
-            if (PlauditeTrueEnding) plaudite.SongSeeks.RemoveAll(x => x.Trigger == "setup_co_sect1");
-            if (!PlauditeTrueEnding)
-            {
-                definition.Interludes.RemoveAll(x => x.Trigger is "setup_co_sect1" or "setup_co_sect8");
-                plaudite.Story.RemoveAll(x => x.Trigger == "setup_co_sect1");
-                plaudite.StoryWindows.RemoveAll(x => x.Trigger == "setup_co_sect1");
-                plaudite.SceneActions.RemoveAll(x => x.Trigger == "setup_co_sect1");
-            }
-            plaudite.ModWrites.RemoveAll(x => x.Condition == "plaudite_true_ending" && !PlauditeTrueEnding
-                || x.Condition == "!plaudite_true_ending" && PlauditeTrueEnding);
-        }
     }
 
-    void ApplyStoryRoomGuards(GimmickDefinition definition)
+    /// <summary>Apply bounded JSON merge patches selected by explicit context. No object-name dispatch or reflection.</summary>
+    public GimmickDefinition ApplyDefinition(GimmickDefinition definition)
     {
-        string? room=Room??definition.SourceRoom;
-        string name=definition.ObjectName;
-        if(name is "obj_self_gimmick" or "obj_stopmotion_gimmick")
+        ApplyDefaults(definition);
+        if(definition.ContextRules.Count==0)return definition;
+        JsonObject root=(JsonObject)AppJson.Node(definition,ViewerProject.Json)!;
+        string identity=definition.ObjectName;
+        bool Matches(GimmickContextCondition condition)
         {
-            string nativeRoom=name=="obj_self_gimmick"?"scene_gameplay_self":"scene_gameplay_stopmotion";
-            if(room==nativeRoom)return;
-            // These helpers and callbacks are created only inside the native
-            // room guard. The else branch writes the UI values every Step.
-            definition.SceneComposite=null;
-            definition.CompositePasses.Clear();
-            definition.Stopmotion=null;
-            definition.Interludes.Clear();
-            definition.RoomLayers.Clear();
-            definition.Shaders.Clear();
-            definition.AmbientParticles=room=="scene_gameplay";
-            definition.RoomPreset=room=="scene_gameplay"?"gameplay":"none";
-            definition.DisableJacketMultiply=room!="scene_gameplay";
-            foreach(string mod in new[]{"uialpha","scorealph","holdoverlayalpha","bgalph","noteoverlayalp"})
+            JsonNode? actual=condition.Key switch
             {
-                definition.Defaults[mod]=1;
-                definition.ValueBindings[mod]=new(){Constant=1};
-            }
-            foreach(string callback in definition.ExtraMods.Where(mod=>StopmotionState.IsCallback(name,mod)))
-                definition.SourceNoOps[callback]="Source room-guarded callback is undefined outside "+nativeRoom+"; its event has no effect here.";
-            if(name=="obj_self_gimmick")
-                definition.RoomLayers.Add(new(){Name="self_stargazing",Depth=701,Alpha=0});
-            return;
+                "songId"=>JsonValue.Create(SongId), "songName"=>JsonValue.Create(SongName),
+                "room"=>JsonValue.Create(Room??definition.SourceRoom), "obscureInfo"=>JsonValue.Create(ObscureInfo),
+                "disablePause"=>JsonValue.Create(DisablePause), "trueEnding"=>JsonValue.Create(PlauditeTrueEnding),
+                "inBetweenspace"=>JsonValue.Create(InBetweenspace),
+                _=>Variables.TryGetValue(condition.Key,out var custom)?JsonNode.Parse(custom.GetRawText()):null
+            };
+            return JsonNode.DeepEquals(actual,JsonNode.Parse(condition.Value.GetRawText()))!=condition.Not;
         }
-        if(name is "obj_supernova_gimmick" or "obj_libertia_gimmick" or "obj_convergence_gimmick")
+        foreach(var rule in definition.ContextRules)
+            if(rule.All.All(Matches))Merge(root,(JsonObject)JsonNode.Parse(rule.Patch.GetRawText())!);
+        var result=AppJson.Deserialize<GimmickDefinition>(root.ToJsonString(),ViewerProject.Json)
+            ??throw new InvalidDataException("Empty context variant.");
+        if(result.ObjectName!=identity)throw new InvalidDataException("Context variants cannot replace object identity.");
+        return result;
+    }
+
+    static void Merge(JsonObject target,JsonObject patch,bool identifiers=false)
+    {
+        foreach(var (name,value) in patch)
         {
-            string nativeRoom="scene_gameplay_"+name[4..^8];
-            if(room==nativeRoom)return;
-            definition.RoomLayers.Clear();
-            definition.AmbientParticles=room=="scene_gameplay";
-            definition.RoomPreset=room=="scene_gameplay"?"gameplay":"none";
-            definition.DisableJacketMultiply=room!="scene_gameplay";
-            if(definition.Sequence is { } sequence)
+            string key=identifiers?name:target.Select(p=>p.Key).FirstOrDefault(k=>k.Equals(name,StringComparison.OrdinalIgnoreCase))??name;
+            if(value==null){target.Remove(key);continue;}
+            if(value is JsonObject fields)
             {
-                sequence.Sprites.Remove("cg");
-                sequence.CgEffect=null;
-                sequence.Story.Clear();sequence.StoryWindows.Clear();sequence.AudioCues.Clear();
-                definition.UnavailableCallbacks["setup_co"]="The source coroutine reads o_"+name[4..^8]+"_cg.depth, but the source Create event does not create that CG outside "+nativeRoom+".";
+                if(target[key] is not JsonObject child)target[key]=child=new JsonObject();
+                bool dictionary=name is "defaults" or "Defaults" or "valueBindings" or "ValueBindings" or "postModes" or "PostModes"
+                    or "sprites" or "Sprites" or "shaders" or "Shaders" or "sourceNoOps" or "SourceNoOps" or "unavailableCallbacks" or "UnavailableCallbacks"
+                    or "uniforms" or "Uniforms" or "modAliases" or "ModAliases" or "automaticTriggers" or "AutomaticTriggers";
+                Merge(child,fields,dictionary);
             }
-            // No CG instance is created here, so its correctly named writes
-            // cannot carry into the next root pass. Preserve only the source's
-            // misspelled no-op lookups in that pass.
-            foreach(var mode in definition.PostModes.Values)
-            {
-                mode.Uniforms.Remove("aberrationx");
-                mode.Uniforms.Remove("aberrationy");
-            }
+            else target[key]=value.DeepClone();
         }
     }
 }

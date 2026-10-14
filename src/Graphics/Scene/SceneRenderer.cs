@@ -136,14 +136,13 @@ public sealed partial class SceneRenderer : IDisposable
         canvas.Begin(scene, RenderWidth, RenderHeight, 320, 180, new Color(0, 0, 0));
         nativeGimmick.DrawBackground(scene, session, time, effects);
         nativeGimmick.DrawRoomLayers(scene, session, time,
-            minimumDepth: session.Chart.ObjectName switch { "obj_sekaisen_gimmick" => 497, "obj_extendnova_gimmick" => 200, _ => int.MinValue });
-        if (session.Chart.ObjectName == "obj_sekaisen_gimmick") customGimmicks.DrawStars(session, time, false);
-        nativeGimmick.DrawStarcrashersBehindMask(scene, session, time);
-        nativeGimmick.DrawStarcrashersLateDust(scene, session, time);
+            minimumDepth: (int)(session.NativeGimmick.Data?.PlayfieldLayerDepth ?? int.MinValue));
+        if (session.NativeGimmick.HasBehavior("target-track")) customGimmicks.DrawStars(session, time, false);
+        nativeGimmick.DrawComponents(GimmickComponentStage.BeforeMask,session,time,scene,gameUi);
         // Starcrashers raw stage inspection. Disabled unless explicitly requested.
         // Stage ordering here is significant: behind-mask instances and directional
         // dust have already drawn to scene; the mask is multiplied only afterwards.
-        string? scMaskProbe = session.Chart.ObjectName == "obj_starcrashers_gimmick"
+        string? scMaskProbe = session.NativeGimmick.HasBehavior("masked-starfield")
             ? Environment.GetEnvironmentVariable("KUROAKI_SC_MASK_VIEW") : null;
         if (scMaskProbe == "before-mask")
         {
@@ -163,7 +162,7 @@ public sealed partial class SceneRenderer : IDisposable
         }
         nativeSequence.Backgrounds(scene, session, time, effects);
         nativeGimmick.DrawParticles(session, time);
-        nativeGimmick.DrawPicturedBackground(session, time);
+        nativeGimmick.DrawComponents(GimmickComponentStage.AfterRoom,session,time,scene,gameUi);
         // 深度 801：白色底衬使深度 700 处以乘算绘制的 jacket 可见。
         if (session.DistortBgEnabled && M("ditortedBG_alp") > 0)
         {
@@ -171,12 +170,12 @@ public sealed partial class SceneRenderer : IDisposable
         }
         checker.Draw(session, time, 0, scene, RenderWidth, RenderHeight);
         customGimmicks.DrawStars(session, time, true);
-        nativeGimmick.DrawPlauditeSlashes(session, time, neutral: false);
+        nativeGimmick.DrawComponents(GimmickComponentStage.BeforeJacket,session,time,scene,gameUi);
         if (session.NativeGimmick.Data?.Sequence?.SlashesBeforeJacket == true) nativeSequence.Slashes(session, time);
         DrawParticles(session, time);
-        nativeGimmick.DrawPlauditeParticles(session, time, front: false);
-        if (!nativeGimmick.DrawSekaisenJacket(session, time) && !nativeGimmick.DrawPlauditeJacket(session, time)) DrawJacket(session, time);
-        nativeGimmick.DrawStargazersBackground(session, time);
+        nativeGimmick.DrawComponents(GimmickComponentStage.BackParticles,session,time,scene,gameUi);
+        if (!nativeGimmick.DrawConfiguredJacket(session,time)) DrawJacket(session, time);
+        nativeGimmick.DrawComponents(GimmickComponentStage.AfterJacket,session,time,scene,gameUi);
         if (session.NativeGimmick.Data?.BurstAfterJacket == true)
         {
             DrawParticles(session, time, burstsOnly: true);
@@ -199,7 +198,7 @@ public sealed partial class SceneRenderer : IDisposable
             }
             previousPriority = priority;
         }
-        nativeGimmick.DrawPlauditeParticles(session, time, front: true);
+        nativeGimmick.DrawComponents(GimmickComponentStage.FrontParticles,session,time,scene,gameUi);
         DrawImages(session, time, previousPriority, -301);
         checker.Draw(session, time, 1, scene, RenderWidth, RenderHeight);
         DrawImages(session, time, -301, -300);
@@ -210,15 +209,14 @@ public sealed partial class SceneRenderer : IDisposable
         customGimmicks.DrawSides(session, time);
         if (session.NativeGimmick.Data?.Sequence?.SlashesBeforeJacket != true) nativeSequence.Slashes(session, time);
         nativeGimmick.DrawStage(session, time, GimmickStages.BeforePlayfield, notes);
-        nativeGimmick.DrawStopmotionScene(session,time);
-        gameUi.DrawStopmotionText(session,time);
+        nativeGimmick.DrawComponents(GimmickComponentStage.BeforePlayfield,session,time,scene,gameUi);
         DrawImages(session, time, -260, -255);
         customGimmicks.DrawLoreleiSides(session, time);
         DrawSlashes(session, time);
         DrawLoreleiSlashes(session, time);
         DrawImages(session, time, -255, -250);
         customGimmicks.DrawDf(session, time);
-        nativeGimmick.DrawPlauditeSlashes(session, time, neutral: true);
+        nativeGimmick.DrawComponents(GimmickComponentStage.NeutralSlashes,session,time,scene,gameUi);
         DrawImages(session, time, -250, -200);
         canvas.Flush();
         // 特殊原生对象保留分段合成；Base / Custom 先组装完整画面再统一采样。
@@ -305,9 +303,7 @@ public sealed partial class SceneRenderer : IDisposable
         }
         nativeGimmick.DrawSequenceSceneBackground(session, time);
         nativeGimmick.DrawStage(session, time, GimmickStages.BeforePost, notes);
-        nativeGimmick.DrawPicturedForeground(session, time);
-        nativeGimmick.DrawMultigrodeDialogue(session, time, gameUi);
-        nativeGimmick.DrawPlauditeFinal(session, time);
+        nativeGimmick.DrawComponents(GimmickComponentStage.BeforePost,session,time,scene,gameUi);
         if (!effects)
         {
             if(unfilteredNativeProxy)CaptureNativeProxySource(scene.Texture);
@@ -345,8 +341,7 @@ public sealed partial class SceneRenderer : IDisposable
         if (inspectionProxy != null) { canvas.Flush(); return; }
         canvas.Begin(output, RenderWidth, RenderHeight, 320, 180);
         // o_combodisplay / judgement 属于固定 GUI，不进入 application proxy，也不跟 uialpha 淡出。
-        nativeGimmick.DrawStargazersStars(session, time, fromSpawner: true);
-        nativeGimmick.DrawTutorialEndBlip(session, time);
+        nativeGimmick.DrawComponents(GimmickComponentStage.EarlyGui,session,time,output,gameUi);
         if (!nativeHudBeforePost)
         {
             gameUi.DrawGuiHud(session, time);
@@ -355,17 +350,12 @@ public sealed partial class SceneRenderer : IDisposable
         if (session.NativeGimmick.Data != null)
         {
             nativeGimmick.DrawGui(session, time, notes, text=>gameUi.DrawNativeText(session,time,text));
-            gameUi.DrawSekaisenLabels(session, time);
-            nativeGimmick.DrawSekaisenEnding(session, time);
-            gameUi.DrawTutorialInputs(session, time, nativeGimmick);
-            nativeGimmick.DrawStargazersStars(session, time, fromSpawner: false);
-            nativeGimmick.DrawStargazersEndBlip(session, time);
-            nativeGimmick.DrawMultigrodeGui(session, time, gameUi);
+            nativeGimmick.DrawComponents(GimmickComponentStage.Gui,session,time,output,gameUi);
             nativeSequence.Gui(session, time);
             nativeGimmick.DrawSequenceSceneGui(session, time);
             gameUi.DrawSequenceStory(session, time);
-            nativeGimmick.DrawPlauditeEndingGui(session, time);
-            gameUi.DrawStarcrashersStory(session, time);
+            nativeGimmick.DrawComponents(GimmickComponentStage.EndingGui,session,time,output,gameUi);
+
             nativeSequence.EndFade(session, time);
         }
         customGimmicks.DrawEndBlip(session,time);
@@ -380,7 +370,7 @@ public sealed partial class SceneRenderer : IDisposable
         {
             canvas.Fill(new(0, 0, 320, 180), Color.White.Alpha(M("wflash")));
         }
-        nativeGimmick.DrawTutorialCover(session, time);
+        nativeGimmick.DrawComponents(GimmickComponentStage.Cover,session,time,output,gameUi);
         canvas.Flush();
         if(effects)RenderNativeComposite(session,time,output,afterGui:true);
     }

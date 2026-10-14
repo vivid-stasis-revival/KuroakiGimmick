@@ -10,6 +10,15 @@ public sealed class GimmickDefinition
 {
     public int Version { get; set; } = 1;
     public string ObjectName { get; set; } = "";
+    public List<GimmickBehaviorDefinition> Behaviors { get; set; } = [];
+    public Dictionary<string,GimmickSignalDefinition> Signals { get; set; } = [];
+    public Dictionary<string,GimmickFunctionProgram> FunctionPrograms { get; set; } = [];
+    public List<GimmickSkinRule> SkinRules { get; set; } = [];
+    public GimmickLifecycleDefinition? CompositeLifecycle { get; set; }
+    public List<GimmickContextRule> ContextRules { get; set; } = [];
+    public double? PlayfieldLayerDepth { get; set; }
+    public GimmickBehaviorDefinition? Behavior(string type) => Behaviors.FirstOrDefault(component=>component.Type==type);
+    public bool HasBehavior(string type) => Behavior(type)!=null;
     public string DisplayName { get; set; } = "OBJECT PROFILE";
     public string[] ProfileAliases { get; set; } = [];
     public string[] PreviewMods { get; set; } = ["scrollspeed", "velocity", "wave", "notealp", "uialpha"];
@@ -29,7 +38,7 @@ public sealed class GimmickDefinition
     public NativeSequenceDefinition? Sequence { get; set; }
     public Dictionary<string, string> SourceNoOps { get; set; } = [];
     /// <summary>Resolved source-context dependency failures; unlike undefined/no-op callbacks, invoking these is an error.</summary>
-    internal Dictionary<string,string> UnavailableCallbacks { get; } = [];
+    public Dictionary<string,string> UnavailableCallbacks { get; set; } = [];
     public double? InitialBpm { get; set; }
     public double? FixedBpm { get; set; }
     public double? OffsetOverrideMs { get; set; }
@@ -38,7 +47,7 @@ public sealed class GimmickDefinition
     public bool CompositeAfterGui { get; set; }
     public string CompositeSource { get; set; } = "final";
     public List<GimmickShaderMode> CompositePasses { get; set; } = [];
-    public StopmotionDefinition? Stopmotion { get; set; }
+    public OperationConsoleDefinition? Console { get; set; }
     public List<NativeDialogueLine> DialogueTable { get; set; } = [];
     public List<NativeInterludeDefinition> Interludes { get; set; } = [];
     public List<GimmickBpmPoint> BpmOverride { get; set; } = [];

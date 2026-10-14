@@ -12,8 +12,6 @@ public static class CustomCompatibility
     public static readonly HashSet<string> NativeOnly = new("track_alpha en_whiteoverlay eo_endsat1 eo_endsat2 eo_endsat3 eo_endsat4 eo_endcg sekaisen_arrow_point sekaisen_target_point sekaisen_jacket".Split(' '));
     public static string? NoOpReason(string name, Chart chart, ViewerProject project)
     {
-        if (chart.ObjectName == "obj_firstbreath_gimmick" && name == "lr_sides_rev_blue")
-            return "Original First Breath registers lr_sides_rev_blue without a callback; its value is stored but no side instances are created.";
         if (chart.ObjectName != "obj_custom_gimmick") return null;
         if(name=="scorealph")return "Source InitMisc registers and initializes scorealph, but no active score or HUD draw reads it.";
         if(name=="ditortedBG_col")return "Source InitDistortBackground registers ditortedBG_col, but the background handler reads the separate ditortedBG_col_rgb value.";

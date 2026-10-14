@@ -4,6 +4,9 @@ namespace KuroakiGimmick.Core;
 public sealed class GimmickRoomLayer
 {
     public string Name { get; set; } = "";
+    public List<GimmickDrawing> Drawings { get; set; } = [];
+    public string? FrameSelectionEvent { get; set; }
+    public uint FrameSelectionSeed { get; set; }
     public string? Sprite { get; set; }
     public int Depth { get; set; }
     public string? AlphaMod { get; set; }

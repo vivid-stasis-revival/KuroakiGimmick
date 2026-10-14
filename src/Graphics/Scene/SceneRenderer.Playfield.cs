@@ -109,14 +109,12 @@ public sealed partial class SceneRenderer
         nativeGimmick.DrawStage(session, t, GimmickStages.AfterRails, drawNotes);
         // Sekaisen's lane layer is depth 497; white background and four portraits
         // are 426..142, below the hold overlay at depth 71 and above the lane.
-        if (session.Chart.ObjectName == "obj_sekaisen_gimmick")
-            nativeGimmick.DrawRoomLayers(field, session, t, maximumDepth: 497);
-        if (session.Chart.ObjectName == "obj_extendnova_gimmick")
-            nativeGimmick.DrawRoomLayers(field, session, t, maximumDepth: 200);
+        if(session.NativeGimmick.Data?.PlayfieldLayerDepth is { } depth)
+            nativeGimmick.DrawRoomLayers(field,session,t,maximumDepth:(int)depth);
         // GameMaker 的 image depth = 图层优先级取负。轨道装饰深度 200，判定覆盖层深度 0，
         // 音符 -350，游戏 HUD -1000；下面每个 DrawImages 区间就是按这些深度切出来的。
         DrawImages(session, t, -200, -100, field);
-        if (session.Chart.ObjectName != "obj_sekaisen_gimmick") customGimmicks.DrawStars(session, t, false);
+        if (!session.NativeGimmick.HasBehavior("target-track")) customGimmicks.DrawStars(session, t, false);
         if (session.NativeGimmick.Data?.ReplaceJudgmentOverlay == true || session.NativeGimmick.HasStage(GimmickStages.FixedJudgment))
         {
             // 房间里深度 100 的 hold 装饰是固定的，夹在轨道对象 (200) 与音符之间；它不能进入移动的 proxy。
@@ -137,14 +135,14 @@ public sealed partial class SceneRenderer
         DrawImages(session, t, -100, 0, field);
         if(session.Chart.ObjectName=="obj_custom_gimmick")customGimmicks.DrawDfFlashes(session,t);
         nativeGimmick.DrawStage(session, t, GimmickStages.BeforeHoldOverlay, drawNotes);
-        if (drawNotes && session.NativeGimmick.Data?.ReplaceJudgmentOverlay != true && session.NativeGimmick.Data?.Stopmotion == null)
+        if (drawNotes && session.NativeGimmick.Data?.ReplaceJudgmentOverlay != true && session.NativeGimmick.Data?.Console == null)
         {
             // 原始轨道与灰色判定背景延伸到 y=180；只有音符裁到 y=165。
             // 固定 HUD 自行覆盖底栏，uialpha=0 时仍应能看见完整灰色区域。
             canvas.Quad(nativeSequence.HoldOverlay(session, t) ?? holdOverlay, new(0, 0, 320, 180), Color.White.Alpha(M("holdoverlayalpha")));
         }
         nativeGimmick.DrawStage(session, t, GimmickStages.BeforeNotes, drawNotes);
-        if(drawNotes)nativeGimmick.DrawStopmotionHoldOverlay(session,t);
+        if(drawNotes)nativeGimmick.DrawOperationConsoleHoldOverlay(session,t);
         DrawImages(session, t, 0, 10, field);
         // Custom 的旧式/具名字幕实例都位于 depth -10：判定覆盖层之后、音符和 cover (-400) 之前。
         // 放入 application surface，稍后与遮罩一起参与 Custom proxy 采样；不受 drawNotes 开关影响。
@@ -182,7 +180,7 @@ public sealed partial class SceneRenderer
             // changeskin 是离散枚举轨；Timeline 在事件起点直接写 To，不做 from->to tween。
             // 所有轨道同时换整套 lane_sprites；越界由 NoteSkin 折回正常皮肤。
             int noteSkinIndex = session.SkinChangeEnabled ? (int) M("changeskin") : 0;
-            if (NativeNoteSkinState.Name(session.Chart.ObjectName, t, name => M(name)) is { } nativeSkin)
+            if (NativeNoteSkinState.Name(session.NativeGimmick.Data, t, name => M(name)) is { } nativeSkin)
                 noteSkinIndex = noteSkin.Index(nativeSkin);
             var scrollByLane = noteScrollCache;
             var alphaByLane = noteAlphaCache;
@@ -266,13 +264,13 @@ public sealed partial class SceneRenderer
                 float x = (float)(NoteSkin.LaneX(n.Type, n.Lane) + motionX);
                 if (n.Type == 2)
                 {
-                    if (!nativeGimmick.DrawStarcrashersNativeHold(session, t, n.Lane, x, (float)y, (float)endY, laneAlpha, n.Time <= visualTime))
+                    if (!nativeGimmick.DrawMaskedStarFieldNativeHold(session, t, n.Lane, x, (float)y, (float)endY, laneAlpha, n.Time <= visualTime))
                         noteSkin.Hold(n.Lane, x, (float)y, (float)endY, laneAlpha, n.Time <= visualTime, noteSkinIndex);
                 }
                 else
                 {
-                    if (!nativeGimmick.DrawStarcrashersNativeNote(session, t, n.Type, n.Lane, x, (float)y, laneAlpha, (float)noteRotation) &&
-                        !(session.Chart.ObjectName == "obj_stargazers_gimmick" && t >= 76.128 && t <= 96.758 && n.Type == 8))
+                    if (!nativeGimmick.DrawMaskedStarFieldNativeNote(session, t, n.Type, n.Lane, x, (float)y, laneAlpha, (float)noteRotation) &&
+                        !(NativeNoteSkinState.At(session.NativeGimmick.Data,t,name=>M(name))?.HideTimingBumpers==true && n.Type==8))
                         noteSkin.Note(n.Type, n.Lane, x, (float)y, laneAlpha, (float)noteRotation, noteSkinIndex);
                 }
             }
@@ -351,7 +349,7 @@ public sealed partial class SceneRenderer
             canvas.Clip(null);
         }
         DrawImages(session, t, 350, 400, field);
-        nativeGimmick.DrawStopmotionStoryBackground(session,t);
+        nativeGimmick.DrawOperationConsoleStoryBackground(session,t);
         customGimmicks.DrawCovers(session, t);
         DrawImages(session, t, 400, 1000, field);
         canvas.Flush();

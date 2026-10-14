@@ -20,7 +20,8 @@ public sealed partial class NativeGimmickRenderer
         canvas.Begin(scene, scene.Texture.Width, scene.Texture.Height, 320, 180);
         foreach (var layer in definition.RoomLayers.Where(l => l.Depth > minimumDepth && l.Depth <= maximumDepth).OrderByDescending(l => l.Depth))
         {
-            if(definition.ObjectName=="obj_self_gimmick"&&layer.Name=="self_stargazing")DrawSelfStargazing(session,time);
+            foreach(var drawing in layer.Drawings)Draw(session,drawing,time,time,-1);
+            if(layer.Drawings.Count>0 && layer.Sprite==null)continue;
             double alpha = GimmickRoomLayerTimeline.Alpha(layer, session.Timeline, time);
             if (alpha <= 0) continue;
             if (layer.FilterOnly)
@@ -41,10 +42,10 @@ public sealed partial class NativeGimmickRenderer
             if (!current.Sprites.TryGetValue(layer.Sprite, out var spec))continue;
             string selectedSprite=layer.Sprite;
             int selectedFrame=GimmickRoomLayerTimeline.Frame(layer,session.Timeline,time,spec.Frames.Count);
-            if(definition.SceneComposite=="stopmotion"&&definition.Stopmotion is { } stopmotion&&layer.Name is "sm_left_bg" or "sm_right_bg")
+            if(definition.Console is { } stopmotion && layer.FrameSelectionEvent is { } selectionEvent)
             {
-                var selected=StopmotionState.Background(stopmotion,selectedSprite,selectedFrame,
-                    layer.Name=="sm_left_bg"?"sm_leftbg_frameset":"sm_rightbg_frameset",session.Chart,session.Timeline.Bpm,time);
+                var selected=OperationConsoleState.Background(stopmotion,selectedSprite,selectedFrame,
+                    selectionEvent,session.Timeline,time,layer.FrameSelectionSeed);
                 selectedSprite=selected.Sprite;selectedFrame=selected.Frame;
                 if(!current.Sprites.TryGetValue(selectedSprite,out spec))continue;
             }
@@ -82,9 +83,9 @@ public sealed partial class NativeGimmickRenderer
             if (layer.Effect is { } effect)
             {
                 canvas.Flush();
-                bool available = ApplyShader(filtered, background.Texture, session, time, effect);
+                bool available = ApplyShader(filtered, background.Texture, session, time, effect, preserveAlpha:true);
                 canvas.Begin(scene, scene.Texture.Width, scene.Texture.Height, 320, 180);
-                if (available) canvas.Quad(filtered.Texture, new(0, 0, 320, 180), Color.White.Alpha(alpha));
+                if (available) canvas.Quad(filtered.Texture, new(0, 0, 320, 180), Color.White.Alpha(alpha), shader:roomLayerComposite);
                 canvas.Flush();
             }
         }
@@ -98,7 +99,7 @@ public sealed partial class NativeGimmickRenderer
         canvas.Begin(mask, mask.Texture.Width, mask.Texture.Height, 320, 180, new(0, 0, 0));
         foreach (var drawing in definition.MaskLayers)
             Draw(session, drawing, time, time, -1);
-        DrawStarcrashersMaskObjects(session, time);
+        DrawMaskedStarFieldMaskObjects(session, time);
         canvas.Flush();
         canvas.Begin(scene, scene.Texture.Width, scene.Texture.Height, 320, 180);
         // GameMaker: gpu_set_blendmode_ext(bm_dest_color, bm_zero); draw_surface(mask,0,0).

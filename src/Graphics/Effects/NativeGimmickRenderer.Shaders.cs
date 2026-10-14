@@ -64,7 +64,7 @@ public sealed partial class NativeGimmickRenderer
     /// 任何一项不合格都返回 false 由调用方走复制路径，不留下画到一半的输出。背景滤镜与全屏后处理共用此入口。
     /// sampler 绑定从单元 1 开始（0 留给 gm_BaseTexture）。
     /// </summary>
-    private bool ApplyShader(Target output, Texture input, Session session, double time, GimmickShaderMode mode)
+    private bool ApplyShader(Target output, Texture input, Session session, double time, GimmickShaderMode mode, bool preserveAlpha = false)
     {
         var pinned=new List<Texture>();
         if (current == null || !current.IsModeAvailable(mode) || failedModes.Contains(mode) || !shaders.TryGetValue(mode.Shader, out var shader))
@@ -126,7 +126,7 @@ public sealed partial class NativeGimmickRenderer
                     // GameMaker 生成的滤镜都依赖这个约定俗成的 <name>TexelSize 配套 uniform。
                     program.Vec2(sampler.Name + "TexelSize", 1.0 / sampler.Image.Width, 1.0 / sampler.Image.Height);
                 }
-            });
+            }, preserveAlpha:preserveAlpha);
             return true;
         }
         catch (Exception exception) when (ResourceFiles.IsResourceError(exception))

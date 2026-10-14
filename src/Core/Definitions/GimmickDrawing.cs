@@ -6,6 +6,8 @@ namespace KuroakiGimmick.Core;
 public sealed class GimmickDrawing
 {
     public string Sprite { get; set; } = "";
+    public GimmickHsvTint? HsvTint { get; set; }
+    public GimmickLifecycleDefinition? Lifecycle { get; set; }
     public string Stage { get; set; } = GimmickStages.Gui;
     public string? AlphaMod { get; set; }
     public bool NotesOnly { get; set; }

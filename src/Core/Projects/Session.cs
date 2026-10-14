@@ -215,8 +215,8 @@ public sealed partial class Session
             Texts.Tracks.SelectMany(t => t.Cues).Select(c => Timeline.Bpm.Time(c.Beat) + 4).DefaultIfEmpty(0).Max());
         Playback = new(Chart, Timeline.Bpm, SongFiles.Config(p, "ENABLE_MUSIC_CONTROL"));
         Stars = new(Timeline, Chart, Duration,
-            Chart.ObjectName == "obj_sekaisen_gimmick" || Chart.ObjectName == "obj_custom_gimmick" && SongFiles.Config(p, "ENABLE_STARPARTICLE", false),
-            sourceStars: Chart.ObjectName == "obj_sekaisen_gimmick");
+            NativeGimmick.HasBehavior("lane-starfield") || Chart.ObjectName == "obj_custom_gimmick" && SongFiles.Config(p, "ENABLE_STARPARTICLE", false),
+            sourceStars: NativeGimmick.HasBehavior("lane-starfield"));
         Audio = NativeInterludeAudio.Render(SongAudio,Interludes,NativeGimmick,Duration);
         Profile("Score/index/playback");
         // 区间展开后 tween 越过歌曲末尾是合法的。

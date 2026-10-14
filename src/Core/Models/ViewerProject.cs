@@ -74,6 +74,7 @@ public sealed class ViewerProject
     public string Profile { get; set; } = "auto";
     public bool Notes { get; set; } = true;
     public bool PostProcessing { get; set; } = true;
+    public Dictionary<string, JsonElement> GimmickContext { get; set; } = [];
     public static readonly JsonSerializerOptions Json = new()
     {
         WriteIndented = true,
@@ -84,6 +85,7 @@ public sealed class ViewerProject
     public ViewerProject Copy()
     {
         var copy = (ViewerProject)MemberwiseClone();
+        copy.GimmickContext = new(GimmickContext);
         copy.EditorMarkers = (EditorMarkers ?? []).ToList();
         copy.EditorTrackOrder = (EditorTrackOrder ?? []).ToList();
         copy.TextFiles = TextFiles == null ? null : new(TextFiles, StringComparer.Ordinal);

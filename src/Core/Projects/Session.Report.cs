@@ -142,6 +142,9 @@ public sealed partial class Session
                 ["background"] = NativeGimmick.Data?.Background != null,
                 ["postModes"] = AppJson.Node(NativeGimmick.Data?.PostModes.Keys.ToArray()),
                 ["objectName"] = NativeGimmick.Data?.ObjectName,
+                ["definitionVersion"] = NativeGimmick.Data?.Version,
+                ["components"] = AppJson.Node(NativeGimmick.Data?.Behaviors.Select(component=>component.Type).ToArray()),
+                ["signalRoutes"] = AppJson.Node(NativeGimmick.Data?.Signals.Keys.ToArray()),
                 ["sourceSongId"] = NativeGimmick.SongContext.SongId,
                 ["sourceSongContext"] = NativeGimmick.SongContext.Source,
                 ["sourceObscureInfo"] = NativeGimmick.SongContext.ObscureInfo,
@@ -159,7 +162,7 @@ public sealed partial class Session
                 ["resourcesReady"] = NativeGimmick.ResourcesReady,
                 ["completeObject"] = NativeGimmick.CompleteObject,
                 ["declaredOnlyMods"] = AppJson.Node(NativeGimmick.DeclaredOnlyMods.ToArray()),
-                ["starcrashersLateAtTime"] = Chart.ObjectName == "obj_starcrashers_gimmick"
+                ["starcrashersLateAtTime"] = NativeGimmick.HasBehavior("masked-starfield")
                     ? new JsonObject
                     {
                         ["greenleftMix8Bit"] = JsonValue.Create(time is { } mixTime
