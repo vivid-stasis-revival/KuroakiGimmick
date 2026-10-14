@@ -63,6 +63,9 @@ public sealed partial class Session
             ["objectName"] = Chart.ObjectName,
             ["assetsRoot"] = Paths.Assets,
             ["proxies"] = Chart.Proxies,
+            ["proxyCountDeclared"] = Chart.ProxyCountDeclared,
+            ["hasProxyTracks"] = HasProxyEvents,
+            ["nativeApplicationProxyEnabled"] = NativeApplicationProxyEnabled,
             ["rendering"] = new JsonObject
             {
                 ["width"] = Project.RenderWidth,

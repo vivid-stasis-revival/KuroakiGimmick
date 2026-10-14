@@ -12,8 +12,7 @@ public sealed partial class SceneRenderer
     int feedbackWidth;
     int feedbackVisualKey;
 
-    bool UsesNativeApplication(Session session)=>(session.NativeGimmick.Data is {ApplicationProxy:true,DisableProxy:false} d
-        && (d.AlwaysApplicationProxy || session.Chart.Proxies>0)) ||
+    bool UsesNativeApplication(Session session)=>session.NativeApplicationProxyEnabled ||
         (session.Chart.ObjectName is "obj_base_gimmick" or "obj_custom_gimmick" && session.Chart.Proxies>0 && session.HasProxyEvents);
 
     void RenderWithNativeFeedback(Session session,double time,bool notes,bool effects)

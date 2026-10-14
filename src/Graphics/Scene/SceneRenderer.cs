@@ -130,9 +130,7 @@ public sealed partial class SceneRenderer : IDisposable
         double M(string n, int p = -1) => timeline.Get(n, time, p);
         // Base Draw_64 and Custom Draw_74 sample the gameplay application surface, but not every HUD object.
         // PAUSE / Escape / score belong to the sampled source; combo、判定与底部信息在 proxy 之后按各自层级补画。
-        bool nativeApplicationProxy = session.NativeGimmick.Data?.ApplicationProxy == true
-            && session.NativeGimmick.Data.DisableProxy != true
-            && (session.NativeGimmick.Data.AlwaysApplicationProxy || session.Chart.Proxies > 0);
+        bool nativeApplicationProxy = session.NativeApplicationProxyEnabled;
         bool applicationProxy = nativeApplicationProxy || session.Chart.ObjectName is "obj_base_gimmick" or "obj_custom_gimmick"
             && session.Chart.Proxies > 0 && session.HasProxyEvents;
         canvas.Begin(scene, RenderWidth, RenderHeight, 320, 180, new Color(0, 0, 0));

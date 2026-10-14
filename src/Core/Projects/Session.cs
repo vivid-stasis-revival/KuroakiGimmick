@@ -16,6 +16,9 @@ public sealed partial class Session
     public NoteIndex NoteIndex { get; }
     public EventDensity EventDensity { get; }
     public bool HasProxyEvents { get; }
+    /// <summary>Parser fallback proxy counts do not activate the native application clear. Direct source Other_21 callers retain their explicit always-on behavior.</summary>
+    public bool NativeApplicationProxyEnabled => NativeGimmick.Data is {ApplicationProxy:true,DisableProxy:false} definition
+        && (definition.AlwaysApplicationProxy || Chart.Proxies > 0 && HasProxyEvents);
     readonly (string Path, long Length, long Written)? noteSourceStamp;
     readonly Chart? vscSource;
     readonly (double Bpm, double Offset, double? Fixed, string? Definition, string Profile, string NativeBpm) noteBpmSettings;

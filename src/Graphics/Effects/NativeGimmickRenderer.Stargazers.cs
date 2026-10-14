@@ -31,7 +31,7 @@ public sealed partial class NativeGimmickRenderer
         if (session.Chart.ObjectName != "obj_stargazers_gimmick") return;
         // Depth 101 GUI stars are erased by inherited base Draw GUI's clear when
         // proxies exist. Callback-created stars use depth 0 and draw after it.
-        if (fromSpawner && session.Chart.Proxies > 0) return;
+        if (fromSpawner && session.NativeApplicationProxyEnabled) return;
         Prepare(session);
         if (!ReferenceEquals(stargazersOwner, session))
         { stargazersOwner = session; stargazersState = new(session.Timeline, session.Chart, session.Duration); }
