@@ -39,7 +39,7 @@ public sealed partial class Viewer
         workspaceGeometry = WorkspaceGeometry.Create(w, h, editorMode && editor != null, LayoutOptions);
         var time = transport.Position;
         // 本帧全部 GPU 工作从这里开始，只在窗口线程执行：先渲染场景，再把 UI 画到离屏 uiTarget。
-        Renderer.Render(Current, time, notes, effects);
+        Renderer.RenderPresentation(Current, transport.PresentationPosition, notes, effects);
         prGridSoloRendered = false;
         if (editorMode && prGridSolo && TryPrGridTarget(out int proxyTarget) && SceneRenderer.CanInspectProxy(Current))
         {

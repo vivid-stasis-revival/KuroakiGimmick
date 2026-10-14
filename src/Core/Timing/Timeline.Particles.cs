@@ -128,12 +128,17 @@ public sealed partial class Timeline
         {
             return;
         }
+        double destroyAt = double.PositiveInfinity;
+        if (chart.ObjectName == "obj_stargazers_gimmick")
+            for (int frame = 0; frame <= frames; frame++)
+                if (Get("uialpha", frame / 60.0) <= 0) { destroyAt = frame / 60.0; break; }
         // o_csm_particle_system：每两个 60 Hz tick 调用一次生成。
         // spawn_particles_area(...,1,1.5,1)，High/默认 bgparticles=1：
         // 同一个随机位置生成两颗粒子，速度和帧号各自独立。
         for (int frame = 2; frame <= frames; frame += 2)
         {
             double t = frame / 60.0;
+            if (t >= destroyAt) break;
             uint n = (uint)(frame * 19 + 271);
             float x = MathF.Floor(Hash(n) * 321), y = MathF.Floor(Hash(n + 1) * 181);
             for (uint i = 0; i < 2; i++)
@@ -152,11 +157,14 @@ public sealed partial class Timeline
                         break;
                     }
                 }
-                Particles.Add(new(t, x, y, vx, vy, (int) Math.Min(3, Hash(seed + 2) * 4), MathF.Floor(Hash(seed + 3) * 256) / 255f,
+                Particles.Add(new(t, x, y, vx, vy, DiamondFrame(Hash(seed + 2)), MathF.Floor(Hash(seed + 3) * 256) / 255f,
                     (float) Math.Clamp(Get("rainbow", t), 0, 1), death));
             }
         }
     }
+
+    /// <summary>Source irandom(image_number) includes4; a four-frame sprite wraps that index back to0.</summary>
+    public static int DiamondFrame(float random) => Math.Clamp((int)MathF.Floor(random * 5), 0, 4) % 4;
 
     /// <summary>按 60 Hz 表插值出该时刻的整体粒子位移；表外的时间夹到两端，不外推。</summary>
     public System.Numerics.Vector2 ParticleOffset(double time)

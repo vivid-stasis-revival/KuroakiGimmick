@@ -73,14 +73,19 @@ public sealed class NativeSequenceRenderer : IDisposable
         if (!session.Project.GameUiEnabled || session.Timeline.Get("uialpha", time) == 0 || session.NativeGimmick.Data?.Sequence is not { } spec) return;
         double alpha = M(session, "hpAlpha", time);
         if (spec.Sprites.TryGetValue("hpBar", out var bar)) native.DrawSequenceSprite(session, bar, 0, 0, 165, 1, 1, alpha, time);
-        if (spec.Sprites.TryGetValue("hpFill", out var fill)) native.DrawSequenceSprite(session, fill, 0, 56, 169, M(session, "hpAmount", time) / 100, 1, alpha, time);
+        if (spec.Sprites.TryGetValue("hpFill", out var fill))
+        {
+            var shake = alpha > 0 && spec.Mod("hpShake") is { } shakeMod
+                ? ExtendnovaHudState.Shake(session.Timeline, session.Score, time, shakeMod) : (X: 0.0, Y: 0.0);
+            native.DrawSequenceSprite(session, fill, 0, 56 + shake.X, 169 + shake.Y, M(session, "hpAmount", time) / 100, 1, alpha, time);
+        }
     }
     /// <summary>CG 画在 GUI 阶段，位于后处理之后，因此不受公共后处理影响；filtered 为真，走 post mode 0 的 shader。</summary>
     public void Gui(Session session, double time)
     {
         if (session.NativeGimmick.Data?.Sequence is not { } spec || !spec.Sprites.TryGetValue("cg", out var sprite)) return;
         native.DrawSequenceSprite(session, sprite, (int)Math.Floor(M(session, "cgFrame", time)), 160, 0,
-            M(session, "cgScale", time) / 4, .25, M(session, "cgAlpha", time, 1), time, true);
+            M(session, "cgScale", time) / 4, .25, M(session, "cgAlpha", time, 1), time, true, spec.CgEffect);
     }
     public void Dispose() { layer.Dispose(); filtered.Dispose(); }
     /// <summary>

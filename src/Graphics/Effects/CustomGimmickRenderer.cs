@@ -12,16 +12,30 @@ public sealed class CustomGimmickRenderer : IDisposable
     /// <summary>按精灵名取纹理；路径必须落在 CustomGimmicks 目录内且通过预算检查，分配前先 Flush。失败写入诊断并记名，后续直接返回 null。</summary>
     Texture? Image(Session session, string name)
     {
-        if (textures.TryGetValue(name, out var texture)) return texture;
-        if (failed.Contains(name)) return null;
+        // Native profiles own their exported sprite requirements. Do not silently
+        // substitute a legacy CustomGimmicks image when a native resource is absent.
+        string key = name;
+        string? nativeFile = null;
+        bool native = session.Chart.ObjectName != "obj_custom_gimmick";
+        if (native)
+        {
+            int separator = name.LastIndexOf('_');
+            string spriteName = separator < 0 ? name : name[..separator];
+            if (!session.NativeGimmick.Sprites.TryGetValue(spriteName, out var sprite) || sprite.Frames.Count == 0) return null;
+            int frame = separator >= 0 && int.TryParse(name[(separator + 1)..], out int parsed) ? parsed : 0;
+            nativeFile = sprite.Frames[((frame % sprite.Frames.Count) + sprite.Frames.Count) % sprite.Frames.Count];
+            key = nativeFile;
+        }
+        if (textures.TryGetValue(key, out var texture)) return texture;
+        if (failed.Contains(key)) return null;
         try
         {
-            string file = ResourceFiles.ContainedFile(Path.Combine(Paths.Assets, "CustomGimmicks"), name + ".png");
+            string file = nativeFile ?? ResourceFiles.ContainedFile(Path.Combine(Paths.Assets, "CustomGimmicks"), name + ".png");
             new ImageResourceBudget().Check(file); canvas.Flush();
-            texture = Texture.Load(canvas.Gpu, file); textures.Add(name, texture); return texture;
+            texture = Texture.Load(canvas.Gpu, file); textures.Add(key, texture); return texture;
         }
         catch (Exception ex) when (ResourceFiles.IsResourceError(ex))
-        { failed.Add(name); session.Chart.Diagnostics.Add(new("custom-gimmick/" + name, 0, ex.Message, true)); return null; }
+        { failed.Add(key); session.Chart.Diagnostics.Add(new("custom-gimmick/" + name, 0, ex.Message, true)); return null; }
     }
     static (float H, float S, float V) Hsv(uint rgb)
     {
@@ -50,6 +64,8 @@ public sealed class CustomGimmickRenderer : IDisposable
     public void DrawCovers(Session session, double time)
     {
         if (session.Chart.ObjectName != "obj_custom_gimmick") return;
+        double flash=session.Timeline.Get("wflash",time);
+        if(flash>0)canvas.Fill(new(0,0,320,180),Color.White.Alpha(flash));
         double snow = session.Timeline.Get("static", time);
         if (snow > 0)
         {
@@ -66,6 +82,24 @@ public sealed class CustomGimmickRenderer : IDisposable
         }
     }
     public void Dispose() { foreach (var texture in textures.Values) texture.Dispose(); textures.Clear(); }
+
+    /// <summary>InitMisc callbacks ignore their values; the latest surviving blip draws an opaque GUI black field.</summary>
+    public void DrawEndBlip(Session session,double time)
+    {
+        if(session.Chart.ObjectName!="obj_custom_gimmick")return;
+        double? birth=null;
+        foreach(var callback in session.Timeline.Callbacks)
+        {
+            if(callback.Time>time)break;
+            if(callback.Name=="sg_endblip")birth=callback.Time;
+            else if(callback.Name=="sg_endblip_destroy")birth=null;
+        }
+        if(birth==null)return;
+        canvas.Fill(new(0,0,320,180),Color.Hex(0));
+        double scale=10*(1-Easings.Eval("outExpo",time-birth.Value));
+        if(scale>0 && Image(session,"sp_sg_endblip_0") is { } image)
+            canvas.Quad(image,new(0,(float)(90-27*scale),320,(float)(54*scale)),Color.White);
+    }
 
     /// <summary>Lorelei 实例只画自身侧条，不产生 Apocalypse 的拖尾；xscale 的符号决定镜像。</summary>
     public void DrawLoreleiSides(Session session, double time)
@@ -91,18 +125,38 @@ public sealed class CustomGimmickRenderer : IDisposable
     /// <summary>DF 装饰：两条侧线、白底和可裁剪的网格。网格按 df_grid_top/bottom 同时裁几何与 UV，拉伸贴图不等价。</summary>
     public void DrawDf(Session session, double time)
     {
-        if (!session.DfEnabled) return;
+        bool firstBreath = session.Chart.ObjectName == "obj_firstbreath_gimmick";
+        bool native = firstBreath || session.Chart.ObjectName == "obj_distortedfate_gimmick";
+        if (!native && !session.DfEnabled) return;
         double M(string name) => session.Timeline.Get(name, time);
-        if (M("df_sideline_alpha") > 0 && Image(session, "sp_df_sideline_0") is { } line)
+        double lineAlpha = native ? 1 : M("df_sideline_alpha");
+        if (lineAlpha > 0 && Image(session, "sp_df_sideline_0") is { } line)
         {
             float left = (float)(-1 + M("df_sideline") * 114), right = (float)(320 - M("df_sideline") * 114);
-            canvas.Quad(line, new(left, 0, 1, 180), Color.White.Alpha(M("df_sideline_alpha")));
-            canvas.Quad(line, new(right, 0, 1, 180), Color.White.Alpha(M("df_sideline_alpha")));
+            canvas.Quad(line, new(left, 0, 1, 180), Color.White.Alpha(lineAlpha));
+            canvas.Quad(line, new(right, 0, 1, 180), Color.White.Alpha(lineAlpha));
         }
-        if (M("df_whitebg") > 0) canvas.Fill(new(-1, -1, 321, 181), Color.White.Alpha(M("df_whitebg")));
+        if (native && M("lr_mountain_bg") > 0 && Image(session, firstBreath ? "sp_firstbreath_mountain_0" : "sp_lorelei_mountain_0") is { } mountain)
+            canvas.Quad(mountain, new(0, 0, 320, 180), Color.White.Alpha(M("lr_mountain_bg")));
+        if (M("df_whitebg") > 0) canvas.Fill(new(-1, -1, 322, 182),
+            (firstBreath ? Color.GameMaker(255) : Color.White).Alpha(M("df_whitebg")));
         float top = (float)Math.Clamp(M("df_grid_top"), 0, 180), bottom = (float)Math.Clamp(M("df_grid_bottom"), 0, 180);
-        if (bottom > top && M("df_grid_alpha") > 0 && Image(session, "sp_df_grid_0") is { } grid)
+        if (bottom > top && M("df_grid_alpha") > 0 && Image(session, firstBreath ? "sp_fb_grid_0" : "sp_df_grid_0") is { } grid)
             canvas.Quad(grid, new(0, top, 320, bottom - top), Color.White.Alpha(M("df_grid_alpha")), new(0, top / 180, 1, (bottom - top) / 180));
+        if(native)DrawDfFlashes(session,time);
+    }
+    public void DrawDfFlashes(Session session,double time)
+    {
+        if(session.Chart.ObjectName=="obj_custom_gimmick"&&!session.DfEnabled)return;
+        if (Image(session, "sp_df_sideline_0") is { } flashLine)
+            foreach (var callback in session.Timeline.Callbacks.Where(e => e.Name == "df_sideline2" && e.Time <= time && time < e.Time + .75))
+            {
+                double t = (time - callback.Time) / .75;
+                float eased = (float)Math.Sqrt(1 - (t - 1) * (t - 1));
+                var tint = Color.GameMaker(0).Alpha(1 - eased);
+                canvas.Quad(flashLine, new(90 * eased, 0, 1, 180), tint);
+                canvas.Quad(flashLine, new(319 - 90 * eased, 0, 1, 180), tint);
+            }
     }
     /// <summary>
     /// 侧边展开演出。Unravel/Astellion 侧条寿命 .3875 秒，Apocalypse 侧条寿命 1/3 秒。
@@ -111,11 +165,15 @@ public sealed class CustomGimmickRenderer : IDisposable
     /// </summary>
     public void DrawSides(Session session, double time)
     {
-        if (session.Chart.ObjectName != "obj_custom_gimmick") return;
-        foreach (var e in session.Timeline.Callbacks.Where(e => CustomCompatibility.IsSideCallback(e.Name) && e.Time <= time && e.Time + 1 >= time))
+        bool custom = session.Chart.ObjectName == "obj_custom_gimmick";
+        var bindings = session.NativeGimmick.Data?.SideCallbacks;
+        if (!custom && (bindings == null || bindings.Count == 0)) return;
+        foreach (var e in session.Timeline.Callbacks.Where(e => e.Time <= time && e.Time + 1 >= time &&
+            (custom ? CustomCompatibility.IsSideCallback(e.Name) : bindings!.ContainsKey(e.Name))))
         {
             double age = time - e.Time;
-            bool apocalypse = e.Name == "apocalypse_sidething", astellion = e.Name == "astellion_sidething";
+            string kind = custom ? e.Name switch { "apocalypse_sidething" => "apocalypse", "astellion_sidething" => "astellion", _ => "unravel" } : bindings![e.Name];
+            bool apocalypse = kind == "apocalypse", astellion = kind == "astellion";
             // Apocalypse starts opaque, decelerates at 1800 px/s² and fades at 3/s.
             double sideLife = apocalypse ? 1.0 / 3 : .3875;
             double Distance(double t) => 800 * t - (apocalypse ? 900 * t * t : 0);

@@ -20,6 +20,12 @@ public sealed class NoteSkin : IDisposable
     float cachedRotation = float.NaN, cosine = 1, sine;
     public string Description => profile.Description;
     public IReadOnlyList<string> Warnings => profile.Warnings;
+    public int Index(string name)
+    {
+        for (int index = 0; index < profile.SkinNames.Count; index++)
+            if (profile.SkinNames[index] == name) return index;
+        return 0;
+    }
     public NoteSkin(Canvas canvas)
     {
         this.canvas = canvas;

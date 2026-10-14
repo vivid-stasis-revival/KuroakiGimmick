@@ -21,8 +21,8 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
     <Version>0.1.5</Version>
-    <BuildNumber>18.0.1</BuildNumber>
-    <BuildSerial>1801</BuildSerial>
+    <BuildNumber>18.0.3</BuildNumber>
+    <BuildSerial>1803</BuildSerial>
     <AssemblyVersion>0.1.5.0</AssemblyVersion>
     <FileVersion>$(Version).$(BuildSerial)</FileVersion>
     <InformationalVersion Condition="'$(InformationalVersion)' == ''">v$(Version) / $(BuildNumber)</InformationalVersion>
@@ -274,6 +274,7 @@
 
   <ItemGroup>
     <None Include="Assets/**/*;Samples/**/*;Integrations/**/*"
+          Exclude="Assets/NativeSource/**/*;Assets/Gimmicks/*/reference/**/*;Assets/Gimmicks/*/coverage.json;Assets/Gimmicks/*/SOURCE_SHA256.json"
           CopyToOutputDirectory="PreserveNewest"
           CopyToPublishDirectory="PreserveNewest"
           ExcludeFromSingleFile="true" />

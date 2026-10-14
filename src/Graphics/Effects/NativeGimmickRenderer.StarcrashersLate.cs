@@ -39,8 +39,8 @@ public sealed partial class NativeGimmickRenderer
             if (dust.Birth > tick) break;
             if (dust.Death <= tick) continue;
             if (Image("pt_diamonddust", dust.Frame) is not { } frame) break;
-            float x = dust.X + dust.Vx * (tick - dust.Birth + 1);
-            canvas.Quad(frame, new(x - spec.OriginX, dust.Y - spec.OriginY, spec.Width, spec.Height), Color.White);
+            var position = data.PositionAt(dust, tick);
+            canvas.Quad(frame, new(position.X - spec.OriginX, position.Y - spec.OriginY, spec.Width, spec.Height), Color.White);
         }
         canvas.Blend(BlendFactor.SourceAlpha, BlendFactor.InverseSourceAlpha);
         canvas.Flush();
@@ -49,18 +49,16 @@ public sealed partial class NativeGimmickRenderer
     /// <summary>GameMaker round(mod * 255)/255; original mixes normal and Allison in a 107x22 surface.</summary>
     public static double GreenleftAlpha(Timeline timeline, double time)
     {
-        double value = timeline.Get("chorus_greenleft_overlay", time);
-        if (!double.IsFinite(value) || value <= 0) return 0;
-        return Math.Round(Math.Clamp(value, 0, 1) * 255, MidpointRounding.AwayFromZero) / 255;
+        return StarcrashersNoteState.At(timeline, time).Alpha;
     }
 
     private void StarcrashersSprite(Session session, string spriteName, int frame, float x, float y, double alpha,
-        float rotation = 0, float scaleY = 1)
+        float rotation = 0, float scaleY = 1, float scaleX = 1)
     {
         if (alpha <= 0 || current?.Sprites.TryGetValue(spriteName, out var spec) != true) return;
         if (Image(spriteName, frame) is not { } image) return;
         var transform = Matrix3x2.CreateTranslation(-spec.OriginX, -spec.OriginY)
-            * Matrix3x2.CreateScale(1, scaleY)
+            * Matrix3x2.CreateScale(scaleX, scaleY)
             * Matrix3x2.CreateRotation(-rotation * MathF.PI / 180)
             * Matrix3x2.CreateTranslation(x, y);
         canvas.Polygon(image,

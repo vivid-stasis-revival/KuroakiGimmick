@@ -15,13 +15,13 @@ public sealed partial class SceneRenderer
     /// Base 的裁剪外灰条不应留在原位置；Custom v1.12.7 则明确将
     /// application_surface 底部 (81..239, 165..180) 重新拷回画面，不能一起丢弃。
     /// </summary>
-    void CompositeField(Session session, double time, bool proxyMode, bool clearFooter)
+    void CompositeField(Session session, double time, bool proxyMode, bool clearFooter, Target? destination=null)
     {
         if (inspectionProxy == null) CaptureWindowField(session);
         var timeline = session.Timeline;
-        bool separateHudFooter = session.Chart.ObjectName is "obj_base_gimmick" or "obj_custom_gimmick";
         double M(string name, int proxy = -1) => timeline.Get(name, time, proxy);
-        canvas.Begin(scene, RenderWidth, RenderHeight, 320, 180);
+        destination ??= scene;
+        canvas.Begin(destination, destination.Texture.Width, destination.Texture.Height, 320, 180);
         // 固定侧边保留谱面图片；每份轨道副本在所有深度 pass 上
         // 使用同一套裁剪、位移、形变与不透明度。
         if (!proxyMode)
@@ -33,19 +33,18 @@ public sealed partial class SceneRenderer
             canvas.Quad(field.Texture, new(0, 0, 81, 180), Color.White.Alpha(1 - M("hom")), new(0, 0, 81f / 320, 1), shader: fieldComposite);
             canvas.Quad(field.Texture, new(239, 0, 81, 180), Color.White.Alpha(1 - M("hom")), new(239f / 320, 0, 81f / 320, 1),
                 shader: fieldComposite);
-            // Custom Draw_74 explicitly restores this segment from the full application surface
-            // before drawing proxies. Without it, opaque backdrops/masks expose the black scene
-            // clear at y=165..180. Base proxyMode00 keeps its separate footer behavior.
-            if (!separateHudFooter || session.Chart.ObjectName == "obj_custom_gimmick")
-                canvas.Quad(field.Texture, new(81, 165, 158, 15), Color.White.Alpha(1 - M("hom")), new(81f / 320, 165f / 180, 158f / 320, 15f / 180),
-                    shader: fieldComposite);
+            // Base Draw_64 and Other_21, and Custom Draw_74 all restore this
+            // segment before the footer's optional black mask and the proxies.
+            canvas.Quad(field.Texture, new(81, 165, 158, 15), Color.White.Alpha(1 - M("hom")), new(81f / 320, 165f / 180, 158f / 320, 15f / 180),
+                shader: fieldComposite);
             // Custom Gimmicks v1.12.7 Draw_74 draws a BLACK rectangle over the
             // footer AFTER restoring aft(81,165,158,15), and BEFORE any proxies.
             // draw_rectangle_colour(..., 0): final 0 = outline=false, NOT alpha=0.
             // Actual alpha comes from draw_set_alpha(1 - cc.mod_uialpha).
             // With Stage4a uialpha=0 the restored gray hold background must vanish;
             // proxy-sampled content is drawn afterwards and remains unaffected.
-            if (session.Chart.ObjectName == "obj_custom_gimmick")
+            if (session.Chart.ObjectName is "obj_base_gimmick" or "obj_custom_gimmick" ||
+                session.NativeGimmick.Data is { ApplicationProxy: true, ClearProxyFooter: true })
             {
                 double footerMask = Math.Clamp(1 - M("uialpha"), 0, 1);
                 if (footerMask > 0)
@@ -107,25 +106,45 @@ public sealed partial class SceneRenderer
         {
             canvas.Quad(laneTexture, new(0, 0, 320, 180), Color.White.Alpha(ui));
         }
+        nativeGimmick.DrawStage(session, t, GimmickStages.AfterRails, drawNotes);
+        // Sekaisen's lane layer is depth 497; white background and four portraits
+        // are 426..142, below the hold overlay at depth 71 and above the lane.
+        if (session.Chart.ObjectName == "obj_sekaisen_gimmick")
+            nativeGimmick.DrawRoomLayers(field, session, t, maximumDepth: 497);
+        if (session.Chart.ObjectName == "obj_extendnova_gimmick")
+            nativeGimmick.DrawRoomLayers(field, session, t, maximumDepth: 200);
         // GameMaker 的 image depth = 图层优先级取负。轨道装饰深度 200，判定覆盖层深度 0，
         // 音符 -350，游戏 HUD -1000；下面每个 DrawImages 区间就是按这些深度切出来的。
         DrawImages(session, t, -200, -100, field);
-        customGimmicks.DrawStars(session, t, false);
+        if (session.Chart.ObjectName != "obj_sekaisen_gimmick") customGimmicks.DrawStars(session, t, false);
         if (session.NativeGimmick.Data?.ReplaceJudgmentOverlay == true || session.NativeGimmick.HasStage(GimmickStages.FixedJudgment))
         {
             // 房间里深度 100 的 hold 装饰是固定的，夹在轨道对象 (200) 与音符之间；它不能进入移动的 proxy。
             // 所以在这里中途合成一次，画完固定判定装饰后再回到透明的 field 目标继续。
-            CompositeField(session, t, session.HasProxyEvents, clearFooter: false);
-            nativeGimmick.DrawStage(session, t, GimmickStages.FixedJudgment, drawNotes);
-            canvas.Begin(field, RenderWidth, RenderHeight, 320, 180, new(0, 0, 0, 0));
+            if (session.NativeGimmick.Data?.ApplicationProxy == true)
+            {
+                // Inherited base Draw GUI samples this room asset together with
+                // the entire application; splitting it here would transform the lane twice.
+                nativeGimmick.DrawStage(session, t, GimmickStages.FixedJudgment, drawNotes);
+            }
+            else
+            {
+                CompositeField(session, t, session.HasProxyEvents && session.NativeGimmick.Data?.DisableProxy != true, clearFooter: false);
+                nativeGimmick.DrawStage(session, t, GimmickStages.FixedJudgment, drawNotes);
+                canvas.Begin(field, RenderWidth, RenderHeight, 320, 180, new(0, 0, 0, 0));
+            }
         }
         DrawImages(session, t, -100, 0, field);
-        if (drawNotes && session.NativeGimmick.Data?.ReplaceJudgmentOverlay != true)
+        if(session.Chart.ObjectName=="obj_custom_gimmick")customGimmicks.DrawDfFlashes(session,t);
+        nativeGimmick.DrawStage(session, t, GimmickStages.BeforeHoldOverlay, drawNotes);
+        if (drawNotes && session.NativeGimmick.Data?.ReplaceJudgmentOverlay != true && session.NativeGimmick.Data?.Stopmotion == null)
         {
             // 原始轨道与灰色判定背景延伸到 y=180；只有音符裁到 y=165。
             // 固定 HUD 自行覆盖底栏，uialpha=0 时仍应能看见完整灰色区域。
             canvas.Quad(nativeSequence.HoldOverlay(session, t) ?? holdOverlay, new(0, 0, 320, 180), Color.White.Alpha(M("holdoverlayalpha")));
         }
+        nativeGimmick.DrawStage(session, t, GimmickStages.BeforeNotes, drawNotes);
+        if(drawNotes)nativeGimmick.DrawStopmotionHoldOverlay(session,t);
         DrawImages(session, t, 0, 10, field);
         // Custom 的旧式/具名字幕实例都位于 depth -10：判定覆盖层之后、音符和 cover (-400) 之前。
         // 放入 application surface，稍后与遮罩一起参与 Custom proxy 采样；不受 drawNotes 开关影响。
@@ -163,6 +182,8 @@ public sealed partial class SceneRenderer
             // changeskin 是离散枚举轨；Timeline 在事件起点直接写 To，不做 from->to tween。
             // 所有轨道同时换整套 lane_sprites；越界由 NoteSkin 折回正常皮肤。
             int noteSkinIndex = session.SkinChangeEnabled ? (int) M("changeskin") : 0;
+            if (NativeNoteSkinState.Name(session.Chart.ObjectName, t, name => M(name)) is { } nativeSkin)
+                noteSkinIndex = noteSkin.Index(nativeSkin);
             var scrollByLane = noteScrollCache;
             var alphaByLane = noteAlphaCache;
             var xOffsetByLane = noteXOffsetCache;
@@ -245,15 +266,14 @@ public sealed partial class SceneRenderer
                 float x = (float)(NoteSkin.LaneX(n.Type, n.Lane) + motionX);
                 if (n.Type == 2)
                 {
-                    noteSkin.Hold(n.Lane, x, (float)y, (float)endY, laneAlpha, n.Time <= visualTime, noteSkinIndex);
-                    nativeGimmick.DrawStarcrashersHoldBlend(session, t, n.Lane, x, (float)y, (float)endY,
-                        laneAlpha, n.Time <= visualTime);
+                    if (!nativeGimmick.DrawStarcrashersNativeHold(session, t, n.Lane, x, (float)y, (float)endY, laneAlpha, n.Time <= visualTime))
+                        noteSkin.Hold(n.Lane, x, (float)y, (float)endY, laneAlpha, n.Time <= visualTime, noteSkinIndex);
                 }
                 else
                 {
-                    noteSkin.Note(n.Type, n.Lane, x, (float)y, laneAlpha, (float)noteRotation, noteSkinIndex);
-                    nativeGimmick.DrawStarcrashersNoteBlend(session, t, n.Type, n.Lane, x, (float)y,
-                        laneAlpha, (float)noteRotation);
+                    if (!nativeGimmick.DrawStarcrashersNativeNote(session, t, n.Type, n.Lane, x, (float)y, laneAlpha, (float)noteRotation) &&
+                        !(session.Chart.ObjectName == "obj_stargazers_gimmick" && t >= 76.128 && t <= 96.758 && n.Type == 8))
+                        noteSkin.Note(n.Type, n.Lane, x, (float)y, laneAlpha, (float)noteRotation, noteSkinIndex);
                 }
             }
 
@@ -331,6 +351,7 @@ public sealed partial class SceneRenderer
             canvas.Clip(null);
         }
         DrawImages(session, t, 350, 400, field);
+        nativeGimmick.DrawStopmotionStoryBackground(session,t);
         customGimmicks.DrawCovers(session, t);
         DrawImages(session, t, 400, 1000, field);
         canvas.Flush();

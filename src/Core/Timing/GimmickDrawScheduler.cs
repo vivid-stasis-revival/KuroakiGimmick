@@ -31,11 +31,20 @@ public sealed class GimmickDrawScheduler
             }
         }
         var callbacks = timeline.Callbacks;
+        var cancelledBefore = new Dictionary<string, int>(StringComparer.Ordinal);
+        if (definition.CallbackCancels.Count > 0)
+            foreach (var signal in callbacks)
+            {
+                if (signal.Time > time) break;
+                if (definition.CallbackCancels.TryGetValue(signal.Name, out var targets))
+                    foreach (string target in targets) cancelledBefore[target] = signal.Index;
+            }
         // 二分找到回溯窗口的起点，再顺序扫到 time 为止；这依赖 Callbacks 按 Time 升序，是构建时保证的不变量。
         for (int index = SortedSearch.LowerBound(callbacks, time - maximumLifetime, item => item.Time); index < callbacks.Count
             && callbacks[index].Time <= time; index++)
         {
             var callback = callbacks[index];
+            if (cancelledBefore.TryGetValue(callback.Name, out int cutoff) && callback.Index < cutoff) continue;
             if (!definition.Callbacks.TryGetValue(callback.Name, out var drawings))
             {
                 continue;

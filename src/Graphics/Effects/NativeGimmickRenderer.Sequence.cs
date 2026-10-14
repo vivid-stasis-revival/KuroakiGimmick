@@ -14,12 +14,16 @@ public sealed partial class NativeGimmickRenderer
     /// uniform 取值非有限或超出 float 范围、以及任一 sampler 图片缺失，都直接放弃本次绘制并写诊断，不退化成无 shader 的版本。
     /// sampler 单元从 1 开始，0 留给 gm_BaseTexture。原点取自 profile 的精灵定义，不假定居中。
     /// </summary>
-    public void DrawSequenceSprite(Session session, string name, int frame, double x, double y, double sx, double sy, double alpha, double time, bool filtered = false)
+    public void DrawSequenceSprite(Session session, string name, int frame, double x, double y, double sx, double sy, double alpha, double time, bool filtered = false, GimmickShaderMode? localEffect = null, bool linear = false)
     {
         Prepare(session);
-        if (current == null || !current.Sprites.TryGetValue(name, out var sprite) || alpha <= 0 || sx == 0 || sy == 0 || Image(name, frame) is not { } texture) return;
+        if (current == null || !current.Sprites.TryGetValue(name, out var sprite) || alpha <= 0 || sx == 0 || sy == 0 || Image(name, frame, linear:linear) is not { } texture) return;
+        var pinned=new List<Texture>{texture};PinImage(texture);
+        try
+        {
         Shader? program = null;
-        if (filtered && current.Data?.PostModes.TryGetValue(0, out var mode) == true && shaders.TryGetValue(mode.Shader, out program))
+        var mode = localEffect ?? current.Data?.PostModes.GetValueOrDefault(0);
+        if (filtered && mode != null && shaders.TryGetValue(mode.Shader, out program))
         {
             canvas.Flush();
             foreach (var pair in mode.Uniforms)
@@ -38,6 +42,7 @@ public sealed partial class NativeGimmickRenderer
             foreach (var sampler in mode.Samplers)
             {
                 if (Image(sampler.Value, repeat: true, linear: mode.LinearSamplers.Contains(sampler.Key)) is not { } image) return;
+                PinImage(image);pinned.Add(image);
                 canvas.Gpu.BindTexture(unit, image); program.Int(sampler.Key, unit++);
             }
         }
@@ -45,5 +50,7 @@ public sealed partial class NativeGimmickRenderer
         canvas.Polygon(texture, Vector2.Transform(Vector2.Zero, matrix), Vector2.Transform(new(sprite.Width, 0), matrix),
             Vector2.Transform(new(0, sprite.Height), matrix), Vector2.Transform(new(sprite.Width, sprite.Height), matrix), Color.White.Alpha(alpha), shader: program);
         canvas.Flush();
+        }
+        finally {foreach(var image in pinned)UnpinImage(image);}
     }
 }

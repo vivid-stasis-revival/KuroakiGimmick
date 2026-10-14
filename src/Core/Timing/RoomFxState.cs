@@ -34,7 +34,7 @@ public static class RoomFxState
             "FX_red" => customObject ? nonBaseFxEnabled && Enabled(mod("fx_red")) : nativeColorControls ? Enabled(mod("fx_red")) : layer.Visible,
             "FX_hue" or "FX_underwater" => (!customObject || nonBaseFxEnabled) && layer.Visible,
             "FX_posterize" => mod("fx_posterize_vis") != 0,
-            _ => false
+            _ => layer.Depth < 0 && layer.Visible
         };
     }
 }

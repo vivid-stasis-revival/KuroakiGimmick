@@ -46,6 +46,7 @@ public sealed class JacketAssets
         string? root = SongFiles.Root(project);
         if (root == null)
         {
+            AddNativeFallback(result, native, chart);
             return result;
         }
         string? Find(string dir,
@@ -166,6 +167,7 @@ public sealed class JacketAssets
                 }
             }
         }
+        AddNativeFallback(result, native, chart);
         var missing = needed.Order().Where(i => !result.Files.ContainsKey(i)).Select(i => result.Mode == "plaudite"
             && i < 11 ? indexedNames[i] : i == 0 || result.Mode == "plaudite" && i == 11 ? "jacket.jpg/png" : "jacket[" + i + "].png").ToArray();
         if (missing.Length > 0)
@@ -174,6 +176,21 @@ public sealed class JacketAssets
                 missing.Take(16)) + ". The multiply pass is omitted for missing covers; particles will differ. Supply local covers; no song covers are bundled."));
         }
         return result;
+    }
+
+    static void AddNativeFallback(JacketAssets result, NativeGimmickProfile? native, Chart chart)
+    {
+        if (native?.Data == null || chart.ObjectName is "obj_base_gimmick" or "obj_custom_gimmick" ||
+            result.Mode != "normal" || result.Files.ContainsKey(0)) return;
+        try
+        {
+            string file = ResourceFiles.ContainedFile(native.AssetsRoot, "GameCommon/song_generic.png");
+            new ImageResourceBudget().Check(file);
+            result.Files[0] = file;
+            native.Resources["song-generic-fallback"] = file;
+        }
+        catch (Exception ex) when (ResourceFiles.IsResourceError(ex))
+        { native.Fail("song-generic-fallback", ex.Message); }
     }
 }
 

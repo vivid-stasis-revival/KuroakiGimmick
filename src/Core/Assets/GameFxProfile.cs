@@ -52,7 +52,7 @@ public sealed class GameFxProfile
     public bool AutoFallback { get; private set; }
     public string? RoomAssociation { get; private set; }
     public static readonly string[] Presets = ["auto", "gameplay", "plaudite", "angelstar", "scarletdeath", "extendnova", "sekaisen",
-        "starcrashers", "none"];
+        "starcrashers", "lastwish", "none"];
     public static string NormalizePreset(string name) => name.StartsWith("scene_gameplay_",
         StringComparison.Ordinal) ? name[15..] : name == "scene_gameplay" ? "gameplay" : name;
     public List<Layer> Layers { get; } = [];
@@ -195,8 +195,8 @@ public sealed class GameFxProfile
                 }
                 if (layer.ParameterMods == null || layer.ParameterMods.Count > 32 || layer.ParameterMods.Any(p => string.IsNullOrWhiteSpace(p.Key) || string.IsNullOrWhiteSpace(p.Value)))
                     throw new InvalidDataException("Invalid FX parameter bindings.");
-                if (layer.Name is not ("FX_edge" or "FX_film" or "FX_chroma" or "FX_contrast" or "FX_red" or "FX_hue" or "FX_underwater" or "FX_posterize" or "LBG" or "FX_glow" or "glow" or "Effect_1") &&
-                    native?.Data?.Sequence?.BackgroundLayers.Values.Contains(layer.Name) != true)
+                if (layer.Name is not ("FX_edge" or "FX_film" or "FX_chroma" or "FX_contrast" or "FX_red" or "FX_hue" or "FX_underwater" or "FX_posterize" or "FX_zoom" or "LBG" or "FX_glow" or "glow" or "Effect_1") &&
+                    native?.Data?.Sequence?.BackgroundLayers.Values.Contains(layer.Name) != true && layer.Depth >= 0)
                 {
                     return;
                 }
@@ -204,7 +204,7 @@ public sealed class GameFxProfile
                 {
                     throw new InvalidDataException("Glow layer requires the original _effect_glow filter.");
                 }
-                if (layer.Name == "Effect_1" && layer.Filter != "_filter_contrast")
+                if (layer.Name == "Effect_1" && layer.Depth >= 0 && layer.Filter != "_filter_contrast")
                 {
                     throw new InvalidDataException("Background Effect_1 requires its contrast filter.");
                 }
@@ -311,6 +311,25 @@ public sealed class GameFxProfile
                 {
                     layer.Number("g_HueShift");
                     layer.Number("g_HueSaturation");
+                }
+                else if (layer.Filter == "_filter_twirl_distort")
+                {
+                    layer.Number("g_DistortAngle");
+                    layer.Vector("g_DistortOffset", 2);
+                    if (layer.Number("g_DistortRadius") <= 0)
+                        throw new InvalidDataException("Twirl radius must be positive.");
+                }
+                else if (layer.Filter == "_filter_zoom_blur")
+                {
+                    layer.Vector("g_ZoomBlurCenter", 2);
+                    layer.Number("g_ZoomBlurIntensity");
+                    if (layer.Number("g_ZoomBlurFocusRadius") <= 0)
+                        throw new InvalidDataException("Zoom focus radius must be positive.");
+                    string sampler = layer.Parameters["g_ZoomBlurTexture"].GetString() ?? throw new InvalidDataException("Missing zoom texture.");
+                    try { layer.TexturePath = ResourceFiles.ContainedFile(System.IO.Path.GetDirectoryName(origin)!, sampler); }
+                    catch(FileNotFoundException)
+                    { layer.TexturePath = ResourceFiles.ContainedFile(System.IO.Path.Combine(Paths.Assets, "GameFX"), sampler + ".png"); }
+                    new ImageResourceBudget().Check(layer.TexturePath);
                 }
                 else if (layer.Filter == "_filter_colour_balance")
                 {

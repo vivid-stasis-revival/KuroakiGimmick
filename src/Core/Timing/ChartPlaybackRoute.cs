@@ -10,6 +10,9 @@ public sealed class ChartPlaybackRoute
     public IReadOnlyList<Leg> Legs => legs;
     public double Duration => legs.Count == 0 ? 0 : legs[^1].PlaybackStart + legs[^1].Duration;
     readonly double end;
+    private ChartPlaybackRoute(double start,double end)
+    { this.end=end;if(end>start)legs.Add(new(start,end,0,1)); }
+    public static ChartPlaybackRoute Identity(double start,double end)=>new(start,end);
     public ChartPlaybackRoute(ChartPlaybackMap map, double start, double end)
     {
         this.end = end;

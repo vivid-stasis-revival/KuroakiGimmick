@@ -15,6 +15,10 @@ public static class CustomCompatibility
         if (chart.ObjectName == "obj_firstbreath_gimmick" && name == "lr_sides_rev_blue")
             return "Original First Breath registers lr_sides_rev_blue without a callback; its value is stored but no side instances are created.";
         if (chart.ObjectName != "obj_custom_gimmick") return null;
+        if(name=="scorealph")return "Source InitMisc registers and initializes scorealph, but no active score or HUD draw reads it.";
+        if(name=="ditortedBG_col")return "Source InitDistortBackground registers ditortedBG_col, but the background handler reads the separate ditortedBG_col_rgb value.";
+        if(name=="fx_zoom")return "Source Step writes the misspelled FX parameter 'g_ZoomBlurIntensity ' (trailing space); the exported filter only declares 'g_ZoomBlurIntensity'.";
+        if(name=="fx_twirl" && !SongFiles.Config(project,"ENABLE_NON_BASE_FX"))return "ENABLE_NON_BASE_FX is false; the original object does not register this twirl control.";
         if (name == "imgalp") return "Original Custom Gimmick registers imgalp_<image ID> only; bare imgalp is unregistered and updateMods skips it.";
         if (NativeOnly.Contains(name)) return "Original Custom Gimmick does not register this native-object parameter; updateMods skips it. Source: obj_base_gimmick / obj_custom_gimmick / native-object Create.";
         if (name == "fx_edge" && !SongFiles.Config(project, "ENABLE_NON_BASE_FX")) return "ENABLE_NON_BASE_FX is false; the original object does not register this filter control.";

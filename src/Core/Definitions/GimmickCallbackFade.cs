@@ -13,5 +13,7 @@ public sealed class GimmickCallbackFade
     public string Ease { get; set; } = "linear";
     public bool RequireResourcePack { get; set; }
     public string? RequireResourceRoom { get; set; }
+    /// <summary>Source repeated callbacks restart the fade until the first scheduled flag-clear event.</summary>
+    public bool RestartUntilInitialCompletion { get; set; }
 }
 

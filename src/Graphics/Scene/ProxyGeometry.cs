@@ -37,6 +37,7 @@ public readonly record struct ProxyGeometry
 
     public static ProxyGeometry Sample(Timeline timeline, double time, int target, bool custom)
     {
+        bool mode00=timeline.Native?.Data?.ProxyMode00==true;
         double M(string name) => timeline.Get(name, time, target);
         double scale = M("przm") * M("przmb") * M("przmc");
         double sx = scale * M("przx") * Math.Cos(M("prrx") * Math.PI / 180);
@@ -44,16 +45,24 @@ public readonly record struct ProxyGeometry
         double x = M("prx") + M("prxb") + M("prxc") + M("prxd");
         double y = M("pry") + M("pryb") + M("pryc") + M("pryd");
         float angle = (float)((M("prrz") + M("prrzb")) * timeline.Get("rotdir", time));
+        if(mode00)angle=(float)(M("prrz")+M("prrzb"));
         float left = 113 - (float)M("shxa"), right = 208 + (float)M("shxa"), top = 0, bottom = 165;
-        if (M("prct") != .08 || M("prcb") != 0)
+        if (!mode00 && (M("prct") != .08 || M("prcb") != 0))
         { top = (float)(180 * M("prcb") - 1); bottom = (float)(180 - Math.Ceiling(180 * M("prct"))); }
-        if (M("prcl") != .35 || M("prcr") != .35)
+        if (!mode00 && (M("prcl") != .35 || M("prcr") != .35))
         { left = (float)M("prcl"); right = (float)M("prcr"); }
         var origin = new Vector2(custom ? 160 - (float)M("shxa") : 160, 82);
         var affine = Matrix3x2.CreateTranslation(-origin) * Matrix3x2.CreateScale((float)sx, (float)sy) *
             Matrix3x2.CreateRotation((custom ? angle : -angle) * MathF.PI / 180) *
             new Matrix3x2(1, -(float)M("prsy"), -(float)M("prsx"), 1, 0, 0) *
             Matrix3x2.CreateTranslation(160 + (float)x, 82 + (float)y);
+        if(mode00)
+        {
+            origin=new((left+right)/2,82.5f);
+            affine=Matrix3x2.CreateTranslation(-origin)*Matrix3x2.CreateScale((float)sx,(float)sy)
+                *Matrix3x2.CreateRotation(-angle*MathF.PI/180)*Matrix3x2.CreateTranslation(160+(float)x,82+(float)y)
+                *new Matrix3x2(1,0,(float)M("prsx"),1,0,0);
+        }
         bool projective = custom && (M("prtrX") != 0 || M("prtrY") != 0);
         var projection = new Matrix4x4(affine);
         if (projective)
@@ -78,7 +87,8 @@ public readonly record struct ProxyGeometry
             X = x, Y = y, Angle = angle, ScaleX = sx, ScaleY = sy, Origin = origin,
             Affine = affine, Projection = projection, Projective = projective,
             Renderable = finite && double.IsFinite(sx) && double.IsFinite(sy) &&
-                (custom || Math.Abs(sx) <= 50 && Math.Abs(sy) <= 50) };
+                (mode00 ? M("pra")>.001 && Math.Abs(sx)>.001 && Math.Abs(sy)>.001 && Math.Abs(x)<240 && Math.Abs(y-8)<240
+                    : custom || Math.Abs(sx) <= 50 && Math.Abs(sy) <= 50) };
     }
 
     internal void ApplyProjection(Shader shader)

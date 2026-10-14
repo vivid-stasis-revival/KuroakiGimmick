@@ -24,6 +24,7 @@ public sealed class Transport : IDisposable
     int queuedSamples;
     double delaySeconds;
     ChartPlaybackMap? chartPlayback;
+    NativeInterludeRoute? interludes;
     double appliedRate = 1;
     ChartPlaybackRoute? route;
     double routeOffset;
@@ -39,12 +40,24 @@ public sealed class Transport : IDisposable
     /// <summary>用户倍速与谱面 playspeed 的乘积，即实际送给 SDL 的频率比；必须落在 0.01..100 内。</summary>
     public double EffectiveSpeed { get { lock (audioGate) return speed * ChartRate; } }
     /// <summary>当前谱面秒数。由 Stopwatch 推导而不是逐帧累加，避免掉帧造成漂移；暂停时返回冻结值。</summary>
-    public double Position
+    public double PresentationPosition
     {
         get
         {
             lock (audioGate) return Math.Clamp(!Playing ? position : route != null ? route.ChartAt(RouteClock) : chartPlayback == null ? position + (watch.Elapsed.TotalSeconds - anchor) * speed :
         chartPlayback.ChartAt(chartPlayback.PlaybackAt(position) + (watch.Elapsed.TotalSeconds - anchor) * speed), 0, duration);
+        }
+    }
+    public double Position { get { lock(audioGate) return interludes?.SongAt(PresentationPosition)??PresentationPosition; } }
+    public void SetInterludes(NativeInterludeRoute? value)
+    {
+        lock(audioGate)
+        {
+            if(ReferenceEquals(interludes,value))return;
+            double song=Position,songDuration=interludes?.SongAt(duration)??duration;
+            interludes=value;position=value?.PresentationAt(song)??song;
+            duration=value?.PresentationAt(songDuration,true)??songDuration;
+            anchor=watch.Elapsed.TotalSeconds;ResetRoute();ResetAudio();
         }
     }
     /// <summary>换用新的 playspeed 映射；先把当前位置固化再重锚时钟，否则切换瞬间会跳一段。</summary>
@@ -53,7 +66,7 @@ public sealed class Transport : IDisposable
         lock (audioGate)
         {
             if (ReferenceEquals(chartPlayback, map)) return;
-            position = Position; anchor = watch.Elapsed.TotalSeconds; chartPlayback = map;
+            position = PresentationPosition; anchor = watch.Elapsed.TotalSeconds; chartPlayback = map;
             ResetRoute();
             ApplyRate(); ResetAudio();
         }
@@ -82,6 +95,7 @@ public sealed class Transport : IDisposable
             position = 0;
             duration = length;
             chartPlayback = null; appliedRate = speed;
+            interludes=null;
             route = null; routeOffset = 0;
             data = audio;
             AudioError = null;
@@ -120,7 +134,7 @@ public sealed class Transport : IDisposable
             {
                 return;
             }
-            position = Position;
+            position = PresentationPosition;
             if (route != null) routeOffset = RouteClock;
             Playing = value;
             anchor = watch.Elapsed.TotalSeconds;
@@ -147,8 +161,8 @@ public sealed class Transport : IDisposable
     {
         lock (audioGate)
         {
-            length = Math.Max(1, length); if (length == duration) return;
-            position = Position; anchor = watch.Elapsed.TotalSeconds; duration = length; ResetRoute();
+            length = Math.Max(1, interludes?.PresentationAt(length,true)??length); if (length == duration) return;
+            position = PresentationPosition; anchor = watch.Elapsed.TotalSeconds; duration = length; ResetRoute();
         }
     }
 
@@ -157,11 +171,22 @@ public sealed class Transport : IDisposable
     {
         lock (audioGate)
         {
-            position = Math.Clamp(t, 0, duration);
+            position = Math.Clamp(interludes?.PresentationAt(t)??t, 0, duration);
             anchor = watch.Elapsed.TotalSeconds;
             ResetRoute();
             ApplyRate();
             ResetAudio();
+        }
+    }
+
+    /// <summary>Frame stepping continues through an inserted story while the chart playhead stays paused.</summary>
+    public void Step(double seconds)
+    {
+        lock(audioGate)
+        {
+            if(interludes==null){Seek(Position+seconds);return;}
+            position=Math.Clamp(PresentationPosition+seconds,0,duration);
+            anchor=watch.Elapsed.TotalSeconds;ResetRoute();ApplyRate();ResetAudio();
         }
     }
 
@@ -170,7 +195,7 @@ public sealed class Transport : IDisposable
     {
         lock (audioGate)
         {
-            position = Position;
+            position = PresentationPosition;
             if (route != null) routeOffset = RouteClock;
             anchor = watch.Elapsed.TotalSeconds;
             speed = Math.Clamp(value, .25, 2);
@@ -199,7 +224,7 @@ public sealed class Transport : IDisposable
     {
         lock (audioGate)
         {
-            position = Position;
+            position = PresentationPosition;
             if (route != null) routeOffset = RouteClock;
             anchor = watch.Elapsed.TotalSeconds;
             delaySeconds = Math.Clamp(milliseconds, -2000, 2000) / 1000;
@@ -290,7 +315,7 @@ public sealed class Transport : IDisposable
             {
                 return;
             }
-            if (Position >= duration)
+            if (PresentationPosition >= duration)
             {
                 SetPlaying(false);
                 return;
@@ -302,12 +327,12 @@ public sealed class Transport : IDisposable
                 // SDL 报告的排队量不含设备内部的小缓冲。用缓慢修正消除漂移，
                 // 同时避免每次音频设备回调都造成一次肉眼可见的跳变。
                 // 阈值 0.08 秒以内不修正；单次修正上限 ±0.003 秒，按误差的 5% 逼近。
-                double error = audioTime + delaySeconds - Position;
+                double error = audioTime + delaySeconds - PresentationPosition;
                 if (Math.Abs(error) > .08 && audioTime < data.Duration)
                 {
                     double correction = Math.Clamp(error * .05, -.003, .003);
                     if (route != null) routeOffset = Math.Clamp(RouteClock + correction / ChartRate, 0, route.Duration);
-                    position = route != null ? route.ChartAt(routeOffset) : Position + correction;
+                    position = route != null ? route.ChartAt(routeOffset) : PresentationPosition + correction;
                     anchor = watch.Elapsed.TotalSeconds;
                 }
             }
@@ -343,13 +368,13 @@ public sealed class Transport : IDisposable
                 {
                     ApplyRate();
                     if (route != null && route.IndexAt(RouteClock) != routeLeg)
-                    { routeLeg = route.IndexAt(RouteClock); position = Position; ResetAudio(); }
-                    if (Position >= duration) { SetPlaying(false); continue; }
+                    { routeLeg = route.IndexAt(RouteClock); position = PresentationPosition; ResetAudio(); }
+                    if (PresentationPosition >= duration) { SetPlaying(false); continue; }
                     Feed();
                 }
                 catch (Exception ex)
                 {
-                    position = Position; Playing = false; AudioError = ex.Message;
+                    position = PresentationPosition; Playing = false; AudioError = ex.Message;
                     if (stream != 0) Sdl.SDL_PauseAudioStreamDevice(stream);
                 }
             }

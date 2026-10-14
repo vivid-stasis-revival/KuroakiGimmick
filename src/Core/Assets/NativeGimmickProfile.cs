@@ -12,6 +12,7 @@ public sealed class NativeGimmickProfile
     public string? Manifest { get; private set; }
     public string? DefinitionSource { get; private set; }
     public string AssetsRoot { get; private set; } = Paths.Assets;
+    public NativeSongContext SongContext { get; private set; } = new(null, "unspecified");
     public List<string> DefinitionMigrations { get; } = [];
     /// <summary>
     /// 字段缺失时回退到 CompleteObject，与显式 false 不等价。
@@ -26,6 +27,14 @@ public sealed class NativeGimmickProfile
     public Dictionary<string, string> Shaders { get; } = new(StringComparer.Ordinal);
     public Dictionary<string, string> Resources { get; } = new(StringComparer.Ordinal);
     public Dictionary<string, string> Issues { get; } = new(StringComparer.Ordinal);
+    /// <summary>已加载的定义没有已知资源/运行期错误；不代表已经核验与原游戏的视觉一致性。</summary>
+    public bool ResourcesReady => Data != null && Issues.Count == 0;
+    /// <summary>保留作者的完整性声明，但任何已发现的加载/运行期故障都会使本次会话不完整。</summary>
+    public bool CompleteObject => Data?.CompleteObject == true && ResourcesReady && DeclaredOnlyMods.Count == 0;
+    /// <summary>仅声明默认值或二进制 ID、却没有已登记消费路径的 mod；不能据此声称已实现。</summary>
+    public IReadOnlyList<string> DeclaredOnlyMods => Data == null ? [] : Data.ExtraMods.Concat(Data.Defaults.Keys)
+        .Where(name => !supported.Contains(name) && !ModCatalog.Supported.Contains(name)).Distinct(StringComparer.Ordinal)
+        .Order(StringComparer.Ordinal).ToArray();
     private readonly HashSet<string> supported = new(StringComparer.Ordinal);
     private readonly HashSet<GimmickShaderMode> invalidModes = [];
     private readonly Dictionary<string, JsonElement> parameters = new(StringComparer.Ordinal);
@@ -85,6 +94,9 @@ public sealed class NativeGimmickProfile
                     "External object definition not found; using the definition embedded in this build. Assets: " + result.AssetsRoot));
             }
             GimmickValidation.Validate(definition);
+            result.ResourceRoom = project.NativeRoom ?? definition.SourceRoom;
+            result.SongContext = NativeSongContext.Resolve(project, songRoot);
+            result.SongContext.ApplyDefaults(definition);
             if (project.Profile == "auto" && definition.ObjectName != chart.ObjectName)
             {
                 throw new InvalidDataException($"Object definition is for {definition.ObjectName}, not {chart.ObjectName}.");
@@ -129,7 +141,7 @@ public sealed class NativeGimmickProfile
                 }
                 if (JsonSchemaMembers.TryGet(root, "room", out var room) && room.ValueKind == JsonValueKind.String)
                 {
-                    result.ResourceRoom = room.GetString();
+                    result.ResourceRoom = project.NativeRoom ?? room.GetString();
                 }
                 JsonElement source = root;
                 bool hasParameters = true;
@@ -179,7 +191,7 @@ public sealed class NativeGimmickProfile
                 foreach (string relative in sprite.Frames)
                 {
                     string file = ResourceFiles.ContainedFile(RootFor(sprite.Scope), relative);
-                    if (budget.Check(file) != (sprite.Width, sprite.Height))
+                    if ((sprite.Lazy ? new ImageResourceBudget().Check(file) : budget.Check(file)) != (sprite.Width, sprite.Height))
                     {
                         // 精灵尺寸按 320×180 逻辑空间声明，且必须与解码出的实际像素尺寸逐像素一致；manifest 写错不做缩放适配。
                         throw new InvalidDataException("Decoded dimensions differ from manifest: " + relative);
@@ -188,6 +200,7 @@ public sealed class NativeGimmickProfile
                 }
                 result.Sprites[name] = new GimmickSprite
                 {
+                    Lazy = sprite.Lazy,
                     Width = sprite.Width,
                     Height = sprite.Height,
                     OriginX = sprite.OriginX,
@@ -289,6 +302,29 @@ public sealed class NativeGimmickProfile
             }
         }
         result.IndexSupportedMods(definition);
+        foreach (var action in definition.Interludes.SelectMany(interlude => interlude.Steps).SelectMany(step => step.Actions).Where(action => action.Path != null))
+        {
+            try
+            {
+                string file=ResourceFiles.ContainedFile(definitionRoot,action.Path!);
+                if(new FileInfo(file).Length>128*1024*1024)throw new InvalidDataException("Interlude audio exceeds 128 MiB.");
+                result.Resources["interlude-audio/"+action.Path]=file;
+            }
+            catch(Exception ex) when(ResourceFiles.IsResourceError(ex)){result.Fail("interlude-audio/"+action.Path,ex.Message);}
+        }
+        foreach (var cue in definition.Sequence?.AudioCues ?? [])
+        {
+            try
+            {
+                string file = ResourceFiles.ContainedFile(definitionRoot, cue.Path);
+                if (new FileInfo(file).Length > 128 * 1024 * 1024) throw new InvalidDataException("Voice resource exceeds 128 MiB.");
+                result.Resources["audio/" + cue.Path] = file;
+            }
+            catch (Exception ex) when (ResourceFiles.IsResourceError(ex)) { result.Fail("audio/" + cue.Path, ex.Message); }
+        }
+        if (definition.Sequence?.Story.Any(cue => cue.FormatPlayerName || cue.Speaker == "DO_ST") == true
+            && string.IsNullOrWhiteSpace(project.NativeStoryContext?.PlayerName))
+            result.Fail("story-context", "NativeStoryContext.PlayerName, StoryProgress and SelectedTitle are needed for source-save-dependent dialogue.");
         if (definition.ParticleEmitter is { FidelityNote: { } note } emitter && result.Sprites.ContainsKey(emitter.Sprite))
         {
             chart.Diagnostics.Add(new("native-gimmick/particles", 0, note));
@@ -323,24 +359,54 @@ public sealed class NativeGimmickProfile
     /// <summary>汇总本对象声明能处理的全部 mod 名，供时间轴判断哪些 mod 有归属；只收集名字，不求值。</summary>
     private void IndexSupportedMods(GimmickDefinition definition)
     {
+        supported.UnionWith(NativeGimmickCapabilities.Mods(definition.ObjectName));
+        supported.UnionWith(NativeFunctionTimeline.Inputs(definition.ObjectName));
         if (definition.Sequence is { } sequence)
-        { supported.UnionWith(sequence.Mods.Values); supported.UnionWith(sequence.Story.Select(c => c.Trigger)); }
+        {
+            supported.UnionWith(sequence.Mods.Values);
+            supported.UnionWith(sequence.Story.Select(c => c.Trigger));
+            supported.UnionWith(sequence.ModWrites.Select(c => c.Mod));
+            supported.UnionWith(sequence.SceneActions.Select(c => c.Trigger));
+            supported.UnionWith(sequence.StoryWindows.Select(c => c.Trigger));
+            supported.UnionWith(sequence.AudioCues.Select(c => c.Trigger));
+            supported.UnionWith(sequence.MusicFades.Select(c => c.Trigger));
+            supported.UnionWith(sequence.SongSeeks.Select(c => c.Trigger));
+        }
         supported.UnionWith(definition.SourceNoOps.Keys);
+        supported.UnionWith(definition.UnavailableCallbacks.Keys);
+        supported.UnionWith(definition.Interludes.Select(i => i.Trigger));
         supported.UnionWith(definition.Callbacks.Keys);
-        supported.UnionWith(definition.Defaults.Keys);
+        supported.UnionWith(definition.CallbackCancels.Keys);
+        supported.UnionWith(definition.SideCallbacks.Keys);
+        supported.UnionWith(definition.TextOverlays.SelectMany(text => new[]{text.IndexMod,text.AlphaMod}).OfType<string>());
         supported.UnionWith(definition.ModAliases.Keys);
         supported.UnionWith(definition.ModAliases.Values);
+        supported.UnionWith(definition.ValueBindings.Keys);
+        foreach(var scalar in definition.ValueBindings.Values) ScalarMods(scalar);
         supported.UnionWith(definition.CallbackFades.Keys);
         foreach (var outputs in definition.PerFrameBindings.Values)
         {
             supported.UnionWith(outputs.Keys);
         }
-        foreach (var drawing in definition.Overlays.Concat(definition.Callbacks.Values.SelectMany(items => items)))
+        IEnumerable<GimmickDrawing> drawings = definition.Overlays.Concat(definition.Callbacks.Values.SelectMany(items => items))
+            .Concat(definition.MaskLayers);
+        if (definition.Background is { } background) drawings = drawings.Append(background.Drawing);
+        foreach (var drawing in drawings)
         {
             if (drawing.AlphaMod != null)
             {
                 supported.Add(drawing.AlphaMod);
             }
+            if (drawing.FrameMod != null) supported.Add(drawing.FrameMod);
+            foreach (var scalar in drawing.Bindings.Values) ScalarMods(scalar);
+        }
+        foreach (var layer in definition.RoomLayers)
+        {
+            if (layer.AlphaMod != null) supported.Add(layer.AlphaMod);
+            if (layer.VisibleMod != null) supported.Add(layer.VisibleMod);
+            if (layer.FrameMod != null) supported.Add(layer.FrameMod);
+            if (layer.FrameSpeedMod != null) supported.Add(layer.FrameSpeedMod);
+            foreach (var scalar in layer.Bindings.Values) ScalarMods(scalar);
         }
         if (definition.PostModes.Count > 0)
         {
@@ -348,11 +414,7 @@ public sealed class NativeGimmickProfile
         }
         foreach (var scalar in GimmickValidation.ShaderModes(definition).SelectMany(pair => pair.Mode.Uniforms.Values).SelectMany(values => values).Concat(definition.PerFrameBindings.Values.SelectMany(bindings => bindings.Values)))
         {
-            supported.UnionWith(scalar.Mods);
-            if (scalar.MultiplyMod != null)
-            {
-                supported.Add(scalar.MultiplyMod);
-            }
+            ScalarMods(scalar);
         }
         if (definition.ParticleEmitter is { } emitter)
         {
@@ -362,5 +424,12 @@ public sealed class NativeGimmickProfile
                 supported.Add(emitter.SaturationMod);
             }
         }
+    }
+
+    private void ScalarMods(GimmickScalar scalar)
+    {
+        supported.UnionWith(scalar.Mods);
+        supported.UnionWith(scalar.MultiplyMods);
+        if (scalar.MultiplyMod != null) supported.Add(scalar.MultiplyMod);
     }
 }

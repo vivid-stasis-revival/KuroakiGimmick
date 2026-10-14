@@ -136,9 +136,9 @@ public sealed partial class Viewer
             case MenuCommand.AddMod: AddMod(); break;
             case MenuCommand.PlayPause: transport.SetPlaying(!transport.Playing); break;
             case MenuCommand.StepBack:
-                transport.SetPlaying(false); transport.Seek(transport.Position - 1.0 / fps); break;
+                transport.SetPlaying(false); transport.Step(-1.0 / fps); break;
             case MenuCommand.StepForward:
-                transport.SetPlaying(false); transport.Seek(transport.Position + 1.0 / fps); break;
+                transport.SetPlaying(false); transport.Step(1.0 / fps); break;
             case MenuCommand.JumpStart: transport.Seek(0); break;
             case MenuCommand.JumpEnd: transport.Seek(Current.Duration); break;
             case MenuCommand.Loop: loopEnabled = !loopEnabled; break;

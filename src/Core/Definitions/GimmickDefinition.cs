@@ -14,15 +14,38 @@ public sealed class GimmickDefinition
     public string[] ProfileAliases { get; set; } = [];
     public string[] PreviewMods { get; set; } = ["scrollspeed", "velocity", "wave", "notealp", "uialpha"];
     public string? RoomPreset { get; set; }
+    public string? SourceRoom { get; set; }
     /// <summary>对象是否覆盖完整原生演出；同时是 UseNativeColorControls 缺省时的取值。</summary>
     public bool CompleteObject { get; set; } = true;
+    /// <summary>Inherited base Draw GUI samples the complete application surface after room effects.</summary>
+    public bool ApplicationProxy { get; set; }
+    public bool ApplicationProxyUsesUnfilteredSource { get; set; }
+    /// <summary>Direct event_user(11) calls Other_21 even with zero proxies; inherited Draw_64 exits in that case.</summary>
+    public bool AlwaysApplicationProxy { get; set; }
+    /// <summary>The source main_shader runs on the already transformed application proxy surface.</summary>
+    public bool PostAfterApplicationProxy { get; set; }
+    /// <summary>The source overrides base Draw GUI without invoking its proxy routine.</summary>
+    public bool DisableProxy { get; set; }
     public NativeSequenceDefinition? Sequence { get; set; }
     public Dictionary<string, string> SourceNoOps { get; set; } = [];
+    /// <summary>Resolved source-context dependency failures; unlike undefined/no-op callbacks, invoking these is an error.</summary>
+    internal Dictionary<string,string> UnavailableCallbacks { get; } = [];
     public double? InitialBpm { get; set; }
     public double? FixedBpm { get; set; }
+    public double? OffsetOverrideMs { get; set; }
+    public string? SceneComposite { get; set; }
+    public NativeDesktopDefinition? Desktop { get; set; }
+    public bool CompositeAfterGui { get; set; }
+    public string CompositeSource { get; set; } = "final";
+    public List<GimmickShaderMode> CompositePasses { get; set; } = [];
+    public StopmotionDefinition? Stopmotion { get; set; }
+    public List<NativeDialogueLine> DialogueTable { get; set; } = [];
+    public List<NativeInterludeDefinition> Interludes { get; set; } = [];
+    public List<GimmickBpmPoint> BpmOverride { get; set; } = [];
     public string[] ExtraMods { get; set; } = [];
     public Dictionary<string, double> Defaults { get; set; } = [];
     public Dictionary<string, string> ModAliases { get; set; } = [];
+    public Dictionary<string,GimmickScalar> ValueBindings { get; set; } = [];
     public Dictionary<string, Dictionary<string, GimmickScalar>> PerFrameBindings { get; set; } = [];
     public Dictionary<string, GimmickCallbackFade> CallbackFades { get; set; } = [];
     public Dictionary<string, GimmickCallbackConstraint> CallbackConstraints { get; set; } = [];
@@ -36,13 +59,23 @@ public sealed class GimmickDefinition
     /// <summary>回调占用的时间尾部（秒）；未声明时取绘制项的最长寿命。</summary>
     public Dictionary<string, double> CallbackLifetimes { get; set; } = [];
     public Dictionary<string, List<GimmickDrawing>> Callbacks { get; set; } = [];
+    public Dictionary<string, string[]> CallbackCancels { get; set; } = [];
+    /// <summary>Callback names mapped to the source side-emitter behavior: unravel, astellion, or apocalypse.</summary>
+    public Dictionary<string, string> SideCallbacks { get; set; } = [];
+    /// <summary>Source side callbacks that test their final tween value (arg3 > 0) before creating instances.</summary>
+    public string[] PositiveSideCallbacks { get; set; } = [];
     public List<GimmickDrawing> Overlays { get; set; } = [];
+    public List<GimmickTextOverlay> TextOverlays { get; set; } = [];
+    /// <summary>Literal source text tables consumed by native helper renderers.</summary>
+    public Dictionary<string, string[]> SourceTextTables { get; set; } = [];
     public List<GimmickRoomLayer> RoomLayers { get; set; } = [];
     public List<GimmickDrawing> MaskLayers { get; set; } = [];
     public GimmickBackground? Background { get; set; }
     public GimmickParticleEmitter? ParticleEmitter { get; set; }
     public string PostModeMod { get; set; } = "shadermode";
     public Dictionary<int, GimmickShaderMode> PostModes { get; set; } = [];
+    /// <summary>Ordered passes after the selected mode, or the complete post chain when no modes are declared.</summary>
+    public List<GimmickShaderMode> PostPasses { get; set; } = [];
     // 这些是可组合的渲染能力，不能把它们重新合并成某首歌的布尔开关。
     public bool AmbientParticles { get; set; }
     public bool BurstAfterJacket { get; set; }
@@ -58,4 +91,10 @@ public sealed class GimmickDefinition
     /// </summary>
     public bool? UseNativeColorControls { get; set; }
     public bool UseRecolorTint { get; set; }
+    /// <summary>Source objects that set combo/judgement/early-late drawInGui=false place that HUD before post-processing.</summary>
+    public bool HudBeforePost { get; set; }
+    /// <summary>A positive source value moves the normal-draw HUD into the GUI event instead.</summary>
+    public string? HudAfterPostWhenPositive { get; set; }
+    public bool ProxyMode00 { get; set; }
+    public bool UseCommonWhiteFlash { get; set; } = true;
 }

@@ -68,7 +68,7 @@ public sealed partial class NativeGimmickRenderer
                 double eased = StarcrashersObjects.OutExpo(age);
                 double width = 161 * eased, height = 91 * eased;
                 // Create_0: line 4 -> 0, image_index round(line+1). Ends by instance_destroy.
-                int frame = Math.Clamp((int)Math.Round(1 + 4 * (1 - eased), MidpointRounding.AwayFromZero), 0, spec.Frames.Count - 1);
+                int frame = Math.Clamp((int)Math.Round(1 + 4 * (1 - eased), MidpointRounding.ToEven), 0, spec.Frames.Count - 1);
                 if (Image(name, frame) is { } image)
                     canvas.Quad(image, new((float)(160-width), (float)(90-height),
                         (float)(width*2), (float)(height*2)), Color.White);
@@ -101,16 +101,14 @@ public sealed partial class NativeGimmickRenderer
                 double move = star.Intro ? 0 : data.StarDisplacement(star, time);
                 double x = star.X, y = star.Y + move;
                 double angle = star.InitialAngle + move * 4; // spd * mod_multiplier * timediff * 240
-                canvas.Quad(texture, new((float)(x - starSpec.OriginX), (float)(y - starSpec.OriginY),
-                    starSpec.Width, starSpec.Height), Color.White.Alpha(StarcrashersObjects.StarAlpha(star, time)),
-                    angle: (float)angle);
+                StarcrashersSprite(session, "sp_sc_firework_star", 0, (float)x, (float)y,
+                    StarcrashersObjects.StarAlpha(star, time), rotation: (float)angle);
                 if (star.Intro)
                 {
                     // o_sc_star_intro.Create_0: overlayfxscale linear 1.5 -> 1 over 500 ms.
                     double scale = 1.5 - .5 * Math.Clamp(age / .5, 0, 1);
-                    canvas.Quad(texture, new((float)(x-starSpec.OriginX*scale), (float)(y-starSpec.OriginY*scale),
-                        (float)(starSpec.Width*scale), (float)(starSpec.Height*scale)),
-                        Color.White.Alpha(StarcrashersObjects.StarAlpha(star, time) * .5), angle: (float)angle);
+                    StarcrashersSprite(session, "sp_sc_firework_star", 0, (float)x, (float)y,
+                        StarcrashersObjects.StarAlpha(star, time) * .5, rotation: (float)angle, scaleX: (float)scale, scaleY: (float)scale);
                 }
             }
         }
@@ -140,9 +138,8 @@ public sealed partial class NativeGimmickRenderer
                 double y = 190 + (fw.EndpointY - 190) * quad;
                 double scale = 2 - quad;
                 if (Image("sp_sc_firework_star") is { } image)
-                    canvas.Quad(image, new((float)(fw.X-fireworkSpec.OriginX*scale),
-                        (float)(y-fireworkSpec.OriginY*scale), (float)(fireworkSpec.Width*scale),
-                        (float)(fireworkSpec.Height*scale)), Color.White, angle: (float)(360*quad));
+                    StarcrashersSprite(session, "sp_sc_firework_star", 0, (float)fw.X, (float)y, 1,
+                        rotation: (float)(360 * quad), scaleX: (float)scale, scaleY: (float)scale);
             }
         }
         if (current!.Sprites.TryGetValue("sp_sc_firework_particle", out var fragmentSpec))

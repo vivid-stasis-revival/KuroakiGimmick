@@ -85,14 +85,14 @@ public sealed partial class GameUiRenderer : IDisposable
     }
 
     /// <summary>居中分支复用 Width，两处的 kerning 规则必须一致；top/bottom 是原版字面的上下渐变色，不是描边。</summary>
-    void Text(string font, string text, float x, float y, Color top, Color bottom, bool center = false)
+    void Text(string font, string text, float x, float y, Color top, Color bottom, bool center = false, float scale = 1)
     {
         var f = current!.Data!.Fonts[font];
         var texture = Image(f.File);
         int previous = -1;
         if (center)
         {
-            x -= Width(font, text) / 2;
+            x -= Width(font, text)*scale / 2;
         }
         foreach (var rune in text.EnumerateRunes())
         {
@@ -101,13 +101,13 @@ public sealed partial class GameUiRenderer : IDisposable
             {
                 continue;
             }
-            x += (g.Kerning.FirstOrDefault(k => k.Character == previous)?.Shift ?? 0) * f.ScaleX;
+            x += (g.Kerning.FirstOrDefault(k => k.Character == previous)?.Shift ?? 0) * f.ScaleX*scale;
             // AscenderOffset 属于图集源 V 的行偏移，只能加在 source 上。
             // 之前改成移动目标位置，结果把 Monaco CJK 字形的最后六行裁掉了。
-            canvas.QuadGradient(texture, new(x + g.Offset * f.ScaleX, y, g.W * f.ScaleX, g.H * f.ScaleY), top, bottom,
+            canvas.QuadGradient(texture, new(x + g.Offset * f.ScaleX*scale, y, g.W * f.ScaleX*scale, g.H * f.ScaleY*scale), top, bottom,
                 new(g.X / (float) texture.Width, (g.Y + f.AscenderOffset) / texture.Height, g.W / (float) texture.Width,
                 g.H / (float) texture.Height));
-            x += g.Advance * f.ScaleX;
+            x += g.Advance * f.ScaleX*scale;
             previous = rune.Value;
         }
     }
@@ -415,7 +415,8 @@ public sealed partial class GameUiRenderer : IDisposable
         Use(session.GameUi); if (current?.Data == null) return;
         string font = Font(session);
         var state = NativeStoryState.Sample(sequence, time,
-            trigger => session.Chart.Mods.Any(e => e.Name == trigger && session.Timeline.Bpm.Time(e.Beat) <= time), s => Width(font, s));
+            trigger => sequence.AutomaticTriggers.TryGetValue(trigger, out double start) && time >= start
+                || session.Chart.Mods.Any(e => e.Name == trigger && session.Timeline.Bpm.Time(e.Beat) <= time), s => Width(font, s), session.Project.NativeStoryContext);
         DrawStoryBox(state, font);
     }
 
@@ -463,22 +464,39 @@ public sealed partial class GameUiRenderer : IDisposable
         if (state == null) return;
         float y = (float)state.Y;
         Sprite("sp_dialogue", 0, 0, y, Color.White);
-        int gradient = state.Speaker switch { "Saturday" => 1, "Dawn" => 7, _ => 0 };
+        int gradient = state.Speaker switch { "Saturday" => 1, "Allison" => 2, "Kotomi" => 3, "Eri" => 4, "Chiyo" => 5,
+            "Tsuki" => 6, "Dawn" => 7, "Storyteller" => 8, "Kanshi" => 9, "Aoi" => 10, _ => 0 };
         Sprite("sp_dialogue_grads", gradient, 0, y + 9, Color.White);
         if (state.Speaker.Length > 0)
         {
             Sprite("sp_namebox_new", 0, 0, y, Color.White);
-            Text(font, state.Speaker, 43, y + 2, Color.Hex(0), Color.Hex(0), true);
-            Text(font, state.Speaker, 43, y + 1, Color.White, Color.White, true);
+            Text(font, state.Speaker, 43, y + 2, Color.Hex(0), Color.Hex(0), !state.SpeakerLeftAligned);
+            Text(font, state.Speaker, 43, y + 1, Color.White, Color.White, !state.SpeakerLeftAligned);
         }
         float textY = state.Lines.Count == 1 ? 162 : 177 - state.Lines.Count * 10;
         var color = state.Thinking ? Color.Hex(0x00CDFF) : Color.White;
         int remaining = state.VisibleCharacters;
+        int characterOffset = 0;
         for (int i = 0; i < state.Lines.Count && remaining > 0; i++)
         {
             string line = state.Lines[i]; int visible = Math.Min(remaining, line.Length);
-            Text(font, line[..visible], 6, textY + i * 10, color, color);
+            if (state.JitterCharacters is not { Count: > 0 } && state.RColorCharacters is not { Count: > 0 }) Text(font, line[..visible], 6, textY + i * 10, color, color);
+            else
+            {
+                float x = 6;
+                for (int j = 0; j < visible; j++)
+                {
+                    string character = line[j].ToString();
+                    uint seed = unchecked((uint)(long)Math.Floor(state.EffectTime * 15) * 65537u + (uint)(characterOffset + j));
+                    float dy = state.JitterCharacters?.Contains(characterOffset + j) == true ? Timeline.Hash(seed) - 1 : 0;
+                    var glyphColor = state.RColorCharacters?.Contains(characterOffset + j) == true
+                        ? Color.GameMaker(NativeStoryState.RColorAt(state.EffectTime, characterOffset + j)) : color;
+                    Text(font, character, x, textY + i * 10 + dy, glyphColor, glyphColor);
+                    x += Width(font, character);
+                }
+            }
             remaining -= visible;
+            characterOffset += line.Length;
         }
     }
 }

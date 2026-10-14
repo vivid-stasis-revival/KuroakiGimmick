@@ -14,11 +14,16 @@ public sealed class GimmickDrawing
     public double ScaleX { get; set; } = 1;
     public double ScaleY { get; set; } = 1;
     public double Alpha { get; set; } = 1;
+    public double MinimumAlpha { get; set; }
+    public double MinimumAbsScale { get; set; }
     public double Angle { get; set; }
     public double VelocityX { get; set; }
     public double VelocityY { get; set; }
     public int Frame { get; set; }
     public string? FrameMod { get; set; }
+    /// <summary>Absolute song-time expressions overriding individual transform values; tweens still use callback age.</summary>
+    public Dictionary<string, GimmickScalar> Bindings { get; set; } = [];
+    public uint ColorBgr { get; set; } = 0xFFFFFF;
     public double FramesPerSecond { get; set; }
     /// <summary>同一阶段内的绘制顺序：Depth 大的先绘制。</summary>
     public int Depth { get; set; }
@@ -57,5 +62,8 @@ public sealed class GimmickDrawing
         }
         return value;
     }
+
+    public double Value(string property, double age, Timeline timeline, double time) =>
+        Bindings.TryGetValue(property, out var scalar) ? scalar.Value(timeline, time) : Value(property, age);
 }
 

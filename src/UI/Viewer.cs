@@ -93,6 +93,7 @@ public sealed partial class Viewer : IDisposable
         rangeIn = 0;
         rangeOut = s.Duration;
         transport.Load(silent ? null : s.Audio, s.Duration);
+        transport.SetInterludes(s.Interludes);
         transport.SetChartPlayback(s.Playback);
         audioMuted = false;
         transport.SetVolume(s.Project.PreviewVolume);

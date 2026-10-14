@@ -129,11 +129,11 @@ public sealed partial class Viewer
                 break;
             case 79:
                 transport.SetPlaying(false);
-                transport.Seek(transport.Position + (shift ? 1 : 1.0 / fps));
+                transport.Step(shift ? 1 : 1.0 / fps);
                 break;
             case 80:
                 transport.SetPlaying(false);
-                transport.Seek(transport.Position - (shift ? 1 : 1.0 / fps));
+                transport.Step(-(shift ? 1 : 1.0 / fps));
                 break;
             case 74:
                 transport.Seek(0);

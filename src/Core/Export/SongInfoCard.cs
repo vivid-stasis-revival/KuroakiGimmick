@@ -31,7 +31,7 @@ public sealed record SongInfoCard(string Title, string Artist, string BpmDisplay
         var info = root == null ? null : SongInfo.Read(root);
         var view = info?.Effective(difficulty);
         // 音频时长是解码后的实际秒数；谱面时长含末尾 2 秒余量，只作为没有音频时的兜底。
-        double length = session.Audio?.Duration ?? 0;
+        double length = session.SongAudio?.Duration ?? 0;
         if (!(length > 0))
         {
             length = session.Chart.Notes.Count > 0
