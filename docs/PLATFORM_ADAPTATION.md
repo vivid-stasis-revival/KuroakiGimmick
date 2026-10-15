@@ -1,6 +1,6 @@
 # 移动端与 Horizon 适配状态
 
-桌面应用使用 `net8.0`。交接包中的 .NET 10 iOS/Android 工程、UIKit/SDL 入口和 Switch 原生入口现已接入。平台包尚待对应工具链编译及设备验证，不能把条件编译成功等同于安装包已验证。
+桌面应用使用 `net8.0`。交接包中的 .NET 10 iOS/Android 工程、UIKit/SDL 入口和 Switch 原生入口现已接入。Windows、macOS、Linux、Android 与 iOS 已在 GitHub CI 完成构建；设备验证仍待完成。Switch CI 已接入 NroForge，须以完整 K/G 构建结果及实机测试分别判断可用性。
 
 ## 已包含的接口
 
@@ -27,8 +27,8 @@ dotnet bin/Release/net8.0/KuroakiGimmick.dll --bake-switch-shaders /path/to/swit
 ## 工程与待验证项
 
 - iOS/iPad Simulator：`platform/mobile/ios` 现在包含目标工程、UIKit 入口及动画帧回调，支持 `--simulator` 构建。交接版本要求 Xcode 26.2；本机仍是 Xcode 16.4，未完成平台构建与运行。
-- Android：`platform/mobile/android` 包含 SDL Activity、文件选择器及资源 ZIP 安装入口，CI 使用仓库 Secrets 签名。需要对应 Android SDK/NDK/.NET workload 验证。
-- Switch/Horizon：`platform/switch` 包含原生输入/路径实现及构建脚本。交接包缺失完整 `dist/` 工具链，需 Linux x64 环境后验证 NRO 构建。
+- Android：`platform/mobile/android` 包含 SDL Activity、文件选择器及资源 ZIP 安装入口，CI 使用仓库 Secrets 签名。GitHub CI 已完成 APK 构建及签名验证，设备运行仍待验证。
+- Switch/Horizon：`platform/switch` 包含原生输入/路径实现及构建脚本。CI 使用固定版本 NroForge 在 GitHub Ubuntu x64 runner 上构建，不再依赖手动提供交接包的 `dist/`。原交接脚本保留；NRO 构建与实机运行须分别验证。
 
 六平台 CI 配置与依赖见 [CI_PLATFORMS.md](CI_PLATFORMS.md)，素材安装见 [EXTERNAL_ASSETS.md](EXTERNAL_ASSETS.md)。
 

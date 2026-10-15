@@ -360,18 +360,11 @@ jobs:
           retention-days: 14
           compression-level: 0
 
-  switch-status:
-    needs: detect
-    if: needs.detect.outputs.should_build == 'true' && vars.KG_SWITCH_RUNNER_READY != 'true'
-    runs-on: ubuntu-24.04
-    steps:
-      - run: echo 'Switch NRO pending — provide the full Linux x64 toolchain and configure the isolated kg-switch runner. No NRO was built.' >> "$GITHUB_STEP_SUMMARY"
-
   switch:
     name: Switch NRO
     needs: detect
-    if: needs.detect.outputs.should_build == 'true' && vars.KG_SWITCH_RUNNER_READY == 'true'
-    runs-on: [self-hosted, Linux, X64, kg-switch]
+    if: needs.detect.outputs.should_build == 'true'
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
@@ -379,11 +372,27 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '9.0.x'
-      - name: Build current source with prepared toolchain
-        env:
-          KG_SWITCH_TOOLCHAIN_ROOT: ${{ vars.KG_SWITCH_TOOLCHAIN_ROOT }}
-        run: bash scripts/ci/build_switch.sh
+          dotnet-version: '9.0.102'
+      - name: Publish current Switch managed source without private assets
+        run: bash scripts/ci/prepare_switch.sh
+      - name: Check out pinned NroForge toolchain and license notices
+        uses: actions/checkout@v7
+        with:
+          repository: BennettNotFound/NroForge
+          ref: e41f2e68b212737da81ddc97fe5c7b881bb125e8
+          path: dist/nroforge-source
+          persist-credentials: false
+      - name: Build Switch NRO with NroForge
+        uses: ./dist/nroforge-source
+        with:
+          managed-directory: dist/switch-managed
+          profile: dist/nroforge-profile.json
+          link-assemblies: 'true'
+          output-directory: dist/switch-nro
+          jobs: '2'
+          # Deliberately omit assets-directory: users install their private pack.
+      - name: Package Switch SD layout and notices
+        run: bash scripts/ci/package_switch.sh
       - uses: actions/upload-artifact@v7
         with:
           name: nativeaot-switch

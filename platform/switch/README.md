@@ -1,5 +1,9 @@
 # Kuroaki/Gimmick → Switch / Horizon 实验移植
 
+## 当前 CI 构建
+
+GitHub CI 使用固定版本 [NroForge](https://github.com/BennettNotFound/NroForge) 在 Ubuntu x64/Docker 中从当前源码构建 NRO。配置与依赖见 [CI_PLATFORMS.md](../../docs/CI_PLATFORMS.md)，素材安装见 [EXTERNAL_ASSETS.md](../../docs/EXTERNAL_ASSETS.md)。下面的 r2–r5 记录及手动脚本属于原交接环境，其实机结果不能视为当前 CI 产物已通过实机验证。
+
 状态：**r5 a6 严格 Mono Full AOT 已通过实机谱面加载/播放，用户反馈平均约 25 FPS；音乐已补齐且实机出声，但随后 HUD 图片解码 OOM；正在准备 LLVM AOT。**
 
 Full AOT 构建与最新实机记录见 [FULL-AOT.md](FULL-AOT.md)。

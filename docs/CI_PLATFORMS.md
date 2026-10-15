@@ -1,6 +1,6 @@
 # Six-platform builds
 
-`.github/workflows/nativeaot.yml` builds Windows x64, macOS arm64 and Linux x64 NativeAOT executables, Android arm64 signed APK, iOS arm64 unsigned IPA, and Switch NRO. Relevant pushes and manual runs trigger builds. Each platform produces a ZIP in Actions artifacts; a release is published only on the default branch when all six builds succeed. Feature branches produce Actions artifacts without publishing releases. With the Switch runner unconfigured, five platform builds can run, Switch is explicitly reported pending, and the release job is skipped.
+`.github/workflows/nativeaot.yml` builds Windows x64, macOS arm64 and Linux x64 NativeAOT executables, Android arm64 signed APK, iOS arm64 unsigned IPA, and Switch NRO. Relevant pushes and manual runs trigger builds. Each platform produces a ZIP in Actions artifacts; a release is published only on the default branch when all six builds succeed. Feature branches produce Actions artifacts without publishing releases. Switch uses NroForge on a GitHub-hosted Ubuntu x64 runner; no self-hosted runner or repository readiness variable is required.
 
 ## Android signing
 
@@ -21,19 +21,12 @@ Signing property reference: https://learn.microsoft.com/en-us/dotnet/android/bui
 
 The current Mac's Xcode 16.4 / iOS SDK 18.5 cannot validate this handoff's iOS 26.2 workload. A successful generic C# build is not evidence of an iOS or Android platform build. Hardware gesture tests remain separate from compile/packaging checks.
 
-## Switch prerequisite
+## Switch with NroForge
 
-The uploaded handoff omitted `dist/`. Supply the full matching toolchain to a dedicated **Linux x64** runner with labels `self-hosted`, `Linux`, `X64`, `kg-switch`. An ARM64 Mac alone cannot execute its Linux x64 AOT compiler. Runner provisioning/registration is not performed by this change.
+CI checks out [BennettNotFound/NroForge](https://github.com/BennettNotFound/NroForge) at audited commit `e41f2e68b212737da81ddc97fe5c7b881bb125e8` and invokes its local composite Action on `ubuntu-24.04`. Its Docker build uses `devkitpro/devkita64:20260219` and .NET SDK 9.0.102; the repository includes the matching Mono/LLVM/SDL3/Mesa SDK with hash verification. No manual handoff `dist/`, `KG_SWITCH_TOOLCHAIN_ROOT`, `KG_SWITCH_RUNNER_READY`, or `kg-switch` runner is needed by CI.
 
-Install the matching devkitPro/libnx environment, export `DEVKITPRO`, and provide Python 3 with Pillow, rsync, zip, cmake, make and pkg-config. Set repository variable `KG_SWITCH_TOOLCHAIN_ROOT` to the full handoff root containing:
+`scripts/ci/prepare_switch.sh` publishes the current application with `KuroakiSwitch=true` and `KuroakiExternalAssets=true`, then creates a profile using the version in the project file. NroForge links that output against its matching libnx BCL and performs LLVM PIC Full AOT, native linking and NRO validation. The historical scripts under `platform/switch` remain available for the original handoff environment; CI uses NroForge instead.
 
-```
-dist/handoff-switch-runtime
-dist/switch-llvm-toolchain/runtime
-dist/switch-deps/mono-nx
-dist/switch-deps/SDL3-Switch
-```
-
-After validating this prepared runner, set `KG_SWITCH_RUNNER_READY=true`. The build copies required toolchain directories to an isolated clean checkout and rebuilds the current C# source, linked assemblies, full AOT objects and SDL. It never uses the handoff's old prebuilt application DLLs. Use a disposable runner restricted to trusted repository code; the workflow does not run on fork pull requests. The complete toolchain is still needed to validate this build path.
+The Action receives no `assets-directory`. `scripts/ci/package_switch.sh` verifies the NRO hash and packages the SD layout, ICU data, build metadata, application notices and NroForge's third-party licenses. It creates an empty `/switch/KuroakiGimmick/Assets` directory for the user resource pack. Private game assets and prebaked private shaders remain outside CI. NroForge's own Hello NRO CI passed at the pinned revision; full K/G build results must be checked separately, and neither establishes hardware compatibility.
 
 See [EXTERNAL_ASSETS.md](EXTERNAL_ASSETS.md) for separate private resource installation. No game resource download URL or public asset host is required.
