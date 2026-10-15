@@ -13,7 +13,7 @@
     <AssemblyName>KuroakiGimmick</AssemblyName>
     <RootNamespace>KuroakiGimmick</RootNamespace>
     <Version>0.1.5</Version>
-    <InformationalVersion Condition="'$(InformationalVersion)' == ''">v0.1.5 / 18.1.1 Mobile</InformationalVersion>
+    <InformationalVersion Condition="'$(InformationalVersion)' == ''">v0.1.5 / 18.2 Mobile</InformationalVersion>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="$(KGRoot)/src/**/*.cs" />

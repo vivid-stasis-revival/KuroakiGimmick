@@ -350,10 +350,13 @@ public sealed partial class Viewer
             if (timelineInteractive && click && mouseClicks >= 2 && editorTracksRect.Contains(mouseX, mouseY) && new Rect(x, y, editorTracksRect.W, 34).Contains(mouseX, mouseY))
             {
                 double b = Snap(BeatAt(mouseX));
-                if (track.TextId is { } textTargetId) { SelectText(textTargetId); textAt = b; transport.Seek(Current.Timeline.Bpm.Time(b)); }
-                else if (track.ImageGroup)
-                { SelectImageObject(track.ImageId!); imageKeyBeat = b; imagePoseTarget = ImagePoseTarget.Key; transport.Seek(Current.Timeline.Bpm.Time(b)); }
-                else if (track.Window) AddWindowEvent(track.Property, b, track.Target); else AddMod(b, track.Property, track.Target);
+                TimelineDoubleClick(() =>
+                {
+                    if (track.TextId is { } textTargetId) { SelectText(textTargetId); textAt = b; transport.Seek(Current.Timeline.Bpm.Time(b)); }
+                    else if (track.ImageGroup)
+                    { SelectImageObject(track.ImageId!); imageKeyBeat = b; imagePoseTarget = ImagePoseTarget.Key; transport.Seek(Current.Timeline.Bpm.Time(b)); }
+                    else if (track.Window) AddWindowEvent(track.Property, b, track.Target); else AddMod(b, track.Property, track.Target);
+                });
                 click = false;
             }
         }

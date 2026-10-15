@@ -27,6 +27,17 @@ public sealed partial class Viewer
     Guid? touchSelectedClip;
     int touchSelectedWindowEvent;
     double? touchSelectedNoteTime;
+    // Timeline double-clicks normally edit on mouse-down. A touch must remain
+    // cancellable until release, without adding/removing entries in undo history.
+    sealed record PendingTouchAction(EditorDocument Owner, long Revision, Action Commit);
+    PendingTouchAction? touchTimelineAction;
+
+    void TimelineDoubleClick(Action action)
+    {
+        if (touchPrimary.HasValue && touchContacts.Count == 1 && !touchHadMulti && editor != null)
+            touchTimelineAction = new(editor, editor.Revision, action);
+        else action();
+    }
 
     TouchContact ReadTouchContact(Sdl.Event e)
     {
@@ -78,6 +89,7 @@ public sealed partial class Viewer
                 touchDownUi = contact.Ui;
                 touchDownAt = Environment.TickCount64;
                 touchMoved = touchHadMulti = false;
+                touchTimelineAction = null;
                 touchNavigation = TouchNavigation.None;
                 touchStartedOnTimeline = editorMode && editorTimelineRect.Contains(contact.Ui.X, contact.Ui.Y);
                 touchSelectedClips.Clear();
@@ -122,6 +134,11 @@ public sealed partial class Viewer
             if (e.Type == Sdl.FingerUp)
             {
                 SendTouchMouse(0x402, contact);
+                var pending = touchTimelineAction;
+                touchTimelineAction = null;
+                if (pending != null && !touchMoved && editorMode && !Busy &&
+                    ReferenceEquals(editor, pending.Owner) && editor.Revision == pending.Revision)
+                    pending.Commit();
                 long duration = Environment.TickCount64 - touchDownAt;
                 if (!touchMoved && duration >= 0 && duration <= 450)
                 {
@@ -149,6 +166,7 @@ public sealed partial class Viewer
 
     void AbortPrimaryTouch()
     {
+        touchTimelineAction = null;
         // Preview gestures are transactional; cancel them instead of synthesizing button-up,
         // which would call FinishDrag/FinishMarquee and commit unintended changes.
         if (draggedTrackKey != null) CancelTrackOrder();

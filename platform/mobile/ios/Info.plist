@@ -4,7 +4,7 @@
   <key>CFBundleDisplayName</key><string>Kuroaki/Gimmick</string>
   <key>CFBundleIdentifier</key><string>io.github.kuroakigimmick.mobile</string>
   <key>CFBundleShortVersionString</key><string>0.1.5</string>
-  <key>CFBundleVersion</key><string>1811</string>
+  <key>CFBundleVersion</key><string>1820</string>
   <key>LSRequiresIPhoneOS</key><true/>
   <key>UIDeviceFamily</key><array><integer>1</integer><integer>2</integer></array>
   <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>

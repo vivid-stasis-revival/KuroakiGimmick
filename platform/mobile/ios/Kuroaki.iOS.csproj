@@ -11,7 +11,7 @@
     <ApplicationTitle>Kuroaki/Gimmick</ApplicationTitle>
     <AppIcon>AppIcon</AppIcon>
     <BundleOriginalResources>false</BundleOriginalResources>
-    <ApplicationVersion>1811</ApplicationVersion>
+    <ApplicationVersion>1820</ApplicationVersion>
     <ApplicationDisplayVersion>0.1.5</ApplicationDisplayVersion>
     <EnableCodeSigning>false</EnableCodeSigning>
     <BuildIpa>false</BuildIpa>
