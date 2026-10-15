@@ -311,7 +311,15 @@ jobs:
           java-version: '21'
       - name: Install Android SDK components
         if: matrix.platform == 'android'
-        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;29.0.14206865'
+        run: |
+          set -euo pipefail
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$sdkmanager"
+          "$sdkmanager" --sdk_root="$ANDROID_HOME" \
+            'platforms;android-36' 'build-tools;36.0.0' 'ndk;29.0.14206865' < /dev/null
+          test -f "$ANDROID_HOME/platforms/android-36/android.jar"
+          test -x "$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          test -f "$ANDROID_HOME/ndk/29.0.14206865/build/cmake/android.toolchain.cmake"
       - name: Install only required mobile workload
         shell: bash
         run: dotnet workload install '${{ matrix.platform }}' --version 10.0.101.1
