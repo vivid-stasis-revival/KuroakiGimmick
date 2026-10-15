@@ -42,3 +42,13 @@ __pycache__/
 # RustBridge artifacts
 /rust/**/target/
 /rust/**/Cargo.lock
+
+# Platform output and signing material (never commit keys).
+**/bin/
+**/obj/
+*.jks
+*.keystore
+*.p12
+*.pfx
+/platform/mobile/ios/Assets.xcassets/AppIcon.appiconset/icon.png
+/platform/switch/native/icon.jpg

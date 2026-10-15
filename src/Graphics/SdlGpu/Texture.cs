@@ -80,6 +80,17 @@ public sealed class Texture : IDisposable
     {
         using var input = File.OpenRead(path);
         var image = ImageResult.FromStream(input, ColorComponents.RedGreenBlueAlpha);
+#if KG_SWITCH
+        if (Path.GetFileName(path).StartsWith("fnt_", StringComparison.Ordinal))
+        {
+            for (int i = 0; i < image.Data.Length; i += 4)
+                if (image.Data[i + 3] > 240)
+                {
+                    Console.Error.WriteLine($"[K/G font pixel] file={Path.GetFileName(path)} size={image.Width}x{image.Height} RGBA={image.Data[i]},{image.Data[i + 1]},{image.Data[i + 2]},{image.Data[i + 3]}");
+                    break;
+                }
+        }
+#endif
         return new(gpu, image.Width, image.Height, image.Data, repeat, linear, mipmaps);
     }
 

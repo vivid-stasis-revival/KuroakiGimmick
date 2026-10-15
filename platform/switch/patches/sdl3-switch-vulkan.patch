@@ -1,0 +1,223 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 93d1f1d..f90e8e3 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -359,7 +359,7 @@ dep_option(SDL_RENDER_D3D12        "Enable the Direct3D 12 render driver" ON "SD
+ dep_option(SDL_RENDER_METAL        "Enable the Metal render driver" ON "SDL_RENDER;APPLE" OFF)
+ dep_option(SDL_RENDER_GPU          "Enable the SDL_GPU render driver" ON "SDL_RENDER;SDL_GPU" OFF)
+ dep_option(SDL_VIVANTE             "Use Vivante EGL video driver" ON "${UNIX_SYS};SDL_CPU_ARM32" OFF)
+-dep_option(SDL_VULKAN              "Enable Vulkan support" ON "SDL_VIDEO;ANDROID OR APPLE OR LINUX OR FREEBSD OR WINDOWS" OFF)
++dep_option(SDL_VULKAN              "Enable Vulkan support" ON "SDL_VIDEO;ANDROID OR APPLE OR LINUX OR FREEBSD OR WINDOWS OR NINTENDO_SWITCH" OFF)
+ dep_option(SDL_RENDER_VULKAN       "Enable the Vulkan render driver" ON "SDL_RENDER;SDL_VULKAN" OFF)
+ dep_option(SDL_METAL               "Enable Metal support" ON "APPLE" OFF)
+ set_option(SDL_OPENVR              "Use OpenVR video driver" OFF)
+@@ -2949,6 +2949,12 @@ elseif(N3DS)
+ elseif(NINTENDO_SWITCH)
+   sdl_link_dependency(nx LIBS nx)
+ 
++  if(SDL_VULKAN)
++    set(SDL_VIDEO_VULKAN 1)
++    set(HAVE_VULKAN TRUE)
++    sdl_link_dependency(vulkan LIBS vulkan)
++  endif()
++
+   if(SDL_VIDEO)
+     set(SDL_VIDEO_DRIVER_SWITCH 1)
+     sdl_glob_sources("${SDL3_SOURCE_DIR}/src/video/switch/*.c")
+diff --git a/src/video/switch/SDL_switchtouch.c b/src/video/switch/SDL_switchtouch.c
+index b4c6716..3f47471 100644
+--- a/src/video/switch/SDL_switchtouch.c
++++ b/src/video/switch/SDL_switchtouch.c
+@@ -67,7 +67,7 @@ void SWITCH_PollTouch(Uint64 timestamp)
+ 
+                 for (j = 0; j < touchStateOld.count; j++) {
+                     if (touchStateOld.touches[j].finger_id == touchState.touches[i].finger_id) {
+-                        found = false;
++                        found = true;
+                         break;
+                     }
+                 }
+@@ -75,7 +75,7 @@ void SWITCH_PollTouch(Uint64 timestamp)
+                 if (!found) {
+                     SDL_SendTouch(timestamp, id,
+                                   (SDL_FingerID)touchState.touches[i].finger_id + 1,
+-                                  window, false,
++                                  window, true,
+                                   (float)touchState.touches[i].x / rel_w,
+                                   (float)touchState.touches[i].y / rel_h, 1);
+                 }
+@@ -88,7 +88,7 @@ void SWITCH_PollTouch(Uint64 timestamp)
+ 
+             for (j = 0; j < touchState.count; j++) {
+                 if (touchState.touches[j].finger_id == touchStateOld.touches[i].finger_id) {
+-                    found = false;
++                    found = true;
+                     /* Finger moved */
+                     if (touchState.touches[j].x != touchStateOld.touches[i].x || touchState.touches[j].y != touchStateOld.touches[i].y) {
+                         SDL_SendTouchMotion(timestamp, id,
+diff --git a/src/video/switch/SDL_switchvideo.c b/src/video/switch/SDL_switchvideo.c
+index d8e0471..729a25a 100644
+--- a/src/video/switch/SDL_switchvideo.c
++++ b/src/video/switch/SDL_switchvideo.c
+@@ -33,6 +33,7 @@
+ #include "SDL_switchswkb.h"
+ #include "SDL_switchtouch.h"
+ #include "SDL_switchvideo.h"
++#include "SDL_switchvulkan.h"
+ 
+ /* Currently only one window */
+ static SDL_Window *switch_window = NULL;
+@@ -117,6 +118,13 @@ static SDL_VideoDevice *SWITCH_CreateDevice()
+     device->HasScreenKeyboardSupport = SWITCH_HasScreenKeyboardSupport;
+     device->IsScreenKeyboardShown = SWITCH_IsScreenKeyboardShown;
+ 
++#ifdef SDL_VIDEO_VULKAN
++    device->Vulkan_LoadLibrary = SWITCH_Vulkan_LoadLibrary;
++    device->Vulkan_UnloadLibrary = SWITCH_Vulkan_UnloadLibrary;
++    device->Vulkan_GetInstanceExtensions = SWITCH_Vulkan_GetInstanceExtensions;
++    device->Vulkan_CreateSurface = SWITCH_Vulkan_CreateSurface;
++    device->Vulkan_DestroySurface = SWITCH_Vulkan_DestroySurface;
++#endif
+     device->PumpEvents = SWITCH_PumpEvents;
+ 
+     return device;
+@@ -223,6 +231,9 @@ bool SWITCH_SetDisplayMode(SDL_VideoDevice *_this, SDL_VideoDisplay *display, SD
+     SDL_GLContext ctx = SDL_GL_GetCurrentContext();
+     NWindow *nWindow = nwindowGetDefault();
+ 
++    if (data != NULL && data->egl_surface == EGL_NO_SURFACE) {
++        nwindowSetDimensions(nWindow, mode->w, mode->h);
++    }
+     if (data != NULL && data->egl_surface != EGL_NO_SURFACE) {
+         SDL_EGL_MakeCurrent(_this, NULL, NULL);
+         SDL_EGL_DestroySurface(_this, data->egl_surface);
+@@ -244,7 +255,7 @@ static bool SWITCH_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_
+         return SDL_SetError("Switch only supports one window");
+     }
+ 
+-    if (!_this->egl_data) {
++    if ((window->flags & SDL_WINDOW_OPENGL) && !_this->egl_data) {
+         return SDL_SetError("EGL not initialized");
+     }
+ 
+@@ -257,12 +268,17 @@ static bool SWITCH_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_
+ 
+     rc = nwindowSetDimensions(nWindow, window->w, window->h);
+     if (R_FAILED(rc)) {
++        SDL_free(window_data);
+         return SDL_SetError("Could not set NWindow dimensions: 0x%x", rc);
+     }
+ 
+-    window_data->egl_surface = SDL_EGL_CreateSurface(_this, window, nWindow);
+-    if (window_data->egl_surface == EGL_NO_SURFACE) {
+-        return SDL_SetError("Could not create GLES window surface");
++    window_data->egl_surface = EGL_NO_SURFACE;
++    if (window->flags & SDL_WINDOW_OPENGL) {
++        window_data->egl_surface = SDL_EGL_CreateSurface(_this, window, nWindow);
++        if (window_data->egl_surface == EGL_NO_SURFACE) {
++            SDL_free(window_data);
++            return SDL_SetError("Could not create GLES window surface");
++        }
+     }
+ 
+     /* Setup driver data for this window */
+@@ -320,6 +336,9 @@ static void SWITCH_SetWindowSize(SDL_VideoDevice *_this, SDL_Window *window)
+     NWindow *nWindow = nwindowGetDefault();
+ 
+     if (window->w != w || window->h != h) {
++        if (data != NULL && data->egl_surface == EGL_NO_SURFACE) {
++            nwindowSetDimensions(nWindow, window->w, window->h);
++        }
+         if (data != NULL && data->egl_surface != EGL_NO_SURFACE) {
+             SDL_EGL_MakeCurrent(_this, NULL, NULL);
+             SDL_EGL_DestroySurface(_this, data->egl_surface);
+diff --git a/src/video/switch/SDL_switchvulkan.c b/src/video/switch/SDL_switchvulkan.c
+new file mode 100644
+index 0000000..47f7cef
+--- /dev/null
++++ b/src/video/switch/SDL_switchvulkan.c
+@@ -0,0 +1,66 @@
++/* Altered SDL3-Switch source: statically linked Mesa NVK, zlib license. */
++#include "SDL_internal.h"
++#if defined(SDL_VIDEO_DRIVER_SWITCH) && defined(SDL_VIDEO_VULKAN)
++#define VK_USE_PLATFORM_VI_NN
++#include "../SDL_vulkan_internal.h"
++#include "SDL_switchvulkan.h"
++#include <switch.h>
++
++/* The Mesa Switch SDK exports this directly: no dlopen, loader, or ICD. */
++extern PFN_vkVoidFunction vkGetInstanceProcAddr(VkInstance instance, const char *name);
++
++bool SWITCH_Vulkan_LoadLibrary(SDL_VideoDevice *_this, const char *path)
++{
++    if (path && *path) return SDL_SetError("Switch Vulkan is statically linked; custom loader paths are unsupported");
++    PFN_vkEnumerateInstanceExtensionProperties enumerate =
++        (PFN_vkEnumerateInstanceExtensionProperties)vkGetInstanceProcAddr(VK_NULL_HANDLE, "vkEnumerateInstanceExtensionProperties");
++    if (!enumerate) return SDL_SetError("Mesa NVK extension enumeration is unavailable");
++    Uint32 count = 0;
++    VkExtensionProperties *extensions = SDL_Vulkan_CreateInstanceExtensionsList(enumerate, &count);
++    if (!extensions) return false;
++    bool surface = false, vi = false;
++    for (Uint32 i = 0; i < count; i++) {
++        if (!SDL_strcmp(extensions[i].extensionName, VK_KHR_SURFACE_EXTENSION_NAME)) surface = true;
++        if (!SDL_strcmp(extensions[i].extensionName, VK_NN_VI_SURFACE_EXTENSION_NAME)) vi = true;
++    }
++    SDL_free(extensions);
++    if (!surface || !vi) return SDL_SetError("Mesa NVK requires VK_KHR_surface and VK_NN_vi_surface");
++    _this->vulkan_config.vkGetInstanceProcAddr = (SDL_FunctionPointer)vkGetInstanceProcAddr;
++    _this->vulkan_config.vkEnumerateInstanceExtensionProperties = (SDL_FunctionPointer)enumerate;
++    _this->vulkan_config.loader_handle = NULL;
++    _this->vulkan_config.loader_path[0] = '\0';
++    return true;
++}
++
++void SWITCH_Vulkan_UnloadLibrary(SDL_VideoDevice *_this)
++{
++    _this->vulkan_config.vkGetInstanceProcAddr = NULL;
++    _this->vulkan_config.vkEnumerateInstanceExtensionProperties = NULL;
++}
++
++char const *const *SWITCH_Vulkan_GetInstanceExtensions(SDL_VideoDevice *_this, Uint32 *count)
++{
++    static const char *const extensions[] = {VK_KHR_SURFACE_EXTENSION_NAME, VK_NN_VI_SURFACE_EXTENSION_NAME};
++    if (count) *count = SDL_arraysize(extensions);
++    return extensions;
++}
++
++bool SWITCH_Vulkan_CreateSurface(SDL_VideoDevice *_this, SDL_Window *window, VkInstance instance,
++                                 const struct VkAllocationCallbacks *allocator, VkSurfaceKHR *surface)
++{
++    PFN_vkCreateViSurfaceNN create = (PFN_vkCreateViSurfaceNN)vkGetInstanceProcAddr(instance, "vkCreateViSurfaceNN");
++    if (!create) return SDL_SetError("vkCreateViSurfaceNN not found");
++    VkViSurfaceCreateInfoNN info = {0};
++    info.sType = VK_STRUCTURE_TYPE_VI_SURFACE_CREATE_INFO_NN;
++    /* mesa-switch's VI WSI interprets this as NWindow*, not a raw VI layer. */
++    info.window = nwindowGetDefault();
++    VkResult result = create(instance, &info, allocator, surface);
++    return result == VK_SUCCESS || SDL_SetError("vkCreateViSurfaceNN failed: %s", SDL_Vulkan_GetResultString(result));
++}
++
++void SWITCH_Vulkan_DestroySurface(SDL_VideoDevice *_this, VkInstance instance, VkSurfaceKHR surface,
++                                  const struct VkAllocationCallbacks *allocator)
++{
++    SDL_Vulkan_DestroySurface_Internal((void *)vkGetInstanceProcAddr, instance, surface, allocator);
++}
++#endif
+diff --git a/src/video/switch/SDL_switchvulkan.h b/src/video/switch/SDL_switchvulkan.h
+new file mode 100644
+index 0000000..931bed0
+--- /dev/null
++++ b/src/video/switch/SDL_switchvulkan.h
+@@ -0,0 +1,12 @@
++/* Altered SDL3-Switch source: K/G Mesa VI Vulkan bridge. zlib license. */
++#pragma once
++#include "../SDL_sysvideo.h"
++#ifdef SDL_VIDEO_VULKAN
++bool SWITCH_Vulkan_LoadLibrary(SDL_VideoDevice *_this, const char *path);
++void SWITCH_Vulkan_UnloadLibrary(SDL_VideoDevice *_this);
++char const *const *SWITCH_Vulkan_GetInstanceExtensions(SDL_VideoDevice *_this, Uint32 *count);
++bool SWITCH_Vulkan_CreateSurface(SDL_VideoDevice *_this, SDL_Window *window, VkInstance instance,
++                                 const struct VkAllocationCallbacks *allocator, VkSurfaceKHR *surface);
++void SWITCH_Vulkan_DestroySurface(SDL_VideoDevice *_this, VkInstance instance, VkSurfaceKHR surface,
++                                  const struct VkAllocationCallbacks *allocator);
++#endif

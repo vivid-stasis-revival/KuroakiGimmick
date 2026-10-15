@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-ios</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">ios-arm64</RuntimeIdentifier>
+    <KGMobilePlatform>ios</KGMobilePlatform>
+    <StartupObject>KuroakiGimmick.Mobile.IosEntry</StartupObject>
+    <DefineConstants>$(DefineConstants);KG_IOS</DefineConstants>
+    <ApplicationId>io.github.kuroakigimmick.mobile</ApplicationId>
+    <ApplicationTitle>Kuroaki/Gimmick</ApplicationTitle>
+    <AppIcon>AppIcon</AppIcon>
+    <BundleOriginalResources>false</BundleOriginalResources>
+    <ApplicationVersion>1801</ApplicationVersion>
+    <ApplicationDisplayVersion>0.1.5</ApplicationDisplayVersion>
+    <EnableCodeSigning>false</EnableCodeSigning>
+    <BuildIpa>false</BuildIpa>
+    <TrimMode>copy</TrimMode>
+    <UseInterpreter>false</UseInterpreter>
+    <MtouchUseLlvm>false</MtouchUseLlvm>
+  </PropertyGroup>
+  <Import Project="../Kuroaki.Mobile.props" />
+  <ItemGroup>
+    <Compile Include="*.cs" />
+    <BundleResource Include="$(KGMobileAssets)/**/*" Link="Assets/%(RecursiveDir)%(Filename)%(Extension)" />
+    <NativeReference Include="$(KGRoot)/dist/mobile-native/$(RuntimeIdentifier)/libSDL3.a">
+      <Kind>Static</Kind>
+      <ForceLoad>true</ForceLoad>
+      <IsCxx>false</IsCxx>
+      <Frameworks>AVFoundation AudioToolbox CoreAudio CoreFoundation CoreGraphics CoreHaptics CoreMedia CoreMotion Foundation GameController Metal QuartzCore UIKit UniformTypeIdentifiers</Frameworks>
+      <LinkerFlags>-liconv</LinkerFlags>
+    </NativeReference>
+  </ItemGroup>
+</Project>

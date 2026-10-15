@@ -122,9 +122,11 @@ public static partial class Sdl
             if (OperatingSystem.IsWindows())
                 return "direct3d12";
 
+            if (OperatingSystem.IsLinux()) return "vulkan";
+
             throw new PlatformNotSupportedException(
                 "Kuroaki GPU backend currently supports only macOS/Metal " +
-                "and Windows/Direct3D 12/Vulkan.");
+                "Windows/Direct3D 12/Vulkan, and Linux/Vulkan.");
         }
     }
 
@@ -159,9 +161,11 @@ public static partial class Sdl
             ];
         }
 
+        if (OperatingSystem.IsLinux()) return [("vulkan", GpuShaderFormat.SpirV)];
+
         throw new PlatformNotSupportedException(
             "Kuroaki GPU backend currently supports only macOS/Metal " +
-            "and Windows/Direct3D 12/Vulkan.");
+            "Windows/Direct3D 12/Vulkan, and Linux/Vulkan.");
     }
 
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
@@ -370,11 +374,13 @@ public static partial class Sdl
                 continue;
             }
 
+#if !KG_SWITCH
             if (!SDL_GPUSupportsShaderFormats(candidateFormats, driver))
             {
                 failures.Add($"{driver}: unsupported for shader formats {candidateFormats}: {Error}");
                 continue;
             }
+#endif
 
             nint device = CreateGpuCandidateDevice(driver, candidateFormats, debugMode);
             if (device == 0)

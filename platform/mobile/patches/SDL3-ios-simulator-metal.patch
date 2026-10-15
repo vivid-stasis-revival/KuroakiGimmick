@@ -1,0 +1,12 @@
+--- a/src/gpu/metal/SDL_gpu_metal.m
++++ b/src/gpu/metal/SDL_gpu_metal.m
+@@ -4576,6 +4576,9 @@
+         }
+ #elif defined(SDL_PLATFORM_VISIONOS)
+         hasHardwareSupport = true;
++#elif TARGET_OS_SIMULATOR
++        // Altered for K/G mobile: simulator family queries do not describe the host device.
++        hasHardwareSupport = true; // MTLCreateSystemDefaultDevice succeeded above.
+ #else
+         if (@available(iOS 13.0, tvOS 13.0, *)) {
+             hasHardwareSupport = [device supportsFamily:MTLGPUFamilyApple3];

@@ -14,7 +14,8 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework Condition="'$(KuroakiSwitch)' != 'true' and '$(KuroakiShaderBaker)' != 'true'">net8.0</TargetFramework>
+    <TargetFramework Condition="'$(KuroakiSwitch)' == 'true' or '$(KuroakiShaderBaker)' == 'true'">net9.0</TargetFramework>
 
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -81,6 +82,17 @@
     <IncludeNativeLibrariesForSelfExtract Condition="'$(PublishSingleFile)' == 'true' and '$(IncludeNativeLibrariesForSelfExtract)' == ''">true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
 
+
+  <PropertyGroup Condition="'$(KuroakiSwitch)' == 'true'">
+    <DefineConstants>$(DefineConstants);KG_SWITCH</DefineConstants>
+    <PublishAot>false</PublishAot>
+    <PublishSingleFile>false</PublishSingleFile>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <SelfContained>false</SelfContained>
+    <PublishTrimmed>false</PublishTrimmed>
+    <RestorePackagesWithLockFile>false</RestorePackagesWithLockFile>
+    <NuGetLockFilePath Condition="'$(NuGetLockFilePath)' == ''">obj/packages.switch.lock.json</NuGetLockFilePath>
+  </PropertyGroup>
 
   <!-- ============================================================
        RELEASE OPTIMIZATION
@@ -253,12 +265,12 @@
        ============================================================ -->
 
   <ItemGroup>
-    <PackageReference Include="SDL3-CS.Linux" Version="3.4.16" />
-    <PackageReference Include="SDL3-CS.MacOS" Version="3.4.16" />
-    <PackageReference Include="SDL3-CS.Windows" Version="3.4.16" />
+    <PackageReference Condition="'$(KuroakiSwitch)' != 'true'" Include="SDL3-CS.Linux" Version="3.4.16" />
+    <PackageReference Condition="'$(KuroakiSwitch)' != 'true'" Include="SDL3-CS.MacOS" Version="3.4.16" />
+    <PackageReference Condition="'$(KuroakiSwitch)' != 'true'" Include="SDL3-CS.Windows" Version="3.4.16" />
 
-    <PackageReference Include="Silk.NET.Shaderc.Native" Version="2.23.0" />
-    <PackageReference Include="Silk.NET.SPIRV.Cross.Native" Version="2.23.0" />
+    <PackageReference Condition="'$(KuroakiSwitch)' != 'true'" Include="Silk.NET.Shaderc.Native" Version="2.23.0" />
+    <PackageReference Condition="'$(KuroakiSwitch)' != 'true'" Include="Silk.NET.SPIRV.Cross.Native" Version="2.23.0" />
 
     <PackageReference Include="StbImageSharp" Version="2.30.16" />
     <PackageReference Include="StbImageWriteSharp" Version="1.16.7" />
@@ -290,6 +302,14 @@
 
 
 
+
+  <!-- CI distributes application files only, even in a checkout with private Assets. -->
+  <ItemGroup Condition="'$(KuroakiExternalAssets)' == 'true'">
+    <EmbeddedResource Remove="Assets/**/*" />
+    <EmbeddedResource Include="Assets/tips.json" LogicalName="KuroakiGimmick.Tips.json" />
+    <None Remove="Assets/**/*" />
+    <None Include="Assets/App/Kuroaki.png;Assets/App/Kuroaki.ico;Assets/App/Kuroaki.icns;Assets/tips.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+  </ItemGroup>
 
   <!-- ============================================================
        PUBLISH CHECK

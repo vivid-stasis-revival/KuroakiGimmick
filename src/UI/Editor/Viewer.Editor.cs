@@ -460,6 +460,10 @@ public sealed partial class Viewer
     /// <summary>开关 LIVE 真实窗口预览。创建 SDL 窗口属于 GPU 工作，必须留在窗口线程；失败时立即 Dispose 并回到虚拟桌面预览。</summary>
     void ToggleNativeWindows()
     {
+#if KG_SWITCH || KG_MOBILE
+        message = "This platform has one native window; use the virtual desktop preview.";
+        return;
+#else
         if (nativeWindows != null) { nativeWindows.Dispose(); nativeWindows = null; message = L.Get("Live windows closed."); return; }
         if (!Current.WindowMotion.HasContent) { message = L.Get("No WindowMovement events or proxy bindings loaded."); return; }
         try
@@ -468,6 +472,7 @@ public sealed partial class Viewer
             windowTimelineConfig = null; message = L.Get("LIVE WINDOWS enabled. Escape or close any preview window to stop.");
         }
         catch (Exception e) { nativeWindows?.Dispose(); nativeWindows = null; message = L.Get("Live windows: ") + e.Message; }
+#endif
     }
     /// <summary>向真实窗口呈现一帧；只能在窗口线程调用。任何异常都当作后端失效，直接关闭 LIVE 预览而不是逐帧重试。</summary>
     void PresentNativeWindows()

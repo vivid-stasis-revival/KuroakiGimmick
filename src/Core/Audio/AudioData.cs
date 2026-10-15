@@ -41,6 +41,9 @@ public sealed record AudioData(float[] Samples, int Rate, int Channels)
             }
             return new(samples, reader.SampleRate, reader.Channels);
         }
+#if KG_SWITCH || KG_MOBILE
+        throw new PlatformNotSupportedException("This platform currently supports Ogg/Vorbis preview audio only.");
+#else
         // 可选的 FFmpeg 负责 WAV/MP3/FLAC/M4A；Ogg/Vorbis 预览不需要 FFmpeg。
         // 统一解码成 f32le、双声道、48 kHz，下游按该格式直接喂 SDL 音频流。
         var info = new ProcessStartInfo(Ffmpeg.Find())
@@ -90,5 +93,6 @@ public sealed record AudioData(float[] Samples, int Rate, int Channels)
         var data = new float[ValidateSampleCount(buffer.Length / sizeof(float))];
         Buffer.BlockCopy(bytes.Array!, bytes.Offset, data, 0, data.Length * sizeof(float));
         return new(data, 48000, 2);
+#endif
     }
 }

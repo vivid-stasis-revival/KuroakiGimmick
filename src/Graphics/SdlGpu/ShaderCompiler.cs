@@ -52,6 +52,17 @@ internal static unsafe partial class ShaderCompiler
             return cached;
         }
 
+#if KG_MOBILE
+        var packed = MobileShaderPack.Load(source, vertex, format);
+        cache[key] = packed;
+        return packed;
+#elif KG_SWITCH
+        if (format != GpuShaderFormat.SpirV)
+            throw new PlatformNotSupportedException("Switch requires SPIR-V.");
+        var packed = SwitchShaderPack.Load(source, vertex);
+        cache[key] = packed;
+        return packed;
+#else
         var translated = Translate(source, vertex, format);
         byte[] code = format switch
         {
@@ -71,5 +82,6 @@ internal static unsafe partial class ShaderCompiler
 
         cache[key] = result;
         return result;
+#endif
     }
 }

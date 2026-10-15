@@ -1,0 +1,215 @@
+diff --git a/native/interpreter/Makefile b/native/interpreter/Makefile
+index 4a85fea..73ed655 100644
+--- a/native/interpreter/Makefile
++++ b/native/interpreter/Makefile
+@@ -45,8 +45,8 @@ include $(DEVKITPRO)/libnx/switch_rules
+ #   of a homebrew executable (.nro). This is intended to be used for sysmodules.
+ #   NACP building is skipped as well.
+ #---------------------------------------------------------------------------------
+-MONO_NX_USE_CIMGUI 			:=  	1
+-MONO_NX_USE_SDL2 			:=  	1
++MONO_NX_USE_CIMGUI 			?=  	1
++MONO_NX_USE_SDL2 			?=  	1
+ MONO_NX_USE_OPENGL	 		:=  	0
+ MONO_NX_USE_OPENAL	 		:=  	0
+ 
+@@ -139,6 +139,26 @@ ifeq ($(MONO_NX_USE_OPENAL),1)
+ 	LIBS		+=	`$(PREFIX)pkg-config --libs openal sdl2`
+ endif
+ 
++ifneq ($(strip $(KG_SWITCH_NATIVE)),)
++    # Dedicated entry point replaces source/main.c; shared Mono core remains upstream.
++    SOURCES := $(KG_SWITCH_NATIVE) ../shared ../shared/third_party/ini
++    KG_PKG_CONFIG ?= pkg-config
++    CFLAGS += -DDLSHIM_KG=1 `$(KG_PKG_CONFIG) --cflags sdl3 vulkan`
++    LDFLAGS += -Wl,--wrap=SystemNative_Malloc -Wl,--wrap=SystemNative_Rename
++    APP_TITLE := Kuroaki/Gimmick (experimental)
++    APP_AUTHOR := vivid-stasis-revival
++    APP_VERSION := 0.1.4
++    LIBS += -Wl,--start-group `$(KG_PKG_CONFIG) --static --libs sdl3 vulkan` -Wl,--end-group
++    ifneq ($(strip $(KG_SWITCH_AOT)),)
++        KG_SWITCH_AOT_NXLINK ?= 0
++        CFLAGS += -DKG_SWITCH_AOT=1 -DKG_SWITCH_AOT_NXLINK=$(KG_SWITCH_AOT_NXLINK) -I$(KG_SWITCH_AOT)
++        LIBS := $(wildcard $(KG_SWITCH_AOT)/objects/*.o) $(subst libmono-component-debugger-static.a,libmono-component-debugger-stub-static.a,$(LIBS))
++        ROMFS := $(KG_SWITCH_AOT)/romfs
++        APP_TITLE := Kuroaki/Gimmick (Mono Full AOT)
++        APP_VERSION := 0.1.4-r5-aot
++    endif
++endif
++
+ # These need to be at the end
+ LIBS	+=	-lnx -lm -lstdc++
+ 
+@@ -152,7 +172,7 @@ ifneq ($(BUILD),$(notdir $(CURDIR)))
+ export OUTPUT	:=	$(CURDIR)/$(TARGET)
+ export TOPDIR	:=	$(CURDIR)
+ 
+-export VPATH	:=	$(foreach dir,$(SOURCES),$(CURDIR)/$(dir)) \
++export VPATH	:=	$(foreach dir,$(SOURCES),$(if $(filter /%,$(dir)),$(dir),$(CURDIR)/$(dir))) \
+ 			$(foreach dir,$(DATA),$(CURDIR)/$(dir))
+ 
+ export DEPSDIR	:=	$(CURDIR)/$(BUILD)
+@@ -210,7 +230,7 @@ ifeq ($(strip $(ICON)),)
+ 		endif
+ 	endif
+ else
+-	export APP_ICON := $(TOPDIR)/$(ICON)
++	export APP_ICON := $(if $(filter /%,$(ICON)),$(ICON),$(TOPDIR)/$(ICON))
+ endif
+ 
+ ifeq ($(strip $(NO_ICON)),)
+@@ -226,7 +246,7 @@ ifneq ($(APP_TITLEID),)
+ endif
+ 
+ ifneq ($(ROMFS),)
+-	export NROFLAGS += --romfsdir=$(CURDIR)/$(ROMFS)
++	export NROFLAGS += --romfsdir=$(if $(filter /%,$(ROMFS)),$(ROMFS),$(CURDIR)/$(ROMFS))
+ endif
+ 
+ .PHONY: $(BUILD) clean all
+diff --git a/native/shared/dl_shim.c b/native/shared/dl_shim.c
+index c22073f..a2df7be 100644
+--- a/native/shared/dl_shim.c
++++ b/native/shared/dl_shim.c
+@@ -20,6 +20,11 @@ REGISTER_LIBRARY(SystemNative, "libSystem.Native", 0x03)
+ REGISTER_LIBRARY(GlobalizationNative, "libSystem.Globalization.Native", 0x04)
+ REGISTER_LIBRARY(CompressionNative, "libSystem.IO.Compression.Native", 0x05)
+ 
++#if defined(DLSHIM_KG)
++REGISTER_LIBRARY(SDL3, "SDL3", 0x106)
++REGISTER_LIBRARY(KGSwitch, "KGSwitch", 0x107)
++#endif
++
+ // Optional libraries.
+ // Don't forget to also register them in the LoadLibrary and GetSymbol functions below, otherwise they won't be found.
+ #if defined(DLSHIM_SDL2)
+@@ -53,6 +58,10 @@ void *dlshim_loadLibrary(const char *name, int flags, char **err, void *user_dat
+     CHECK_LIB_NAME(name, SystemNative);
+     CHECK_LIB_NAME(name, GlobalizationNative);
+     CHECK_LIB_NAME(name, CompressionNative);
++#if defined(DLSHIM_KG)
++    CHECK_LIB_NAME(name, SDL3);
++    CHECK_LIB_NAME(name, KGSwitch);
++#endif
+ 
+     #if defined(DLSHIM_SDL2)
+ 	CHECK_LIB_NAME(name, SDL2);
+@@ -107,6 +116,10 @@ void *dlshim_getSymbol(void *handle, const char *name, char **err, void *user_da
+ 		CHECK_LIB_SYMBOL(SystemNative)
+ 		CHECK_LIB_SYMBOL(GlobalizationNative)
+ 		CHECK_LIB_SYMBOL(CompressionNative)
++#if defined(DLSHIM_KG)
++        CHECK_LIB_SYMBOL(SDL3)
++        CHECK_LIB_SYMBOL(KGSwitch)
++#endif
+ 
+ 	#if defined(DLSHIM_SDL2)
+ 		CHECK_LIB_SYMBOL(SDL2)
+diff --git a/native/shared/heap.c b/native/shared/heap.c
+index 506f5bc..5fd2ba0 100644
+--- a/native/shared/heap.c
++++ b/native/shared/heap.c
+@@ -49,6 +49,13 @@ void __libnx_initheap(void)
+ 	// Give libnx half the heap and mono the other half, Align the mono side to 4MB because we know that's the biggest granularity it needs.
+     // TODO: Consider a better split for this. In practice it's compilcated because mono might allocate internal data structures via malloc, any mesa/opengl allocations are also handled by libnx.
+ 	size_t newlib_size = size / 2;
++#if defined(DLSHIM_KG)
++    // K/G's Mesa/NVK resources share malloc with Mono's native structures.
++    // Keep up to 1 GiB for the interpreter's fake mmap heap, give the rest to malloc.
++    size_t mono_size = size / 2;
++    if (mono_size > 1024ULL * 1024 * 1024) mono_size = 1024ULL * 1024 * 1024;
++    newlib_size = size - mono_size;
++#endif
+ 	mono_heap_start = (((intptr_t)addr + newlib_size) + (0x400000 - 1)) & ~(0x400000 - 1);
+ 	mono_heap_end   = (intptr_t)addr + size;
+ 
+@@ -64,4 +71,4 @@ void __libnx_initheap(void)
+ 
+     // Note that even tho we set the pointers newlib's heap is still not ready cause libnx hasn't called the thread init function yet. We can't use malloc yet.
+ 	mono_nx_fakemmap_init(mono_heap_start, mono_heap_end);
+-}
+\ No newline at end of file
++}
+diff --git a/native/shared/io_util.c b/native/shared/io_util.c
+index 249ab09..160acda 100644
+--- a/native/shared/io_util.c
++++ b/native/shared/io_util.c
+@@ -3,6 +3,7 @@
+ #include <stdlib.h>
+ #include <stdarg.h>
+ #include <string.h>
++#include <errno.h>
+ #include <switch.h>
+ 
+ #include <unistd.h>
+@@ -138,6 +139,8 @@ static ssize_t udp_log_write(struct _reent *r, void *fd, const char *ptr, size_t
+ }
+ 
+ static FILE* file_log_handle;
++static int nxlink_log_socket = -1;
++void io_set_nxlink_socket(int socket_fd) { nxlink_log_socket = socket_fd; }
+ static ssize_t file_log_write(struct _reent *r, void *fd, const char *ptr, size_t len)
+ {
+     if (!file_log_handle)
+@@ -146,7 +149,16 @@ static ssize_t file_log_write(struct _reent *r, void *fd, const char *ptr, size_
+     if (len == 0)
+         return 0;
+ 
+-    return fwrite(ptr, 1, len, file_log_handle);
++    size_t written = fwrite(ptr, 1, len, file_log_handle);
++    if (nxlink_log_socket >= 0) {
++        // A disconnected or slow log collector must not stall rendering/audio.
++        ssize_t sent = send(nxlink_log_socket, ptr, len, MSG_DONTWAIT);
++        if (sent < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
++            close(nxlink_log_socket);
++            nxlink_log_socket = -1;
++        }
++    }
++    return written;
+ }
+ 
+ static int redirect_newlib_io(newlib_io_write_callback callback)
+@@ -185,6 +197,10 @@ int io_stdio_to_svc()
+ 
+ void io_stdio_finish()
+ {
++    if (nxlink_log_socket >= 0) {
++        close(nxlink_log_socket);
++        nxlink_log_socket = -1;
++    }
+     if (logUdpSocket >= 0)
+     {
+         close(logUdpSocket);
+@@ -228,6 +244,8 @@ int io_stdio_to_file(const char* filename)
+     if (!file_log_handle)
+         return -1;
+ 
++    /* Preserve complete diagnostic lines if Mono aborts without normal cleanup. */
++    setvbuf(file_log_handle, NULL, _IOLBF, 0);
+     fprintf(file_log_handle, "--- starting log ---\n");
+ 
+     if (redirect_newlib_io(file_log_write) < 0)
+@@ -263,4 +281,4 @@ char* io_strdup(const char* str)
+     strcpy(res, str);
+ 
+     return res;
+-}
+\ No newline at end of file
++}
+diff --git a/native/shared/io_util.h b/native/shared/io_util.h
+index 9938ea5..25f0fc8 100644
+--- a/native/shared/io_util.h
++++ b/native/shared/io_util.h
+@@ -17,9 +17,10 @@ int io_stdio_to_svc();
+ int io_stdio_to_udp(const char* host, int port);
+ 
+ int io_stdio_to_file(const char* filename);
++void io_set_nxlink_socket(int socket_fd);
+ 
+ void io_stdio_finish();
+ 
+ void io_debugf(const char *fmt, ...);
+ 
+-char* io_strdup(const char* str);
+\ No newline at end of file
++char* io_strdup(const char* str);

@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <SupportedOSPlatformVersion>26.0</SupportedOSPlatformVersion>
+    <RuntimeIdentifier>android-arm64</RuntimeIdentifier>
+    <KGMobilePlatform>android</KGMobilePlatform>
+    <DefineConstants>$(DefineConstants);KG_ANDROID</DefineConstants>
+    <ApplicationId>io.github.kuroakigimmick.mobile</ApplicationId>
+    <ApplicationTitle>Kuroaki/Gimmick</ApplicationTitle>
+    <ApplicationVersion>1801</ApplicationVersion>
+    <ApplicationDisplayVersion>0.1.5</ApplicationDisplayVersion>
+    <AndroidPackageFormats>apk</AndroidPackageFormats>
+    <AndroidUseAssemblyStore>true</AndroidUseAssemblyStore>
+    <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
+    <RunAOTCompilation>false</RunAOTCompilation>
+    <AndroidEnableMarshalMethods>false</AndroidEnableMarshalMethods>
+    <PublishTrimmed>false</PublishTrimmed>
+  </PropertyGroup>
+  <Import Project="../Kuroaki.Mobile.props" />
+  <PropertyGroup Condition="'$(KG_ANDROID_KEYSTORE)' != ''">
+    <AndroidKeyStore>true</AndroidKeyStore>
+    <AndroidSigningKeyStore>$(KG_ANDROID_KEYSTORE)</AndroidSigningKeyStore>
+    <AndroidSigningKeyAlias>$(ANDROID_KEY_ALIAS)</AndroidSigningKeyAlias>
+    <AndroidSigningStorePass>env:ANDROID_KEYSTORE_PASSWORD</AndroidSigningStorePass>
+    <AndroidSigningKeyPass>env:ANDROID_KEY_PASSWORD</AndroidSigningKeyPass>
+  </PropertyGroup>
+  <Target Name="RequireCiSigning" BeforeTargets="SignAndroidPackage" Condition="'$(CI)' == 'true'">
+    <Error Condition="'$(KG_ANDROID_KEYSTORE)' == '' or '$(ANDROID_KEY_ALIAS)' == ''" Text="CI Android release requires the configured signing keystore and alias." />
+  </Target>
+  <ItemGroup>
+    <AndroidLibrary Remove="SdlBindings/**/*" />
+    <Compile Include="*.cs" />
+    <ProjectReference Include="SdlBindings/SdlBindings.csproj" />
+    <AndroidAsset Include="$(KGMobileAssets)/**/*" Link="Assets/%(RecursiveDir)%(Filename)%(Extension)" />
+    <AndroidNativeLibrary Include="$(KGRoot)/dist/mobile-native/android-arm64/libSDL3.so" Abi="arm64-v8a" />
+    <AndroidResource Include="$(KGRoot)/Assets/App/Kuroaki.png" Link="Resources/drawable/kuroaki.png" />
+  </ItemGroup>
+</Project>

@@ -92,6 +92,9 @@ public sealed class Transport : IDisposable
             if (!Sdl.SDL_InitSubSystem(0x10))
             {
                 AudioError = Sdl.Error;
+#if KG_SWITCH
+                Console.Error.WriteLine("[K/G audio] initialization failed: " + AudioError);
+#endif
                 return;
             }
             var spec = new Sdl.AudioSpec
@@ -104,10 +107,13 @@ public sealed class Transport : IDisposable
             if (stream == 0)
             {
                 AudioError = Sdl.Error;
+#if KG_SWITCH
+                Console.Error.WriteLine("[K/G audio] initialization failed: " + AudioError);
+#endif
                 return;
             }
-            Sdl.SDL_SetAudioStreamFrequencyRatio(stream, (float)speed);
-            Sdl.SDL_SetAudioStreamGain(stream, (float)volume);
+            Sdl.Require(Sdl.SDL_SetAudioStreamFrequencyRatio(stream, (float)speed));
+            Sdl.Require(Sdl.SDL_SetAudioStreamGain(stream, (float)volume));
             StartFeeder();
         }
     }
@@ -140,6 +146,9 @@ public sealed class Transport : IDisposable
                 Sdl.SDL_PauseAudioStreamDevice(stream);
             }
         }
+#if KG_SWITCH
+        Console.Error.WriteLine($"[K/G audio] playing={Playing} stream={stream != 0} decoded={data != null} volume={volume:F2} queuedBytes={(stream == 0 ? 0 : Sdl.SDL_GetAudioStreamQueued(stream))}");
+#endif
     }
 
     /// <summary>编辑器把时间轴延长到音乐尾部之后，不重开音频设备。</summary>
@@ -227,7 +236,7 @@ public sealed class Transport : IDisposable
         Feed(priming: true);
         if (Playing)
         {
-            Sdl.SDL_ResumeAudioStreamDevice(stream);
+            Sdl.Require(Sdl.SDL_ResumeAudioStreamDevice(stream));
         }
     }
 
@@ -245,7 +254,13 @@ public sealed class Transport : IDisposable
         bool starved = !priming && Playing && remaining == 0 && queuedSamples > 0 && queuedSamples < data.Samples.Length;
         if (starved && !queueStarved) { underruns++; PerformanceStats.Add(PerformanceStats.Counter.AudioUnderruns, 1); }
         queueStarved = starved;
-        int target = (int)(data.Rate * data.Channels * .2 * Math.Clamp(EffectiveSpeed, .01, 100));
+#if KG_SWITCH
+        // Keep playback fed through interpreter frames that take longer than 200 ms.
+        const double queueSeconds = 1.0;
+#else
+        const double queueSeconds = .2;
+#endif
+        int target = (int)(data.Rate * data.Channels * queueSeconds * Math.Clamp(EffectiveSpeed, .01, 100));
         int n = Math.Min(Math.Max(0, target - remaining), data.Samples.Length - queuedSamples);
         // 截断到声道数的整数倍，避免把一帧从中间劈开导致左右声道错位。
         n -= n % data.Channels;

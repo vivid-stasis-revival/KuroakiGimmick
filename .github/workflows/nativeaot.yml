@@ -1,4 +1,4 @@
-name: NativeAOT builds
+name: Cross-platform builds
 
 on:
   push:
@@ -71,7 +71,7 @@ jobs:
             # Only application/build inputs trigger NativeAOT.
             # README / CHANGELOG-only commits intentionally do not build. Rust and release workflow changes do.
             if printf '%s\n' "$changed" | grep -Eq \
-              '^(src/|rust/|Assets/|Resources/|ThirdParty/|scripts/|\.github/workflows/nativeaot\.yml$|KuroakiGimmick\.csproj$|packages\.lock\.json$|app\.manifest$)'; then
+              '^(src/|platform/|rust/|Assets/|Resources/|ThirdParty/|scripts/|\.github/workflows/nativeaot\.yml$|KuroakiGimmick\.csproj$|packages\.lock\.json$|app\.manifest$)'; then
               should_build=true
             fi
           fi
@@ -115,8 +115,20 @@ jobs:
             spirv_cross: libspirv-cross.dylib
             rust_core: libkg_native_core.dylib
 
+          - runner: ubuntu-24.04
+            rid: linux-x64
+            executable: KuroakiGimmick
+            sdl: libSDL3.so
+            shaderc: libshaderc_shared.so
+            spirv_cross: libspirv-cross.so
+            rust_core: libkg_native_core.so
+
     steps:
       - uses: actions/checkout@v7
+
+      - name: Install Linux native build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev libx11-6 libxext6 libwayland-client0 libvulkan1 zip
 
       - uses: actions/setup-dotnet@v6
         id: dotnet
@@ -146,6 +158,7 @@ jobs:
             -c Release \
             -r '${{ matrix.rid }}' \
             --self-contained true \
+            -p:KuroakiExternalAssets=true \
             -p:PublishAot=true \
             -p:PublishSingleFile=false \
             "-p:InformationalVersion=${BUILD_LABEL}" \
@@ -164,6 +177,7 @@ jobs:
           set -euo pipefail
           output='artifacts/${{ matrix.rid }}'
           cp README.md CHANGELOG.md THIRD_PARTY_NOTICES.md "$output/"
+          cp docs/EXTERNAL_ASSETS.md "$output/INSTALL-ASSETS.md"
           cp -R ThirdParty "$output/"
           test ! -d "$output/docs"
           test ! -d "$output/tests"
@@ -231,6 +245,10 @@ jobs:
             'artifacts/${{ matrix.rid }}' \
             'artifacts/KuroakiGimmick-${{ matrix.rid }}.zip'
 
+      - name: Archive Linux build
+        if: runner.os == 'Linux'
+        run: cd artifacts && zip -r 'KuroakiGimmick-${{ matrix.rid }}.zip' '${{ matrix.rid }}'
+
       - name: Archive Windows build
         if: runner.os == 'Windows'
         shell: pwsh
@@ -251,10 +269,125 @@ jobs:
           retention-days: 14
           compression-level: 0
 
+  mobile:
+    name: ${{ matrix.platform }}
+    needs: detect
+    if: needs.detect.outputs.should_build == 'true'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: android
+            runner: ubuntu-24.04
+          - platform: ios
+            runner: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: |
+            9.0.x
+            10.0.101
+      - name: Select pinned mobile SDK
+        shell: bash
+        run: printf '{"sdk":{"version":"10.0.101","rollForward":"disable"}}\n' > global.json
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Select iOS toolchain
+        if: matrix.platform == 'ios'
+        run: |
+          test -d /Applications/Xcode_26.2.app
+          sudo xcode-select -s /Applications/Xcode_26.2.app/Contents/Developer
+          brew install ninja
+      - name: Install Android native build tools
+        if: matrix.platform == 'android'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build cmake libgl1
+      - uses: actions/setup-java@v5
+        if: matrix.platform == 'android'
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install Android SDK components
+        if: matrix.platform == 'android'
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;29.0.14206865'
+      - name: Install only required mobile workload
+        shell: bash
+        run: dotnet workload install '${{ matrix.platform }}' --version 10.0.101.1
+      - name: Prepare Android signing key
+        if: matrix.platform == 'android'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: python scripts/ci/prepare_android_signing.py
+      - name: Build signed Android APK
+        if: matrix.platform == 'android'
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          python platform/mobile/build.py android --external-assets --output artifacts/android
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose artifacts/android/*.apk
+      - name: Build unsigned iOS IPA
+        if: matrix.platform == 'ios'
+        run: python platform/mobile/build.py ios --external-assets --output artifacts/ios
+      - name: Remove temporary Android signing key
+        if: always() && matrix.platform == 'android'
+        run: python -c 'import os,pathlib; pathlib.Path(os.environ["RUNNER_TEMP"], "kuroaki-signing.jks").unlink(missing_ok=True)'
+      - name: Archive mobile program
+        shell: bash
+        run: |
+          cp docs/EXTERNAL_ASSETS.md artifacts/${{ matrix.platform }}/INSTALL-ASSETS.md
+          cd artifacts
+          zip -r KuroakiGimmick-${{ matrix.platform }}.zip ${{ matrix.platform }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: nativeaot-${{ matrix.platform }}
+          path: artifacts/KuroakiGimmick-${{ matrix.platform }}.zip
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+  switch-status:
+    needs: detect
+    if: needs.detect.outputs.should_build == 'true' && vars.KG_SWITCH_RUNNER_READY != 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo 'Switch NRO pending — provide the full Linux x64 toolchain and configure the isolated kg-switch runner. No NRO was built.' >> "$GITHUB_STEP_SUMMARY"
+
+  switch:
+    name: Switch NRO
+    needs: detect
+    if: needs.detect.outputs.should_build == 'true' && vars.KG_SWITCH_RUNNER_READY == 'true'
+    runs-on: [self-hosted, Linux, X64, kg-switch]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '9.0.x'
+      - name: Build current source with prepared toolchain
+        env:
+          KG_SWITCH_TOOLCHAIN_ROOT: ${{ vars.KG_SWITCH_TOOLCHAIN_ROOT }}
+        run: bash scripts/ci/build_switch.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: nativeaot-switch
+          path: artifacts/KuroakiGimmick-switch.zip
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
   release:
     name: Publish GitHub release
-    needs: [detect, build]
-    if: needs.detect.outputs.should_build == 'true' && needs.build.result == 'success'
+    needs: [detect, build, mobile, switch]
+    if: needs.detect.outputs.should_build == 'true' && needs.build.result == 'success' && needs.mobile.result == 'success' && needs.switch.result == 'success'
     runs-on: ubuntu-latest
 
     permissions:
@@ -278,13 +411,17 @@ jobs:
 
           test -f release-assets/KuroakiGimmick-win-x64.zip
           test -f release-assets/KuroakiGimmick-osx-arm64.zip
+          test -f release-assets/KuroakiGimmick-linux-x64.zip
+          test -f release-assets/KuroakiGimmick-android.zip
+          test -f release-assets/KuroakiGimmick-ios.zip
+          test -f release-assets/KuroakiGimmick-switch.zip
 
           mapfile -t assets < <(
             find release-assets -maxdepth 1 -type f -name 'KuroakiGimmick-*.zip' -print | sort
           )
 
-          if (( ${#assets[@]} != 2 )); then
-            echo "Expected exactly 2 release archives, found ${#assets[@]}." >&2
+          if (( ${#assets[@]} != 6 )); then
+            echo "Expected exactly 6 release archives, found ${#assets[@]}." >&2
             printf 'Found: %s\n' "${assets[@]:-<none>}" >&2
             exit 1
           fi
@@ -306,8 +443,8 @@ jobs:
             find release-assets -maxdepth 1 -type f -name 'KuroakiGimmick-*.zip' -print | sort
           )
 
-          if (( ${#assets[@]} != 2 )); then
-            echo "Expected exactly 2 release archives, found ${#assets[@]}." >&2
+          if (( ${#assets[@]} != 6 )); then
+            echo "Expected exactly 6 release archives, found ${#assets[@]}." >&2
             printf 'Found: %s\n' "${assets[@]:-<none>}" >&2
             exit 1
           fi

@@ -8,11 +8,37 @@ namespace KuroakiGimmick.Graphics;
 public sealed unsafe partial class GpuDevice : IDisposable
 {
     /// <summary>创建 CPU/GPU 传输缓冲。调用者负责 finally 中释放，单位为字节。</summary>
-    internal nint Transfer(uint size, bool download = false) => Check(SDL_CreateGPUTransferBuffer(Handle, new GPUTransferBufferCreateInfo
+    internal nint Transfer(uint size, bool download = false)
     {
-        usage = download ? 1u : 0u,
-        size = size
-    }), "Create GPU transfer buffer");
+        nint buffer = SDL_CreateGPUTransferBuffer(Handle, new GPUTransferBufferCreateInfo
+        {
+            usage = download ? 1u : 0u,
+            size = size
+        });
+        if (buffer != 0) return buffer;
+        string error = Error;
+#if KG_SWITCH
+        // Completed texture uploads can still own deferred releases until SDL polls/waits.
+        // Drain them once on allocation exhaustion; do not retry other driver failures.
+        if (error.Contains("VK_ERROR_OUT_OF_HOST_MEMORY", StringComparison.Ordinal) ||
+            error.Contains("VK_ERROR_OUT_OF_DEVICE_MEMORY", StringComparison.Ordinal))
+        {
+            Console.Error.WriteLine($"[Kuroaki/GPU] allocation exhausted; drain completed work and retry bytes={size}");
+            if (SDL_WaitForGPUIdle(Handle))
+            {
+                buffer = SDL_CreateGPUTransferBuffer(Handle, new GPUTransferBufferCreateInfo
+                {
+                    usage = download ? 1u : 0u,
+                    size = size
+                });
+                if (buffer != 0) return buffer;
+                error = Error;
+            }
+        }
+#endif
+        DiscardPendingCommands();
+        throw new InvalidOperationException($"Create GPU transfer buffer (bytes={size}, download={download}): {error}");
+    }
 
 
     /// <summary>返回一行像素在 transfer buffer 中占用的字节数：D3D12 必须按 256 字节对齐，Metal/Vulkan 用紧密的 width*4。</summary>

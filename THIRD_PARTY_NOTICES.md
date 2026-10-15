@@ -46,3 +46,5 @@ The user-exported shared gameplay UI/font pack is kept locally under Assets/Game
 The interface is drawn with **Noto Sans SC**, shipped as two static font files under `Resources/Fonts` and rasterized at run time. They are licensed under SIL OFL 1.1, retained independently of the application code; full text and copyright in `ThirdParty/NotoSansSC-OFL.txt`. The family derives from Adobe Source Han Sans and its Reserved Font Name is `Source`, which this project does not use. Upstream: https://github.com/google/fonts (`ofl/notosanssc`).
 
 Earlier releases rasterized the interface from IBM Plex Sans SC into bitmap atlases named Kuroaki UI Sans. Those atlases are no longer loaded; the IBM Plex notice and license are retained in `ThirdParty/IBM-Plex-OFL.txt` for the history of that artwork. Copyright © 2017 IBM Corp. Upstream: https://github.com/IBM/plex.
+
+Mobile builds compile official SDL 3.4.18 (zlib license). Switch Full AOT packages also include ICU 77.1 data (Unicode/ICU notices in `ThirdParty/ICU-LICENSE.txt`), mono-nx and .NET runtime notices copied from the matching toolchain at packaging time.

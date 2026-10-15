@@ -17,7 +17,11 @@ namespace KuroakiGimmick.Native;
 /// </summary>
 public static partial class Sdl
 {
+#if KG_IOS
+    private const string Lib = "__Internal";
+#else
     private const string Lib = "SDL3";
+#endif
 
     // -------------------------------------------------------------------------
     // SDL 初始化
@@ -194,6 +198,8 @@ public static partial class Sdl
 
             if (OperatingSystem.IsWindows())
                 return GpuShaderFormat.Dxbc | GpuShaderFormat.SpirV;
+
+            if (OperatingSystem.IsLinux()) return GpuShaderFormat.SpirV;
 
             throw new PlatformNotSupportedException();
         }

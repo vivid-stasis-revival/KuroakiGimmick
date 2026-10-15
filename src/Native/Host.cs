@@ -23,10 +23,19 @@ public sealed class Host : IDisposable
         Sdl.Require(Sdl.SDL_Init(0x20));
         try
         {
+#if KG_SWITCH
+            Window = Sdl.CreateGpuWindow("Kuroaki/Gimmick", 1280, 720, Sdl.SDL_WINDOW_RESIZABLE);
+#elif KG_MOBILE
+            Window = Sdl.CreateGpuWindow("Kuroaki/Gimmick", 1280, 720,
+                Sdl.SDL_WINDOW_FULLSCREEN | Sdl.SDL_WINDOW_HIGH_PIXEL_DENSITY);
+#else
             Window = Sdl.CreateGpuWindow("Kuroaki/Gimmick", 1440, 940,
                 Sdl.SDL_WINDOW_RESIZABLE | Sdl.SDL_WINDOW_HIGH_PIXEL_DENSITY | (hidden ? Sdl.SDL_WINDOW_HIDDEN : 0));
+#endif
             SetIcon();
+#if !KG_SWITCH && !KG_MOBILE
             Sdl.SDL_SetWindowMinimumSize(Window, 1180, 860);
+#endif
             Gpu = new(Window, hidden);
             Device = "SDL_GPU / " + Sdl.GetGpuDriverName(Gpu.Handle);
         }

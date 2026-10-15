@@ -14,6 +14,7 @@ kg_rust_publish() {
     [ -n "$host" ] || { echo 'Unable to determine rustc host target.' >&2; return 1; }
 
     case "$rid" in
+        linux-x64) target=x86_64-unknown-linux-gnu; library=libkg_native_core.so ;;
         osx-arm64) target=aarch64-apple-darwin; library=libkg_native_core.dylib ;;
         osx-x64) target=x86_64-apple-darwin; library=libkg_native_core.dylib ;;
         win-x64)

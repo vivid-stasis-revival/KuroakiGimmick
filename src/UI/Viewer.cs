@@ -33,8 +33,10 @@ public sealed partial class Viewer : IDisposable
     public Target UiTarget => uiTarget!;
     /// <summary>主线程队列。对话框回调等异步结果只能入队，由窗口线程在 Update 中取出执行；回调内不直接改 Viewer 状态。</summary>
     readonly ConcurrentQueue<Action> actions = new();
+#if !KG_SWITCH && !KG_MOBILE
     /// <summary>字段持有委托实例，防止对话框尚未关闭时委托被 GC 回收、原生侧回调已失效的函数指针。</summary>
     Sdl.DialogCallback? dialog;
+#endif
     /// <summary>后台解析任务。结果只在 Update 中由窗口线程取回；任务存在期间 Busy 为真，阻止再次加载。</summary>
     Task<Session>? loading;
     string? loadingSourcePath;
@@ -44,7 +46,11 @@ public sealed partial class Viewer : IDisposable
     // Mute is transient UI state, not a project volume value. Keeping it separate prevents M from
     // overwriting PreviewVolume and lets a second press restore the exact configured level.
     bool audioMuted;
+#if KG_SWITCH
+    const bool dialogOpen = false;
+#else
     bool dialogOpen;
+#endif
     double rangeIn, rangeOut;
     double? resumePosition;
     int fps = 60, resolution = 1, diagnosticPage;
@@ -97,6 +103,11 @@ public sealed partial class Viewer : IDisposable
         audioMuted = false;
         transport.SetVolume(s.Project.PreviewVolume);
         transport.SetDelay(s.Project.AudioDelayMs);
+#if KG_SWITCH
+        Console.Error.WriteLine($"[K/G audio] source={s.Project.Audio ?? "none"} decoded={s.Audio != null} rate={s.Audio?.Rate ?? 0} channels={s.Audio?.Channels ?? 0} duration={s.Audio?.Duration ?? 0:F2} volume={transport.Volume:F2} deviceError={transport.AudioError ?? "none"}");
+        foreach (var diagnostic in s.Chart.Diagnostics.Where(d => d.Source == "audio"))
+            Console.Error.WriteLine("[K/G audio] " + diagnostic.Message);
+#endif
         message = L.Format($"Loaded {s.Chart.Notes.Count(n=>n.Type is not (3 or 4 or 5)):N0} notes / {s.Chart.Mods.Count:N0} events.");
         if (s.IsEmpty)
         {
@@ -119,28 +130,81 @@ public sealed partial class Viewer : IDisposable
     /// </summary>
     public void Run()
     {
+#if KG_MOBILE
+        MobilePlatform.WatchLifecycle(() => transport.SetPlaying(false));
+#endif
+#if KG_SWITCH
+        var frameMetrics = new SwitchFrameMetrics();
+#endif
         long frameStart = Stopwatch.GetTimestamp();
-        while (!quit)
+        try
         {
-            while (Sdl.SDL_PollEvent(out var e))
+            while (!quit)
             {
-                Handle(e);
+#if KG_SWITCH
+                long frameBegin = Stopwatch.GetTimestamp();
+                SwitchPlatform.PumpInput(host.Window);
+#endif
+                while (Sdl.SDL_PollEvent(out var e)) Handle(e);
+#if KG_MOBILE
+                if (MobilePlatform.Suspended)
+                {
+                    Sdl.SDL_Delay(16);
+                    continue;
+                }
+#endif
+#if KG_SWITCH
+                long inputEnd = Stopwatch.GetTimestamp();
+#endif
+                Update();
+                if (quit) break;
+                if (!host.Gpu.PresentationReady()) { Sdl.SDL_Delay(1); continue; }
+#if KG_SWITCH
+                long updateEnd = Stopwatch.GetTimestamp();
+#endif
+                Draw();
+#if KG_SWITCH
+                long drawEnd = Stopwatch.GetTimestamp();
+#endif
+                host.Gpu.Submit(present: true);
+                PresentNativeWindows();
+#if KG_SWITCH
+                frameMetrics.Record(frameBegin, inputEnd, updateEnd, drawEnd, Stopwatch.GetTimestamp(), transport.Playing);
+#endif
+                PerformanceStats.Record(PerformanceStats.Stage.Frame, Stopwatch.GetElapsedTime(frameStart).TotalMilliseconds);
+                frameStart = Stopwatch.GetTimestamp();
+                if (!transport.Playing && !Busy) Sdl.SDL_Delay(8);
             }
+            PerformanceStats.WriteConfiguredReport();
+        }
+        catch
+        {
+            host.Gpu.AbortPendingCommands();
+            throw;
+        }
+#if KG_MOBILE
+        finally { MobilePlatform.StopWatchingLifecycle(); }
+#endif
+    }
+
+#if KG_MOBILE
+    // UIKit owns the run loop on iOS; a display-link callback advances one frame.
+    internal void PauseMobile() => transport.SetPlaying(false);
+    internal bool MobileFrame()
+    {
+        try
+        {
+            while (Sdl.SDL_PollEvent(out var e)) Handle(e);
             Update();
-            if (quit) break;
-            if (!host.Gpu.PresentationReady()) { Sdl.SDL_Delay(1); continue; }
+            if (quit) return false;
+            if (MobilePlatform.Suspended || dialogOpen || !host.Gpu.PresentationReady()) return true;
             Draw();
             host.Gpu.Submit(present: true);
-            PresentNativeWindows();
-            PerformanceStats.Record(PerformanceStats.Stage.Frame, Stopwatch.GetElapsedTime(frameStart).TotalMilliseconds);
-            frameStart = Stopwatch.GetTimestamp();
-            if (!transport.Playing && !Busy)
-            {
-                Sdl.SDL_Delay(8);
-            }
+            return true;
         }
-        PerformanceStats.WriteConfiguredReport();
+        catch { host.Gpu.AbortPendingCommands(); throw; }
     }
+#endif
 
     /// <summary>
     /// 在后台线程解析文件，结果由 Update 取回。主文件选取优先级：.sgv.json 项目 > .vsb/.vsc 谱面 > 歌曲文件夹、info.json 或 .vsm
@@ -229,6 +293,22 @@ public sealed partial class Viewer : IDisposable
     /// </summary>
     void Dialog(bool save, string? location, Action<string[]> result, Action? cancelled = null, bool folder = false)
     {
+#if KG_SWITCH
+        var selectedPath = SwitchPlatform.PromptPath(save, location);
+        if (selectedPath == null) cancelled?.Invoke();
+        else actions.Enqueue(() => result([selectedPath]));
+        return;
+#elif KG_MOBILE
+        if (dialogOpen) return;
+        dialogOpen = true;
+        transport.SetPlaying(false);
+        MobilePlatform.PickFiles(save, location, folder, values => actions.Enqueue(() =>
+        {
+            dialogOpen = false;
+            if (values.Length > 0) result(values);
+            else cancelled?.Invoke();
+        }));
+#else
         if (dialogOpen)
         {
             return;
@@ -277,6 +357,7 @@ public sealed partial class Viewer : IDisposable
         {
             Sdl.SDL_ShowOpenFileDialog(dialog, 0, host.Window, 0, 0, location, true);
         }
+#endif
     }
 
     void ChooseOpen(bool attach = false)
@@ -324,6 +405,10 @@ public sealed partial class Viewer : IDisposable
     /// </summary>
     void ChooseExport()
     {
+#if KG_SWITCH || KG_MOBILE
+        message = "MP4 export requires desktop FFmpeg.";
+        return;
+#else
         if (Busy || Current.IsEmpty)
         {
             return;
@@ -348,6 +433,7 @@ public sealed partial class Viewer : IDisposable
             export = new(Canvas, Renderer, Current, new(path, rangeIn, rangeOut, fps, width, width * 9 / 16, notes, effects, preferences.OverwriteExports));
             message = L.Get("Rendering video...");
         });
+#endif
     }
 
     void Report()

@@ -1,0 +1,11 @@
+diff --git a/src/mono/mono/mini/CMakeLists.txt b/src/mono/mono/mini/CMakeLists.txt
+--- a/src/mono/mono/mini/CMakeLists.txt
++++ b/src/mono/mono/mini/CMakeLists.txt
+@@ -294,6 +294,7 @@
+ elseif(ENABLE_LLVM_RUNTIME AND NOT HOST_WASM)
+ set(llvm_runtime_sources
+     llvm-runtime.cpp)
++set_source_files_properties(llvm-runtime.cpp PROPERTIES COMPILE_OPTIONS "-fexceptions")
+ else()
+ set(llvm_runtime_sources)
+ endif()
