@@ -17,6 +17,11 @@ public sealed partial class Viewer
     public void Handle(Sdl.Event e)
     {
         // 先换算到逻辑坐标，再按优先级交给各手势 / 覆盖层处理器；任一处理器吃掉事件后，下方的 viewer 快捷键不再响应。
+        // Handle SDL native fingers before LogicalInput: their coordinates and windowID
+        // occupy different offsets from mouse events. Discard SDL's duplicate touch-mouse.
+        if (HandleTouchInput(e)) return;
+        if ((e.Type is 0x400 or 0x401 or 0x402) && e.MouseWhich == Sdl.TouchMouseId) return;
+        if (e.Type == 0x20F && touchContacts.Count != 0) CancelTouchInput();
         e = LogicalInput(e);
         if (HandleStartupInput(e)) return;
         if (HandleTrackOrderInput(e)) return;

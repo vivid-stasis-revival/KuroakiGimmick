@@ -118,7 +118,8 @@ public sealed partial class Viewer
         imageSources = textSources = false;
         editorSourceScroll = 10000;
         Draw(1440, 940);
-        int settingsY = (int)(editorSourceRect.Y + 35 - editorSourceScroll + 400);
+        int settingsY = (int)(editorSourceRect.Y + 35 - editorSourceScroll +
+            EditorToolsSettingsOffset(proxyPanelExpanded, windowToolsExpanded) + 14);
         Handle(new() { Type = 0x401, Button = 1, X = 80, Y = settingsY });
         Draw(1440, 940);
         Handle(new() { Type = 0x402, Button = 1 });
@@ -197,6 +198,7 @@ public sealed partial class Viewer
             throw new Exception("Official reference index did not render its Markdown table.");
         CloseReference();
         Draw(1440, 940);
+        SmokeTouchUi();
     }
 }
 

@@ -61,8 +61,12 @@ jobs:
 
             if [[ -z "$before" || "$before" == "0000000000000000000000000000000000000000" ]]; then
               changed="$(git show --pretty='' --name-only HEAD)"
-            else
+            elif git cat-file -e "${before}^{commit}" 2>/dev/null; then
               changed="$(git diff --name-only "$before" "${GITHUB_SHA}")"
+            else
+              # A force-push may remove the previous SHA from reachable history.
+              # Rebuild conservatively instead of failing before compilation.
+              changed="$(git ls-files)"
             fi
 
             echo "Changed files:"
@@ -254,7 +258,7 @@ jobs:
   release:
     name: Publish GitHub release
     needs: [detect, build]
-    if: needs.detect.outputs.should_build == 'true' && needs.build.result == 'success'
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && needs.detect.outputs.should_build == 'true' && needs.build.result == 'success'
     runs-on: ubuntu-latest
 
     permissions:

@@ -449,6 +449,7 @@ public sealed partial class Viewer : IDisposable
         macMenu?.Dispose();
         windowsMenu?.Dispose();
         chartExportCancellation?.Cancel();
+        CancelTouchInput();
         CancelImageGesture();
         ReleaseImageImports();
         if (resizingLayout != 0) EndLayoutResize();
