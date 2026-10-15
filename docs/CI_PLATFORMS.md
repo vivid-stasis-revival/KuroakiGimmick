@@ -1,6 +1,6 @@
 # Six-platform builds
 
-`.github/workflows/nativeaot.yml` builds Windows x64, macOS arm64 and Linux x64 NativeAOT executables, Android arm64 signed APK, iOS arm64 unsigned IPA, and Switch NRO. Relevant pushes and manual runs trigger builds. Each platform produces a ZIP in Actions artifacts; a release is published only when all six builds succeed. With the Switch runner unconfigured, five platform builds can run, Switch is explicitly reported pending, and the release job is skipped.
+`.github/workflows/nativeaot.yml` builds Windows x64, macOS arm64 and Linux x64 NativeAOT executables, Android arm64 signed APK, iOS arm64 unsigned IPA, and Switch NRO. Relevant pushes and manual runs trigger builds. Each platform produces a ZIP in Actions artifacts; a release is published only on the default branch when all six builds succeed. Feature branches produce Actions artifacts without publishing releases. With the Switch runner unconfigured, five platform builds can run, Switch is explicitly reported pending, and the release job is skipped.
 
 ## Android signing
 
