@@ -152,13 +152,20 @@ public sealed partial class Canvas : IDisposable
     }
 
     /// <summary>执行一次全屏离屏滤镜。输入纹理不能与输出目标为同一纹理。</summary>
-    public void Pass(Target output, Texture input, Shader shader, Action<Shader>? uniforms = null)
+    public void Pass(Target output, Texture input, Shader shader, Action<Shader>? uniforms = null, bool preserveAlpha = false)
     {
-        // 输出目标先清成不透明黑：滤镜结果覆盖整个目标，不保留上一次的残留内容。
-        Begin(output, output.Texture.Width, output.Texture.Height, output.Texture.Width, output.Texture.Height, new(0, 0, 0, 1));
-        uniforms?.Invoke(shader);
-        Quad(input, new(0, 0, output.Texture.Width, output.Texture.Height), Color.White, shader: shader);
-        Flush();
+        // 全屏滤镜默认清成不透明黑；独立图层可保留透明覆盖范围。
+        Begin(output, output.Texture.Width, output.Texture.Height, output.Texture.Width, output.Texture.Height, new(0, 0, 0, preserveAlpha ? 0 : 1));
+        // Isolated layer filters must retain coverage instead of blending it
+        // into an opaque black backdrop. Copy their premultiplied RGBA once.
+        if(preserveAlpha)Blend(BlendFactor.One,BlendFactor.Zero);
+        try
+        {
+            uniforms?.Invoke(shader);
+            Quad(input, new(0, 0, output.Texture.Width, output.Texture.Height), Color.White, shader: shader);
+            Flush();
+        }
+        finally { if(preserveAlpha)Blend(BlendFactor.SourceAlpha,BlendFactor.InverseSourceAlpha); }
     }
 
     /// <summary>先 Flush 再提交队列，然后释放自有的 White 与 Basic；不释放外部传入的 GpuDevice。</summary>

@@ -13,6 +13,7 @@ public sealed partial class NativeGimmickRenderer : IDisposable
     private readonly Target background;
     private readonly Target filtered;
     private readonly Target mask;
+    private readonly Shader roomLayerComposite;
     private NativeGimmickProfile? current;
     private GimmickDrawScheduler? scheduler;
     private readonly Dictionary<(string Path, bool Repeat, bool Linear), Texture> textures = [];
@@ -20,12 +21,23 @@ public sealed partial class NativeGimmickRenderer : IDisposable
     private readonly HashSet<(string Path, bool Repeat, bool Linear)> failedTextures = [];
     private readonly HashSet<GimmickShaderMode> failedModes = [];
     private long textureBytes;
+    private long imageClock;
+    private readonly Dictionary<(string Path,bool Repeat,bool Linear),long> imageUse=[];
+    private readonly Dictionary<Texture,int> imagePins=[];
+    private void PinImage(Texture texture)=>imagePins[texture]=imagePins.GetValueOrDefault(texture)+1;
+    private void UnpinImage(Texture texture)
+    {
+        int count=imagePins.GetValueOrDefault(texture);
+        if(count<=1)imagePins.Remove(texture);else imagePins[texture]=count-1;
+    }
     public NativeGimmickRenderer(Canvas canvas)
     {
         this.canvas = canvas;
         background = new(canvas.Gpu, 320, 180);
         filtered = new(canvas.Gpu, 320, 180);
         mask = new(canvas.Gpu, 320, 180);
+        roomLayerComposite = new(canvas.Gpu, Canvas.VertexSource,
+            "#version 330 core\nin vec2 v_vTexcoord;in vec4 v_vColour;uniform sampler2D gm_BaseTexture;out vec4 fragColor;void main(){vec4 c=texture(gm_BaseTexture,v_vTexcoord);if(c.a>0.)c.rgb/=c.a;fragColor=c*v_vColour;}");
     }
 
     /// <summary>先 Flush 再缩放两块离屏目标，避免仍在队列中的批次引用旧尺寸纹理。</summary>
@@ -94,6 +106,7 @@ public sealed partial class NativeGimmickRenderer : IDisposable
         var key = (path, repeat, linear);
         if (textures.TryGetValue(key, out var image))
         {
+            imageUse[key]=++imageClock;
             return image;
         }
         if (failedTextures.Contains(key))
@@ -106,12 +119,21 @@ public sealed partial class NativeGimmickRenderer : IDisposable
             canvas.Flush();
             var size = new ImageResourceBudget().Check(path);
             long bytes = (long) size.Width * size.Height * 4;
-            if (textureBytes + bytes > ResourceFiles.DecodedImageLimit)
+            while (textureBytes + bytes > ResourceFiles.DecodedImageLimit)
             {
-                throw new InvalidDataException("Object GPU textures exceed the 128 MiB budget (including sampler variants).");
+                (string Path,bool Repeat,bool Linear)? victim=null;
+                long oldest=long.MaxValue;
+                foreach(var entry in textures)
+                    if(!imagePins.ContainsKey(entry.Value) && imageUse.GetValueOrDefault(entry.Key)<oldest)
+                    {victim=entry.Key;oldest=imageUse.GetValueOrDefault(entry.Key);}
+                if(victim==null)throw new InvalidDataException("Active object GPU images exceed the 128 MiB working-set budget.");
+                var removed=textures[victim.Value];
+                textureBytes-=(long)removed.Width*removed.Height*4;
+                removed.Dispose();textures.Remove(victim.Value);imageUse.Remove(victim.Value);
             }
             image = Texture.Load(canvas.Gpu, path, repeat: repeat, linear: linear);
             textures.Add(key, image);
+            imageUse[key]=++imageClock;
             textureBytes += bytes;
             return image;
         }
@@ -187,7 +209,26 @@ public sealed partial class NativeGimmickRenderer : IDisposable
         canvas.Flush();
     }
 
-    public void DrawGui(Session session, double time, bool notes = true) => DrawStage(session, time, GimmickStages.Gui, notes);
+    public void DrawGui(Session session, double time, bool notes = true, Action<GimmickTextOverlay>? drawText=null)
+    {
+        Prepare(session);
+        if(scheduler!=null && current?.Data is { } definition)
+        {
+            var commands=scheduler.At(session.Timeline,time,GimmickStages.Gui,notes);
+            var text=definition.TextOverlays.OrderByDescending(t=>t.Depth).ThenBy(t=>t.SortOrder).ToArray();
+            int index=0;
+            foreach(var command in commands)
+            {
+                while(index<text.Length && (text[index].Depth>command.Drawing.Depth || text[index].Depth==command.Drawing.Depth
+                    && text[index].SortOrder<command.Drawing.SortOrder))
+                {var overlay=text[index++];drawText?.Invoke(overlay);}
+                Draw(session,command.Drawing,command.Age,time,command.EventIndex);
+            }
+            while(index<text.Length){var overlay=text[index++];drawText?.Invoke(overlay);}
+        }
+        canvas.Flush();
+        DrawSpriteLyricsText(session, time);
+    }
     private void Draw(Session session, GimmickDrawing drawing, double age, double time, int eventIndex)
     {
         if (current == null || !current.Sprites.TryGetValue(drawing.Sprite, out var sprite))
@@ -198,14 +239,31 @@ public sealed partial class NativeGimmickRenderer : IDisposable
         double frameValue = drawing.FrameMod == null
             ? drawing.Frame + Math.Floor(Math.Max(0, age) * drawing.FramesPerSecond)
             : session.Timeline.Get(drawing.FrameMod, time);
+        if (drawing.Bindings.TryGetValue("frame", out var frameBinding)) frameValue = frameBinding.Value(session.Timeline, time);
+        if(current.Behavior("reset-animation") is { } animation && drawing.Sprite==animation.Text("sprite",""))
+        {
+            double start=0,reset=session.Timeline.Bpm.Time(animation.Number("resetBeat",0));
+            if(time>reset)start=(Math.Floor(reset*60+1e-8)+1)/60.0;
+            frameValue=Math.Clamp(Math.Floor((Math.Max(0,time-start)+1.0/60)*animation.Number("fps",1)-1e-8),0,animation.Number("lastFrame",0));
+        }
         if (!double.IsFinite(frameValue)) return;
         int frame = (int)((frameValue % sprite.Frames.Count + sprite.Frames.Count) % sprite.Frames.Count);
         if (Image(drawing.Sprite, frame) is not { } texture)
         {
             return;
         }
-        double x = drawing.Value("x", age), y = drawing.Value("y", age);
-        Color color = Color.White;
+        double V(string property) => drawing.Value(property, age, session.Timeline, time);
+        double x = V("x"), y = V("y");
+        double packedColor = drawing.Bindings.TryGetValue("color", out var colorBinding)
+            ? colorBinding.Value(session.Timeline, time) : drawing.ColorBgr;
+        if (!double.IsFinite(packedColor) || packedColor < 0 || packedColor > 0xFFFFFF) return;
+        if(!GimmickLifecycle.At(drawing.Lifecycle,session.Timeline.Callbacks,time))return;
+        Color color = Color.GameMaker((uint)packedColor);
+        if(drawing.HsvTint is { } tint)
+        {
+            var hsv=Color.Hsv((float)tint.Hue.Value(session.Timeline,time),(float)tint.Saturation);
+            color=new(hsv.R*(float)tint.Brightness,hsv.G*(float)tint.Brightness,hsv.B*(float)tint.Brightness);
+        }
         if (drawing.Random is { } random)
         {
             uint seed = unchecked((uint) Math.Max(0, eventIndex) * random.SeedMultiplier + random.SeedOffset);
@@ -218,14 +276,18 @@ public sealed partial class NativeGimmickRenderer : IDisposable
                 color = Color.Hsv(Timeline.Hash(seed + 2), 1);
             }
         }
-        double alpha = drawing.Value("alpha", age) * (drawing.AlphaMod == null ? 1 : session.Timeline.Get(drawing.AlphaMod, time));
-        if (alpha <= 0)
+        double alpha = V("alpha") * (drawing.AlphaMod == null ? 1 : session.Timeline.Get(drawing.AlphaMod, time));
+        double scaleX = V("scaleX"), scaleY = V("scaleY"), angle = V("angle");
+        if (!double.IsFinite(alpha) || alpha <= drawing.MinimumAlpha || !double.IsFinite(x) || !double.IsFinite(y)
+            || !double.IsFinite(scaleX) || !double.IsFinite(scaleY) || !double.IsFinite(angle)
+            || Math.Abs(x) > float.MaxValue || Math.Abs(y) > float.MaxValue
+            || Math.Abs(scaleX) > float.MaxValue || Math.Abs(scaleY) > float.MaxValue)
         {
             return;
         }
-        var transform = Matrix3x2.CreateTranslation(-sprite.OriginX, -sprite.OriginY) * Matrix3x2.CreateScale((float) drawing.Value("scaleX",
-            age), (float) drawing.Value("scaleY", age)) * Matrix3x2.CreateRotation((float)(-drawing.Value("angle",
-            age) * Math.PI / 180)) * Matrix3x2.CreateTranslation((float) x, (float) y);
+        if(Math.Abs(scaleX)<=drawing.MinimumAbsScale || Math.Abs(scaleY)<=drawing.MinimumAbsScale)return;
+        var transform = Matrix3x2.CreateTranslation(-sprite.OriginX, -sprite.OriginY) * Matrix3x2.CreateScale((float)scaleX,
+            (float)scaleY) * Matrix3x2.CreateRotation((float)(-(angle % 360) * Math.PI / 180)) * Matrix3x2.CreateTranslation((float)x, (float)y);
         canvas.Polygon(texture, Vector2.Transform(new(0, 0), transform), Vector2.Transform(new(sprite.Width, 0), transform),
             Vector2.Transform(new(0, sprite.Height), transform), Vector2.Transform(new(sprite.Width, sprite.Height), transform), color.Alpha(alpha));
     }
@@ -233,6 +295,15 @@ public sealed partial class NativeGimmickRenderer : IDisposable
     /// <summary>释放本会话的全部 GPU 对象并清空失败记录与调度器。调用方负责在此之前 Flush；本方法自身不提交。</summary>
     private void ReleaseSessionResources()
     {
+        picturedTimeline = null;
+        picturedObjects = null;
+        plauditeTimeline = null;
+        plauditeObjects = null;
+        sceneStoryTimeline = null;
+        sceneStoryState = null;
+        sceneStoryTime = double.NaN;
+        starcrashNoteMix?.Dispose();
+        starcrashNoteMix = null;
         foreach (var image in textures.Values)
         {
             image.Dispose();
@@ -242,6 +313,7 @@ public sealed partial class NativeGimmickRenderer : IDisposable
             shader.Dispose();
         }
         textures.Clear();
+        imageUse.Clear();imagePins.Clear();imageClock=0;
         shaders.Clear();
         failedTextures.Clear();
         failedModes.Clear();
@@ -257,8 +329,13 @@ public sealed partial class NativeGimmickRenderer : IDisposable
         ReleaseSessionResources();
         background.Dispose();
         filtered.Dispose();
-        DisposeStarcrashersObjects();
+        DisposeMaskedStarFieldState();
+        DisposePostTargets();
+        DisposeFilterChainTargets();
+        DisposeDesktopTargets();
+        DisposeFilterChainTargets();
         mask.Dispose();
+        roomLayerComposite.Dispose();
     }
 }
 

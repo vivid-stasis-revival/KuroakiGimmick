@@ -27,7 +27,9 @@ public sealed class Checkerboard
             return result;
         }
         string root = p.GimmickAssets ?? Paths.SharedAssetDirectory("GimmickExtras");
-        var frames = Enumerable.Range(0, 3).Select(i => Path.Combine(root, $"sp_angelstar_checker_{i}.png")).ToArray();
+        var frames = chart.ObjectName != "obj_custom_gimmick" && timeline.Native?.Sprites.TryGetValue("sp_angelstar_checker", out var sprite) == true
+            ? sprite.Frames.ToArray()
+            : Enumerable.Range(0, 3).Select(i => Path.Combine(root, $"sp_angelstar_checker_{i}.png")).ToArray();
         if (frames.All(File.Exists))
         {
             try

@@ -12,5 +12,6 @@ public sealed class GimmickShaderMode
     public Dictionary<string, GimmickScalar[]> Uniforms { get; set; } = [];
     public Dictionary<string, string> Samplers { get; set; } = [];
     public string[] LinearSamplers { get; set; } = [];
+    public string[] ClampSamplers { get; set; } = [];
 }
 

@@ -34,8 +34,8 @@ public sealed partial class Session
             },
             ["total"] = card.Stats.Total
         };
-        var pastAudioTail = new JsonArray(Chart.Mods.Where(e => Audio != null && Timeline.Bpm.Time(e.Beat) +
-            Math.Max(0, e.Duration) * 60 / Timeline.Bpm.BpmAtBeat(e.Beat) > Audio.Duration + 1e-6)
+        var pastAudioTail = new JsonArray(Chart.Mods.Where(e => SongAudio != null && Timeline.Bpm.Time(e.Beat) +
+            Math.Max(0, e.Duration) * 60 / Timeline.Bpm.BpmAtBeat(e.Beat) > SongAudio.Duration + 1e-6)
             .Select(e => (JsonNode?)new JsonObject
             {
                 ["Name"] = e.Name,
@@ -63,6 +63,9 @@ public sealed partial class Session
             ["objectName"] = Chart.ObjectName,
             ["assetsRoot"] = Paths.Assets,
             ["proxies"] = Chart.Proxies,
+            ["proxyCountDeclared"] = Chart.ProxyCountDeclared,
+            ["hasProxyTracks"] = HasProxyEvents,
+            ["nativeApplicationProxyEnabled"] = NativeApplicationProxyEnabled,
             ["rendering"] = new JsonObject
             {
                 ["width"] = Project.RenderWidth,
@@ -87,7 +90,10 @@ public sealed partial class Session
             ["modCount"] = Chart.Mods.Count,
             ["perFrameCount"] = Chart.PerFrame.Count,
             ["duration"] = Duration,
-            ["playbackDuration"] = Playback.Duration(0, Duration),
+            ["playbackDuration"] = Interludes!=null ? PresentationDuration : Playback.Duration(0, Duration),
+            ["nativeStoryPauses"] = new JsonArray((Interludes?.Entries.Select(e=>(JsonNode)new JsonObject{
+                ["songTime"]=e.SongTime,["presentationStart"]=e.PresentationStart,["duration"]=e.Duration,
+                ["trigger"]=e.Schedule.Definition.Trigger}).ToArray())??[]),
             ["chartSpeed"] = time.HasValue ? Playback.RateAt(time.Value) : Playback.RateAt(0),
             ["playspeedSegments"] = AppJson.Node(Playback.Segments.ToArray()),
             ["musicControls"] = AppJson.Node(Playback.Controls.ToArray()),
@@ -95,7 +101,8 @@ public sealed partial class Session
             ["eventTimeline"] = new JsonObject
             {
                 ["end"] = Timeline.End,
-                ["audioEnd"] = JsonValue.Create(Audio?.Duration),
+                ["audioEnd"] = JsonValue.Create(SongAudio?.Duration),
+                ["presentationAudioEnd"] = JsonValue.Create(Audio?.Duration),
                 ["pastAudioTail"] = pastAudioTail
             },
             ["sourceNoOps"] = AppJson.Node(Timeline.SourceNoOps.ToArray()),
@@ -135,6 +142,13 @@ public sealed partial class Session
                 ["background"] = NativeGimmick.Data?.Background != null,
                 ["postModes"] = AppJson.Node(NativeGimmick.Data?.PostModes.Keys.ToArray()),
                 ["objectName"] = NativeGimmick.Data?.ObjectName,
+                ["definitionVersion"] = NativeGimmick.Data?.Version,
+                ["components"] = AppJson.Node(NativeGimmick.Data?.Behaviors.Select(component=>component.Type).ToArray()),
+                ["signalRoutes"] = AppJson.Node(NativeGimmick.Data?.Signals.Keys.ToArray()),
+                ["sourceSongId"] = NativeGimmick.SongContext.SongId,
+                ["sourceSongContext"] = NativeGimmick.SongContext.Source,
+                ["sourceObscureInfo"] = NativeGimmick.SongContext.ObscureInfo,
+                ["sourceDisablePause"] = NativeGimmick.SongContext.DisablePause,
                 ["resources"] = AppJson.Node(NativeGimmick.Resources),
                 ["issues"] = AppJson.Node(NativeGimmick.Issues),
                 ["enabled"] = NativeGimmick.Data != null,
@@ -144,8 +158,11 @@ public sealed partial class Session
                 ["sprites"] = AppJson.Node(NativeGimmick.Sprites.Keys.ToArray()),
                 ["textures"] = AppJson.Node(NativeGimmick.TextureFiles),
                 ["particles"] = Timeline.ObjectParticles.Count,
-                ["completeObject"] = NativeGimmick.Data?.CompleteObject ?? false,
-                ["starcrashersLateAtTime"] = Chart.ObjectName == "obj_starcrashers_gimmick"
+                ["declaredCompleteObject"] = NativeGimmick.Data?.CompleteObject ?? false,
+                ["resourcesReady"] = NativeGimmick.ResourcesReady,
+                ["completeObject"] = NativeGimmick.CompleteObject,
+                ["declaredOnlyMods"] = AppJson.Node(NativeGimmick.DeclaredOnlyMods.ToArray()),
+                ["starcrashersLateAtTime"] = NativeGimmick.HasBehavior("masked-starfield")
                     ? new JsonObject
                     {
                         ["greenleftMix8Bit"] = JsonValue.Create(time is { } mixTime

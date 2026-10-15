@@ -190,6 +190,9 @@ public sealed unsafe class Shader : IDisposable
     /// <summary>仅转换 GameMaker GLSL 接口及已存在的零除防护，不重写原滤镜公式。</summary>
     public static string AdaptGml(string source)
     {
+        // GameMaker ES shaders may use "sample" as a local name; desktop GLSL
+        // reserves it as an interpolation qualifier. Preserve the expression.
+        if(Regex.IsMatch(source,@"\bvec[234]\s+sample\b"))source=Regex.Replace(source,@"\bsample\b","kg_sample");
         source = Regex.Replace(source, @"(?m)^\s*#version[^\r\n]*", "");
         source = Regex.Replace(source, @"precision\s+\w+\s+\w+\s*;", "");
         source = source.Replace("#define LOWPREC lowp", "#define LOWPREC").Replace("varying ", "in ").Replace("texture2D(",

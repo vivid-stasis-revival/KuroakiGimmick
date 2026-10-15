@@ -49,6 +49,17 @@ public sealed class ViewerProject
     public string? SongName { get; set; }
     public string? SongArtist { get; set; }
     public string? SongLevel { get; set; }
+    /// <summary>Optional source-game song_id for native branches; chart_id is a file key, not this ID.</summary>
+    public int? NativeSongId { get; set; }
+    public string? NativeRoom { get; set; }
+    /// <summary>Source story/gameplay context supplied by the project; no save file is read implicitly.</summary>
+    public bool NativeObscureInfo { get; set; }
+    public bool NativeDisablePause { get; set; }
+    public bool NativePlauditeTrueEnding { get; set; }
+    public bool NativeInBetweenspace { get; set; }
+    public bool NativeTutorialCover { get; set; }
+    public NativeInputContext? NativeInput { get; set; }
+    public NativeStoryContext? NativeStoryContext { get; set; }
     public double Bpm { get; set; } = 120;
     /// <summary>工程 offset，毫秒；由 BpmMap 在时间域一次性应用，不要在别处重复减。</summary>
     public double OffsetMs { get; set; }
@@ -63,6 +74,7 @@ public sealed class ViewerProject
     public string Profile { get; set; } = "auto";
     public bool Notes { get; set; } = true;
     public bool PostProcessing { get; set; } = true;
+    public Dictionary<string, JsonElement> GimmickContext { get; set; } = [];
     public static readonly JsonSerializerOptions Json = new()
     {
         WriteIndented = true,
@@ -73,9 +85,12 @@ public sealed class ViewerProject
     public ViewerProject Copy()
     {
         var copy = (ViewerProject)MemberwiseClone();
+        copy.GimmickContext = new(GimmickContext);
         copy.EditorMarkers = (EditorMarkers ?? []).ToList();
         copy.EditorTrackOrder = (EditorTrackOrder ?? []).ToList();
         copy.TextFiles = TextFiles == null ? null : new(TextFiles, StringComparer.Ordinal);
+        copy.NativeInput = NativeInput is { } input ? input with
+            { KeyboardLabels = input.KeyboardLabels?.ToArray(), GamepadIcons = input.GamepadIcons?.ToArray() } : null;
         return copy;
     }
 }

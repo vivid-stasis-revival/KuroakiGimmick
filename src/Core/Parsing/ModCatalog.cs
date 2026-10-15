@@ -13,6 +13,7 @@ public static class ModCatalog
         Supported.Add("lr_slash_color");
         foreach (string name in "lr_sides_blue lr_sides_red lr_sides_rev_blue lr_sides_rev_red df_countdown".Split(' ')) Supported.Add(name);
         Supported.Add("fx_film");
+        foreach(string name in new[]{"fx_twirl","sg_endblip","sg_endblip_destroy","df_sideline2"}) Supported.Add(name);
         Supported.Add("playspeed");
         Supported.Add("prtrX");
         Supported.Add("prtrY");

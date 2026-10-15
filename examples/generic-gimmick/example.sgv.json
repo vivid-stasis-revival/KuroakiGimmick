@@ -1,0 +1,9 @@
+{
+  "Chart": "FINALE.vsc",
+  "Gimmick": "FINALE.vsm",
+  "GimmickDefinition": "gimmick-object.json",
+  "Bpm": 120,
+  "RoomPreset": "none",
+  "RenderWidth": 320,
+  "GameUiEnabled": false
+}

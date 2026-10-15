@@ -214,6 +214,10 @@ jobs:
           set -euo pipefail
           'artifacts/${{ matrix.rid }}/${{ matrix.executable }}' --reference-layout-test
 
+      - name: Verify v1 and v2 object definitions in the published executable
+        shell: bash
+        run: 'artifacts/${{ matrix.rid }}/${{ matrix.executable }} --gimmick-definition-test'
+
       - name: Verify RustBridge in the actual published executable
         shell: bash
         run: |

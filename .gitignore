@@ -52,3 +52,4 @@ __pycache__/
 *.pfx
 /platform/mobile/ios/Assets.xcassets/AppIcon.appiconset/icon.png
 /platform/switch/native/icon.jpg
+/scripts/assets/

@@ -33,6 +33,7 @@ public sealed partial class SceneRenderer
     /// <summary>按时间取当前 jacket；解码失败只记一次诊断并进入 failedTextures，不每帧重试。切换纹理前先 Flush。</summary>
     void DrawJacket(Session session, double time)
     {
+        if (session.NativeGimmick.Data?.Sequence?.JacketEndTime is { } end && time >= end) return;
         var jackets = session.Jackets;
         string? path = jackets.At(session.Timeline, time);
         if (path != jacketPath)

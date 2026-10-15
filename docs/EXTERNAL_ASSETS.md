@@ -9,6 +9,10 @@ CI packages contain the application, public application branding, fonts/notices 
 
 Android and iOS packs must include `MobileShaders` baked for the correct platform (SPIR-V for Android, MSL for iOS). Copying a raw desktop `Assets.zip` is insufficient. Shader caches are tied to shader source; regenerate after shader changes. Custom songs may need their shaders baked as well.
 
+## Definition compatibility
+
+The 18.1.x resource packs use v2 object definitions. Use an application containing the 18.1.1 object system with those packs; older 18.0.1-based builds (including Nightly ab7e4bb) reject them. Changing the manifest version number does not migrate the behavior configuration. Rebuild mobile/Switch shader packs when updating shader sources.
+
 ## Prepare a private pack on a desktop
 
 Install .NET SDK/runtime 9 and the project's desktop shader compiler dependencies. From the repository:

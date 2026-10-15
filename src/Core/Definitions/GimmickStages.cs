@@ -6,9 +6,14 @@ namespace KuroakiGimmick.Core;
 public static class GimmickStages
 {
     public const string BeforeRails = "before-rails";
+    public const string AfterRails = "after-rails";
     public const string BeforePlayfield = "before-playfield";
+    public const string BeforePost = "before-post";
     public const string FixedJudgment = "fixed-judgment";
     public const string Gui = "gui";
-    public static readonly string[] All = [BeforeRails, BeforePlayfield, FixedJudgment, Gui];
+    public const string AfterEffects = "after-effects";
+    public const string BeforeHoldOverlay = "before-hold-overlay";
+    public const string BeforeNotes = "before-notes";
+    public static readonly string[] All = [BeforeRails, AfterRails, BeforePlayfield, FixedJudgment, BeforeHoldOverlay, BeforeNotes, BeforePost, AfterEffects, Gui];
 }
 

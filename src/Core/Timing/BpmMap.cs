@@ -10,7 +10,8 @@ public sealed class BpmMap
     public List<Segment> Segments { get; } = [];
     readonly double offset;
     public bool IsFixed { get; }
-    public BpmMap(Chart chart, double bpm, double offsetMs, double? fixedBpm = null)
+    public BpmMap(Chart chart, double bpm, double offsetMs, double? fixedBpm = null,
+        IReadOnlyList<GimmickBpmPoint>? nativePoints = null)
     {
         if (!double.IsFinite(bpm) || bpm <= 0 || bpm > 10000)
         {
@@ -27,6 +28,24 @@ public sealed class BpmMap
         IsFixed = fixedBpm.HasValue;
         // offset 只在这里从毫秒转成秒并保存一次，Time/Beat 各自加减一次，别处不得重复应用。
         offset = offsetMs / 1000;
+        if (!fixedBpm.HasValue && nativePoints is { Count: > 0 })
+        {
+            double previousBeat = 0, previousBpm = 60, time = 0;
+            foreach (var point in nativePoints)
+            {
+                if (point == null || !double.IsFinite(point.Beat) || point.Beat < previousBeat
+                    || !double.IsFinite(point.Bpm) || point.Bpm <= 0 || point.Bpm > 10000)
+                    throw new InvalidDataException("Invalid native BPM override.");
+                time += (point.Beat - previousBeat) * 60 / previousBpm;
+                if (Segments.Count > 0 && point.Beat == Segments[^1].Beat)
+                    Segments[^1] = new(time, point.Beat, point.Bpm);
+                else Segments.Add(new(time, point.Beat, point.Bpm));
+                previousBeat = point.Beat;
+                previousBpm = point.Bpm;
+            }
+            if (nativePoints[0].Beat != 0) throw new InvalidDataException("Native BPM override must start at beat zero.");
+            return;
+        }
         if (RustEngineBridge.TryBuildBpm(chart, bpm, offsetMs, fixedBpm, out var nativeSegments) && nativeSegments != null)
         {
             Segments.AddRange(nativeSegments);

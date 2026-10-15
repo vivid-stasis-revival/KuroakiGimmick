@@ -35,7 +35,7 @@ internal static class Program
         Console.Error.WriteLine("[K/G boot] default cultures initialized");
 #endif
         // 这一串是所有无人值守模式（自测、检查、导出、截图）。cli 为真时失败只写 stderr，不弹消息框卡住脚本。
-        bool cli = args.Any(a => a is "--bake-mobile-shaders" or "--bake-switch-shaders" or "--inspect" or "--render" or "--snapshot" or "--card" or "--smoke-ui" or "--smoke-workspace-memory" or "--smoke-startup" or "--smoke-mac-menu" or "--smoke-windows-menu" or "--smoke-proxy-guides" or "--proxy-pick-test" or "--reference-layout-test" or "--smoke-text-ui" or "--smoke-i18n" or "--rust-engine-test" or "--rust-timeline-test" or "--rust-bridge-test" or "--rust-audio-test");
+        bool cli = args.Any(a => a is "--bake-mobile-shaders" or "--bake-switch-shaders" or "--inspect" or "--render" or "--snapshot" or "--card" or "--smoke-ui" or "--smoke-workspace-memory" or "--smoke-startup" or "--smoke-mac-menu" or "--smoke-windows-menu" or "--smoke-proxy-guides" or "--proxy-pick-test" or "--reference-layout-test" or "--gimmick-definition-test" or "--smoke-text-ui" or "--smoke-i18n" or "--rust-engine-test" or "--rust-timeline-test" or "--rust-bridge-test" or "--rust-audio-test");
         try
         {
             if (args.Length >= 3 && args[0] == "--bake-mobile-shaders")
@@ -66,6 +66,7 @@ internal static class Program
                 return 0;
             }
             if (args.Contains("--proxy-pick-test")) return ProxyPickingChecks.Run();
+            if (args.Contains("--gimmick-definition-test")) return GimmickDefinitionChecks.Run();
             if (args.Contains("--reference-layout-test")) return ReferenceMarkdownChecks.Run();
             if (args.Contains("--rust-audio-test"))
             {
@@ -455,6 +456,7 @@ internal static class Program
     Proxy preview: --snapshot --proxy 4 [--proxy-solo] [--proxy-crop] --time 60
     Proxy guide check: --smoke-proxy-guides --time 0 --out proxy-guides.ppm
     Proxy picking (no SDL): --proxy-pick-test
+    Object definition compatibility (no SDL/assets): --gimmick-definition-test
     Documentation Markdown/layout (no SDL): --reference-layout-test
     UI localization check: --smoke-i18n [--editor] --out i18n.ppm
     KuroakiGimmick --editor Samples/EditorDemo/demo.sgv.json
