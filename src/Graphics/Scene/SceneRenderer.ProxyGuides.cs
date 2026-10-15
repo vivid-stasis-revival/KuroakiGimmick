@@ -32,7 +32,7 @@ public sealed partial class SceneRenderer
     // Same UV mask as Assets/Shaders/proxy.frag. The mask is evaluated BEFORE wave sampling.
     // This pass deliberately shades an opaque source rectangle, including empty/hidden proxies,
     // so the author can distinguish the selected region from the notes currently inside it.
-    const string ProxyGuideFragmentSource = """
+    internal const string ProxyGuideFragmentSource = """
         #version 330 core
         in vec2 v_vTexcoord;
         in vec4 v_vColour;

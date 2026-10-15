@@ -1,0 +1,37 @@
+<Project>
+  <PropertyGroup>
+    <KGRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../..'))</KGRoot>
+    <KGMobileAssets Condition="'$(KGMobileAssets)' == ''">$(KGRoot)/dist/mobile-assets/$(KGMobilePlatform)</KGMobileAssets>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefineConstants>$(DefineConstants);KG_MOBILE</DefineConstants>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <PublishAot>false</PublishAot>
+    <PublishSingleFile>false</PublishSingleFile>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <AssemblyName>KuroakiGimmick</AssemblyName>
+    <RootNamespace>KuroakiGimmick</RootNamespace>
+    <Version>0.1.5</Version>
+    <InformationalVersion Condition="'$(InformationalVersion)' == ''">v0.1.5 / 18.2 Mobile</InformationalVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(KGRoot)/src/**/*.cs" />
+    <EmbeddedResource Include="$(KGRoot)/Assets/tips.json" LogicalName="KuroakiGimmick.Tips.json" Condition="Exists('$(KGRoot)/Assets/tips.json')" />
+    <EmbeddedResource Include="$(KGRoot)/src/UI/Localization/*.json" LogicalName="KuroakiGimmick.Localization.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="$(KGRoot)/Resources/Fonts/*.ttf" LogicalName="KuroakiGimmick.Fonts.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="$(KGRoot)/Assets/Gimmicks/**/manifest.json" Link="Assets/Gimmicks/%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="$(KGRoot)/Assets/Documentation/vsm-reference.json" LogicalName="KuroakiGimmick.VsmReference.json" Condition="Exists('$(KGRoot)/Assets/Documentation/vsm-reference.json')" />
+    <EmbeddedResource Include="$(KGRoot)/Assets/Catalog/legacy-per-frame-bindings.json" LogicalName="KuroakiGimmick.LegacyPerFrameBindings.json" Condition="Exists('$(KGRoot)/Assets/Catalog/legacy-per-frame-bindings.json')" />
+    <EmbeddedResource Include="$(KGRoot)/Assets/Catalog/jackets.json" LogicalName="KuroakiGimmick.JacketCatalog.json" Condition="Exists('$(KGRoot)/Assets/Catalog/jackets.json')" />
+    <EmbeddedResource Include="$(KGRoot)/Assets/Catalog/room-associations.json" LogicalName="KuroakiGimmick.RoomAssociations.json" Condition="Exists('$(KGRoot)/Assets/Catalog/room-associations.json')" />
+    <PackageReference Include="StbImageSharp" Version="2.30.16" />
+    <PackageReference Include="StbImageWriteSharp" Version="1.16.7" />
+    <PackageReference Include="NVorbis" Version="0.10.5" />
+    <PackageReference Include="StbTrueTypeSharp" Version="1.26.13" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(KuroakiExternalAssets)' == 'true'">
+    <EmbeddedResource Remove="$(KGRoot)/Assets/**/*" />
+    <EmbeddedResource Include="$(KGRoot)/Assets/tips.json" LogicalName="KuroakiGimmick.Tips.json" />
+  </ItemGroup>
+</Project>

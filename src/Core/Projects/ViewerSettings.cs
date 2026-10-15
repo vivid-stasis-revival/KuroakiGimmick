@@ -122,12 +122,14 @@ public sealed class ViewerSettings
     public static ViewerSettings Load(string? path = null)
     {
         path ??= SettingsPath;
-        if (!File.Exists(path))
-        {
-            return new();
-        }
         try
         {
+#if KG_SWITCH
+            string previous = path + ".previous";
+            if (!File.Exists(path) && File.Exists(previous))
+                File.Move(previous, path);
+#endif
+            if (!File.Exists(path)) return new();
             // 最近工程是可丢弃的设备历史：它坏了只清这一项，不连带丢掉音量、字体等其它偏好。
             var data = JsonNode.Parse(File.ReadAllText(path));
             string? recentKey = (data as JsonObject)?.Select(pair => pair.Key)
@@ -175,7 +177,7 @@ public sealed class ViewerSettings
         p.VisualDelayMs = double.IsFinite(VisualDelayMs) ? Math.Clamp(VisualDelayMs, -2000, 2000) : 0;
     }
 
-    /// <summary>从工程回写当前取值后落盘。先写 .tmp 再原子替换，中途崩溃不会留下半截的 settings.json。</summary>
+    /// <summary>从工程回写当前取值后落盘。先写完整 .tmp，再发布为 settings.json；Switch 保留可恢复的上一份设置。</summary>
     public void Save(ViewerProject p, string? path = null)
     {
         Workspace ??= new(); Workspace.Normalize(); UiTheme = ValidTheme(UiTheme);
@@ -206,6 +208,24 @@ public sealed class ViewerSettings
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         string temporary = path + ".tmp";
         File.WriteAllText(temporary, AppJson.Serialize(this, ViewerProject.Json));
+#if KG_SWITCH
+        // Horizon rename cannot replace an existing file. Preserve the last
+        // complete settings file until the new temporary file is published.
+        string previous = path + ".previous";
+        if (File.Exists(path))
+        {
+            if (File.Exists(previous)) File.Delete(previous);
+            File.Move(path, previous);
+        }
+        try { File.Move(temporary, path); }
+        catch
+        {
+            if (!File.Exists(path) && File.Exists(previous)) File.Move(previous, path);
+            throw;
+        }
+        if (File.Exists(previous)) File.Delete(previous);
+#else
         File.Move(temporary, path, true);
+#endif
     }
 }

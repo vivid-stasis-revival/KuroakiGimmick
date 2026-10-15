@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework Condition="'$(KuroakiTestFramework)' == ''">net9.0</TargetFramework>
+    <TargetFramework Condition="'$(KuroakiTestFramework)' != ''">$(KuroakiTestFramework)</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <StartupObject>KuroakiGimmick.MobileChecks.Checks</StartupObject>
+  </PropertyGroup>
+  <Import Project="../Kuroaki.Mobile.props" />
+  <ItemGroup>
+    <Compile Include="Checks.cs" />
+    <PackageReference Include="SDL3-CS.MacOS" Version="3.4.16" />
+  </ItemGroup>
+</Project>

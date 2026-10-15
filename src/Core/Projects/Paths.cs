@@ -26,6 +26,11 @@ public static class Paths
     {
         get
         {
+#if KG_SWITCH
+            return Path.Combine(KuroakiGimmick.Native.SwitchPlatform.Root, "Assets");
+#elif KG_MOBILE
+            return KuroakiGimmick.Native.MobilePlatform.Assets;
+#else
             string local = Path.Combine(AppContext.BaseDirectory, "Assets");
             if (Directory.Exists(local))
             {
@@ -40,12 +45,21 @@ public static class Paths
                 }
             }
             return local;
+#endif
         }
     }
 
     /// <summary>导出的默认落点，在“我的文档”下；只是初值，用户指定的路径优先。</summary>
+#if KG_SWITCH
+    public static string Output => Path.Combine(KuroakiGimmick.Native.SwitchPlatform.Root, "Exports");
+    public static string LogDirectory => Path.Combine(KuroakiGimmick.Native.SwitchPlatform.Root, "UserData");
+#elif KG_MOBILE
+    public static string Output => Path.Combine(KuroakiGimmick.Native.MobilePlatform.Root, "Exports");
+    public static string LogDirectory => Path.Combine(KuroakiGimmick.Native.MobilePlatform.Root, "UserData");
+#else
     public static string Output => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "KuroakiGimmick", "Exports");
     /// <summary>日志、设置与图片导入暂存都在这里。用本地应用数据目录而非漫游目录，这些内容不应跟着用户账户同步。</summary>
     public static string LogDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KuroakiGimmick");
+ #endif
     public static string SharedAssetDirectory(string name) => Path.Combine(Assets, name);
 }

@@ -9,6 +9,8 @@ namespace KuroakiGimmick.Graphics;
 /// </summary>
 public sealed partial class SceneRenderer : IDisposable
 {
+    internal const string CompositeFragmentSource = "#version 330 core\nin vec2 v_vTexcoord;in vec4 v_vColour;uniform sampler2D gm_BaseTexture;out vec4 fragColor;void main(){vec4 c=texture(gm_BaseTexture,v_vTexcoord);if(c.a>0.)c.rgb/=c.a;fragColor=c*v_vColour;}";
+
     readonly Canvas canvas;
     readonly NoteSkin noteSkin;
     readonly Texture laneTexture, holdOverlay;
@@ -77,7 +79,7 @@ public sealed partial class SceneRenderer : IDisposable
         // 绘制进透明离屏目标存下的是预乘 RGB。在常规 source-alpha 混合之前先还原回直通 alpha，
         // 使 lane/音符的 alpha 只被乘一次。把它折进 Basic、或当成冗余删掉，都会让 alpha 被乘两次。
         fieldComposite = new(g, Canvas.VertexSource,
-            "#version 330 core\nin vec2 v_vTexcoord;in vec4 v_vColour;uniform sampler2D gm_BaseTexture;out vec4 fragColor;void main(){vec4 c=texture(gm_BaseTexture,v_vTexcoord);if(c.a>0.)c.rgb/=c.a;fragColor=c*v_vColour;}");
+            CompositeFragmentSource);
         scene = new(g, 320, 180);
         field = new(g, 320, 180);
         Final = new(g, 320, 180);

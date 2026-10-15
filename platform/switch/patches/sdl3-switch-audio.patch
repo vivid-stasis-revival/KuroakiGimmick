@@ -1,0 +1,151 @@
+diff --git a/src/audio/switch/SDL_switchaudio.c b/src/audio/switch/SDL_switchaudio.c
+index e23c7716d..bdd0b4a07 100644
+--- a/src/audio/switch/SDL_switchaudio.c
++++ b/src/audio/switch/SDL_switchaudio.c
+@@ -27,6 +27,9 @@
+ 
+ #include "SDL_switchaudio.h"
+ 
++/* Altered SDL3-Switch source: nonblocking playback callback, checked setup,
++ * renderer-paced waits outside SDL's device lock, and complete buffer cleanup. */
++
+ // clang-format off
+ static const AudioRendererConfig arConfig = {
+     .output_rate     = AudioRendererOutputRate_48kHz,
+@@ -79,6 +82,8 @@ static bool SWITCHAUDIO_OpenDevice(SDL_AudioDevice *device)
+     }
+ 
+     device->spec.format = test_format;
++    device->spec.freq = 48000;
++    device->spec.channels = 2;
+ 
+     SDL_UpdatedAudioDeviceFormat(device);
+ 
+@@ -88,25 +93,29 @@ static bool SWITCHAUDIO_OpenDevice(SDL_AudioDevice *device)
+ 
+     size = (u32)((device->buffer_size * 2) + 0xfff) & ~0xfff;
+     device->hidden->pool = memalign(0x1000, size);
++    device->hidden->buffer_tmp = SDL_malloc(device->buffer_size);
++    if (!device->hidden->pool || !device->hidden->buffer_tmp) return SDL_OutOfMemory();
+     for (int i = 0; i < 2; i++) {
+         device->hidden->buffer[i].data_raw = device->hidden->pool;
+         device->hidden->buffer[i].size = device->buffer_size * 2;
+         device->hidden->buffer[i].start_sample_offset = i * device->sample_frames;
+         device->hidden->buffer[i].end_sample_offset = device->hidden->buffer[i].start_sample_offset + device->sample_frames;
+-        device->hidden->buffer_tmp = SDL_malloc(device->buffer_size);
+     }
+ 
+     mpid = audrvMemPoolAdd(&device->hidden->driver, device->hidden->pool, size);
+-    audrvMemPoolAttach(&device->hidden->driver, mpid);
++    if (mpid < 0 || !audrvMemPoolAttach(&device->hidden->driver, mpid))
++        return SDL_SetError("Switch audio memory-pool setup failed");
+ 
+-    audrvDeviceSinkAdd(&device->hidden->driver, AUDREN_DEFAULT_DEVICE_NAME, 2, sink_channels);
++    if (audrvDeviceSinkAdd(&device->hidden->driver, AUDREN_DEFAULT_DEVICE_NAME, 2, sink_channels) < 0)
++        return SDL_SetError("Switch audio output sink setup failed");
+ 
+     res = audrenStartAudioRenderer();
+     if (R_FAILED(res)) {
+         return SDL_SetError("audrenStartAudioRenderer failed (0x%x)", res);
+     }
+ 
+-    audrvVoiceInit(&device->hidden->driver, 0, device->spec.channels, PcmFormat_Int16, device->spec.freq);
++    if (!audrvVoiceInit(&device->hidden->driver, 0, device->spec.channels, PcmFormat_Int16, device->spec.freq))
++        return SDL_SetError("Switch audio voice initialization failed");
+     audrvVoiceSetDestinationMix(&device->hidden->driver, 0, AUDREN_FINAL_MIX_ID);
+     if (device->spec.channels == 1) {
+         audrvVoiceSetMixFactor(&device->hidden->driver, 0, 1.0f, 0, 0);
+@@ -119,6 +128,8 @@ static bool SWITCHAUDIO_OpenDevice(SDL_AudioDevice *device)
+     }
+ 
+     audrvVoiceStart(&device->hidden->driver, 0);
++    SDL_LogInfo(SDL_LOG_CATEGORY_AUDIO, "Switch audio opened: S16 stereo 48000 Hz, %u frames, %u bytes",
++                (unsigned int)device->sample_frames, (unsigned int)device->buffer_size);
+ 
+     return true;
+ }
+@@ -137,51 +148,42 @@ static bool SWITCHAUDIO_PlayDevice(SDL_AudioDevice *device, const Uint8 *buffer,
+     SDL_assert(buffer == device->hidden->buffer_tmp);
+     SDL_assert(buflen == device->buffer_size);
+ 
+-    if (current >= 0) {
+-        Uint8 *ptr = (Uint8 *)(device->hidden->pool + (current * device->buffer_size));
+-        SDL_memcpy(ptr, device->hidden->buffer_tmp, device->buffer_size);
+-        armDCacheFlush(ptr, device->buffer_size);
+-        audrvVoiceAddWaveBuf(&device->hidden->driver, 0, &device->hidden->buffer[current]);
+-    } else if (!audrvVoiceIsPlaying(&device->hidden->driver, 0)) {
+-        audrvVoiceStart(&device->hidden->driver, 0);
+-    }
+-
+-    audrvUpdate(&device->hidden->driver);
+-
+-    if (current >= 0) {
+-        while (device->hidden->buffer[current].state != AudioDriverWaveBufState_Playing) {
+-            audrvUpdate(&device->hidden->driver);
+-            audrenWaitFrame();
+-        }
+-    } else {
+-        current = -1;
+-        for (int i = 0; i < 2; i++) {
+-            if (device->hidden->buffer[i].state == AudioDriverWaveBufState_Playing) {
+-                current = i;
+-                break;
+-            }
+-        }
+-        while (device->hidden->buffer[current].state == AudioDriverWaveBufState_Playing) {
+-            audrvUpdate(&device->hidden->driver);
+-            audrenWaitFrame();
+-        }
+-    }
+-
+-    return true;
++    if (current < 0) return SDL_SetError("Switch audio has no free wave buffer");
++    Uint8 *ptr = (Uint8 *)device->hidden->pool + current * device->buffer_size;
++    SDL_memcpy(ptr, buffer, buflen);
++    armDCacheFlush(ptr, buflen);
++    if (!audrvVoiceAddWaveBuf(&device->hidden->driver, 0, &device->hidden->buffer[current]))
++        return SDL_SetError("Switch audio wave-buffer queue failed");
++    audrvVoiceStart(&device->hidden->driver, 0);
++    Result res = audrvUpdate(&device->hidden->driver);
++    return R_SUCCEEDED(res) || SDL_SetError("audrvUpdate(play) failed (0x%x)", res);
+ }
+ 
+ static bool SWITCHAUDIO_WaitDevice(SDL_AudioDevice *device)
+ {
++    // SDL calls this outside device->lock; pause/resume/seek can keep responding.
++    while (!SDL_GetAtomicInt(&device->shutdown)) {
++        Result res = audrvUpdate(&device->hidden->driver);
++        if (R_FAILED(res)) return SDL_SetError("audrvUpdate(wait) failed (0x%x)", res);
++        for (int i = 0; i < 2; i++) {
++            if (device->hidden->buffer[i].state == AudioDriverWaveBufState_Free ||
++                device->hidden->buffer[i].state == AudioDriverWaveBufState_Done) return true;
++        }
++        audrenWaitFrame();
++    }
+     return true;
+ }
+ 
+ static Uint8 *SWITCHAUDIO_GetDeviceBuf(SDL_AudioDevice *device, int *buffer_size)
+ {
++    *buffer_size = device->buffer_size;
+     return device->hidden->buffer_tmp;
+ }
+ 
+ static void SWITCHAUDIO_CloseDevice(SDL_AudioDevice *device)
+ {
++    if (!device->hidden) return;
++    if (device->hidden->audr_device) audrenStopAudioRenderer();
+     if (device->hidden->audr_driver) {
+         audrvClose(&device->hidden->driver);
+     }
+@@ -193,8 +195,10 @@ static void SWITCHAUDIO_CloseDevice(SDL_AudioDevice *device)
+     if (device->hidden->buffer_tmp) {
+         SDL_free(device->hidden->buffer_tmp);
+     }
++    free(device->hidden->pool);
+ 
+     SDL_free(device->hidden);
++    device->hidden = NULL;
+ }
+ 
+ static bool SWITCHAUDIO_Init(SDL_AudioDriverImpl *impl)

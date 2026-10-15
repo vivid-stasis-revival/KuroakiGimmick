@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -292,7 +293,7 @@ public sealed class VspDocument
                 // dawn_hd_gloom.png，而不是只能看到 SHA-256 或 image-imports/0.png。
                 target = Path.Combine(directory, stem + ".editor-assets", OriginalFileName(image));
                 byte[] data = File.ReadAllBytes(path);
-                string sha = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(data)).ToLowerInvariant();
+                string sha = Convert.ToHexString(SHA256.HashData(data)).ToLowerInvariant();
                 if (sha != image.Sha256) throw new IOException("Staged image changed: " + image.OriginalPath);
                 if (files.TryGetValue(target, out var prior) && !prior.AsSpan().SequenceEqual(data))
                     throw new IOException("Two imported images use the same original filename with different contents: " + Path.GetFileName(target));

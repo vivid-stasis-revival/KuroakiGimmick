@@ -1,0 +1,9 @@
+<metadata>
+  <!-- SDL's other Java classes remain in the JAR and are invoked by JNI.
+       Bind only the Activity hooks used by the managed application. -->
+  <remove-node path="/api/package[@name='org.libsdl.app']/class[@name!='SDLActivity']" />
+  <remove-node path="/api/package[@name='org.libsdl.app']/interface" />
+  <remove-node path="/api/package[@name='org.libsdl.app']/class[@name='SDLActivity']/field" />
+  <remove-node path="/api/package[@name='org.libsdl.app']/class[@name='SDLActivity']/implements" />
+  <remove-node path="/api/package[@name='org.libsdl.app']/class[@name='SDLActivity']/method[@name!='main' and @name!='getLibraries']" />
+</metadata>

@@ -100,7 +100,8 @@ public static class GimmickValidation
             Require(sequence.EndFadeTime == null || double.IsFinite(sequence.EndFadeTime.Value) && sequence.EndFadeTime >= 0 &&
                 double.IsFinite(sequence.EndFadeDuration) && sequence.EndFadeDuration > 0 && !string.IsNullOrWhiteSpace(sequence.EndFadeTrigger), "Invalid sequence end fade.");
         }
-        Require(definition.Version is 1 or 2 && !string.IsNullOrWhiteSpace(definition.ObjectName), "Invalid object definition version/name.");
+        Require(definition.Version is 1 or 2, $"Unsupported object definition version: {definition.Version}. Supported versions: 1, 2. Use an application build matching the resource pack.");
+        Require(!string.IsNullOrWhiteSpace(definition.ObjectName), "Object definition name must not be empty.");
         // 扩展表按位置编码，旧格式允许不同 ID 对应同名 mod；禁止去重，否则后续 ID 全部错位。
         Require(definition.ExtraMods != null && definition.ExtraMods.Length <= 127
             && definition.ExtraMods.All(name => !string.IsNullOrWhiteSpace(name)), "At most 127 binary mod IDs are allowed.");

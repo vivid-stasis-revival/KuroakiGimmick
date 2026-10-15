@@ -27,6 +27,21 @@ public sealed unsafe partial class GpuDevice : IDisposable
         slot.Vertex = nextVertex; slot.Upload = nextUpload; slot.Capacity = capacity;
     }
 
+    /// <summary>异常退出时丢弃尚未提交的 CPU 批次，避免 Dispose 再提交并掩盖原始异常。</summary>
+    public void DiscardPendingCommands()
+    {
+        foreach (var batch in batches) ReleaseBatchStorage(batch);
+        batches.Clear();
+        vertices.Clear();
+    }
+
+    /// <summary>退出失败帧后阻止 Canvas.Dispose/Flush 再次排队并覆盖原始错误。</summary>
+    public void AbortPendingCommands()
+    {
+        aborted = true;
+        DiscardPendingCommands();
+    }
+
     /// <summary>与本 pass 内已推送的 uniform 快照逐字节比较，用于跳过重复 push；长度不同即判不等。</summary>
     static bool SameBytes(byte[]? a, int aLength, byte[]? b, int bLength)
     {
@@ -81,7 +96,7 @@ public sealed unsafe partial class GpuDevice : IDisposable
     public void Submit(bool present = false, nint presentWindow = 0)
     {
         nint outputWindow = presentWindow == 0 ? window : presentWindow;
-        if (batches.Count == 0)
+        if (aborted || batches.Count == 0)
         {
             return;
         }

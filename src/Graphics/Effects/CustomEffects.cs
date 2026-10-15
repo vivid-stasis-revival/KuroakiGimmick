@@ -7,6 +7,10 @@ namespace KuroakiGimmick.Graphics;
 /// </summary>
 public sealed class CustomEffects : IDisposable
 {
+    internal const string PosterizeFragmentSource = "#version 330 core\nin vec2 v_vTexcoord;uniform sampler2D gm_BaseTexture;uniform float levels;out vec4 fragColor;void main(){vec4 c=texture(gm_BaseTexture,v_vTexcoord);float n=max(2.,levels);fragColor=vec4(floor(c.rgb*n)/n,c.a);}";
+
+    internal const string CombineFragmentSource = "#version 330 core\nin vec2 v_vTexcoord;uniform sampler2D gm_BaseTexture,blurred;uniform float intensity;out vec4 fragColor;void main(){fragColor=vec4(max(texture(gm_BaseTexture,v_vTexcoord).rgb,texture(blurred,v_vTexcoord).rgb*intensity),1);}";
+
     readonly Canvas canvas;
     /// <summary>房间与公共 FX 用到的全部 shader，构造时一次性加载，运行期不重建。</summary>
     readonly Shader main, glow, combine, water, posterize, roomPosterize, heat, largeBlur, colourise, hue, colourBalance, contrast, film, edge;
@@ -37,9 +41,9 @@ public sealed class CustomEffects : IDisposable
         contrast = Load("contrast.frag");
         roomPosterize = Load("room-posterize.frag");
         combine = new(gpu, Canvas.VertexSource,
-            "#version 330 core\nin vec2 v_vTexcoord;uniform sampler2D gm_BaseTexture,blurred;uniform float intensity;out vec4 fragColor;void main(){fragColor=vec4(max(texture(gm_BaseTexture,v_vTexcoord).rgb,texture(blurred,v_vTexcoord).rgb*intensity),1);}");
+            CombineFragmentSource);
         posterize = new(gpu, Canvas.VertexSource,
-            "#version 330 core\nin vec2 v_vTexcoord;uniform sampler2D gm_BaseTexture;uniform float levels;out vec4 fragColor;void main(){vec4 c=texture(gm_BaseTexture,v_vTexcoord);float n=max(2.,levels);fragColor=vec4(floor(c.rgb*n)/n,c.a);}");
+            PosterizeFragmentSource);
         blur = Enumerable.Range(0, 2).Select(_ => new Target(gpu, 320, 180)).ToArray();
         combined = new(gpu, 320, 180);
         glowAccumA = new(gpu, 320, 180);

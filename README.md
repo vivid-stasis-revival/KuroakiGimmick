@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.5_%2F_18.0.1-94cddd?style=flat-square" alt="v0.1.5 / Build 18.0.1">
+  <img src="https://img.shields.io/badge/version-0.1.5_%2F_18.2-94cddd?style=flat-square" alt="v0.1.5 / Build 18.2">
   <img src="https://img.shields.io/badge/C%23-.NET_8-b5a3e8?style=flat-square" alt="C# / .NET 8">
   <img src="https://img.shields.io/badge/renderer-SDL3_GPU-94cddd?style=flat-square" alt="SDL3 GPU">
   <img src="https://img.shields.io/badge/engine-C%23_%2B_Rust-b5a3e8?style=flat-square" alt="C# + Rust">
@@ -272,7 +272,7 @@ dotnet run -c Release --no-build -- \
 
 ## 构建与发布
 
-当前应用版本为 **v0.1.5 / Build 18.0.1**；最终版本号以 [`KuroakiGimmick.csproj`](KuroakiGimmick.csproj) 为准。
+当前应用版本为 **v0.1.5 / Build 18.2**；最终版本号以 [`KuroakiGimmick.csproj`](KuroakiGimmick.csproj) 为准。
 
 发行脚本会为目标 RID 编译、打包匹配架构的 `kg_native_core` 库。跨架构构建 Rust 时还需要对应 target 与链接器；不要把能交叉编译 C# 误当成原生库也自动跟着跨平台了。
 
@@ -302,7 +302,7 @@ Windows PowerShell：
 
 ```text
 dist/
-└── KuroakiGimmick-v0.1.5-<RID>-18.0.1-<timestamp>/
+└── KuroakiGimmick-v0.1.5-<RID>-18.2-<timestamp>/
 ```
 
 同时生成对应 ZIP；使用 `all` 会分别构建两个架构，macOS 不自动生成 Universal Binary。

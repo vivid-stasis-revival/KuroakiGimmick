@@ -20,7 +20,7 @@ public sealed class CheckerboardRenderer : IDisposable
         canvas = c;
         pattern = new(c.Gpu, 320, 180);
         composite = new(c.Gpu, Canvas.VertexSource,
-            "#version 330 core\nin vec2 v_vTexcoord;in vec4 v_vColour;uniform sampler2D gm_BaseTexture;out vec4 fragColor;void main(){vec4 c=texture(gm_BaseTexture,v_vTexcoord);if(c.a>0.)c.rgb/=c.a;fragColor=c*v_vColour;}");
+            SceneRenderer.CompositeFragmentSource);
     }
 
     /// <summary>

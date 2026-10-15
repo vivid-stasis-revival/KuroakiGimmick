@@ -6,6 +6,7 @@ public sealed partial class SceneRenderer
     // through rasterization: dividing only the four corners on CPU would distort UVs
     // along the triangle diagonal and mishandle geometry crossing the projection plane.
     internal static readonly string ProxyProjectionVertexSource = ProxyVertexSource(false);
+    internal static readonly string ProxyGuideVertexSource = ProxyVertexSource(true);
     static string ProxyVertexSource(bool authoring) => """
         #version 330 core
         layout(location=0) in vec2 a_position;

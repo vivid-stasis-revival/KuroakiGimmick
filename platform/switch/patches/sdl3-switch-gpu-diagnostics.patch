@@ -1,0 +1,101 @@
+diff --git a/src/gpu/vulkan/SDL_gpu_vulkan.c b/src/gpu/vulkan/SDL_gpu_vulkan.c
+index a2e2f3443..a5858f776 100644
+--- a/src/gpu/vulkan/SDL_gpu_vulkan.c
++++ b/src/gpu/vulkan/SDL_gpu_vulkan.c
+@@ -65,8 +65,14 @@ typedef struct VulkanExtensions
+ // Defines
+ 
+ #define SMALL_ALLOCATION_THRESHOLD    2097152  // 2   MiB
++#ifdef SDL_PLATFORM_SWITCH
++/* Altered SDL3-Switch source: compact UMA allocation pages for K/G. */
++#define SMALL_ALLOCATION_SIZE         4194304  // 4   MiB
++#define LARGE_ALLOCATION_INCREMENT    8388608  // 8   MiB
++#else
+ #define SMALL_ALLOCATION_SIZE         16777216 // 16  MiB
+ #define LARGE_ALLOCATION_INCREMENT    67108864 // 64  MiB
++#endif
+ #define MAX_UBO_SECTION_SIZE          4096     // 4   KiB
+ #define DESCRIPTOR_POOL_SIZE          128
+ #define WINDOW_PROPERTY_DATA          "SDL_GPUVulkanWindowPropertyData"
+@@ -1258,6 +1264,7 @@ static inline const char *VkErrorMessages(VkResult code)
+     switch (code) {
+         ERR_TO_STR(VK_ERROR_OUT_OF_HOST_MEMORY)
+         ERR_TO_STR(VK_ERROR_OUT_OF_DEVICE_MEMORY)
++        ERR_TO_STR(VK_ERROR_MEMORY_MAP_FAILED)
+         ERR_TO_STR(VK_ERROR_FRAGMENTED_POOL)
+         ERR_TO_STR(VK_ERROR_OUT_OF_POOL_MEMORY)
+         ERR_TO_STR(VK_ERROR_INITIALIZATION_FAILED)
+@@ -1868,8 +1875,14 @@ static Uint8 VULKAN_INTERNAL_AllocateMemory(
+         &allocation->memory);
+ 
+     if (result != VK_SUCCESS) {
++        SDL_SetError("vkAllocateMemory failed: %s (bytes=%llu, memoryType=%u, flags=0x%x)",
++                     VkErrorMessages(result), (unsigned long long)allocationSize,
++                     memoryTypeIndex, renderer->memoryProperties.memoryTypes[memoryTypeIndex].propertyFlags);
++        SDL_LogError(SDL_LOG_CATEGORY_GPU, "%s", SDL_GetError());
+         // Uh oh, we couldn't allocate, time to clean up
+         SDL_free(allocation->freeRegions);
++        SDL_free(allocation->usedRegions);
++        SDL_DestroyMutex(allocation->memoryLock);
+ 
+         allocator->allocationCount -= 1;
+         allocator->allocations = SDL_realloc(
+@@ -1890,7 +1903,20 @@ static Uint8 VULKAN_INTERNAL_AllocateMemory(
+             VK_WHOLE_SIZE,
+             0,
+             (void **)&allocation->mapPointer);
+-        CHECK_VULKAN_ERROR_AND_RETURN(result, vkMapMemory, 0);
++        if (result != VK_SUCCESS) {
++            SDL_SetError("vkMapMemory failed: %s (bytes=%llu, memoryType=%u)",
++                         VkErrorMessages(result), (unsigned long long)allocationSize, memoryTypeIndex);
++            SDL_LogError(SDL_LOG_CATEGORY_GPU, "%s", SDL_GetError());
++            renderer->vkFreeMemory(renderer->logicalDevice, allocation->memory, NULL);
++            SDL_free(allocation->freeRegions);
++            SDL_free(allocation->usedRegions);
++            SDL_DestroyMutex(allocation->memoryLock);
++            allocator->allocationCount -= 1;
++            allocator->allocations = SDL_realloc(allocator->allocations,
++                sizeof(VulkanMemoryAllocation *) * allocator->allocationCount);
++            SDL_free(allocation);
++            return 0;
++        }
+     } else {
+         allocation->mapPointer = NULL;
+     }
+@@ -2348,6 +2374,18 @@ static Uint8 VULKAN_INTERNAL_BindMemoryForBuffer(
+         &memoryRequirements,
+         &memoryTypeCount);
+ 
++    if (memoryTypeCount == 0) {
++        SDL_SetError("No compatible Vulkan buffer memory (bytes=%llu, bufferType=%u, typeBits=0x%x, requiredFlags=0x%x)",
++                     (unsigned long long)size, (unsigned int)type,
++                     memoryRequirements.memoryTypeBits, requiredMemoryPropertyFlags);
++        SDL_LogError(SDL_LOG_CATEGORY_GPU, "%s", SDL_GetError());
++        for (i = 0; i < renderer->memoryProperties.memoryTypeCount; i += 1) {
++            SDL_LogError(SDL_LOG_CATEGORY_GPU, "Vulkan memory type %u: flags=0x%x heap=%u", i,
++                         renderer->memoryProperties.memoryTypes[i].propertyFlags,
++                         renderer->memoryProperties.memoryTypes[i].heapIndex);
++        }
++    }
++
+     for (i = 0; i < memoryTypeCount; i += 1) {
+         bindResult = VULKAN_INTERNAL_BindResourceMemory(
+             renderer,
+@@ -11535,6 +11573,17 @@ static Uint8 VULKAN_INTERNAL_DeterminePhysicalDevice(VulkanRenderer *renderer)
+         renderer->physicalDevice,
+         &renderer->memoryProperties);
+ 
++#ifdef SDL_PLATFORM_SWITCH
++    SDL_LogInfo(SDL_LOG_CATEGORY_GPU, "NVK device: %s, memoryTypes=%u heaps=%u",
++                renderer->physicalDeviceProperties.properties.deviceName,
++                renderer->memoryProperties.memoryTypeCount, renderer->memoryProperties.memoryHeapCount);
++    for (Uint32 memoryIndex = 0; memoryIndex < renderer->memoryProperties.memoryTypeCount; ++memoryIndex) {
++        SDL_LogInfo(SDL_LOG_CATEGORY_GPU, "Memory type %u: flags=0x%x heap=%u", memoryIndex,
++                    renderer->memoryProperties.memoryTypes[memoryIndex].propertyFlags,
++                    renderer->memoryProperties.memoryTypes[memoryIndex].heapIndex);
++    }
++#endif
++
+     SDL_stack_free(physicalDevices);
+     SDL_stack_free(physicalDeviceExtensions);
+     return 1;

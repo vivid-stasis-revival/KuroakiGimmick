@@ -12,19 +12,46 @@ namespace KuroakiGimmick;
 /// </summary>
 internal static class Program
 {
+#if KG_MOBILE
+    internal static int RunMobile(string[] args) => Main(args);
+#endif
     /// <summary>
     /// 退出码契约：0 正常结束；1 未捕获异常（已写入 viewer.log）；2 strict 模式或 --inspect 发现错误诊断；130 用户取消视频导出。
     /// 数字解析一律走 InvariantCulture，命令行不随系统区域设置改变含义。
     /// </summary>
     [STAThread] static int Main(string[] args)
     {
+#if KG_SWITCH
+        args = SwitchPlatform.Initialize(args);
+        Console.Error.WriteLine("[K/G boot] launch initialized");
+#endif
         _ = UiLanguage.SystemLanguage;
+#if KG_SWITCH
+        Console.Error.WriteLine("[K/G boot] UI language initialized");
+#endif
         CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
         CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
+#if KG_SWITCH
+        Console.Error.WriteLine("[K/G boot] default cultures initialized");
+#endif
         // 这一串是所有无人值守模式（自测、检查、导出、截图）。cli 为真时失败只写 stderr，不弹消息框卡住脚本。
-        bool cli = args.Any(a => a is "--inspect" or "--render" or "--snapshot" or "--card" or "--smoke-ui" or "--smoke-touch-ui" or "--smoke-workspace-memory" or "--smoke-startup" or "--smoke-mac-menu" or "--smoke-windows-menu" or "--smoke-proxy-guides" or "--proxy-pick-test" or "--reference-layout-test" or "--smoke-text-ui" or "--smoke-i18n" or "--rust-engine-test" or "--rust-timeline-test" or "--rust-bridge-test" or "--rust-audio-test");
+        bool cli = args.Any(a => a is "--bake-mobile-shaders" or "--bake-switch-shaders" or "--inspect" or "--render" or "--snapshot" or "--card" or "--smoke-ui" or "--smoke-touch-ui" or "--smoke-workspace-memory" or "--smoke-startup" or "--smoke-mac-menu" or "--smoke-windows-menu" or "--smoke-proxy-guides" or "--proxy-pick-test" or "--reference-layout-test" or "--gimmick-definition-test" or "--smoke-text-ui" or "--smoke-i18n" or "--rust-engine-test" or "--rust-timeline-test" or "--rust-bridge-test" or "--rust-audio-test");
         try
         {
+            if (args.Length >= 3 && args[0] == "--bake-mobile-shaders")
+            {
+                MobileShaderPack.Bake(args[1], args[2], args.Skip(3));
+                return 0;
+            }
+            if (args.Length >= 2 && args[0] == "--bake-switch-shaders")
+            {
+                SwitchShaderPack.Bake(args[1], args.Skip(2));
+                return 0;
+            }
+#if KG_SWITCH || KG_MOBILE
+            if (args.Contains("--render"))
+                throw new PlatformNotSupportedException("MP4 export requires a desktop FFmpeg process.");
+#endif
             // 后端覆盖必须早于任何 GPU 设备创建；否则显式 --force-vulkan 仍可能先创建平台默认后端。
             if (args.Contains("--force-vulkan")) Sdl.ForceGpuDriver("vulkan");
             // 自测与 --version/--help 在解析工程之前返回：它们不需要 Session，也不应为了跑一次检查去解码音频。
@@ -39,6 +66,7 @@ internal static class Program
                 return 0;
             }
             if (args.Contains("--proxy-pick-test")) return ProxyPickingChecks.Run();
+            if (args.Contains("--gimmick-definition-test")) return GimmickDefinitionChecks.Run();
             if (args.Contains("--reference-layout-test")) return ReferenceMarkdownChecks.Run();
             if (args.Contains("--rust-audio-test"))
             {
@@ -121,7 +149,11 @@ internal static class Program
             {
                 throw new InvalidDataException("Load a chart or VSM before exporting.");
             }
+#if KG_IOS
+            var host = new Host(cli && !options.ContainsKey("smoke-workspace-memory")); // Owned by the UIKit frame callback after Main returns.
+#else
             using var host = new Host(cli && !options.ContainsKey("smoke-workspace-memory"));
+#endif
             Console.Error.WriteLine("Build: " + Paths.BuildRevision);
             Console.Error.WriteLine("GPU: " + host.Device);
             if (options.ContainsKey("render"))
@@ -190,7 +222,11 @@ internal static class Program
                 Directory.CreateDirectory(Path.GetDirectoryName(startupTestSettings!)!);
                 if (File.Exists(ViewerSettings.SettingsPath)) File.Copy(ViewerSettings.SettingsPath, startupTestSettings!);
             }
+#if KG_IOS
+            var viewer = new Viewer(host, session, silent: cli && !workspaceMemoryTest, applyPreferences: !changed,
+#else
             using var viewer = new Viewer(host, session, silent: cli && !workspaceMemoryTest, applyPreferences: !changed,
+#endif
                 uiLanguage: options.GetValueOrDefault("language"), showStartup: path == null && (!cli || options.ContainsKey("smoke-startup")),
                 initialPath: path, settingsPath: startupTestSettings);
             // 单帧截图必须抓到最终布局，而不是入场动画那一帧全透明的画面。
@@ -275,7 +311,11 @@ internal static class Program
                 finally { if (File.Exists(startupTestSettings)) File.Delete(startupTestSettings); }
                 return 0;
             }
+#if KG_IOS
+            MobilePlatform.StartFrameLoop(host, viewer);
+#else
             viewer.Run();
+#endif
             return 0;
         }
         catch (Exception ex)
@@ -424,6 +464,7 @@ internal static class Program
     Touch input check (SDL/GPU, synthetic events): --smoke-touch-ui
     Proxy guide check: --smoke-proxy-guides --time 0 --out proxy-guides.ppm
     Proxy picking (no SDL): --proxy-pick-test
+    Object definition compatibility (no SDL/assets): --gimmick-definition-test
     Documentation Markdown/layout (no SDL): --reference-layout-test
     UI localization check: --smoke-i18n [--editor] --out i18n.ppm
     KuroakiGimmick --editor Samples/EditorDemo/demo.sgv.json

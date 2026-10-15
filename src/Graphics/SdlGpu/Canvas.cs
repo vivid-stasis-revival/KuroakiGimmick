@@ -8,6 +8,8 @@ namespace KuroakiGimmick.Graphics;
 /// <summary>立即模式二维绘制门面。坐标可为逻辑单位，提交到 GPU 前明确转换 viewport 与 scissor。</summary>
 public sealed partial class Canvas : IDisposable
 {
+    internal const string BasicFragmentSource = "#version 450\nin vec2 v_vTexcoord;in vec4 v_vColour;uniform sampler2D gm_BaseTexture;out vec4 fragColor;void main(){fragColor=texture(gm_BaseTexture,v_vTexcoord)*v_vColour;}";
+
     // 整数缩放按物理像素（含 Retina）度量，而不是窗口逻辑点；
     // 原点也对齐到同一套像素网格。
     /// <summary>以物理像素决定整数缩放，避免 Retina 下把窗口点误当像素。</summary>
@@ -76,7 +78,7 @@ public sealed partial class Canvas : IDisposable
     {
         Gpu = gpu;
         Basic = new(gpu, VertexSource,
-            "#version 450\nin vec2 v_vTexcoord;in vec4 v_vColour;uniform sampler2D gm_BaseTexture;out vec4 fragColor;void main(){fragColor=texture(gm_BaseTexture,v_vTexcoord)*v_vColour;}");
+            BasicFragmentSource);
         if (Environment.GetEnvironmentVariable("KG_NOTE_INSTANCING") != "off")
         {
             try { NoteInstances = new(gpu, NoteInstanceVertexSource, NoteInstanceFragmentSource, instanced: true); }

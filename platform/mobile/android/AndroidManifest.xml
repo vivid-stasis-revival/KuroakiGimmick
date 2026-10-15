@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-feature android:name="android.hardware.vulkan.version" android:version="4198400" android:required="true" />
+  <application android:allowBackup="false" android:extractNativeLibs="true" android:label="Kuroaki/Gimmick" android:icon="@drawable/kuroaki" android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
+</manifest>

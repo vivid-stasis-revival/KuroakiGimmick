@@ -18,6 +18,7 @@ public sealed partial class Viewer
     (ulong Device, ulong Finger)? touchPrimary, touchSecondary;
     TouchNavigation touchNavigation;
     bool touchHadMulti, touchMoved, touchStartedOnTimeline;
+    bool sendingTouchMouse, mouseClickFromTouch;
     Vector2 touchDownUi, touchGestureCenter, touchImageAnchor, touchLastTapUi;
     float touchGestureDistance, touchGestureImageZoom, touchGestureTextZoom;
     double touchGestureBeat, touchGesturePixelsPerBeat;
@@ -34,7 +35,7 @@ public sealed partial class Viewer
 
     void TimelineDoubleClick(Action action)
     {
-        if (touchPrimary.HasValue && touchContacts.Count == 1 && !touchHadMulti && editor != null)
+        if (mouseClickFromTouch && touchPrimary.HasValue && touchContacts.Count == 1 && !touchHadMulti && editor != null)
             touchTimelineAction = new(editor, editor.Revision, action);
         else action();
     }
@@ -53,16 +54,21 @@ public sealed partial class Viewer
     {
         // Synthetic events use mouse ID 0. SDL's own SDL_TOUCH_MOUSEID duplicates are ignored
         // at the top of Handle, but the real mouse and Joy-Con input paths remain intact.
-        Handle(new Sdl.Event
+        sendingTouchMouse = true;
+        try
         {
-            Type = type,
-            WindowID = Sdl.SDL_GetWindowID(host.Window),
-            MouseWhich = 0,
-            Button = type == 0x400 ? (byte)0 : (byte)1,
-            Clicks = clicks,
-            X = contact.Window.X,
-            Y = contact.Window.Y
-        });
+            Handle(new Sdl.Event
+            {
+                Type = type,
+                WindowID = Sdl.SDL_GetWindowID(host.Window),
+                MouseWhich = 0,
+                Button = type == 0x400 ? (byte)0 : (byte)1,
+                Clicks = clicks,
+                X = contact.Window.X,
+                Y = contact.Window.Y
+            });
+        }
+        finally { sendingTouchMouse = false; }
     }
 
     bool HandleTouchInput(Sdl.Event e)

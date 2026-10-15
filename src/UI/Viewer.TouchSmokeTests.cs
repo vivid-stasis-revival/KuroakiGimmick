@@ -101,7 +101,7 @@ public sealed partial class Viewer
         }
         try
         {
-            foreach (string ending in new[] { "primary-up", "secondary-up", "cancel", "focus", "move", "changed", "replaced", "commit" })
+            foreach (string ending in new[] { "primary-up", "secondary-up", "cancel", "focus", "move", "changed", "replaced", "commit", "mouse" })
             {
                 editor = new EditorDocument(Current);
                 // Existing redo must survive a cancelled gesture as well.
@@ -139,9 +139,17 @@ public sealed partial class Viewer
                         owner.Redo(); revision = owner.Revision; source = owner.Vsm.Text;
                     }
                     if (ending == "replaced") editor = new EditorDocument(Current);
+                    if (ending == "mouse")
+                    {
+                        var v = Viewport();
+                        Handle(new() { Type = 0x401, MouseWhich = 4242, Button = 1, Clicks = 2,
+                            X = (x + 220) / v.InputScaleX, Y = y / v.InputScaleY }); Frame();
+                        Check(owner.Revision == revision + 1, "Physical mouse double-click was deferred by an active touch.");
+                        Handle(new() { Type = 0x402, MouseWhich = 4242, Button = 1 });
+                    }
                     Finger(Sdl.FingerUp, 150, x, y);
                 }
-                if (ending == "commit")
+                if (ending is "commit" or "mouse")
                 {
                     Check(owner.Revision == revision + 1 && owner.Vsm.Text != source && owner.CanUndo && !owner.CanRedo,
                         "Single-finger double tap did not commit once on release.");
@@ -168,7 +176,7 @@ public sealed partial class Viewer
             Handle(new() { Type = 0x402, MouseWhich = 4242, Button = 1,
                 X = mx / viewport.InputScaleX, Y = my / viewport.InputScaleY }); Frame();
             Check(editor.Revision == mouseRevision + 1, "Mouse release inserted a duplicate clip.");
-            Console.WriteLine("Touch insertion: 8 release/cancel/history cases and mouse regression passed (synthetic SDL events).");
+            Console.WriteLine("Touch insertion: 9 release/cancel/history/interleaved-mouse cases and mouse regression passed (synthetic SDL events).");
         }
         finally
         {

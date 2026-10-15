@@ -28,6 +28,9 @@ public sealed class SceneFont : IDisposable
     Texture? originalAtlas;
     string? originalKey;
     float fontX = 1, fontY = 1, fontHeight = 10, ascenderOffset;
+#if KG_SWITCH
+    double lastColorDiagnostic = -100;
+#endif
     public SceneFont(GpuDevice gpu)
     {
         string root = Path.Combine(Paths.Assets, "SceneFont");
@@ -157,6 +160,14 @@ public sealed class SceneFont : IDisposable
                 rgb = ((rgb & 255) << 16) | (rgb & 0xFF00) | ((rgb >> 16) & 255);
             }
             var color = Color.Hex(rgb).Alpha(alpha);
+#if KG_SWITCH
+            if (Math.Abs(time - lastColorDiagnostic) >= 10)
+            {
+                lastColorDiagnostic = time;
+                Console.Error.WriteLine($"[K/G text] track={track.Id} time={time:F2} rgb={rgb:X6} alpha={alpha:F6} RGBA={color.R:F6},{color.G:F6},{color.B:F6},{color.A:F6}");
+                canvas.DebugNextVertex = true;
+            }
+#endif
             var matrix = Matrix3x2.CreateScale((float) scale) * Matrix3x2.CreateRotation(-(float) M("textrot") * MathF.PI / 180) * Matrix3x2.CreateTranslation(x, y);
             matrix *= projection ?? Matrix3x2.Identity;
             float blockWidth = Math.Max(4, rows.Max(Width)), blockLeft = alignH == 1 ? -blockWidth / 2 : alignH == 2 ? -blockWidth : 0;

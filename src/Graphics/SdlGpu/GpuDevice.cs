@@ -48,6 +48,7 @@ public sealed unsafe partial class GpuDevice : IDisposable
     }
     readonly MeshSlot[] meshSlots = [new(), new(), new()];
     int meshCursor;
+    bool aborted;
 
     // 批次必须持有提交时不再变化的状态快照；不能保留可继续写入的 uniform 数组引用。
     // 用 value-type batch + ArrayPool 避免 Vulkan 路径每帧制造成百上千个短命数组/对象，
@@ -216,12 +217,16 @@ public sealed unsafe partial class GpuDevice : IDisposable
     }
 
     /// <summary>记录目标/清屏边界，不立即开启原生 pass；上传必须先于所有绘制。</summary>
-    internal void Begin(Target? target, int width, int height, Color? clear) => batches.Add(new(target?.Texture.Id ?? 0, width, height, clear));
+    internal void Begin(Target? target, int width, int height, Color? clear)
+    {
+        if (!aborted) batches.Add(new(target?.Texture.Id ?? 0, width, height, clear));
+    }
 
     /// <summary>复制顶点、uniform 和采样器状态。相邻完全相同的状态直接合并成一个 draw。</summary>
     internal void Draw(Target? target, int width, int height, Shader shader, Texture primary, IntRect? clip, BlendFactor source,
         BlendFactor destination, ReadOnlySpan<float> data)
     {
+        if (aborted) return;
         if (data.Length > MaxRecordedFloatCount)
         {
             int quantum = shader.Instanced ? 16 : 48; // complete instances or quad triangle pairs

@@ -514,6 +514,11 @@ public sealed partial class Viewer
         Canvas.Flush();
         Canvas.Begin(null, pw, ph, w, h, bg);
         Canvas.Quad(UiTarget.Texture, new(0, 0, w, h), Color.White);
+#if KG_SWITCH
+        // Switch has no desktop compositor cursor; draw the same logical pointer used for hit tests.
+        Canvas.Fill(new(mouseX - 5, mouseY - 1, 11, 3), Color.White);
+        Canvas.Fill(new(mouseX - 1, mouseY - 5, 3, 11), Color.White);
+#endif
         Canvas.Flush();
         click = false;
     }

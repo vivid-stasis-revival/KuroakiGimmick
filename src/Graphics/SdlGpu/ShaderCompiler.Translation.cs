@@ -10,6 +10,7 @@ namespace KuroakiGimmick.Graphics;
 /// <summary>保留 GLSL 运算表达式，只改写 uniform、sampler 和输入输出声明。</summary>
 internal static unsafe partial class ShaderCompiler
 {
+    internal static bool TargetIosMsl { get; set; }
     // 为既有 HLSL/MSL 校验调用方保留的兼容重载。
     internal static Translation Translate(string source, bool vertex, bool metal) =>
         Translate(source, vertex, metal ? GpuShaderFormat.Msl : GpuShaderFormat.Dxbc);
@@ -188,6 +189,8 @@ internal static unsafe partial class ShaderCompiler
                     options,
                     metal ? 0x8000011u : 0x400000du,
                     metal ? 20100u : 51u));
+                if (metal && TargetIosMsl)
+                    Check(spvc_compiler_options_set_uint(options, 0x800001fu, 0)); // MSL_PLATFORM = iOS
                 Check(spvc_compiler_install_compiler_options(compiler, options));
 
                 if (metal)

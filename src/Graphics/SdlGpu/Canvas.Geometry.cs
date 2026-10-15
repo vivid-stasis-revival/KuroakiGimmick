@@ -8,6 +8,9 @@ namespace KuroakiGimmick.Graphics;
 /// <summary>二维几何到固定 8-float 顶点流的转换，不读取谱面身份或对象类型。</summary>
 public sealed partial class Canvas : IDisposable
 {
+#if KG_SWITCH
+    internal bool DebugNextVertex;
+#endif
     /// <summary>写入一个 8 float / 32 字节顶点：x,y,u,v,r,g,b,a；alpha 在这里乘上 presentationOpacity。</summary>
     void Vertex(float x, float y, float u, float v, Color c)
     {
@@ -19,6 +22,14 @@ public sealed partial class Canvas : IDisposable
         vertices.Add(c.G);
         vertices.Add(c.B);
         vertices.Add(c.A * presentationOpacity);
+#if KG_SWITCH
+        if (DebugNextVertex)
+        {
+            DebugNextVertex = false;
+            int start = vertices.Count - 4;
+            Console.Error.WriteLine($"[K/G text vertex] RGBA={vertices[start]:F6},{vertices[start + 1]:F6},{vertices[start + 2]:F6},{vertices[start + 3]:F6}");
+        }
+#endif
     }
 
     /// <summary>两组三角形拼成矩形；角度以度为单位，绕矩形中心旋转，UV 保持输入顺序。</summary>
