@@ -10,6 +10,7 @@ public sealed class CustomEffects : IDisposable
     readonly Canvas canvas;
     /// <summary>房间与公共 FX 用到的全部 shader，构造时一次性加载，运行期不重建。</summary>
     readonly Shader main, glow, combine, water, posterize, roomPosterize, heat, largeBlur, colourise, hue, colourBalance, contrast, film, edge;
+    Shader? nativeTwirl, nativeZoom;
     /// <summary>glow 的两块模糊中转目标，按 i%2 交替使用；辉光累积另有 glowAccumA/B 一对，两对合起来才构成完整的 ping-pong。</summary>
     readonly Target[] blur;
     readonly Target combined, glowAccumA, glowAccumB, distorted, quantized;
@@ -139,6 +140,10 @@ public sealed class CustomEffects : IDisposable
             "_filter_colour_balance" => colourBalance,
             "_filter_contrast" => contrast,
             "_filter_posterise" => roomPosterize,
+            "_filter_twirl_distort" => nativeTwirl ??= new(canvas.Gpu, Canvas.VertexSource,
+                Shader.AdaptGml(File.ReadAllText(Path.Combine(Paths.Assets, "Shaders", "native-twirl.frag")))),
+            "_filter_zoom_blur" => nativeZoom ??= new(canvas.Gpu, Canvas.VertexSource,
+                Shader.AdaptGml(File.ReadAllText(Path.Combine(Paths.Assets, "Shaders", "native-zoom.frag")))),
             _ => throw new InvalidDataException("Unknown source FX filter")
         };
         Texture? tex = layer.TexturePath == null ? null : Noise(layer);
@@ -160,7 +165,18 @@ public sealed class CustomEffects : IDisposable
                 s.Int("g_OldFilmTexture", 1);
                 s.Vec2("g_OldFilmTextureTexelSize", 1.0 / tex.Width, 1.0 / tex.Height);
                 foreach (string name in GameFxProfile.FilmParameters)
-                    s.Float(name, layer.Number(name) * (name is "g_OldFilmFlickerSpeed" or "g_OldFilmBarSpeed" ? time : 1));
+                    s.Float(name, (layer.ParameterMods.TryGetValue(name, out var boundMod) ? M(boundMod) : layer.Number(name))
+                        * (name is "g_OldFilmFlickerSpeed" or "g_OldFilmBarSpeed" ? time : 1));
+            }
+            else if (tex != null && layer.Filter == "_filter_zoom_blur")
+            {
+                s.Int("g_ZoomBlurTexture", 1);
+                s.Vec2("g_ZoomBlurTextureTexelSize", 1.0 / tex.Width, 1.0 / tex.Height);
+                var center = layer.Vector("g_ZoomBlurCenter", 2);
+                s.Vec2("g_ZoomBlurCenter", center[0], center[1]);
+                s.Float("g_ZoomBlurFocusRadius", layer.Number("g_ZoomBlurFocusRadius"));
+                s.Float("g_ZoomBlurIntensity", layer.ParameterMods.TryGetValue("g_ZoomBlurIntensity", out var zoomMod)
+                    ? M(zoomMod) : layer.Number("g_ZoomBlurIntensity"));
             }
             else if (tex != null)
             {
@@ -212,6 +228,14 @@ public sealed class CustomEffects : IDisposable
                 {
                     s.Float(n, layer.Number(n));
                 }
+            }
+            if (layer.Filter == "_filter_twirl_distort")
+            {
+                var offset = layer.Vector("g_DistortOffset", 2);
+                s.Vec2("g_DistortOffset", offset[0], offset[1]);
+                s.Float("g_DistortRadius", layer.Number("g_DistortRadius"));
+                s.Float("g_DistortAngle", custom && session.NonBaseFxEnabled && layer.Name=="FX_twirl"?M("fx_twirl"):
+                    layer.ParameterMods.TryGetValue("g_DistortAngle", out var twirlMod)?M(twirlMod):layer.Number("g_DistortAngle"));
             }
             if (layer.Filter == "_filter_posterise")
             {
@@ -322,7 +346,9 @@ public sealed class CustomEffects : IDisposable
         Texture input = scene.Texture;
         foreach (var layer in session.Fx.Layers.Where(l => l.Name == name))
         {
-            if (!layer.Visible || !layer.Enabled)
+            bool visible = layer.VisibilityMod != null && session.Chart.ObjectName != "obj_custom_gimmick"
+                ? RoomFxState.Enabled(session.Timeline.Get(layer.VisibilityMod, time)) : layer.Visible;
+            if (!visible || !layer.Enabled)
             {
                 continue;
             }
@@ -408,7 +434,7 @@ public sealed class CustomEffects : IDisposable
         }
         foreach (var layer in session.Fx.Layers)
         {
-            if (!layer.Enabled)
+            if (!layer.Enabled || layer.Depth >= 0)
             {
                 continue;
             }
@@ -425,7 +451,8 @@ public sealed class CustomEffects : IDisposable
             var target = Next();
             if (layer.Filter == "_effect_glow")
             {
-                RunGlow(target, input, layer, M("fx_glow"));
+                RunGlow(target, input, layer, layer.ParameterMods.TryGetValue("g_GlowIntensity", out var glowMod)
+                    ? M(glowMod) : layer.Name == "FX_glow" ? M("fx_glow") : layer.Number("g_GlowIntensity"));
             }
             else
             {
@@ -521,6 +548,8 @@ public sealed class CustomEffects : IDisposable
         hue.Dispose();
         colourBalance.Dispose();
         contrast.Dispose();
+        nativeTwirl?.Dispose();
+        nativeZoom?.Dispose();
         glowAccumA.Dispose();
         glowAccumB.Dispose();
         foreach (var t in blur)

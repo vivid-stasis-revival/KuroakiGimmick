@@ -10,12 +10,13 @@ public sealed class CustomStarTimeline
     public List<Star> Stars { get; } = [];
     readonly double[] maskTravel, maskFade, colorTravel;
     readonly Timeline timeline;
+    readonly bool sourceStars;
     // Ticks 是原版的 60 Hz 逻辑 tick；模拟时长最多 3600 秒，星数上限 100000，超出改记诊断而不是继续分配。
     const int Ticks = 60, MaxStars = 100000;
     public bool Enabled { get; }
-    public CustomStarTimeline(Timeline timeline, Chart chart, double duration, bool enabled)
+    public CustomStarTimeline(Timeline timeline, Chart chart, double duration, bool enabled, bool sourceStars = false)
     {
-        this.timeline = timeline; Enabled = enabled;
+        this.timeline = timeline; Enabled = enabled; this.sourceStars = sourceStars;
         int count = enabled ? (int)Math.Ceiling(Math.Clamp(duration, 0, 3600) * Ticks) + 1 : 1;
         maskTravel = new double[count]; maskFade = new double[count]; colorTravel = new double[count];
         if (!enabled) return;
@@ -25,7 +26,8 @@ public sealed class CustomStarTimeline
         for (int tick = 1; tick < count; tick++)
         {
             double t = tick / (double)Ticks, speed = timeline.Get("starspd_multiplier", t);
-            bool mask = timeline.Get("active_startrans", t) > 0, colored = timeline.Get("active_starchgcol", t) > 0;
+            bool mask = !sourceStars && timeline.Get("active_startrans", t) > 0,
+                colored = sourceStars || timeline.Get("active_starchgcol", t) > 0;
             maskTravel[tick] = maskTravel[tick - 1] + (mask ? speed : 0);
             maskFade[tick] = maskFade[tick - 1] + (mask ? -.5 / Ticks * timeline.Get("startrans_alpha", t) : 0);
             colorTravel[tick] = colorTravel[tick - 1] + speed;
@@ -33,7 +35,8 @@ public sealed class CustomStarTimeline
             {
                 int index = alive[i]; var s = Stars[index]; if (s.Mask && !mask) continue;
                 double y = s.Y + s.Speed * ((s.Mask ? maskTravel[tick] : colorTravel[tick]) - s.BirthTravel);
-                double alpha = s.Mask ? 2 + maskFade[tick] - s.BirthFade : Math.Min(1, 2 - (t - s.Birth) / 2) * timeline.Get("starchgcol_alpha", t);
+                double alpha = s.Mask ? 2 + maskFade[tick] - s.BirthFade : Math.Min(1, 2 - (t - s.Birth) / 2)
+                    * (sourceStars ? 1 : timeline.Get("starchgcol_alpha", t));
                 if (alpha <= 0 || (s.Mask ? y < -10 || y > 190 : y >= 185))
                 // 死亡时刻一旦写入就不再改变：之后把速度调反也不能让已销毁的星复活。
                 { Stars[index] = s with { Death = t }; alive.RemoveAt(i); }
@@ -55,7 +58,7 @@ public sealed class CustomStarTimeline
                     alive.Add(Stars.Count);
                     Stars.Add(new(t, double.PositiveInfinity, x, speed < 0 ? isMask ? 190 : 185 : isMask ? -10 : -5, velocity,
                         (int)Math.Min(3, Timeline.Hash(n + 3) * 4), isMask, isMask ? maskTravel[tick] : colorTravel[tick], maskFade[tick],
-                        Rgb("starchgcol_up_rgb"), Rgb("starchgcol_down_rgb")));
+                        sourceStars ? 0xffffff : Rgb("starchgcol_up_rgb"), sourceStars ? 0xffffff : Rgb("starchgcol_down_rgb")));
                     timer += interval;
                 }
             }
@@ -78,7 +81,8 @@ public sealed class CustomStarTimeline
         {
             if (s.Birth > time) break;
             if (s.Mask != mask || time >= s.Death) continue;
-            double alpha = mask ? 2 + fade - s.BirthFade : Math.Min(1, 2 - (time - s.Birth) / 2) * timeline.Get("starchgcol_alpha", time);
+            double alpha = mask ? 2 + fade - s.BirthFade : Math.Min(1, 2 - (time - s.Birth) / 2)
+                * (sourceStars ? 1 : timeline.Get("starchgcol_alpha", time));
             if (alpha > 0) yield return new(s.X, s.Y + s.Speed * (travel - s.BirthTravel), Math.Clamp(alpha, 0, 1), s.Frame, s.Top, s.Bottom, mask);
         }
     }

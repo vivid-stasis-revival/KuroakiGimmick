@@ -79,8 +79,10 @@ public sealed class CheckerboardRenderer : IDisposable
             generation = wanted;
         }
         canvas.Begin(target, width, height, 320, 180);
-        // Custom Gimmicks 没有 obj_angelstar_gimmick.curcolor，固定按 HSV(0,255,255) 取纯红。
-        canvas.Quad(pattern.Texture, new(0, 0, 320, 180), Color.Hex(0xFF0000).Alpha(alpha), shader: composite);
+        // Only the native Angelstar object supplies curcolor in the source.
+        var tint = session.NativeGimmick.HasBehavior("checker-tint")
+            ? Color.Hsv((float)session.Timeline.Get("curcolor", time) / 255, 1) : Color.Hex(0xFF0000);
+        canvas.Quad(pattern.Texture, new(0, 0, 320, 180), tint.Alpha(alpha), shader: composite);
     }
 
     public void Dispose()

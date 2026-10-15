@@ -15,6 +15,11 @@ public sealed partial class Timeline
     /// <summary>读取基础轨道后应用声明式别名、逐帧覆盖与回调淡入；不修改时间轴状态。</summary>
     public double Get(string name, double t, int proxy = -1)
     {
+        if (proxy == -1 && TrySequenceWrite(name, t, out double sourceWrite)) return SafeModValue(name, sourceWrite);
+        if (proxy == -1 && Native?.Data?.ValueBindings.TryGetValue(name,out var forced) == true)
+            return SafeModValue(name,forced.Value(this,t));
+        if (nativeFunctions?.TryValue(name,t,proxy,out double programValue)==true)
+            return SafeModValue(name,programValue);
         // Main frame path: one Rust FFI call in PrepareFrame, zero crossings per Get.
         // Other times/threads fall back to original C# automatically.
         if (TryNativeBase(name, t, proxy, out double nativeValue))
@@ -50,19 +55,51 @@ public sealed partial class Timeline
                 }
                 // fade 的 Duration 与 t 都是秒，不是拍：这里不经过 BPM map。
                 double completion = start + fade.Duration;
+                double fadeStart = start;
+                if (fade.RestartUntilInitialCompletion && callbackTimes.TryGetValue(fade.Callback, out var times))
+                {
+                    int beforeClear = SortedSearch.LowerBound(times, completion, value => value) - 1;
+                    int beforeNow = SortedSearch.UpperBound(times, t, value => value) - 1;
+                    int index = Math.Min(beforeClear, beforeNow);
+                    if (index >= 0) fadeStart = times[index];
+                }
                 if (t < completion)
                 {
-                    return SafeModValue(name, fade.From + (fade.To - fade.From) * Easings.Eval(fade.Ease, (t - start) / fade.Duration));
+                    return SafeModValue(name, fade.From + (fade.To - fade.From) * Easings.Eval(fade.Ease, (t - fadeStart) / fade.Duration));
                 }
                 // 隐式的房间写入会盖掉更早、已经结束的轨道，但盖不掉更晚或仍在进行中的轨道。
                 if (list == null || !list.Any(segment => segment.Time <= t && (segment.Time >= completion
                     || segment.Time + segment.Duration > completion)))
                 {
-                    return SafeModValue(name, fade.To);
+                    return SafeModValue(name, fade.RestartUntilInitialCompletion && fade.Duration > 0
+                        ? fade.From + (fade.To - fade.From) * Easings.Eval(fade.Ease, (completion - fadeStart) / fade.Duration) : fade.To);
                 }
             }
         }
         return SafeModValue(name, v);
+    }
+
+    private bool TrySequenceWrite(string name, double time, out double value)
+    {
+        value = 0;
+        if (Native?.Data?.Sequence is not { ModWrites.Count: > 0 } sequence) return false;
+        double last = double.NegativeInfinity;
+        foreach (var write in sequence.ModWrites)
+        {
+            if (write.Mod != name) continue;
+            double trigger = SequenceTriggerTime(write.Trigger);
+            double at = Math.Max(write.Time, trigger);
+            if (at <= time && at >= last) { last = at; value = write.Value; }
+        }
+        return last > double.NegativeInfinity && last >= NativeTrackWriteTime(name, -1, time);
+    }
+
+    public double SequenceTriggerTime(string trigger)
+    {
+        double time = Native?.Data?.Sequence?.AutomaticTriggers.GetValueOrDefault(trigger, double.PositiveInfinity) ?? double.PositiveInfinity;
+        foreach (var mod in chart.Mods)
+            if (mod.Name == trigger) time = Math.Min(time, Bpm.Time(mod.Beat));
+        return time;
     }
 
     /// <summary>二分选择已经开始的最后一个事件；同一时间的后声明事件覆盖先声明事件。</summary>

@@ -10,6 +10,8 @@ public sealed class GimmickSprite
     public int OriginX { get; set; }
     public int OriginY { get; set; }
     public string? Scope { get; set; }
+    /// <summary>Large source banks are header-validated eagerly and decoded on demand under the shared GPU LRU budget.</summary>
+    public bool Lazy { get; set; }
     public List<string> Frames { get; set; } = [];
 }
 

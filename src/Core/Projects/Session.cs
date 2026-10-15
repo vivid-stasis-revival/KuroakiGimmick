@@ -16,12 +16,20 @@ public sealed partial class Session
     public NoteIndex NoteIndex { get; }
     public EventDensity EventDensity { get; }
     public bool HasProxyEvents { get; }
+    /// <summary>Parser fallback proxy counts do not activate the native application clear. Direct source Other_21 callers retain their explicit always-on behavior.</summary>
+    public bool NativeApplicationProxyEnabled => NativeGimmick.Data is {ApplicationProxy:true,DisableProxy:false} definition
+        && (definition.AlwaysApplicationProxy || Chart.Proxies > 0 && HasProxyEvents);
     readonly (string Path, long Length, long Written)? noteSourceStamp;
     readonly Chart? vscSource;
-    readonly (double Bpm, double Offset, double? Fixed, string? Definition, string Profile) noteBpmSettings;
+    readonly (double Bpm, double Offset, double? Fixed, string? Definition, string Profile, string NativeBpm) noteBpmSettings;
     public Windows.WindowMotionConfig WindowMotion { get; }
     public CustomImages Images { get; }
     public AudioData? Audio { get; }
+    public AudioData? SourceAudio { get; }
+    public AudioData? SongAudio { get; }
+    public bool HasNativeSequenceAudio => !ReferenceEquals(Audio, SourceAudio);
+    public NativeInterludeRoute? Interludes { get; }
+    public double PresentationDuration => Interludes?.PresentationAt(Duration,true) ?? Duration;
     public CustomText Texts { get; }
     /// <summary>谱面内剧情（custom_episode）；谱面没写这个 gimmick 时为 null。</summary>
     public EpisodeScript? Episode { get; }
@@ -87,7 +95,7 @@ public sealed partial class Session
         // Audio is independent of the chart's scene metadata. Begin it after validation
         // and overlap the expensive decode with chart/asset metadata work.
         string? audioPath = p.Audio;
-        AudioData? previousAudio = reuseAudioFrom?.Project.Audio == audioPath ? reuseAudioFrom?.Audio : null;
+        AudioData? previousAudio = reuseAudioFrom?.Project.Audio == audioPath ? reuseAudioFrom?.SourceAudio : null;
         bool parallel = OptimizationEngineSettings.ParallelLoading && audioPath != null && previousAudio == null;
         string audioEngine = OptimizationEngineSettings.AudioMode;
         bool audioCache = OptimizationEngineSettings.AudioCache;
@@ -174,11 +182,21 @@ public sealed partial class Session
             Console.Error.WriteLine($"[K/G Audio] engine={audioEngine} parallel={parallel} cache={audioCache} wall={Stopwatch.GetElapsedTime(audioStarted).TotalMilliseconds:F2} ms");
         Profile("Audio decode/reuse (wait)");
         Timeline = new(Chart, p, Audio?.Duration ?? Chart.Duration, Fx, NativeGimmick);
+        SourceAudio = Audio;
+        Audio = NativeSequenceAudio.Mix(SourceAudio, NativeGimmick, Chart, Timeline);
+        SongAudio = Audio;
+        if(NativeGimmick.Data is { } nativeDefinition&&(nativeDefinition.Interludes.Count>0||nativeDefinition.Sequence?.SongSeeks.Count>0))
+        {
+            var route=new NativeInterludeRoute(Chart,Timeline.Bpm,nativeDefinition.Interludes,nativeDefinition.Sequence?.SongSeeks);
+            if(route.HasChanges)Interludes=route;
+        }
         Profile("Timeline construct");
         // 判定表依赖 BpmMap 求长条的每拍毫秒数，所以必须排在 Timeline 之后。
         noteSourceStamp = Stamp(p.Chart);
         if (noteSourceStamp != beforeNoteRead) noteSourceStamp = null; // source changed during load: never reuse a mixed snapshot
-        noteBpmSettings = (p.Bpm, p.OffsetMs, NativeGimmick.Data?.FixedBpm, p.GimmickDefinition, p.Profile);
+        noteBpmSettings = (p.Bpm, p.OffsetMs, NativeGimmick.Data?.FixedBpm, p.GimmickDefinition, p.Profile,
+            (NativeGimmick.Data?.OffsetOverrideMs?.ToString("R",System.Globalization.CultureInfo.InvariantCulture)??"")+":"+string.Join(";", NativeGimmick.Data?.BpmOverride.Select(point =>
+                FormattableString.Invariant($"{point.Beat:R}:{point.Bpm:R}")) ?? []));
         // Notes are read-only in the editor. VSM/layout revisions reuse the immutable note snapshot;
         // a changed chart file or timing configuration always rebuilds it on the existing load worker.
         bool reuseNotes = reuseAudioFrom != null && (noteSourceStamp.HasValue && reuseAudioFrom.noteSourceStamp == noteSourceStamp
@@ -187,13 +205,19 @@ public sealed partial class Session
         NoteIndex = reuseNotes ? reuseAudioFrom!.NoteIndex : new(Chart.Notes, Timeline.Bpm);
         Score = reuseNotes ? reuseAudioFrom!.Score : new(Chart, Timeline.Bpm);
         EventDensity = new(Chart, Timeline.Bpm);
-        HasProxyEvents = Chart.Mods.Any(static e => e.Proxy >= 0);
+        // Source callbacks ignore their proxy argument. Only an evaluated proxy
+        // track enables the editor's proxy view; callback metadata must not hide
+        // the ordinary playfield behind an unauthored transparent proxy.
+        HasProxyEvents = Timeline.Tracks.Keys.Any(static key => key.Proxy >= 0);
         Checker = Checkerboard.Load(p, Chart, Timeline);
         // 时长取音频优先；无音频时取谱面、时间轴尾部和最后一条文本 cue 之后的富余，三者取最大，避免演出被提前截断。
         Duration = Audio?.Duration ?? Math.Max(Math.Max(Chart.Duration, Timeline.End + .5),
             Texts.Tracks.SelectMany(t => t.Cues).Select(c => Timeline.Bpm.Time(c.Beat) + 4).DefaultIfEmpty(0).Max());
         Playback = new(Chart, Timeline.Bpm, SongFiles.Config(p, "ENABLE_MUSIC_CONTROL"));
-        Stars = new(Timeline, Chart, Duration, Chart.ObjectName == "obj_custom_gimmick" && SongFiles.Config(p, "ENABLE_STARPARTICLE", false));
+        Stars = new(Timeline, Chart, Duration,
+            NativeGimmick.HasBehavior("lane-starfield") || Chart.ObjectName == "obj_custom_gimmick" && SongFiles.Config(p, "ENABLE_STARPARTICLE", false),
+            sourceStars: NativeGimmick.HasBehavior("lane-starfield"));
+        Audio = NativeInterludeAudio.Render(SongAudio,Interludes,NativeGimmick,Duration);
         Profile("Score/index/playback");
         // 区间展开后 tween 越过歌曲末尾是合法的。
         // 保留它并在 Report 中如实给出时间事实，这不算不兼容。

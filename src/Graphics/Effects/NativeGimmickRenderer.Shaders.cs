@@ -4,6 +4,8 @@ namespace KuroakiGimmick.Graphics;
 
 public sealed partial class NativeGimmickRenderer
 {
+    private Target? postIntermediateA;
+    private Target? postIntermediateB;
     /// <summary>
     /// 全屏后处理。选择器要求是有限、整数且落在 int 范围内的值，并且能对应到已定义的 post mode；任何一步不满足都写诊断。
     /// 失败时复制输入，绝不能把上一帧残留的离屏纹理当成当前输出。
@@ -11,23 +13,50 @@ public sealed partial class NativeGimmickRenderer
     public void RenderPost(Target output, Texture input, Session session, double time)
     {
         Prepare(session);
-        if (current?.Data is not { } definition || definition.PostModes.Count == 0)
+        if (current?.Data is not { } definition || definition.PostModes.Count == 0 && definition.PostPasses.Count == 0)
         {
             canvas.Pass(output, input, canvas.Basic);
             return;
         }
-        double selected = session.Timeline.Get(definition.PostModeMod, time);
-        if (!double.IsFinite(selected) || selected != Math.Truncate(selected) || selected < int.MinValue || selected > int.MaxValue
-            || !definition.PostModes.TryGetValue((int) selected, out var mode))
+        GimmickShaderMode? mode = null;
+        if (definition.PostModes.Count > 0)
         {
-            current.Fail(definition.PostModeMod, "No post shader mode is defined for the evaluated selector.");
-            canvas.Pass(output, input, canvas.Basic);
-            return;
+            double selected = session.Timeline.Get(definition.PostModeMod, time);
+            if (!double.IsFinite(selected) || selected != Math.Truncate(selected) || selected < int.MinValue || selected > int.MaxValue
+                || !definition.PostModes.TryGetValue((int)selected, out mode))
+            {
+                current.Fail(definition.PostModeMod, "No post shader mode is defined for the evaluated selector.");
+                canvas.Pass(output, input, canvas.Basic);
+                return;
+            }
         }
-        if (!ApplyShader(output, input, session, time, mode))
+        int count = definition.PostPasses.Count + (mode == null ? 0 : 1);
+        Texture source = input;
+        for (int i = 0; i < count; i++)
         {
-            canvas.Pass(output, input, canvas.Basic);
+            var pass = mode != null && i == 0 ? mode : definition.PostPasses[i - (mode == null ? 0 : 1)];
+            Target target = output;
+            if (i < count - 1)
+            {
+                ref Target? intermediate = ref (i % 2 == 0 ? ref postIntermediateA : ref postIntermediateB);
+                intermediate ??= new Target(canvas.Gpu, output.Texture.Width, output.Texture.Height);
+                if (intermediate.Texture.Width != output.Texture.Width || intermediate.Texture.Height != output.Texture.Height)
+                {
+                    canvas.Flush();
+                    intermediate.Resize(output.Texture.Width, output.Texture.Height);
+                }
+                target = intermediate;
+            }
+            if (!ApplyShader(target, source, session, time, pass)) canvas.Pass(target, source, canvas.Basic);
+            source = target.Texture;
         }
+    }
+
+    private void DisposePostTargets()
+    {
+        postIntermediateA?.Dispose();
+        postIntermediateB?.Dispose();
+        postIntermediateA = postIntermediateB = null;
     }
 
     /// <summary>
@@ -35,8 +64,9 @@ public sealed partial class NativeGimmickRenderer
     /// 任何一项不合格都返回 false 由调用方走复制路径，不留下画到一半的输出。背景滤镜与全屏后处理共用此入口。
     /// sampler 绑定从单元 1 开始（0 留给 gm_BaseTexture）。
     /// </summary>
-    private bool ApplyShader(Target output, Texture input, Session session, double time, GimmickShaderMode mode)
+    private bool ApplyShader(Target output, Texture input, Session session, double time, GimmickShaderMode mode, bool preserveAlpha = false)
     {
+        var pinned=new List<Texture>();
         if (current == null || !current.IsModeAvailable(mode) || failedModes.Contains(mode) || !shaders.TryGetValue(mode.Shader, out var shader))
         {
             return false;
@@ -56,12 +86,13 @@ public sealed partial class NativeGimmickRenderer
             var samplers = new List<(string Name, Texture Image)>();
             foreach (var (name, textureName) in mode.Samplers)
             {
-                var image = Image(textureName, repeat: true, linear: mode.LinearSamplers.Contains(name, StringComparer.Ordinal));
+                var image = Image(textureName, repeat: !mode.ClampSamplers.Contains(name, StringComparer.Ordinal), linear: mode.LinearSamplers.Contains(name, StringComparer.Ordinal));
                 if (image == null)
                 {
                     return false;
                 }
                 samplers.Add((name, image));
+                PinImage(image);pinned.Add(image);
             }
             canvas.Flush();
             for (int index = 0; index < samplers.Count; index++)
@@ -95,7 +126,7 @@ public sealed partial class NativeGimmickRenderer
                     // GameMaker 生成的滤镜都依赖这个约定俗成的 <name>TexelSize 配套 uniform。
                     program.Vec2(sampler.Name + "TexelSize", 1.0 / sampler.Image.Width, 1.0 / sampler.Image.Height);
                 }
-            });
+            }, preserveAlpha:preserveAlpha);
             return true;
         }
         catch (Exception exception) when (ResourceFiles.IsResourceError(exception))
@@ -104,6 +135,7 @@ public sealed partial class NativeGimmickRenderer
             current.Fail("shader/" + mode.Shader, exception.Message);
             return false;
         }
+        finally {foreach(var image in pinned)UnpinImage(image);}
     }
 }
 

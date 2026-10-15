@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "objectName": "obj_example_gimmick",
+  "displayName": "CONFIGURED EFFECT LIFECYCLE",
+  "disableProxy": true,
+  "disableJacketMultiply": true,
+  "useCommonPostProcessing": false,
+  "ambientParticles": false,
+  "extraMods": ["amount", "enable_effect", "disable_effect"],
+  "defaults": {"amount": 1},
+  "shaders": {"grayscale": "grayscale.frag"},
+  "sceneComposite": "filter-chain",
+  "compositeSource": "final",
+  "compositeAfterGui": true,
+  "compositePasses": [
+    {"shader": "grayscale", "uniforms": {"amount": [{"mods": ["amount"]}]}}
+  ],
+  "signals": {
+    "enable_effect": {"signal": "effect.on"},
+    "disable_effect": {"signal": "effect.off"}
+  },
+  "compositeLifecycle": {
+    "initial": true,
+    "create": ["effect.on"],
+    "destroy": ["effect.off"]
+  }
+}

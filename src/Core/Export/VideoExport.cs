@@ -20,7 +20,9 @@ public sealed class VideoExport : IDisposable
     readonly System.Threading.Channels.Channel<byte[]> frames;
     readonly CancellationTokenSource cancel = new();
     readonly string temporary;
+    readonly string? nativeAudioTemporary;
     readonly ChartPlaybackRoute route;
+    readonly bool presentationRoute;
     byte[]? pending;
     readonly GpuReadback[] readbacks;
     readonly Queue<GpuReadback> downloads = new(3);
@@ -49,7 +51,7 @@ public sealed class VideoExport : IDisposable
         session = s;
         Options = options;
         // 挂了音频却解码失败时拒绝导出：否则会静默产出一段无声视频，属于伪成功。
-        if (s.Project.Audio != null && s.Audio == null)
+        if (s.Project.Audio != null && s.SourceAudio == null)
         {
             throw new IOException("Cannot export: selected audio failed to decode. Fix or remove the audio path first.");
         }
@@ -58,7 +60,10 @@ public sealed class VideoExport : IDisposable
         temporary = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(options.Path))!,
             "." + System.IO.Path.GetFileNameWithoutExtension(options.Path) + "." + Guid.NewGuid().ToString("N") + ".partial.mp4");
         // 变速段会改变输出时长，因此帧数按 route 的实际时长算，而不是 End-Start。
-        route = s.Playback.Route(options.Start, options.End);
+        presentationRoute=s.Interludes!=null;
+        route = s.Interludes is { } interludes
+            ? ChartPlaybackRoute.Identity(interludes.PresentationAt(options.Start),interludes.PresentationAt(options.End,true))
+            : s.Playback.Route(options.Start, options.End);
         double outputDuration = route.Duration;
         if (!double.IsFinite(outputDuration) || outputDuration <= 0 || outputDuration > 3600) throw new InvalidOperationException("Speed-adjusted export must be at most one hour.");
         TotalFrames = Math.Max(1, (int)Math.Ceiling(outputDuration * options.Fps - 1e-9));
@@ -81,10 +86,18 @@ public sealed class VideoExport : IDisposable
         // -n 禁止 ffmpeg 覆盖已有文件；像素格式与帧率必须与后面推送的 RGBA 原始帧完全一致。
         Add("-hide_banner", "-loglevel", "error", "-n", "-f", "rawvideo", "-pix_fmt", "rgba", "-s", $"{options.Width}x{options.Height}", "-r",
             options.Fps.ToString(), "-i", "pipe:0");
-        bool audio = s.Project.Audio != null && s.Audio != null && route.Legs.Any(l => l.Start < s.Audio.Duration);
+        bool audio = s.Audio != null && route.Legs.Any(l => l.Start < s.Audio.Duration);
         if (audio)
         {
-            Add("-i", s.Project.Audio!);
+            string? inputAudio = s.Project.Audio;
+            if (s.HasNativeSequenceAudio)
+            {
+                nativeAudioTemporary = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "kg-native-voice-" + Guid.NewGuid().ToString("N") + ".wav");
+                try { NativeSequenceAudio.WriteFloatWave(nativeAudioTemporary, s.Audio!); }
+                catch { TryDeleteNativeAudio(); throw; }
+                inputAudio = nativeAudioTemporary;
+            }
+            Add("-i", inputAudio ?? throw new InvalidOperationException("Decoded export audio has no source."));
         }
         Add("-map", "0:v:0");
         if (audio)
@@ -101,14 +114,15 @@ public sealed class VideoExport : IDisposable
         }
         Add("-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p", "-t", N(TotalFrames / (double) options.Fps),
             "-movflags", "+faststart", temporary);
-        process = Process.Start(p) ?? throw new IOException("Could not launch FFmpeg. Install FFmpeg or set KUROAKI_FFMPEG.");
+        try { process = Process.Start(p) ?? throw new IOException("Could not launch FFmpeg. Install FFmpeg or set KUROAKI_FFMPEG."); }
+        catch { TryDeleteNativeAudio(); throw; }
         // 必须一直异步抽干 stderr，否则 ffmpeg 写满管道缓冲区会死锁；出错时它也是唯一的错误信息来源。
         stderr = process.StandardError.ReadToEndAsync();
         target = new(c.Gpu, options.Width, options.Height);
         frameBytes = checked(options.Width * options.Height * 4);
         readbacks = new GpuReadback[3];
         try { for (int i = 0; i < readbacks.Length; i++) readbacks[i] = c.CreateReadback(target); }
-        catch { foreach (var slot in readbacks) slot?.Dispose(); target.Dispose(); process.Kill(); process.Dispose(); throw; }
+        catch { foreach (var slot in readbacks) slot?.Dispose(); target.Dispose(); process.Kill(); process.Dispose(); TryDeleteNativeAudio(); throw; }
         // 容量 2：渲染线程最多领先编码器两帧，既能重叠 GPU 与编码耗时，又不会把整段视频堆在内存里。
         frames = System.Threading.Channels.Channel.CreateBounded<byte[]>(new System.Threading.Channels.BoundedChannelOptions(2)
         {
@@ -179,7 +193,8 @@ public sealed class VideoExport : IDisposable
             if (rendered < TotalFrames && downloads.Count < readbacks.Length)
             {
                 using var frameTiming = PerformanceStats.Measure(PerformanceStats.Stage.Frame);
-                renderer.Render(session, route.ChartAt(rendered / (double) Options.Fps), Options.Notes, Options.Effects);
+                if(presentationRoute)renderer.RenderPresentation(session,route.ChartAt(rendered/(double)Options.Fps),Options.Notes,Options.Effects);
+                else renderer.Render(session, route.ChartAt(rendered / (double) Options.Fps), Options.Notes, Options.Effects);
                 canvas.Pass(target, renderer.Final.Texture, canvas.Basic);
                 var slot = readbacks[nextSlot];
                 canvas.BeginReadback(slot, target);
@@ -241,6 +256,14 @@ public sealed class VideoExport : IDisposable
         StopEncoder();
     }
 
+    void TryDeleteNativeAudio()
+    {
+        if (nativeAudioTemporary == null) return;
+        try { File.Delete(nativeAudioTemporary); }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
+
     /// <summary>释放顺序固定：先停编码器，再等 writer 退出，最后清理临时文件与 GPU 资源。顺序颠倒会让 writer 写向已关闭的管道。</summary>
     public void Dispose()
     {
@@ -271,6 +294,7 @@ public sealed class VideoExport : IDisposable
         foreach (var slot in readbacks) slot.Dispose();
         target.Dispose();
         process.Dispose();
+        TryDeleteNativeAudio();
         cancel.Dispose();
     }
 }

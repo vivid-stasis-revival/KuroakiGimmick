@@ -95,7 +95,17 @@ public sealed partial class SceneRenderer : IDisposable
     /// 分辨率变化时先 Flush 再整批缩放全部目标，不允许只缩放其中一个。
     /// </summary>
     public void Render(Session session, double time, bool notes = true, bool effects = true) =>
-        RenderFrame(session, time, notes, effects, Final);
+        RenderPresentation(session,session.Interludes?.PresentationAt(time)??time,notes,effects);
+
+    public void RenderPresentation(Session session,double time,bool notes=true,bool effects=true)=>
+        RenderWithNativeFeedback(session,time,notes,effects);
+
+    NativeInterludeState? nativeInterludeState;
+    void RenderPresentationFrame(Session session,double time,bool notes,bool effects,Target output)
+    {
+        nativeInterludeState=session.Interludes?.At(time);
+        RenderFrame(session,session.Interludes?.SongAt(time)??time,notes,effects,output);
+    }
 
     void RenderFrame(Session session, double time, bool notes, bool effects, Target output)
     {
@@ -120,17 +130,19 @@ public sealed partial class SceneRenderer : IDisposable
         double M(string n, int p = -1) => timeline.Get(n, time, p);
         // Base Draw_64 and Custom Draw_74 sample the gameplay application surface, but not every HUD object.
         // PAUSE / Escape / score belong to the sampled source; combo、判定与底部信息在 proxy 之后按各自层级补画。
-        bool applicationProxy = session.Chart.ObjectName is "obj_base_gimmick" or "obj_custom_gimmick"
+        bool nativeApplicationProxy = session.NativeApplicationProxyEnabled;
+        bool applicationProxy = nativeApplicationProxy || session.Chart.ObjectName is "obj_base_gimmick" or "obj_custom_gimmick"
             && session.Chart.Proxies > 0 && session.HasProxyEvents;
         canvas.Begin(scene, RenderWidth, RenderHeight, 320, 180, new Color(0, 0, 0));
         nativeGimmick.DrawBackground(scene, session, time, effects);
-        nativeGimmick.DrawRoomLayers(scene, session, time);
-        nativeGimmick.DrawStarcrashersBehindMask(scene, session, time);
-        nativeGimmick.DrawStarcrashersLateDust(scene, session, time);
+        nativeGimmick.DrawRoomLayers(scene, session, time,
+            minimumDepth: (int)(session.NativeGimmick.Data?.PlayfieldLayerDepth ?? int.MinValue));
+        if (session.NativeGimmick.HasBehavior("target-track")) customGimmicks.DrawStars(session, time, false);
+        nativeGimmick.DrawComponents(GimmickComponentStage.BeforeMask,session,time,scene,gameUi);
         // Starcrashers raw stage inspection. Disabled unless explicitly requested.
         // Stage ordering here is significant: behind-mask instances and directional
         // dust have already drawn to scene; the mask is multiplied only afterwards.
-        string? scMaskProbe = session.Chart.ObjectName == "obj_starcrashers_gimmick"
+        string? scMaskProbe = session.NativeGimmick.HasBehavior("masked-starfield")
             ? Environment.GetEnvironmentVariable("KUROAKI_SC_MASK_VIEW") : null;
         if (scMaskProbe == "before-mask")
         {
@@ -150,6 +162,7 @@ public sealed partial class SceneRenderer : IDisposable
         }
         nativeSequence.Backgrounds(scene, session, time, effects);
         nativeGimmick.DrawParticles(session, time);
+        nativeGimmick.DrawComponents(GimmickComponentStage.AfterRoom,session,time,scene,gameUi);
         // 深度 801：白色底衬使深度 700 处以乘算绘制的 jacket 可见。
         if (session.DistortBgEnabled && M("ditortedBG_alp") > 0)
         {
@@ -157,8 +170,12 @@ public sealed partial class SceneRenderer : IDisposable
         }
         checker.Draw(session, time, 0, scene, RenderWidth, RenderHeight);
         customGimmicks.DrawStars(session, time, true);
+        nativeGimmick.DrawComponents(GimmickComponentStage.BeforeJacket,session,time,scene,gameUi);
+        if (session.NativeGimmick.Data?.Sequence?.SlashesBeforeJacket == true) nativeSequence.Slashes(session, time);
         DrawParticles(session, time);
-        DrawJacket(session, time);
+        nativeGimmick.DrawComponents(GimmickComponentStage.BackParticles,session,time,scene,gameUi);
+        if (!nativeGimmick.DrawConfiguredJacket(session,time)) DrawJacket(session, time);
+        nativeGimmick.DrawComponents(GimmickComponentStage.AfterJacket,session,time,scene,gameUi);
         if (session.NativeGimmick.Data?.BurstAfterJacket == true)
         {
             DrawParticles(session, time, burstsOnly: true);
@@ -171,7 +188,7 @@ public sealed partial class SceneRenderer : IDisposable
         double previousPriority = double.NegativeInfinity;
         // 背景 FX 层按深度反号成图片优先级，并夹在 -301 之内；相邻两次 DrawImages 的区间首尾相接，
         // 不能留空隙也不能重叠，否则同一批图片会漏画或画两遍。
-        foreach (var layer in session.Fx.Layers.Where(l => l.Name is "Effect_1" or "glow").OrderByDescending(l => l.Depth))
+        foreach (var layer in session.Fx.Layers.Where(l => l.Depth >= 0 && l.Name is "Effect_1" or "glow").OrderByDescending(l => l.Depth))
         {
             double priority = Math.Min(-301, -layer.Depth);
             DrawImages(session, time, previousPriority, priority);
@@ -181,31 +198,36 @@ public sealed partial class SceneRenderer : IDisposable
             }
             previousPriority = priority;
         }
+        nativeGimmick.DrawComponents(GimmickComponentStage.FrontParticles,session,time,scene,gameUi);
         DrawImages(session, time, previousPriority, -301);
         checker.Draw(session, time, 1, scene, RenderWidth, RenderHeight);
         DrawImages(session, time, -301, -300);
+        if (effects && session.Fx.Find("FX_zoom") is { Depth: >= 0 })
+            customEffects.RenderBackdrop(scene, session, time, "FX_zoom");
         nativeGimmick.DrawStage(session, time, GimmickStages.BeforeRails, notes);
         DrawImages(session, time, -300, -260);
         customGimmicks.DrawSides(session, time);
-        nativeSequence.Slashes(session, time);
+        if (session.NativeGimmick.Data?.Sequence?.SlashesBeforeJacket != true) nativeSequence.Slashes(session, time);
         nativeGimmick.DrawStage(session, time, GimmickStages.BeforePlayfield, notes);
+        nativeGimmick.DrawComponents(GimmickComponentStage.BeforePlayfield,session,time,scene,gameUi);
         DrawImages(session, time, -260, -255);
         customGimmicks.DrawLoreleiSides(session, time);
         DrawSlashes(session, time);
         DrawLoreleiSlashes(session, time);
         DrawImages(session, time, -255, -250);
         customGimmicks.DrawDf(session, time);
+        nativeGimmick.DrawComponents(GimmickComponentStage.NeutralSlashes,session,time,scene,gameUi);
         DrawImages(session, time, -250, -200);
         canvas.Flush();
         // 特殊原生对象保留分段合成；Base / Custom 先组装完整画面再统一采样。
-        bool proxyMode = !applicationProxy && session.HasProxyEvents;
+        bool proxyMode = !applicationProxy && session.NativeGimmick.Data?.DisableProxy != true && session.HasProxyEvents;
         DrawNotes(session, time, notes);
         CompositeField(session, time, proxyMode, clearFooter: session.NativeGimmick.Data?.ClearProxyFooter ?? true);
         // Base / Custom 只把 PAUSE / Escape / score 放进 application proxy。
         // 其它对象保持固定：非 application proxy 仍在这里按旧顺序绘制；application proxy 稍后补画。
         canvas.Begin(field, RenderWidth, RenderHeight, 320, 180, new(0, 0, 0, 0));
         gameUi.DrawProxyHud(session, time);
-        if (!applicationProxy)
+        if (!applicationProxy || nativeApplicationProxy)
         {
             gameUi.DrawFixedHud(session, time);
             nativeSequence.Hud(session, time);
@@ -217,7 +239,7 @@ public sealed partial class SceneRenderer : IDisposable
         // 优先级 >= 1000 的图片可以同时盖住音符与固定 HUD。
         // 它们仍然走原本的 proxy 变换，不要把谱面美术（包括伪造的 PAUSE/标题图片）
         // 变成固定在屏幕上的覆盖层。
-        if (!applicationProxy && session.Images.Items.Any(item => item.LayerPriority >= 1000))
+        if ((!applicationProxy || nativeApplicationProxy) && session.Images.Items.Any(item => item.LayerPriority >= 1000))
         {
             canvas.Begin(field, RenderWidth, RenderHeight, 320, 180, new(0, 0, 0, 0));
             DrawImages(session, time, 1000, double.PositiveInfinity, field);
@@ -232,13 +254,15 @@ public sealed partial class SceneRenderer : IDisposable
             sceneFont.Draw(canvas, session, time);
         }
         canvas.Flush();
-        if (applicationProxy)
+        if (applicationProxy && !nativeApplicationProxy)
         {
             // field 现在只包含允许随 proxy 移动的 application source。清空目标后重建固定侧边与 proxy，
             // 防止未变换的中央轨道泄漏出来。
             canvas.Pass(field, scene.Texture, canvas.Basic);
-            canvas.Begin(scene, RenderWidth, RenderHeight, 320, 180, Color.Hex(0));
-            CompositeField(session, time, true, clearFooter: true);
+            BeginNativeProxySurface(session,time);
+            CompositeField(session, time, true, clearFooter: true,destination:nativeProxySurface);
+            ApplyNativeFeedback(session,time);
+            canvas.Pass(scene,nativeProxySurface!.Texture,canvas.Basic);
 
             // Combo / judgement 属于 Draw GUI，留到 Final；歌曲信息、难度与 sequence HUD 仍参加后处理，
             // 但不进入 proxy。保留原来 fixed HUD 对 hom 的淡出语义。
@@ -266,50 +290,89 @@ public sealed partial class SceneRenderer : IDisposable
         // 并按 UseCommonPostProcessing 决定是否再套一层公共链；两者都没有时同样退回 Basic 复制。
         // 任何一条分支都必须把 scene 写进 Final，不能让 Final 留着上一帧内容。
         bool commonPost = session.NativeGimmick.Data?.UseCommonPostProcessing ?? true;
+        bool postAfterApplicationProxy = nativeApplicationProxy && session.NativeGimmick.Data?.PostAfterApplicationProxy == true;
+        bool unfilteredNativeProxy = nativeApplicationProxy && session.NativeGimmick.Data?.ApplicationProxyUsesUnfilteredSource == true;
+        bool nativeHudBeforePost = session.NativeGimmick.Data?.HudBeforePost == true &&
+            (session.NativeGimmick.Data.HudAfterPostWhenPositive is not { } hudSwitch || M(hudSwitch) <= 0);
+        if (nativeHudBeforePost && inspectionProxy == null)
+        {
+            canvas.Begin(scene, RenderWidth, RenderHeight, 320, 180);
+            gameUi.DrawGuiHud(session, time);
+            DrawComboParticles(session, time);
+            canvas.Flush();
+        }
+        nativeGimmick.DrawSequenceSceneBackground(session, time);
+        nativeGimmick.DrawStage(session, time, GimmickStages.BeforePost, notes);
+        nativeGimmick.DrawComponents(GimmickComponentStage.BeforePost,session,time,scene,gameUi);
         if (!effects)
         {
+            if(unfilteredNativeProxy)CaptureNativeProxySource(scene.Texture);
             canvas.Pass(output, scene.Texture, canvas.Basic);
         }
-        else if (session.NativeGimmick.Data?.PostModes.Count > 0)
+        else if (!postAfterApplicationProxy && session.NativeGimmick.Data is { } nativeDefinition
+            && (nativeDefinition.PostModes.Count > 0 || nativeDefinition.PostPasses.Count > 0))
         {
             if (commonPost)
             {
-                customEffects.Render(output, scene.Texture, session, time, (postOutput, input) => nativeGimmick.RenderPost(postOutput, input, session, time));
+                customEffects.Render(output, scene.Texture, session, time, (postOutput, input) =>
+                {if(unfilteredNativeProxy)CaptureNativeProxySource(input);nativeGimmick.RenderPost(postOutput,input,session,time);});
             }
             else
             {
+                if(unfilteredNativeProxy)CaptureNativeProxySource(scene.Texture);
                 nativeGimmick.RenderPost(output, scene.Texture, session, time);
             }
         }
         else if (commonPost)
         {
-            customEffects.Render(output, scene.Texture, session, time);
+            if(session.NativeGimmick.Data!=null && session.Chart.ObjectName is not ("obj_base_gimmick" or "obj_custom_gimmick"))
+                customEffects.Render(output,scene.Texture,session,time,(target,input)=>
+                {if(unfilteredNativeProxy)CaptureNativeProxySource(input);canvas.Pass(target,input,canvas.Basic);});
+            else customEffects.Render(output, scene.Texture, session, time);
         }
         else
         {
+            if(unfilteredNativeProxy)CaptureNativeProxySource(scene.Texture);
             canvas.Pass(output, scene.Texture, canvas.Basic);
         }
+        DrawNativeAfterEffects(session, time, notes, output, nativeApplicationProxy, effects && postAfterApplicationProxy);
+        if(effects)RenderNativeComposite(session,time,output,afterGui:false);
         // The inspection image contains only the selected proxy, without fixed combo/story HUD.
         if (inspectionProxy != null) { canvas.Flush(); return; }
         canvas.Begin(output, RenderWidth, RenderHeight, 320, 180);
         // o_combodisplay / judgement 属于固定 GUI，不进入 application proxy，也不跟 uialpha 淡出。
-        gameUi.DrawGuiHud(session, time);
-        DrawComboParticles(session, time);
+        nativeGimmick.DrawComponents(GimmickComponentStage.EarlyGui,session,time,output,gameUi);
+        if (!nativeHudBeforePost)
+        {
+            gameUi.DrawGuiHud(session, time);
+            DrawComboParticles(session, time);
+        }
         if (session.NativeGimmick.Data != null)
         {
-            nativeGimmick.DrawGui(session, time, notes);
+            nativeGimmick.DrawGui(session, time, notes, text=>gameUi.DrawNativeText(session,time,text));
+            nativeGimmick.DrawComponents(GimmickComponentStage.Gui,session,time,output,gameUi);
             nativeSequence.Gui(session, time);
+            nativeGimmick.DrawSequenceSceneGui(session, time);
             gameUi.DrawSequenceStory(session, time);
-            gameUi.DrawStarcrashersStory(session, time);
+            nativeGimmick.DrawComponents(GimmickComponentStage.EndingGui,session,time,output,gameUi);
+
             nativeSequence.EndFade(session, time);
         }
+        customGimmicks.DrawEndBlip(session,time);
         // 谱面内剧情不依赖原生 gimmick：任何自定义曲写了 custom_episode 都能触发，所以在门控之外。
         gameUi.DrawEpisodeStory(session, time);
-        if (M("wflash") > 0)
+        if(nativeInterludeState is { } interlude)
+        {
+            nativeGimmick.Interlude(session,interlude);
+            gameUi.Interlude(session,interlude);
+        }
+        if (session.Chart.ObjectName!="obj_custom_gimmick" && session.NativeGimmick.Data?.UseCommonWhiteFlash != false && M("wflash") > 0)
         {
             canvas.Fill(new(0, 0, 320, 180), Color.White.Alpha(M("wflash")));
         }
+        nativeGimmick.DrawComponents(GimmickComponentStage.Cover,session,time,output,gameUi);
         canvas.Flush();
+        if(effects)RenderNativeComposite(session,time,output,afterGui:true);
     }
 
     /// <summary>结果与除数同号的取模；负时间或负角度不会落到负区间。</summary>
@@ -342,6 +405,10 @@ public sealed partial class SceneRenderer : IDisposable
     /// <summary>按与构造相反的次序释放：子渲染器和纹理先于目标与 shader。调用前应确保引用这些资源的批次已经提交。</summary>
     public void Dispose()
     {
+        DisposeNativeFeedback();
+        nativeCompositeInput?.Dispose();
+        nativeApplicationSnapshot?.Dispose();
+        nativeProxySource?.Dispose();
         jacketTexture?.Dispose();
         customEffects.Dispose();
         customGimmicks.Dispose();

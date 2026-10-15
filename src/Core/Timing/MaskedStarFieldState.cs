@@ -10,7 +10,7 @@ namespace KuroakiGimmick.Core;
 /// preview FPS and seek direction. Random values are deterministic surrogates, NOT a
 /// bit-identical emulation of GameMaker's unknown per-session RNG state.
 /// </summary>
-public sealed class StarcrashersObjects
+public sealed class MaskedStarFieldState
 {
     public const int TicksPerSecond = 60;
     const int MaxTicks = 60 * 3600;
@@ -47,27 +47,35 @@ public sealed class StarcrashersObjects
     private int nextCheckerRevision;
     private bool nextFireworkRight;
 
-    public StarcrashersObjects(Session session)
+    public MaskedStarFieldState(Session session) : this(session.Timeline, session.Chart, session.Duration) { }
+
+    public MaskedStarFieldState(Timeline sourceTimeline, Chart chart, double duration)
     {
-        timeline = session.Timeline;
-        int ticks = Math.Clamp((int)Math.Ceiling(Math.Max(0, session.Duration) * TicksPerSecond), 0, MaxTicks);
+        timeline = sourceTimeline;
+        int ticks = Math.Clamp((int)Math.Ceiling(Math.Max(0, duration) * TicksPerSecond), 0, MaxTicks);
         movementPrefix = new double[ticks + 1];
+        // Death searches must see future movement, including later reversals.
+        // Building this prefix lazily inside the spawn loop resurrects stars
+        // which should already have crossed the source y>=185 destruction edge.
+        for (int tick = 1; tick <= ticks; tick++)
+            movementPrefix[tick] = movementPrefix[tick - 1] + Finite(timeline.Get("starspd_multiplier", tick / 60.0), 1);
         // Constant seed: stable seeking/export. GameMaker's session seed is not present in the extracted GML.
         random = 0x5A7C8E13u;
-        var events = session.Chart.Mods
-            .Where(e => e.Proxy == -1 && IsSpawn(e.Name))
+        var events = chart.Mods
+            .Where(e => IsInstanceCallback(e.Name))
             .OrderBy(e => e.Beat).ThenBy(e => e.Order)
             .Select(e => (Tick: Math.Max(1, (int)Math.Ceiling(timeline.Bpm.Time(e.Beat) * 60 - 1e-8)), e.Name, e.To))
             .ToArray();
         int eventIndex = 0;
+        var checkerWrites = SpriteDialogueState.Writes(timeline, "lasthours_checker_set").Where(x => x.Value > 0 && x.Time > 0)
+            .Select(x => Math.Max(1, (int)Math.Ceiling(x.Time * 60 - 1e-8))).Distinct().ToArray();
+        int checkerIndex = 0;
         double spawnTimer = 0;
         // Checker surface is created on first Draw regardless of the mod initial value.
         RefreshChecker(0);
         for (int tick = 1; tick <= ticks; tick++)
         {
             double time = tick / 60.0;
-            double speedMultiplier = Finite(timeline.Get("starspd_multiplier", time), 1);
-            movementPrefix[tick] = movementPrefix[tick - 1] + speedMultiplier;
             while (eventIndex < events.Length && events[eventIndex].Tick <= tick)
             {
                 var e = events[eventIndex++];
@@ -97,11 +105,10 @@ public sealed class StarcrashersObjects
                             nextFireworkRight = !nextFireworkRight;
                         }
                         break;
-                    case "lasthours_checker_set":
-                        if (e.To > 0) RefreshChecker(tick);
-                        break;
                 }
             }
+            while (checkerIndex < checkerWrites.Length && checkerWrites[checkerIndex] <= tick)
+            { RefreshChecker(tick); checkerIndex++; }
             // o_sc_starspawner.Step_0: timer -= cc.timediff*60, while(timer<=0)
             double interval = Finite(timeline.Get("starspawner_timer", time), 0);
             if (interval > 0)
@@ -118,8 +125,8 @@ public sealed class StarcrashersObjects
         }
     }
 
-    static bool IsSpawn(string name) => name is "spawn_star_mask" or "spawn_centerrect_red" or
-        "spawn_centerrect_black" or "laser_spawn" or "chorus_firework" or "lasthours_checker_set";
+    public static bool IsInstanceCallback(string name) => name is "spawn_star_mask" or "spawn_centerrect_red" or
+        "spawn_centerrect_black" or "laser_spawn" or "chorus_firework";
     static double Finite(double v, double fallback) => double.IsFinite(v) ? v : fallback;
     // xorshift32 is intentionally an explicit surrogate, not a claim of GameMaker RNG equivalence.
     double Unit()

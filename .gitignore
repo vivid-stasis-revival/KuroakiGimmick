@@ -42,3 +42,5 @@ __pycache__/
 # RustBridge artifacts
 /rust/**/target/
 /rust/**/Cargo.lock
+
+/scripts/assets/

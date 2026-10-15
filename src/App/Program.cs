@@ -22,7 +22,7 @@ internal static class Program
         CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
         CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
         // 这一串是所有无人值守模式（自测、检查、导出、截图）。cli 为真时失败只写 stderr，不弹消息框卡住脚本。
-        bool cli = args.Any(a => a is "--inspect" or "--render" or "--snapshot" or "--card" or "--smoke-ui" or "--smoke-workspace-memory" or "--smoke-startup" or "--smoke-mac-menu" or "--smoke-windows-menu" or "--smoke-proxy-guides" or "--proxy-pick-test" or "--reference-layout-test" or "--smoke-text-ui" or "--smoke-i18n" or "--rust-engine-test" or "--rust-timeline-test" or "--rust-bridge-test" or "--rust-audio-test");
+        bool cli = args.Any(a => a is "--inspect" or "--render" or "--snapshot" or "--card" or "--smoke-ui" or "--smoke-touch-ui" or "--smoke-workspace-memory" or "--smoke-startup" or "--smoke-mac-menu" or "--smoke-windows-menu" or "--smoke-proxy-guides" or "--proxy-pick-test" or "--reference-layout-test" or "--smoke-text-ui" or "--smoke-i18n" or "--rust-engine-test" or "--rust-timeline-test" or "--rust-bridge-test" or "--rust-audio-test");
         try
         {
             // 后端覆盖必须早于任何 GPU 设备创建；否则显式 --force-vulkan 仍可能先创建平台默认后端。
@@ -183,7 +183,7 @@ internal static class Program
                 return options.ContainsKey("strict") && session.Chart.Diagnostics.Any(d => d.Error) ? 2 : 0;
             }
             bool workspaceMemoryTest = options.ContainsKey("smoke-workspace-memory");
-            string? startupTestSettings = options.ContainsKey("smoke-startup") || workspaceMemoryTest
+            string? startupTestSettings = options.ContainsKey("smoke-startup") || options.ContainsKey("smoke-touch-ui") || workspaceMemoryTest
                 ? Path.Combine(Path.GetTempPath(), "kuroaki-startup-settings-" + Guid.NewGuid().ToString("N"), "settings.json") : null;
             if (workspaceMemoryTest)
             {
@@ -202,6 +202,13 @@ internal static class Program
                 finally { if (startupTestSettings != null && Directory.Exists(Path.GetDirectoryName(startupTestSettings)))
                     Directory.Delete(Path.GetDirectoryName(startupTestSettings)!, true); }
                 Console.WriteLine(output);
+                return 0;
+            }
+            if (options.ContainsKey("smoke-touch-ui"))
+            {
+                viewer.SetUiAnimationsForTest(false);
+                viewer.SmokeTouchUi();
+                Console.WriteLine("Touch pan/pinch, deferred insertion and mouse regression passed (synthetic SDL events).");
                 return 0;
             }
             if (options.ContainsKey("smoke-mac-menu"))
@@ -319,7 +326,7 @@ internal static class Program
             "render",
             "snapshot",
             "card",
-            "smoke-ui",
+            "smoke-ui", "smoke-touch-ui",
             "smoke-workspace-memory", "smoke-startup",
             "smoke-mac-menu",
             "smoke-windows-menu",
@@ -414,6 +421,7 @@ internal static class Program
                         (16:9 PNG for the chart's difficulty; default follows Settings)
     UI language: --language auto|zh-CN|en (also available in Settings)
     Proxy preview: --snapshot --proxy 4 [--proxy-solo] [--proxy-crop] --time 60
+    Touch input check (SDL/GPU, synthetic events): --smoke-touch-ui
     Proxy guide check: --smoke-proxy-guides --time 0 --out proxy-guides.ppm
     Proxy picking (no SDL): --proxy-pick-test
     Documentation Markdown/layout (no SDL): --reference-layout-test
