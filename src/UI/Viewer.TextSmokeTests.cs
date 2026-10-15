@@ -97,6 +97,8 @@ public sealed partial class Viewer
         activeMarker = null;
         Sync();
         Console.WriteLine("PASS text UI: grouped tracks, real glyph canvas, drag/undo/redo, Escape, scale, rotation, multiline input, resized layouts, playhead/marker cue insertion and cue undo/redo");
+        SmokeTextContentIssues(id);
+        SmokeGlow();
         SmokeEditorIssues();
         SmokeProxyFooter();
     }

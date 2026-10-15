@@ -16,7 +16,7 @@ public sealed partial class Viewer
     string inlineValue = "", inlineOriginal = "", inlineError = "";
     /// <summary>插入点与选区锚点。相等表示只有光标没有选区；谁大谁小都合法，取端点一律走 InlineLow / InlineHigh。</summary>
     int inlineCaret, inlineAnchor;
-    bool inlineTrim = true, inlineSelecting;
+    bool inlineTrim = true, inlineSelecting, inlineEscapeNewlines;
     Action<string>? inlineAccept;
     /// <summary>本帧真正画出来的输入框与其中的文本区。字段被滚出 inspector 时 inlineVisible 为 false，此时旧矩形不得再参与命中测试。</summary>
     Rect inlineBoxRect, inlineTextRect;
@@ -25,7 +25,7 @@ public sealed partial class Viewer
     /// <summary>最后一次改动的时刻。刚动过的半秒内光标常亮再开始闪，否则连续打字时光标一直在眨，反而看不清插入点在哪。</summary>
     double inlineBlinkFrom;
     /// <summary>本帧 inspector 依次画出的字段，Tab / Shift+Tab 依此在字段之间跳转。每帧重建。</summary>
-    readonly List<(string Key, string Label, string Value, Action<string> Accept, bool Preserve)> inlineFields = [];
+    readonly List<(string Key, string Label, string Value, Action<string> Accept, bool Preserve, bool EscapeNewlines)> inlineFields = [];
     const float InlineSize = 13;
     /// <summary>就地编辑的长度上限。再长就交给模态：单行框既显示不下，逐字量宽也会变成每帧上千次。</summary>
     const int InlineMax = 1024;
@@ -39,9 +39,10 @@ public sealed partial class Viewer
     /// 聚焦一个字段。打开即全选，沿用原模态的手感：直接打字替换整值，先按方向键则落成普通插入点。
     /// preserveWhitespace 用于首尾空白有意义的内容，此时提交不做 Trim。
     /// </summary>
-    void OpenInline(string key, string value, Action<string> accept, bool preserveWhitespace = false)
+    void OpenInline(string key, string value, Action<string> accept, bool preserveWhitespace = false, bool escapeNewlines = false)
     {
         if (modalActive || menuOpen) return;
+        inlineEscapeNewlines = escapeNewlines;
         inlineField = key; inlineValue = inlineOriginal = value; inlineAccept = accept;
         inlineError = ""; inlineTrim = !preserveWhitespace; inlineSelecting = false; inlineScroll = 0;
         inlineAnchor = 0; inlineCaret = value.Length;
@@ -84,7 +85,7 @@ public sealed partial class Viewer
         AcceptInline();
         if (InlineActive || at < 0 || fields.Length < 2) return;
         var next = fields[(at + (back ? fields.Length - 1 : 1)) % fields.Length];
-        OpenInline(next.Key, next.Value, next.Accept, next.Preserve);
+        OpenInline(next.Key, next.Value, next.Accept, next.Preserve, next.EscapeNewlines);
     }
 
     /// <summary>内容变过之后清掉旧错误，并让光标重新常亮。</summary>
@@ -112,6 +113,8 @@ public sealed partial class Viewer
     void InlineInsert(string text)
     {
         if (text.Length == 0) return;
+        // Text content is edited in source notation; pasted line breaks must survive the single-line field.
+        text = text.Replace("\r\n", "\n").Replace('\r', '\n').Replace("\n", inlineEscapeNewlines ? "{n}" : " ");
         InlineDeleteSelection();
         int room = InlineMax - inlineValue.Length;
         if (room <= 0) { inlineError = L.Format($"Field limit is {InlineMax} characters."); return; }
@@ -120,8 +123,6 @@ public sealed partial class Viewer
             text = text[..room];
             if (text.Length > 0 && char.IsHighSurrogate(text[^1])) text = text[..^1];
         }
-        // 单行输入框放不下换行，粘贴多行内容时压成空格，免得画出一串豆腐块。
-        if (text.Contains('\n') || text.Contains('\r')) text = text.Replace("\r\n", " ").Replace('\n', ' ').Replace('\r', ' ');
         inlineValue = inlineValue[..inlineCaret] + text + inlineValue[inlineCaret..];
         inlineCaret = inlineAnchor = inlineCaret + text.Length;
         InlineTouched();
@@ -233,9 +234,9 @@ public sealed partial class Viewer
     /// key 必须能区分不同的被选中对象，否则换了选择之后同名字段会被当成还是原来那一个，焦点和内容会串。
     /// </summary>
     void InlineField(string key, string name, string value, float x, float y, float width, Action<string> accept,
-        bool preserveWhitespace = false, bool enabled = true, float labelSize = 10)
+        bool preserveWhitespace = false, bool enabled = true, float labelSize = 10, bool escapeNewlines = false)
     {
-        if (enabled) inlineFields.Add((key, name, value, accept, preserveWhitespace));
+        if (enabled) inlineFields.Add((key, name, value, accept, preserveWhitespace, escapeNewlines));
         Text(name, x, y + 7, labelSize, muted, max: width * .38f);
         var box = new Rect(x + width * .4f, y, width * .6f, 27);
         if (inlineField == key && enabled) { DrawInlineEditor(box); return; }
@@ -246,7 +247,7 @@ public sealed partial class Viewer
         if (!EButton(ImageShortText(shown, box.W - 16, 13), box, enabled: enabled, key: "field:" + key)) return;
         // 多行文本和超长值在单行框里改不了，这两种情况无论设置怎么选都仍然走模态。
         if (preferences.ModalValueEditor || value.Length > InlineMax || value.Contains('\n')) OpenValue(name, value, accept, preserveWhitespace);
-        else OpenInline(key, value, accept, preserveWhitespace);
+        else OpenInline(key, value, accept, preserveWhitespace, escapeNewlines);
     }
 
     /// <summary>画聚焦状态：选区高亮、文本、插入点光标。文本按 inlineScroll 横向平移并裁剪，长值不会溢出字段。</summary>

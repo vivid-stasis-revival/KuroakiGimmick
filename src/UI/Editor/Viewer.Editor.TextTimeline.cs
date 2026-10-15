@@ -18,6 +18,7 @@ public sealed partial class Viewer
     void DrawTextGroupClips(string id, float y, bool interactive)
     {
         if (editor == null) return;
+        DrawTextContentCues(id, y, interactive);
         EnsureTimelineClipIndex();
         if (!timelineTextIndices.TryGetValue(id, out var index)) return;
         timelineVisibleText.Clear();
@@ -30,11 +31,11 @@ public sealed partial class Viewer
             bool raw = group.Raw;
             bool selected = selectedTextId == id && (textAnimation == clip.Id ||
                 textInspector && textAnimation == null && clip.Duration == 0 && Math.Abs(textAt - clip.Beat) < 1e-9);
-            var box = new Rect(x, y + 6, width, 23);
+            var box = new Rect(x, y + 20, width, 13);
             Canvas.Fill(box, Mix(Theme.PanelRaised, Theme.Accent, selected ? .7f : .3f));
             Canvas.Border(box, selected ? white : soft, selected ? 2 : 1);
-            if (width > 40) Text(raw ? L.Get("RAW") : clip.Duration > 0 ? L.Get("MOTION") : L.Get("POSE"), x + 5, y + 11, 11, white, true, width - 12);
-            if (clip.Duration == 0) Canvas.Line(x + width / 2, y + 10, x + width / 2, y + 25, 2, white);
+            if (width > 40) Text(raw ? L.Get("RAW") : clip.Duration > 0 ? L.Get("MOTION") : L.Get("POSE"), x + 5, y + 21, 10, white, true, width - 12);
+            if (clip.Duration == 0) Canvas.Line(x + width / 2, y + 22, x + width / 2, y + 31, 2, white);
             if (interactive && click && box.Contains(mouseX, mouseY) && editorTracksRect.Contains(mouseX, mouseY))
             {
                 SelectText(id);
@@ -45,4 +46,38 @@ public sealed partial class Viewer
             }
         }
     }
+
+    // Content occupies the upper half of the row; motion stays independently clickable below it.
+    // Cues are sorted. Include the one starting before the viewport, since its text is still active.
+    void DrawTextContentCues(string id, float y, bool interactive)
+    {
+        EnsureTexts();
+        var track = textCache?.Tracks.FirstOrDefault(t => t.Id == id);
+        if (track == null || track.Cues.Count == 0) return;
+        double endBeat = beatStart + editorTracksRect.W / pixelsPerBeat;
+        int first = Math.Max(0, SortedSearch.UpperBound(track.Cues, beatStart, static c => c.Beat) - 1);
+        for (int i = first; i < track.Cues.Count && track.Cues[i].Beat <= endBeat; i++)
+        {
+            var cue = track.Cues[i];
+            double end = i + 1 < track.Cues.Count ? track.Cues[i + 1].Beat : endBeat;
+            float x = Math.Max(editorTracksRect.X, BeatX(cue.Beat));
+            float right = Math.Min(editorTracksRect.X + editorTracksRect.W, BeatX(end));
+            if (right <= x) continue;
+            bool selected = textInspector && selectedTextId == id && textAnimation == null
+                && textAt >= cue.Beat && (i + 1 == track.Cues.Count || textAt < end);
+            var box = new Rect(x, y + 2, right - x, 16);
+            Canvas.Fill(box, Mix(Theme.PanelRaised, Theme.Accent, selected ? .7f : .2f));
+            Canvas.Border(box, selected ? white : muted);
+            string label = cue.Text.Length == 0 ? L.Get("(empty at this beat)") : cue.Text.Replace("\n", "{n}");
+            if (box.W > 18) Text(ImageShortText(label, box.W - 8, 10), x + 4, y + 4, 10, white, true, box.W - 8);
+            if (interactive && click && box.Contains(mouseX, mouseY) && editorTracksRect.Contains(mouseX, mouseY))
+            {
+                SelectText(id);
+                textAnimation = null; textAt = cue.Beat; inspectorScroll = 0;
+                transport.Seek(Current.Timeline.Bpm.Time(textAt));
+                click = false;
+            }
+        }
+    }
+
 }

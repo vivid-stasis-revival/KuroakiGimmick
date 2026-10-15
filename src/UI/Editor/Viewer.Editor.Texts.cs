@@ -192,9 +192,9 @@ public sealed partial class Viewer
         void Field(string label, string value, Action<string> apply, bool preserveWhitespace = false)
         {
             if (!Row(out float y)) return;
-            // Content 天然是多行的，InlineField 会把它交回模态；其余字段就地改。
+            // Content 使用源格式的 {n} 表示换行，和其它字段一样支持就地编辑。
             InlineField("text-field:" + id + ":" + label, label, value, r.X, y, r.W, apply,
-                preserveWhitespace: preserveWhitespace, enabled: !transport.Playing, labelSize: 11);
+                preserveWhitespace: preserveWhitespace, enabled: !transport.Playing, labelSize: 11, escapeNewlines: preserveWhitespace);
         }
         void Button(string label, Action action)
         { if (Row(out float y) && EButton(label, new(r.X, y, r.W, 27), enabled: !transport.Playing, key: "text-action:" + label)) TextAction(action); }
@@ -204,7 +204,7 @@ public sealed partial class Viewer
             Button(L.Get("EDIT START") + (!textAnimationEnd ? " *" : ""), () => SelectTextAnimation(animation, false));
             Button(L.Get("EDIT END") + (textAnimationEnd ? " *" : ""), () => SelectTextAnimation(animation, true));
         }
-        Field(L.Get("Content"), track.At(textAt), value => editor.SetTextCue(id, textAt, value.Replace("{n}", "\n")), preserveWhitespace: true);
+        Field(L.Get("Content"), track.At(textAt).Replace("\n", "{n}"), value => editor.SetTextCue(id, textAt, value.Replace("{n}", "\n")), preserveWhitespace: true);
         Button(L.Get("ENABLE TEXT PREVIEW + EXPORT"), () => editor.Change(L.Get("Enable text"), () => editor.Windows.Root["ENABLE_TEXT"] = true));
         Button(L.Get("+ CONTENT CUE HERE"), AddTextCueHere);
         Button(L.Get("CLEAR TEXT HERE"), () => editor.SetTextCue(id, textAt, ""));

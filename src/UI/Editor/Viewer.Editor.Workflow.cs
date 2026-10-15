@@ -271,7 +271,7 @@ public sealed partial class Viewer
         float split = box.X + Math.Min(305, box.W * .34f), x = split + 20, rightWidth = box.X + box.W - 24 - x;
         var searchBox = new Rect(box.X + 24, box.Y + 65, split - box.X - 40, 34);
         addSearchRect = searchBox;
-        inlineFields.Add((AddSearchKey, L.Get("Search name or description"), addQuery, SetAddQuery, false));
+        inlineFields.Add((AddSearchKey, L.Get("Search name or description"), addQuery, SetAddQuery, false, false));
         if (inlineField == AddSearchKey) DrawInlineEditor(searchBox);
         else if (WorkflowButton(addQuery.Length == 0 ? L.Get("SEARCH / Ctrl+F") : addQuery, searchBox)) OpenAddSearch();
         string query = inlineField == AddSearchKey ? inlineValue : addQuery;

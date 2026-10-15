@@ -9,7 +9,9 @@ public sealed class CustomEffects : IDisposable
 {
     internal const string PosterizeFragmentSource = "#version 330 core\nin vec2 v_vTexcoord;uniform sampler2D gm_BaseTexture;uniform float levels;out vec4 fragColor;void main(){vec4 c=texture(gm_BaseTexture,v_vTexcoord);float n=max(2.,levels);fragColor=vec4(floor(c.rgb*n)/n,c.a);}";
 
-    internal const string CombineFragmentSource = "#version 330 core\nin vec2 v_vTexcoord;uniform sampler2D gm_BaseTexture,blurred;uniform float intensity;out vec4 fragColor;void main(){fragColor=vec4(max(texture(gm_BaseTexture,v_vTexcoord).rgb,texture(blurred,v_vTexcoord).rgb*intensity),1);}";
+    // GameMaker bm_max uses (src_alpha, inv_src_colour) with ADD, not a MAX equation.
+    // https://manual.gamemaker.io/monthly/en/GameMaker_Language/GML_Reference/Drawing/GPU_Control/gpu_set_blendmode.htm
+    internal const string CombineFragmentSource = "#version 330 core\nin vec2 v_vTexcoord;uniform sampler2D gm_BaseTexture,blurred;uniform float intensity;out vec4 fragColor;void main(){vec3 dst=texture(gm_BaseTexture,v_vTexcoord).rgb;vec4 src=texture(blurred,v_vTexcoord);src.rgb*=intensity;fragColor=vec4(src.rgb*src.a+dst*(1.-src.rgb),1);}";
 
     readonly Canvas canvas;
     /// <summary>房间与公共 FX 用到的全部 shader，构造时一次性加载，运行期不重建。</summary>
@@ -305,10 +307,10 @@ public sealed class CustomEffects : IDisposable
     }
 
     // 原版 io_gamemaker_gm_effect_glow 的 layer_end：每遍采样上一遍的模糊结果，
-    // 半径逐遍取反号，再以 MAX 合成回底图。
+    // 半径逐遍取反号，再以 bm_max（src_alpha + inv_src_colour 的 ADD）合成回底图。
     // 两组 ping-pong 对支撑原版可配置的质量档（而不是一次绑定 5 张近似纹理）。
     // 我们的场景是不透明的，所以用 g_GlowAlpha 画自己的副本不会改变底图。
-    void RunGlow(Target output, Texture input, GameFxProfile.Layer layer, double intensity)
+    internal void RunGlow(Target output, Texture input, GameFxProfile.Layer layer, double intensity)
     {
         if (intensity <= 0)
         {
