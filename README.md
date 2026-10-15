@@ -1,6 +1,6 @@
 # KuroakiGimmick
 
-![KuroakiGimmick Logo](https://raw.githubusercontent.com/vivid-stasis-revival/KuroakiGimmick/main/Assets/App/Kuroaki.png)
+<img src="https://raw.githubusercontent.com/vivid-stasis-revival/KuroakiGimmick/main/Assets/App/Kuroaki.png" width="200" alt="KuroakiGimmick Logo">
 
 **为《vivid/stasis》制作的谱面演出预览与编辑工具。**
 
