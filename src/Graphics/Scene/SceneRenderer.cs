@@ -37,6 +37,7 @@ public sealed partial class SceneRenderer : IDisposable
     int RenderHeight => scene.Texture.Height;
     /// <summary>最终呈现像素宽度；fish 在放大后的输出上求值，源画面仍遵循工程的像素分辨率。</summary>
     public int PresentationWidth { get; set; } = 1920;
+    internal CancellationToken ExportCancellation { get; set; }
     CustomImages? loadedImages;
     /// <summary>按路径缓存的图片纹理；textureLru 记录淘汰顺序，failedTextures 记录只报一次的失败路径，textureBytes 计量 128 MiB 预算。装载与淘汰见 SceneRenderer.Resources.cs。</summary>
     readonly Dictionary<string, Texture> customTextures = [];
@@ -113,6 +114,7 @@ public sealed partial class SceneRenderer : IDisposable
 
     void RenderFrame(Session session, double time, bool notes, bool effects, Target output)
     {
+        ExportCancellation.ThrowIfCancellationRequested();
         using var performanceScope = PerformanceStats.Measure(PerformanceStats.Stage.Scene);
         // Evaluate every native timeline track in one batch, before the first draw.
         // C# remains authoritative for aliases, callbacks, frame bindings and fades.

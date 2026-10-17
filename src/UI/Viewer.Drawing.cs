@@ -234,8 +234,8 @@ public sealed partial class Viewer
         Text(Current.NoteIndex.Count.ToString("N0"), cx + cw * .27f, infoY + 34, 19, white, true);
         Label("BPM", cx + cw * .52f, infoY + 16);
         Text(Current.Timeline.Bpm.BpmAtBeat(Current.Timeline.Bpm.Beat(time)).ToString("0.##"), cx + cw * .52f, infoY + 34, 19, white, true);
-        Label(L.Get("PREVIEW"), cx + cw * .77f, infoY + 16);
-        Text($"{measuredFps:0} fps", cx + cw * .77f, infoY + 34, 19, white, true);
+        Label(L.Get(export != null ? "EXPORT" : "PREVIEW"), cx + cw * .77f, infoY + 16);
+        Text($"{(export?.AverageFramesPerSecond ?? measuredFps):0} fps", cx + cw * .77f, infoY + 34, 19, white, true);
         Label(L.Get("03 / INSPECT & EXPORT"), rx, 102);
         float reportTabGap = 8;
         float reportTabWidth = Math.Max(1, (rw - reportTabGap) / 2);

@@ -37,7 +37,7 @@ internal static class Program
         // 这一串是所有无人值守模式（自测、检查、导出、截图）。cli 为真时失败只写 stderr，不弹消息框卡住脚本。
         bool cli = args.Any(a => a is "--bake-mobile-shaders" or "--bake-switch-shaders" or "--inspect" or "--render" or "--snapshot" or "--card" or "--smoke-ui" or "--smoke-touch-ui" or "--smoke-workspace-memory" or "--smoke-startup" or "--smoke-mac-menu" or "--smoke-windows-menu" or "--smoke-proxy-guides" or "--proxy-pick-test" or "--reference-layout-test" or "--gimmick-definition-test" or "--smoke-text-ui" or "--smoke-i18n" or "--rust-engine-test" or "--rust-timeline-test" or "--rust-bridge-test" or "--rust-audio-test");
         string startupLanguage = UiLanguage.SystemLanguage;
-        cli |= args.Contains("--chart-size-test") || args.Contains("--smoke-size-warning");
+        cli |= args.Contains("--chart-size-test") || args.Contains("--smoke-size-warning") || args.Contains("--parallel-export-test");
         try
         {
             if (args.Length >= 3 && args[0] == "--bake-mobile-shaders")
@@ -164,6 +164,7 @@ internal static class Program
 #endif
             Console.Error.WriteLine("Build: " + Paths.BuildRevision);
             Console.Error.WriteLine("GPU: " + host.Device);
+            if (options.ContainsKey("parallel-export-test")) return ParallelExportChecks.Run(host.Gpu);
 #if !KG_MOBILE && !KG_SWITCH
             if (options.ContainsKey("smoke-size-warning"))
             {
@@ -184,7 +185,9 @@ internal static class Program
                 int width = (int) Number("width", 1920);
                 var exportOptions = new ExportOptions(Path.GetFullPath(output), Number("start", 0), Number("end", session.Duration),
                     (int) Number("fps", 60), width, width * 9 / 16, session.Project.Notes && !options.ContainsKey("no-notes"),
-                    session.Project.PostProcessing && !options.ContainsKey("no-fx"), overwriteExports);
+                    session.Project.PostProcessing && !options.ContainsKey("no-fx"), overwriteExports,
+                    options.TryGetValue("render-workers", out var workers) ? int.Parse(workers, CultureInfo.InvariantCulture)
+                        : ViewerSettings.ValidRenderWorkers(ViewerSettings.Load().VideoRenderWorkers));
                 using var job = new VideoExport(canvas, renderer, session, exportOptions);
                 ConsoleCancelEventHandler cancel = (_, e) =>
                 {
@@ -416,6 +419,7 @@ internal static class Program
             "smoke-mac-menu",
             "smoke-windows-menu",
             "smoke-size-warning",
+            "parallel-export-test",
             "smoke-text-ui",
             "smoke-proxy-guides",
             "smoke-i18n",
@@ -456,6 +460,7 @@ internal static class Program
             "song-level",
             "note-alignment",
             "render-width",
+            "render-workers",
             "visual-delay",
             "audio-delay",
             "bpm",
@@ -506,6 +511,7 @@ internal static class Program
     Info card:  --card chart.vsb --out card.png [--width 1280|1920|2560|3840]
                         (16:9 PNG for the chart's difficulty; default follows Settings)
     UI language: --language auto|zh-CN|en (also available in Settings)
+    Parallel video rendering: --render-workers N (max: CPU logical cores minus 2, minimum 1; default 1; Settings > Export)
     Proxy preview: --snapshot --proxy 4 [--proxy-solo] [--proxy-crop] --time 60
     Touch input check (SDL/GPU, synthetic events): --smoke-touch-ui
     Proxy guide check: --smoke-proxy-guides --time 0 --out proxy-guides.ppm

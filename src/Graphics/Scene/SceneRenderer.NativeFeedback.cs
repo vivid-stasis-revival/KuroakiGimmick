@@ -35,7 +35,7 @@ public sealed partial class SceneRenderer
             long start=target;
             // A zero-hom source frame severs all older feedback. Search scalar
             // state only; no GPU replay is needed before that reset frame.
-            while(start>0 && Hom(start)!=0)start--;
+            while(start>0 && Hom(start)!=0) { ExportCancellation.ThrowIfCancellationRequested(); start--; }
             var checkpoint=nativeFeedbackCheckpoints.LastOrDefault(p=>p.Key<target && p.Key>=start);
             feedbackValid=false;
             if(checkpoint.Value!=null)

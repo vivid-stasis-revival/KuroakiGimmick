@@ -7,7 +7,7 @@ namespace KuroakiGimmick.Graphics;
 
 // 批次一直保留到提交，让全部顶点数据在渲染前用一次 copy pass 统一上传。
 // 每次 Draw 都对 uniform、纹理绑定和裁剪做快照。
-/// <summary>窗口关联的 GPU 设备与 CPU 批次队列。所有调用留在创建窗口的线程；Dispose 晚于依附它的纹理和 shader。</summary>
+/// <summary>GPU 设备与 CPU 批次队列。所有调用留在创建设备的线程；Dispose 晚于依附它的纹理和 shader。</summary>
 public sealed unsafe partial class GpuDevice : IDisposable
 {
     // SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM。它是原生枚举值，不是每像素字节数。
@@ -27,6 +27,7 @@ public sealed unsafe partial class GpuDevice : IDisposable
 
     readonly nint window;
     readonly bool hidden;
+    internal bool Offscreen => window == 0;
     readonly List<Batch> batches = [];
     const int MaxRecordedFloatCount = 64 * 1024 * 1024 / sizeof(float);
     const int MaxRecordedBatches = 16384;
@@ -68,6 +69,19 @@ public sealed unsafe partial class GpuDevice : IDisposable
         while (presentationFences.TryPeek(out var fence) && fence.Complete(Handle))
         { presentationFences.Dequeue(); fence.Release(Handle); }
         return presentationFences.Count < 2;
+    }
+
+    /// <summary>Worker-owned GPU context with no window or swapchain; all calls stay on its render thread.</summary>
+    internal GpuDevice(string driver)
+    {
+        hidden = true;
+        Handle = Check(CreateOffscreenGpuDevice(driver, Environment.GetEnvironmentVariable("KUROAKI_GPU_DEBUG") == "1"), "Create export GPU");
+        try
+        {
+            Driver = GetGpuDriverName(Handle);
+            ShaderFormat = SelectShaderFormat(Driver, SDL_GetGPUShaderFormats(Handle));
+        }
+        catch { SDL_DestroyGPUDevice(Handle); Handle = 0; throw; }
     }
 
     /// <summary>沿用输入版本的平台选择、双帧在途上限及隐藏窗口 present 策略。</summary>

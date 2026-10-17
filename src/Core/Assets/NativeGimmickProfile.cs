@@ -46,6 +46,26 @@ public sealed class NativeGimmickProfile
     public GimmickBehaviorDefinition? Behavior(string type) => Data?.Behavior(type);
     public bool IsModeAvailable(GimmickShaderMode mode) => !invalidModes.Contains(mode);
 
+    /// <summary>Resource definitions are read-only after loading; each render worker owns its runtime errors.</summary>
+    internal NativeGimmickProfile ForkForRender(Chart owner)
+    {
+        var copy = new NativeGimmickProfile
+        {
+            Data = Data, Manifest = Manifest, DefinitionSource = DefinitionSource, AssetsRoot = AssetsRoot,
+            SongContext = SongContext, ResourceManifest = ResourceManifest, ResourceRoom = ResourceRoom,
+            ResourcePackLoaded = ResourcePackLoaded, chart = owner
+        };
+        copy.DefinitionMigrations.AddRange(DefinitionMigrations);
+        foreach (var pair in Sprites) copy.Sprites.Add(pair.Key, pair.Value);
+        foreach (var pair in TextureFiles) copy.TextureFiles.Add(pair.Key, pair.Value);
+        foreach (var pair in Shaders) copy.Shaders.Add(pair.Key, pair.Value);
+        foreach (var pair in Resources) copy.Resources.Add(pair.Key, pair.Value);
+        foreach (var pair in Issues) copy.Issues.Add(pair.Key, pair.Value);
+        copy.supported.UnionWith(supported); copy.invalidModes.UnionWith(invalidModes);
+        foreach (var pair in parameters) copy.parameters.Add(pair.Key, pair.Value);
+        return copy;
+    }
+
     /// <summary>去重相同的运行期错误，避免每帧编译失败或贴图缺失淹没报告。</summary>
     public void Fail(string component, string message)
     {

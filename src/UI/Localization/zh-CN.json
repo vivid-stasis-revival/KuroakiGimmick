@@ -1,4 +1,6 @@
 {
+  "Render threads": "渲染线程",
+  "Parallel rendering uses more GPU memory. Speed depends on the scene and GPU.": "并行渲染会增加显存占用，实际速度取决于演出内容和 GPU。",
   "Editor": "编辑器",
   "Group gimmick tracks": "按全局 / Proxy 合并轨道",
   "Show expanded GMK summaries": "展开时显示 GMK 汇总",

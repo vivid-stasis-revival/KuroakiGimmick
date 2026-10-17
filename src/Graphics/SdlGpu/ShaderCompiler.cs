@@ -41,6 +41,11 @@ internal static unsafe partial class ShaderCompiler
     /// </summary>
     internal static Compiled Compile(string source, bool vertex, GpuShaderFormat format)
     {
+        lock (cache) return CompileCached(source, vertex, format);
+    }
+
+    static Compiled CompileCached(string source, bool vertex, GpuShaderFormat format)
+    {
         if (format is not (GpuShaderFormat.SpirV or GpuShaderFormat.Dxbc or GpuShaderFormat.Msl))
         {
             throw new PlatformNotSupportedException($"Unsupported Kuroaki shader format: {format}");

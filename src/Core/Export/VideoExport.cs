@@ -13,12 +13,14 @@ public sealed class VideoExport : IDisposable
     readonly Canvas canvas;
     readonly SceneRenderer renderer;
     readonly Session session;
-    readonly Target target;
+    readonly Target? target;
+    readonly ParallelExportRenderer? parallel;
     readonly Process process;
     readonly Task<string> stderr;
     readonly Task writer;
     readonly System.Threading.Channels.Channel<byte[]> frames;
     readonly CancellationTokenSource cancel = new();
+    readonly Stopwatch elapsed = Stopwatch.StartNew();
     readonly string temporary;
     readonly string? nativeAudioTemporary;
     readonly ChartPlaybackRoute route;
@@ -30,15 +32,19 @@ public sealed class VideoExport : IDisposable
     readonly int frameBytes;
     bool inputCompleted, finalized;
     public ExportOptions Options { get; }
-    public int Frame { get; private set; }
+    int frame;
+    public int Frame { get => Volatile.Read(ref frame); private set => Volatile.Write(ref frame, value); }
+    public int RenderWorkers => parallel?.WorkerCount ?? 1;
     public int TotalFrames { get; }
+    /// <summary>Average frames delivered to the encoder per wall-clock second, including export startup/backpressure.</summary>
+    public double AverageFramesPerSecond => Frame / Math.Max(.001, elapsed.Elapsed.TotalSeconds);
     /// <summary>已渲染帧数占总帧数的比例（0..1）。它只反映送进管道的帧，ffmpeg 收尾混流的那段时间会停在 1 附近。</summary>
     public double Progress => Frame / (double) TotalFrames;
     public bool Completed { get; private set; }
     public bool Cancelled { get; private set; }
     public bool Finalizing => inputCompleted;
     public string? Error { get; private set; }
-    public string Status => Error != null ? Error : Cancelled? "Export cancelled" : Completed? "Export complete" : inputCompleted ? "Finalizing audio and MP4..." : $"Rendering frame {Frame:N0} / {TotalFrames:N0}";
+    public string Status => Error != null ? Error : Cancelled? "Export cancelled" : Completed? "Export complete" : inputCompleted ? "Finalizing audio and MP4..." : $"Rendering frame {Frame:N0} / {TotalFrames:N0}" + (parallel != null ? $" / {RenderWorkers} render threads" : "");
     /// <summary>构造即启动 ffmpeg 子进程并建立管道；ffmpeg 不可用时直接抛错，这是 MP4 导出的硬依赖边界。</summary>
     public VideoExport(Canvas c, SceneRenderer r, Session s, ExportOptions options)
     {
@@ -118,11 +124,19 @@ public sealed class VideoExport : IDisposable
         catch { TryDeleteNativeAudio(); throw; }
         // 必须一直异步抽干 stderr，否则 ffmpeg 写满管道缓冲区会死锁；出错时它也是唯一的错误信息来源。
         stderr = process.StandardError.ReadToEndAsync();
-        target = new(c.Gpu, options.Width, options.Height);
         frameBytes = checked(options.Width * options.Height * 4);
-        readbacks = new GpuReadback[3];
-        try { for (int i = 0; i < readbacks.Length; i++) readbacks[i] = c.CreateReadback(target); }
-        catch { foreach (var slot in readbacks) slot?.Dispose(); target.Dispose(); process.Kill(); process.Dispose(); TryDeleteNativeAudio(); throw; }
+        readbacks = options.RenderWorkers > 1 ? [] : new GpuReadback[3];
+        try
+        {
+            if (options.RenderWorkers > 1)
+                parallel = new(s.CaptureRenderFactory(), c.Gpu.Driver, options, route, presentationRoute, TotalFrames, cancel.Token);
+            else
+            {
+                target = new(c.Gpu, options.Width, options.Height);
+                for (int i = 0; i < readbacks.Length; i++) readbacks[i] = c.CreateReadback(target);
+            }
+        }
+        catch { foreach (var slot in readbacks) slot?.Dispose(); target?.Dispose(); process.Kill(); process.Dispose(); TryDeleteNativeAudio(); throw; }
         // 容量 2：渲染线程最多领先编码器两帧，既能重叠 GPU 与编码耗时，又不会把整段视频堆在内存里。
         frames = System.Threading.Channels.Channel.CreateBounded<byte[]>(new System.Threading.Channels.BoundedChannelOptions(2)
         {
@@ -135,12 +149,14 @@ public sealed class VideoExport : IDisposable
         {
             try
             {
-                await foreach (var bytes in frames.Reader.ReadAllAsync(encodingToken))
+                var source = parallel?.ReadFrames(encodingToken) ?? frames.Reader.ReadAllAsync(encodingToken);
+                await foreach (var bytes in source)
                 {
                     try
                     {
                         using var timing = PerformanceStats.Measure(PerformanceStats.Stage.EncoderWrite);
                         await encodingInput.WriteAsync(bytes.AsMemory(0, frameBytes), encodingToken);
+                        if (parallel != null) Interlocked.Increment(ref frame);
                         PerformanceStats.Add(PerformanceStats.Counter.EncodedFrames, 1);
                     }
                     finally { ArrayPool<byte>.Shared.Return(bytes); }
@@ -164,6 +180,7 @@ public sealed class VideoExport : IDisposable
         }
         try
         {
+            if (parallel?.Failure is { } renderError) throw new IOException("Render worker failed: " + renderError.Message, renderError);
             if (writer.IsFaulted)
             {
                 throw new IOException(writer.Exception?.GetBaseException().Message);
@@ -190,7 +207,7 @@ public sealed class VideoExport : IDisposable
                 if (!frames.Writer.TryWrite(pending)) return;
                 pending = null; Frame++;
             }
-            if (rendered < TotalFrames && downloads.Count < readbacks.Length)
+            if (parallel == null && rendered < TotalFrames && downloads.Count < readbacks.Length)
             {
                 using var frameTiming = PerformanceStats.Measure(PerformanceStats.Stage.Frame);
                 int previewWidth = renderer.PresentationWidth;
@@ -201,9 +218,9 @@ public sealed class VideoExport : IDisposable
                     else renderer.Render(session, route.ChartAt(rendered / (double) Options.Fps), Options.Notes, Options.Effects);
                 }
                 finally { renderer.PresentationWidth = previewWidth; }
-                canvas.Pass(target, renderer.Final.Texture, canvas.Basic);
+                canvas.Pass(target!, renderer.Final.Texture, canvas.Basic);
                 var slot = readbacks[nextSlot];
-                canvas.BeginReadback(slot, target);
+                canvas.BeginReadback(slot, target!);
                 downloads.Enqueue(slot); nextSlot = (nextSlot + 1) % readbacks.Length; rendered++;
                 return;
             }
@@ -214,7 +231,7 @@ public sealed class VideoExport : IDisposable
                 inputCompleted = true;
             }
             // 必须等 writer 完成且 ffmpeg 退出，才能认定封装结束；提前改名会得到未写完 moov 的文件。
-            if (!writer.IsCompleted || !process.HasExited)
+            if (!writer.IsCompleted || !process.HasExited || parallel != null && !parallel.Completion.IsCompleted)
             {
                 return;
             }
@@ -223,6 +240,7 @@ public sealed class VideoExport : IDisposable
                 throw new IOException(stderr.GetAwaiter().GetResult());
             }
             // 编码及混流全部完成后才替换目标；取消或失败时原视频保持完整。
+            if (parallel?.Failure is { } finalError) throw new IOException("Render worker failed: " + finalError.Message, finalError);
             ExportFiles.Publish(temporary, Options.Path, Options.Overwrite);
             finalized = true;
             Completed = true;
@@ -285,6 +303,7 @@ public sealed class VideoExport : IDisposable
         catch (AggregateException)
         {
         }
+        parallel?.Dispose();
         // 未成功改名的中间文件在此清理，不给用户留下无法播放的 .partial.mp4。
         if (!finalized && File.Exists(temporary))
         {
@@ -298,7 +317,7 @@ public sealed class VideoExport : IDisposable
         }
         if (pending != null) { ArrayPool<byte>.Shared.Return(pending); pending = null; }
         foreach (var slot in readbacks) slot.Dispose();
-        target.Dispose();
+        target?.Dispose();
         process.Dispose();
         TryDeleteNativeAudio();
         cancel.Dispose();

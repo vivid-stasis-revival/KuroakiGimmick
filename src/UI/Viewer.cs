@@ -440,7 +440,8 @@ public sealed partial class Viewer : IDisposable
                 3840
             }
             [resolution];
-            export = new(Canvas, Renderer, Current, new(path, rangeIn, rangeOut, fps, width, width * 9 / 16, notes, effects, preferences.OverwriteExports));
+            export = new(Canvas, Renderer, Current, new(path, rangeIn, rangeOut, fps, width, width * 9 / 16, notes, effects,
+                preferences.OverwriteExports, ViewerSettings.ValidRenderWorkers(preferences.VideoRenderWorkers)));
             message = L.Get("Rendering video...");
         });
 #endif

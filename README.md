@@ -6,7 +6,7 @@
 
 在同一条时间轴上编排 gimmick、图片、字幕、场景效果和窗口运动，并在歌曲场景中检查实际表现。
 
-![Version](https://img.shields.io/badge/version-0.1.5_%2F_18.2-94cddd?style=flat-square)
+![Version](https://img.shields.io/badge/version-0.1.5_%2F_18.2.1-94cddd?style=flat-square)
 ![.NET](https://img.shields.io/badge/.NET-8-b5a3e8?style=flat-square)
 ![Renderer](https://img.shields.io/badge/renderer-SDL3_GPU-94cddd?style=flat-square)
 ![Engine](https://img.shields.io/badge/engine-C%23_%2B_Rust-b5a3e8?style=flat-square)
@@ -72,7 +72,7 @@ KuroakiGimmick 的重点是**演出**，而不只是把 VSM 文本换一种方�
 
 ## 下载与平台支持
 
-当前正式版本为 **v0.1.5 / Build 18.2**，构建序号为 `1820`。
+当前版本为 **v0.1.5 / Build 18.2.1**，构建序号为 `1821`。
 
 [前往 GitHub Releases](https://github.com/vivid-stasis-revival/KuroakiGimmick/releases)
 
@@ -109,18 +109,14 @@ Android、iOS/iPadOS 和 Nintendo Switch 的适配还处于实验阶段。相关
 
 Nightly 用于提供最近的功能、兼容性改进和 Bug 修复。
 
-例如，18.2 正式版发布后的提交中：
+18.2.1 汇总了 18.2 之后的修复和编辑功能，包括 fish/glow 渲染、共享图片资源、即时流速与时间轴偏移、GMK 分组和 VSM/VSP 源码编辑、桌面谱面大小设置，以及多线程视频导出。
 
-- 修复 `fx_glow` 与原版 GameMaker 在 `bm_max` 混合行为上的差异。
-- 改进字幕 Content 的 Inline 编辑，保留 `{n}` 与粘贴文本的换行语义。
-- 为文字时间轴增加可视化内容区间，可直接点击选择对应字幕。
-
-这些修改位于后续的 Nightly 构建，不能直接视为原始 18.2 正式版已经包含的功能。
+发布产物在六个平台构建全部通过后由 GitHub Actions 自动上传；构建状态与下载文件以 Releases 页面为准。
 
 相关版本：
 
-- [v0.1.5 / 18.2 正式版](https://github.com/vivid-stasis-revival/KuroakiGimmick/releases/tag/v0.1.5-18.2)
-- [Nightly / 8dd8da0](https://github.com/vivid-stasis-revival/KuroakiGimmick/releases/tag/nightly-8dd8da0)
+- [v0.1.5 / 18.2.1](https://github.com/vivid-stasis-revival/KuroakiGimmick/releases/tag/v0.1.5-18.2.1)
+- [全部版本与 Nightly](https://github.com/vivid-stasis-revival/KuroakiGimmick/releases)
 
 程序版本、构建号和提交 SHA 应分别检查。
 
@@ -424,6 +420,8 @@ TEXT CANVAS 支持多行文字、RGB 颜色、对齐方式、行距、换行宽�
 
 **Video** 输出普通歌曲场景，不是操作系统屏幕录像。
 
+桌面端可在“设置 → 导出 → 渲染线程”选择 1 到 CPU 逻辑核心数减 2 个线程（上限最低为 1），默认 1；命令行可用 `--render-workers 2` 覆盖设置。各线程独立渲染，帧按顺序送入 FFmpeg；未保存的编辑也会包含在导出中。更多线程会增加显存占用，实际加速取决于 GPU、场景与编码瓶颈，带历史反馈的效果还需重放前序状态。
+
 真实窗口、虚拟桌面和多窗口演出的完整行为仍需要在目标系统中检查。
 
 移动端和 Switch 适配不提供依赖桌面 FFmpeg 进程的视频导出。
@@ -659,7 +657,7 @@ dotnet run -c Release --no-build -- \
 
 ## 构建与发布
 
-当前正式应用版本为 **v0.1.5 / Build 18.2**。
+当前应用版本为 **v0.1.5 / Build 18.2.1**。
 
 最终版本号以 [KuroakiGimmick.csproj](KuroakiGimmick.csproj) 为准。
 

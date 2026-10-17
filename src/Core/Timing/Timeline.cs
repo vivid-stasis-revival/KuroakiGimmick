@@ -18,7 +18,7 @@ public sealed partial class Timeline
     /// <summary>烘焙好的粒子。Time/Death/Life 单位秒，但都由 60 Hz 逻辑 tick 推导；X/Y/Vx/Vy 在 320×180 逻辑空间，速度是每 tick 位移。</summary>
     public record Dust(double Time, float X, float Y, float Vx, float Vy, int Frame, float Hue, float Saturation, double Death,
         bool Burst = false, double Life = 2, bool FollowPower = false);
-    public Dictionary<(string Name, int Proxy), List<Segment>> Tracks { get; } = [];
+    public Dictionary<(string Name, int Proxy), List<Segment>> Tracks { get; private set; } = [];
     public List<Callback> Callbacks { get; } = [];
     public List<SlashSpan> SlashSpans { get; } = [];
     public record LoreleiSlash(double Time, int Count, double Color, int Index);
@@ -29,7 +29,7 @@ public sealed partial class Timeline
     public record SourceNoOp(string Name, int Line, double Beat, string Reason);
     public List<SourceNoOp> SourceNoOps { get; } = [];
     public BpmMap Bpm { get; }
-    public NativeGimmickProfile? Native { get; }
+    public NativeGimmickProfile? Native { get; private set; }
     /// <summary>时间轴末端（秒）：取音频时长与所有 tween、回调尾部占用的较大值，跳转和导出都以它为界。</summary>
     public double End { get; private set; }
     public double Scroll { get; private set; }
@@ -61,7 +61,16 @@ public sealed partial class Timeline
     }
     public string Difficulty { get; }
     readonly List<System.Numerics.Vector2> particleOffsets = [];
-    readonly Chart chart;
+    Chart chart;
+    internal Timeline ForkForRender(Chart owner, NativeGimmickProfile profile)
+    {
+        var copy = (Timeline)MemberwiseClone();
+        copy.chart = owner; copy.Native = profile;
+        copy.Tracks = Tracks.ToDictionary(pair => pair.Key, pair => new List<Segment>(pair.Value));
+        copy.nativeFunctions = nativeFunctions?.ForkForRender(copy);
+        // Particle/callback arrays are immutable after construction. Rust frame caches are thread-local.
+        return copy;
+    }
     public Timeline(Chart c, ViewerProject project, double duration, GameFxProfile? fx = null, NativeGimmickProfile? native = null)
     {
         chart = c;

@@ -478,6 +478,9 @@ public static partial class Sdl
     }
 
 
+    internal static nint CreateOffscreenGpuDevice(string driver, bool debugMode) =>
+        CreateGpuCandidateDevice(driver, ShaderFormatFor(driver), debugMode);
+
     static nint CreateGpuCandidateDevice(
         string driver,
         GpuShaderFormat formats,

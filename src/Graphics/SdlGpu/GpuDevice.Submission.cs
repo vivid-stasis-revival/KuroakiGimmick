@@ -130,7 +130,7 @@ public sealed unsafe partial class GpuDevice : IDisposable
                 if (mesh.Fence is { } previous)
                 {
                     using var backpressure = PerformanceStats.Measure(PerformanceStats.Stage.GpuWait);
-                    while (!previous.Complete(Handle)) { SDL_PumpEvents(); SDL_Delay(1); }
+                    while (!previous.Complete(Handle)) { if (!Offscreen) SDL_PumpEvents(); SDL_Delay(1); }
                     previous.Release(Handle); mesh.Fence = null;
                 }
                 EnsureVertices(mesh, size); vertexBuffer = mesh.Vertex; uploadBuffer = mesh.Upload;

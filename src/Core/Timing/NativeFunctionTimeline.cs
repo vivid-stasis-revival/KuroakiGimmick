@@ -14,6 +14,9 @@ public sealed class NativeFunctionTimeline
     public static readonly string[] Kernels=["orbit-primary","orbit-secondary","orbit-quad","jitter-x","orbit-perspective","oscillate-perspective",
         "oscillate-flat","swirl","toggle-x","camera-jitter","window-orbit","camera-twist"];
     public static bool Supports(GimmickDefinition? definition,string function)=>definition?.FunctionPrograms.ContainsKey(function)==true;
+    NativeFunctionTimeline(NativeFunctionTimeline source, Timeline owner)
+    { outputs = source.outputs; toggles = source.toggles; timeline = owner; }
+    internal NativeFunctionTimeline ForkForRender(Timeline owner) => new(this, owner);
 
     public NativeFunctionTimeline(Timeline timeline, Chart chart, GimmickDefinition? definition=null)
     {

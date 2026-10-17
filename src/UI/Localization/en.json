@@ -1,4 +1,6 @@
 {
+  "Render threads": "Render threads",
+  "Parallel rendering uses more GPU memory. Speed depends on the scene and GPU.": "Parallel rendering uses more GPU memory. Speed depends on the scene and GPU.",
   "Editor": "Editor",
   "Group gimmick tracks": "Group gimmick tracks",
   "Show expanded GMK summaries": "Show expanded GMK summaries",

@@ -14,6 +14,12 @@ public sealed class CustomStarTimeline
     // Ticks 是原版的 60 Hz 逻辑 tick；模拟时长最多 3600 秒，星数上限 100000，超出改记诊断而不是继续分配。
     const int Ticks = 60, MaxStars = 100000;
     public bool Enabled { get; }
+    CustomStarTimeline(CustomStarTimeline source, Timeline owner)
+    {
+        timeline = owner; sourceStars = source.sourceStars; Enabled = source.Enabled;
+        Stars = source.Stars; maskTravel = source.maskTravel; maskFade = source.maskFade; colorTravel = source.colorTravel;
+    }
+    internal CustomStarTimeline ForkForRender(Timeline owner) => new(this, owner);
     public CustomStarTimeline(Timeline timeline, Chart chart, double duration, bool enabled, bool sourceStars = false)
     {
         this.timeline = timeline; Enabled = enabled; this.sourceStars = sourceStars;

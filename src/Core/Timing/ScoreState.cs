@@ -51,6 +51,14 @@ public sealed class ScoreState
     }
     readonly record struct Checkpoint(double Time, long Count, double Acc, double Ex);
     readonly record struct Cursor(int Run, int Index);
+    ScoreState(ScoreState source)
+    {
+        hits = source.hits; holds = source.holds; runs = source.runs;
+        runMaxEnd = source.runMaxEnd; runCounts = source.runCounts; holdMaxEnd = source.holdMaxEnd;
+        accRate = source.accRate; accStep = source.accStep; NoteCount = source.NoteCount; NoteValue = source.NoteValue;
+        checkpoints.AddRange(source.checkpoints);
+    }
+    internal ScoreState ForkForRender() => new(this);
 
     public ScoreState(Chart chart, BpmMap bpm)
     {

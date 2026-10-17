@@ -210,6 +210,22 @@ public sealed partial class Viewer
                 active: preferences.OverwriteExports, key: "settings-overwrite-exports"))
             { preferences.OverwriteExports = !preferences.OverwriteExports; SaveSettings(); }
         }
+#if !KG_MOBILE && !KG_SWITCH
+        if (r.H >= 220)
+        {
+            float rowY = r.Y + 132, buttonsX = r.X + MathF.Min(180, r.W * .3f);
+            float controlsWidth = MathF.Min(280, r.X + r.W - 16 - buttonsX);
+            int workers = ViewerSettings.ValidRenderWorkers(preferences.VideoRenderWorkers);
+            int maximum = ExportOptions.MaxRenderWorkers;
+            Text(L.Get("Render threads"), sx, rowY + 7, 13, white, max: buttonsX - sx - 10);
+            if (Button("-", new(buttonsX, rowY, 32, 30), enabled: workers > 1, key: "settings-render-workers-minus"))
+            { preferences.VideoRenderWorkers = --workers; SaveSettings(); }
+            Text($"{workers} / {maximum}", buttonsX + 44, rowY + 7, 13, white, max: controlsWidth - 84);
+            if (Button("+", new(buttonsX + controlsWidth - 32, rowY, 32, 30), enabled: workers < maximum, key: "settings-render-workers-plus"))
+            { preferences.VideoRenderWorkers = workers + 1; SaveSettings(); }
+            SettingsHint("Parallel rendering uses more GPU memory. Speed depends on the scene and GPU.", sx, rowY + 45, r.W - 28);
+        }
+#endif
     }
 
     void DrawSettingsPerformance(Rect r, bool compact)
