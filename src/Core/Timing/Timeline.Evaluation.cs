@@ -18,6 +18,8 @@ public sealed partial class Timeline
         if (proxy == -1 && TrySequenceWrite(name, t, out double sourceWrite)) return SafeModValue(name, sourceWrite);
         if (proxy == -1 && Native?.Data?.ValueBindings.TryGetValue(name,out var forced) == true)
             return SafeModValue(name,forced.Value(this,t));
+        if (mpfScripts?.TryValue(name,t,proxy,out double scriptValue)==true)
+            return SafeModValue(name,scriptValue);
         if (nativeFunctions?.TryValue(name,t,proxy,out double programValue)==true)
             return SafeModValue(name,programValue);
         // Main frame path: one Rust FFI call in PrepareFrame, zero crossings per Get.
