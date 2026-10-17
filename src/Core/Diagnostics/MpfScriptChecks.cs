@@ -43,7 +43,7 @@ internal static class MpfScriptChecks
             Check(Math.Abs(time.Get("cover1", time.Bpm.Time(6)) - .5) < 1e-6, "next phase");
             Check(Math.Abs(time.Get("cover1", time.Bpm.Time(13))) < 1e-6, "Finish cleanup");
             Check(Math.Abs(time.Get("cover1", time.Bpm.Time(5)) - 1) < 1e-6, "reverse seek");
-            Check(source.Diagnostics.All(d => !d.IsError), "basic program diagnostics");
+            Check(source.Diagnostics.All(d => !d.Error), "basic program diagnostics");
 
             File.WriteAllText(Path.Combine(dir, "cmpf", "GLOBAL.wave.vsmpf"), "::Main::\nset_mod_val(\"cover1\", 0.2);\n");
             File.WriteAllText(mpf, "::Main::\nset_mod_val(\"cover1\", 0.8);\n");
@@ -73,7 +73,7 @@ internal static class MpfScriptChecks
                 """);
             var loopChart = Chart();
             _ = NewTimeline(loopChart);
-            Check(loopChart.Diagnostics.Any(d => d.IsError && d.Message.Contains("MaxLoopReached", StringComparison.Ordinal)),
+            Check(loopChart.Diagnostics.Any(d => d.Error && d.Message.Contains("MaxLoopReached", StringComparison.Ordinal)),
                 "infinite loop bound");
 
             File.WriteAllText(mpf, """
@@ -83,7 +83,7 @@ internal static class MpfScriptChecks
                 """);
             var riskChart = Chart();
             _ = NewTimeline(riskChart);
-            Check(riskChart.Diagnostics.Any(d => d.IsError && d.Message.Contains("not simulate", StringComparison.Ordinal)),
+            Check(riskChart.Diagnostics.Any(d => d.Error && d.Message.Contains("not simulate", StringComparison.Ordinal)),
                 "high-risk gameplay mutation refused");
 
             Console.WriteLine("PASS CGMK 1.14 MPF: " + count + " checks");
