@@ -345,8 +345,8 @@ internal sealed class MpfScriptTimeline
                     if (inside && !range.Active)
                     {
                         range.Active = true;
-                        script.Dead = false;
-                        if (script.Language.RefreshOnEachRun)
+                        // A failed script stays disabled until a new preview/session.
+                        if (!script.Dead && script.Language.RefreshOnEachRun)
                         {
                             script.Context.Reset();
                             script.Random = new(unchecked((int)StableSeed(script.Name)));
