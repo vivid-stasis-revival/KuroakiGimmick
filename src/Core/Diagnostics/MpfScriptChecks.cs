@@ -76,6 +76,55 @@ internal static class MpfScriptChecks
             Check(loopChart.Diagnostics.Any(d => d.Error && d.Message.Contains("MaxLoopReached", StringComparison.Ordinal)),
                 "infinite loop bound");
 
+            // FakeAC-style Init reads are legal SAFE MPF functions. Offline preview
+            // has no player/replay input, so those counters are zero with a notice
+            // instead of killing the script and hiding all image tweens.
+            string fakeFile = Path.Combine(dir, "cmpf", "ENCORE.testaaa.vsmpf");
+            File.WriteAllText(fakeFile, """
+                ::Init::
+                var nofc = get_judge_cnt(4);
+                var noac = get_judge_cnt(2) + get_judge_cnt(3) + get_judge_cnt(4);
+                var endtime = beatEnd - 0.125;
+                ::Main::
+                if (noac == 0) {
+                    tween_mod_val_at("imgy_acbar", beatStart, 2, "outExpo", -1260, 30);
+                    tween_mod_val_at("imgy_acbar", endtime, 0.125, "linear", 30, -1260);
+                }
+                else if (nofc == 0) {
+                    set_mod_val("cover1", 0);
+                }
+                """);
+            var fakeAcChart = new Chart { ObjectName = "obj_custom_gimmick" };
+            fakeAcChart.PerFrame.Add(new(1, 4, "testaaa"));
+            var fakeAc = NewTimeline(fakeAcChart);
+            Check(!fakeAcChart.Diagnostics.Any(d => d.Error), "FakeAC SAFE Init judgment reads");
+            Check(fakeAcChart.Diagnostics.Count(d => d.Message.Contains("zeroed offline preview counters", StringComparison.Ordinal)) == 1,
+                "one explicit zero-state warning per script");
+            Check(Math.Abs(fakeAc.Get("imgy_acbar", fakeAc.Bpm.Time(3)) - 30) < 1e-4,
+                "FakeAC conditional image tween survives Init");
+            File.WriteAllText(mpf, """
+                ::Init::
+                var current = get_combo();
+                var maximum = get_max_combo();
+                ::Main::
+                set_mod_val("cover1", current + maximum + 0.3);
+                """);
+            var comboChart = Chart();
+            var comboPreview = NewTimeline(comboChart);
+            Check(!comboChart.Diagnostics.Any(d => d.Error) &&
+                  Math.Abs(comboPreview.Get("cover1", comboPreview.Bpm.Time(5)) - .3) < 1e-6,
+                "read-only combo queries use the same offline baseline");
+
+            File.WriteAllText(mpf, """
+                ::Main::
+                set_mod_val("cover1", get_judge_cnt(5));
+                """);
+            var invalidCounter = Chart();
+            _ = NewTimeline(invalidCounter);
+            Check(invalidCounter.Diagnostics.Any(d => d.Error &&
+                  d.Message.Contains("judgment type must be 0..4", StringComparison.Ordinal)),
+                "invalid judgment IDs must still fail");
+
             File.WriteAllText(mpf, """
                 #RISK_LEVEL = HIGH_RISK
                 ::Main::
