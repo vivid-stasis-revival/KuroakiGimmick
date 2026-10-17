@@ -217,7 +217,7 @@ public sealed partial class Session
         // Source callbacks ignore their proxy argument. Only an evaluated proxy
         // track enables the editor's proxy view; callback metadata must not hide
         // the ordinary playfield behind an unauthored transparent proxy.
-        HasProxyEvents = Timeline.Tracks.Keys.Any(static key => key.Proxy >= 0);
+        HasProxyEvents = Timeline.Tracks.Keys.Any(static key => key.Proxy >= 0) || Timeline.HasMpfProxyWrites;
         Checker = Checkerboard.Load(p, Chart, Timeline);
         // 时长取音频优先；无音频时取谱面、时间轴尾部和最后一条文本 cue 之后的富余，三者取最大，避免演出被提前截断。
         Duration = Audio?.Duration ?? Math.Max(Math.Max(Chart.Duration, Timeline.End + .5),
