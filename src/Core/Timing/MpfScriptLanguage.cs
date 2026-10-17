@@ -19,7 +19,7 @@ internal sealed class MpfScriptLanguage
     }
     sealed record Variable(string Name) : Expr
     {
-        internal override object? Eval(Context context) => context.Variables[Name];
+        internal override object? Eval(Context context) => context.Variables.TryGetValue(Name, out var value) ? value : 0d;
     }
     sealed record ArrayLiteral(List<Expr> Values) : Expr
     {
@@ -81,7 +81,7 @@ internal sealed class MpfScriptLanguage
         {
             foreach (var statement in Statements)
             {
-                if (++context.Steps > 100_000) throw new InvalidDataException("MaxLoopReached: instruction budget exceeded.");
+                context.Budget();
                 statement.Run(context);
             }
         }
@@ -139,6 +139,7 @@ internal sealed class MpfScriptLanguage
             while (Truthy(Test.Eval(context)))
             {
                 if (++count > context.MaxLoop) throw new InvalidDataException("MaxLoopReached");
+                context.Budget();
                 try { Body.Run(context); }
                 catch (FlowException flow) { if (!flow.ContinueLoop) break; }
             }
@@ -153,6 +154,7 @@ internal sealed class MpfScriptLanguage
             while (Test == null || Truthy(Test.Eval(context)))
             {
                 if (++count > context.MaxLoop) throw new InvalidDataException("MaxLoopReached");
+                context.Budget();
                 try { Body.Run(context); }
                 catch (FlowException flow) { if (!flow.ContinueLoop) break; }
                 Step?.Run(context);
@@ -166,6 +168,12 @@ internal sealed class MpfScriptLanguage
         internal Func<string, object?[], object?> Function { get; set; } = (_, _) => 0d;
         internal int MaxLoop = 65536;
         internal int Steps;
+        internal long TotalSteps;
+        internal void Budget()
+        {
+            if (++Steps > 100_000 || ++TotalSteps > 5_000_000)
+                throw new InvalidDataException("MaxLoopReached: MPF preview execution budget exceeded.");
+        }
         internal void Reset()
         {
             Variables.Clear();
