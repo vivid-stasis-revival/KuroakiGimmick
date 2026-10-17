@@ -64,6 +64,13 @@ public sealed class ViewerProject
     /// <summary>工程 offset，毫秒；由 BpmMap 在时间域一次性应用，不要在别处重复减。</summary>
     public double OffsetMs { get; set; }
     public double ScrollSpeed { get; set; } = 3;
+    /// <summary>游戏设置的流速；cc_Create 使用 op_note_speed / 5 + 1。保留工程中的内部倍率格式。</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public double NoteSpeed
+    {
+        get => Math.Clamp((ScrollSpeed - 1) * 5, 1, 20);
+        set => ScrollSpeed = (double.IsFinite(value) ? Math.Clamp(value, 1, 20) : 10) / 5 + 1;
+    }
     // VS 选项：0 表示音符上边缘对齐判定线，1 表示下边缘。
     public int NoteAlignment { get; set; }
     public int RenderWidth { get; set; } = 320;
@@ -71,6 +78,8 @@ public sealed class ViewerProject
     /// <summary>用户校准延迟，毫秒；只影响音频队列与画面呈现，不进入演出时钟。</summary>
     public double AudioDelayMs { get; set; }
     public double VisualDelayMs { get; set; }
+    /// <summary>整段演出相对音乐的呈现延迟；正值延后，不改变谱面原始 BPM/offset。</summary>
+    public double TimelineOffsetMs { get; set; }
     public string Profile { get; set; } = "auto";
     public bool Notes { get; set; } = true;
     public bool PostProcessing { get; set; } = true;

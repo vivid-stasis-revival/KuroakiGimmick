@@ -55,7 +55,7 @@ public sealed partial class NativeGimmickRenderer
     private void StarcrashersSprite(Session session, string spriteName, int frame, float x, float y, double alpha,
         float rotation = 0, float scaleY = 1, float scaleX = 1)
     {
-        if (alpha <= 0 || current?.Sprites.TryGetValue(spriteName, out var spec) != true) return;
+        if (alpha <= 0 || current == null || !current.Sprites.TryGetValue(spriteName, out var spec)) return;
         if (Image(spriteName, frame) is not { } image) return;
         var transform = Matrix3x2.CreateTranslation(-spec.OriginX, -spec.OriginY)
             * Matrix3x2.CreateScale(scaleX, scaleY)

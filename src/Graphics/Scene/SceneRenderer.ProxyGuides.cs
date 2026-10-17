@@ -16,6 +16,7 @@ public sealed partial class SceneRenderer
     /// texture. Never mutate PRA/VSM or the Final texture used by windows and export.</summary>
     public void RenderProxyInspection(KuroakiGimmick.Core.Session session, double time, int target, bool notes, bool effects)
     {
+        time = session.SceneTime(time);
         proxyInspection ??= new(canvas.Gpu, RenderWidth, RenderHeight);
         if (proxyInspection.Texture.Width != RenderWidth || proxyInspection.Texture.Height != RenderHeight)
             proxyInspection.Resize(RenderWidth, RenderHeight);

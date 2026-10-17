@@ -40,7 +40,12 @@ public sealed class ImageImportBatch : IDisposable
                 string path = Path.GetFullPath(entry);
                 using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
                 if (input.Length is < 1 or > 64 * 1024 * 1024) throw new InvalidDataException("Image exceeds 64 MiB or is empty: " + path);
-                string staged = Path.Combine(folder, batch.images.Count + Path.GetExtension(path).ToLowerInvariant());
+                // 原文件名（包括扩展名大小写）保持不变；通过独立目录隔离重复导入和同名文件。
+                string imageDirectory = Path.Combine(folder, batch.images.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                string staged = Path.Combine(imageDirectory, Path.GetFileName(path));
+                if (staged.IndexOfAny([',', '\r', '\n']) >= 0)
+                    throw new IOException("Image filename cannot be represented by VSP CSV: " + Path.GetFileName(path));
+                Directory.CreateDirectory(imageDirectory);
                 // CreateNew 而非 Create：暂存名重复说明有别的东西在写这个一次性目录，宁可报错也不覆盖。
                 using (var output = new FileStream(staged, FileMode.CreateNew, FileAccess.Write, FileShare.None)) input.CopyTo(output);
                 // 后续的读取、解码与哈希一律针对暂存副本，不再回头碰原文件——原文件在这中间被改动也不会影响本批结果。

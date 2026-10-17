@@ -38,6 +38,7 @@ public sealed partial class Viewer
         BeginUiMotion();
         workspaceGeometry = WorkspaceGeometry.Create(w, h, editorMode && editor != null, LayoutOptions);
         var time = transport.Position;
+        Renderer.PresentationWidth = pw;
         // 本帧全部 GPU 工作从这里开始，只在窗口线程执行：先渲染场景，再把 UI 画到离屏 uiTarget。
         Renderer.RenderPresentation(Current, transport.PresentationPosition, notes, effects);
         prGridSoloRendered = false;
@@ -326,7 +327,7 @@ public sealed partial class Viewer
             for (int i = 0; i < Math.Min(mods.Length, 5); i++)
             {
                 Label(mods[i].ToUpperInvariant(), rx, 182 + i * 29);
-                Text(Current.Timeline.Get(mods[i], time).ToString("0.000", CultureInfo.InvariantCulture), rx + 162, 180 + i * 29, 12, white, true);
+                Text(Current.Timeline.Get(mods[i], Current.SceneTime(time)).ToString("0.000", CultureInfo.InvariantCulture), rx + 162, 180 + i * 29, 12, white, true);
             }
             Divider(rx, 340, rw);
             Label(L.Get("TIMING"), rx, 357);
@@ -346,25 +347,26 @@ public sealed partial class Viewer
             {
                 Rebuild(bpm: Current.Project.Bpm + 1);
             }
-            Text(L.Get("Offset / ms"), rx, 422, 11, muted);
-            Text(Current.Project.OffsetMs.ToString("0"), rx + 105, 422, 12, white, true);
+            Text(L.Get("Timeline / ms"), rx, 422, 11, muted);
+            Text(Current.Project.TimelineOffsetMs.ToString("0"), rx + 105, 422, 12, white, true);
             if (Button("-", new(rx + 178, 413, 31, 26), enabled: !Busy))
             {
-                Rebuild(offset: Current.Project.OffsetMs - 1);
+                SetTimelineOffset(Current.Project.TimelineOffsetMs - 1);
             }
             if (Button("+", new(rx + 216, 413, 31, 26), enabled: !Busy))
             {
-                Rebuild(offset: Current.Project.OffsetMs + 1);
+                SetTimelineOffset(Current.Project.TimelineOffsetMs + 1);
             }
             Text(L.Get("Scroll"), rx, 458, 11, muted);
-            Text(Current.Project.ScrollSpeed.ToString("0.0"), rx + 105, 458, 12, white, true);
+            Text(Current.Project.NoteSpeed.ToString("0.0"), rx + 105, 458, 12, white, true);
+            double scrollStep = (Sdl.SDL_GetModState() & 3) != 0 ? .1 : 1;
             if (Button("-", new(rx + 178, 449, 31, 26), enabled: !Busy))
             {
-                Rebuild(scroll: Math.Max(.1, Current.Project.ScrollSpeed - .1));
+                SetNoteSpeed(Current.Project.NoteSpeed - scrollStep);
             }
             if (Button("+", new(rx + 216, 449, 31, 26), enabled: !Busy))
             {
-                Rebuild(scroll: Current.Project.ScrollSpeed + .1);
+                SetNoteSpeed(Current.Project.NoteSpeed + scrollStep);
             }
             Divider(rx, 491, rw);
             Label(L.Get("VIDEO EXPORT"), rx, 509);

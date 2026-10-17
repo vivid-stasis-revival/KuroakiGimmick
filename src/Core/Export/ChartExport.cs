@@ -121,6 +121,15 @@ public static class ChartExport
             fileName = Portable(fileName);
             if (fileName.Contains('/')) throw new IOException("Image gimmick filename must be a single file name: " + fileName);
             string name = putImageGimmickIntoAssetsFolder ? "Assets/" + fileName : fileName;
+            if (files.TryGetValue(name, out var existing))
+            {
+                // 同一图像可被多个 gimmick 引用；重复导入会产生路径不同、内容相同的暂存副本。
+                // 用导出计划中的长度与 SHA-256 识别共享资源，保留原文件名和所有 VSP 引用。
+                NoLinks(path);
+                if (existing.Source == path || new FileInfo(path).Length == existing.Length
+                    && HashFile(path, cancellation) == existing.Sha256)
+                    return existing.Name;
+            }
             try { Copy(name, path); }
             catch (IOException ex) when (ex.Message.StartsWith("Two resources map to the same output name:", StringComparison.Ordinal))
             {

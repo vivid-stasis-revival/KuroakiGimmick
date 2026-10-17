@@ -212,6 +212,7 @@ public sealed partial class Viewer
             var textSources = editor.TextSources.ToDictionary(x => x.Key, x => x.Value);
             p.RenderWidth = Current.Project.RenderWidth; p.PreviewVolume = Current.Project.PreviewVolume;
             p.AudioDelayMs = Current.Project.AudioDelayMs; p.VisualDelayMs = Current.Project.VisualDelayMs;
+            p.TimelineOffsetMs = Current.Project.TimelineOffsetMs; p.ScrollSpeed = Current.Project.ScrollSpeed;
             p.GameUiEnabled = Current.Project.GameUiEnabled;
             var old = Current; string? path = editor.SavedProjectPath ?? old.ProjectPath;
             editorBuild = Task.Run(() =>

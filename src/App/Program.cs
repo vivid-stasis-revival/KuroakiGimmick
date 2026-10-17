@@ -36,6 +36,7 @@ internal static class Program
 #endif
         // 这一串是所有无人值守模式（自测、检查、导出、截图）。cli 为真时失败只写 stderr，不弹消息框卡住脚本。
         bool cli = args.Any(a => a is "--bake-mobile-shaders" or "--bake-switch-shaders" or "--inspect" or "--render" or "--snapshot" or "--card" or "--smoke-ui" or "--smoke-touch-ui" or "--smoke-workspace-memory" or "--smoke-startup" or "--smoke-mac-menu" or "--smoke-windows-menu" or "--smoke-proxy-guides" or "--proxy-pick-test" or "--reference-layout-test" or "--gimmick-definition-test" or "--smoke-text-ui" or "--smoke-i18n" or "--rust-engine-test" or "--rust-timeline-test" or "--rust-bridge-test" or "--rust-audio-test");
+        string startupLanguage = UiLanguage.SystemLanguage;
         try
         {
             if (args.Length >= 3 && args[0] == "--bake-mobile-shaders")
@@ -89,6 +90,11 @@ internal static class Program
                 return 0;
             }
             var options = Parse(args);
+            if (!cli)
+            {
+                startupLanguage = UiLanguage.Resolve(options.GetValueOrDefault("language") ?? ViewerSettings.Load().UiLanguage);
+                CheckStartupAssets();
+            }
             bool overwriteExports = options.ContainsKey("overwrite") || ViewerSettings.Load().OverwriteExports;
             var path = options.GetValueOrDefault("file");
             string? projectPath = null;
@@ -326,7 +332,7 @@ internal static class Program
                 Directory.CreateDirectory(Paths.LogDirectory);
                 File.AppendAllText(Path.Combine(Paths.LogDirectory, "viewer.log"), DateTimeOffset.Now + "\n" + ex + "\n\n");
             }
-            catch (IOException)
+            catch (Exception logError) when (logError is IOException or UnauthorizedAccessException)
             {
             }
             // 日志写不进去也不能掩盖原始异常：吞掉 IO 失败，继续把错误呈现给用户并返回 1。
@@ -334,7 +340,15 @@ internal static class Program
             {
                 try
                 {
-                    Sdl.SDL_ShowSimpleMessageBox(0x10, "KuroakiGimmick", ex.Message + "\n\nSee viewer.log for details.", 0);
+                    if (ex is StartupAssetsException)
+                    {
+                        string message = startupLanguage == UiLanguage.Chinese
+                            ? "找不到素材，点击确认后，Kuroaki/Gimmick 将自杀。"
+                            : "BRO WHERE TF ARE THE ASSETS\nPress OK to make Kuroaki/Gimmick commit suicide.";
+                        Sdl.SDL_ShowSimpleMessageBox(0x20, "WHERE R U", message, 0);
+                    }
+                    else
+                        Sdl.SDL_ShowSimpleMessageBox(0x10, "KuroakiGimmick", ex.Message + "\n\nSee viewer.log for details.", 0);
                 }
                 catch (Exception)
                 {
@@ -346,6 +360,26 @@ internal static class Program
         {
             try { PerformanceStats.WriteConfiguredReport(); }
             catch (IOException ex) { Console.Error.WriteLine("Profile report: " + ex.Message); }
+        }
+    }
+
+    sealed class StartupAssetsException(Exception inner) : Exception("Required startup assets are missing or unusable.", inner);
+
+    // 在创建窗口/GPU 前检查，避免缺素材时先出现半初始化的主窗口。
+    static void CheckStartupAssets()
+    {
+        try
+        {
+            foreach (string relative in new[] { "App/Kuroaki.png", "Brand/kuroaki.png" })
+            {
+                string path = Path.Combine(Paths.Assets, relative);
+                if (!File.Exists(path)) throw new FileNotFoundException("Missing startup asset: " + path, path);
+            }
+            _ = NoteSkinProfile.Load(Paths.Assets);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException)
+        {
+            throw new StartupAssetsException(ex);
         }
     }
 

@@ -129,12 +129,12 @@ public sealed partial class Viewer
                 SetUiTheme(theme);
         }
         y += 41;
-        float toggleW = MathF.Min(100, (r.W - 48) / 3);
+        float toggleW = (r.W - 40) / 3;
         if (Button(preferences.UiAnimations ? L.Get("ON") : L.Get("OFF"), new(sx, y, toggleW, 29),
             active: preferences.UiAnimations, key: "settings-ui-motion")) preferences.UiAnimations = !preferences.UiAnimations;
-        if (Button(preferences.ModalValueEditor ? L.Get("MODAL FIELDS") : L.Get("INLINE FIELDS"), new(sx + toggleW + 6, y, toggleW + 25, 29),
+        if (Button(preferences.ModalValueEditor ? L.Get("MODAL FIELDS") : L.Get("INLINE FIELDS"), new(sx + toggleW + 6, y, toggleW, 29),
             active: preferences.ModalValueEditor, key: "settings-modal-fields")) preferences.ModalValueEditor = !preferences.ModalValueEditor;
-        if (Button(preferences.AlwaysFollow ? L.Get("ALWAYS FOLLOW") : L.Get("AUTO RELEASE"), new(sx + toggleW * 2 + 37, y, toggleW + 25, 29),
+        if (Button(preferences.AlwaysFollow ? L.Get("ALWAYS FOLLOW") : L.Get("AUTO RELEASE"), new(sx + (toggleW + 6) * 2, y, toggleW, 29),
             active: preferences.AlwaysFollow, key: "settings-always-follow")) preferences.AlwaysFollow = !preferences.AlwaysFollow;
     }
 
@@ -196,31 +196,31 @@ public sealed partial class Viewer
     {
         SettingsCard(r, "Performance");
         float sx = r.X + 14;
-        float cx = r.X + MathF.Min(compact ? 132 : 192, r.W * .32f);
+        float cx = compact ? sx : r.X + MathF.Min(192, r.W * .32f);
         float cw = r.X + r.W - 16 - cx;
-        float y = r.Y + 47;
-        Text(L.Get("Calculation Engine"), sx, y + 7, 13, white);
+        float y = r.Y + (compact ? 55 : 47);
+        Text(L.Get("Calculation Engine"), sx, compact ? y - 18 : y + 7, 13, white, max: compact ? cw : cx - sx - 8);
         float half = (cw - 6) / 2;
         if (Button("OPTIMIZATION (RUST)", new(cx, y, half, 30), active: preferences.CalculationEngine == "optimization", key: "engine-rust"))
         { preferences.CalculationEngine = "optimization"; SaveSettings(); }
         if (Button("COMPATIBILITY (C#)", new(cx + half + 6, y, half, 30), active: preferences.CalculationEngine == "compatibility", key: "engine-managed"))
         { preferences.CalculationEngine = "compatibility"; SaveSettings(); }
 
-        y += compact ? 48 : 76;
-        Text(L.Get("Audio Engine"), sx, y + 7, 13, white);
+        y += compact ? 62 : 76;
+        Text(L.Get("Audio Engine"), sx, compact ? y - 18 : y + 7, 13, white, max: compact ? cw : cx - sx - 8);
         if (Button("OPTIMIZATION (RUST)", new(cx, y, half, 30), active: preferences.AudioEngine == "optimization", key: "audio-rust"))
         { preferences.AudioEngine = "optimization"; SaveSettings(); }
         if (Button("NVORBIS (LEGACY)", new(cx + half + 6, y, half, 30), active: preferences.AudioEngine == "nvorbis", key: "audio-legacy"))
         { preferences.AudioEngine = "nvorbis"; SaveSettings(); }
 
-        y += compact ? 49 : 75;
-        Text(L.Get("Parallel Loading"), sx, y + 7, 13, white);
+        y += compact ? 62 : 75;
+        Text(L.Get("Parallel Loading"), sx, compact ? y - 18 : y + 7, 13, white, max: compact ? cw : cx - sx - 8);
         if (Button(preferences.ParallelLoading ? L.Get("ENABLED") : L.Get("DISABLED"), new(cx, y, MathF.Min(155, cw), 30),
             active: preferences.ParallelLoading, key: "parallel-loading"))
         { preferences.ParallelLoading = !preferences.ParallelLoading; SaveSettings(); }
 
-        y += compact ? 48 : 75;
-        Text(L.Get("Decoded Audio Cache"), sx, y + 7, 13, white);
+        y += compact ? 62 : 75;
+        Text(L.Get("Decoded Audio Cache"), sx, compact ? y - 18 : y + 7, 13, white, max: compact ? cw : cx - sx - 8);
         if (Button(preferences.DecodedAudioCache ? L.Get("ENABLED") : L.Get("DISABLED"), new(cx, y, MathF.Min(155, cw), 30),
             active: preferences.DecodedAudioCache, key: "audio-cache"))
         { preferences.DecodedAudioCache = !preferences.DecodedAudioCache; SaveSettings(); }

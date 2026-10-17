@@ -31,10 +31,12 @@ public sealed partial class SceneRenderer : IDisposable
     const float TrackBottom = 165;
     /// <summary>scene 是不透明的合成底；field 是透明的轨道层，必须经 fieldComposite 反预乘后才能贴回 scene。</summary>
     readonly Target scene, field;
-    /// <summary>后处理输出，同时是窗口 proxy 的主源。尺寸随 RenderWidth 变化，逻辑空间仍固定 320×180。</summary>
+    /// <summary>后处理输出；fish 可使用高于源画面的呈现分辨率，逻辑空间仍固定 320×180。</summary>
     public Target Final { get; }
-    int RenderWidth => Final.Texture.Width;
-    int RenderHeight => Final.Texture.Height;
+    int RenderWidth => scene.Texture.Width;
+    int RenderHeight => scene.Texture.Height;
+    /// <summary>最终呈现像素宽度；fish 在放大后的输出上求值，源画面仍遵循工程的像素分辨率。</summary>
+    public int PresentationWidth { get; set; } = 1920;
     CustomImages? loadedImages;
     /// <summary>按路径缓存的图片纹理；textureLru 记录淘汰顺序，failedTextures 记录只报一次的失败路径，textureBytes 计量 128 MiB 预算。装载与淘汰见 SceneRenderer.Resources.cs。</summary>
     readonly Dictionary<string, Texture> customTextures = [];
@@ -100,7 +102,7 @@ public sealed partial class SceneRenderer : IDisposable
         RenderPresentation(session,session.Interludes?.PresentationAt(time)??time,notes,effects);
 
     public void RenderPresentation(Session session,double time,bool notes=true,bool effects=true)=>
-        RenderWithNativeFeedback(session,time,notes,effects);
+        RenderWithNativeFeedback(session,session.ScenePresentationTime(time),notes,effects);
 
     NativeInterludeState? nativeInterludeState;
     void RenderPresentationFrame(Session session,double time,bool notes,bool effects,Target output)
@@ -121,12 +123,17 @@ public sealed partial class SceneRenderer : IDisposable
             canvas.Flush();
             scene.Resize(width, height);
             field.Resize(width, height);
-            Final.Resize(width, height);
             customEffects.Resize(width, height);
             nativeGimmick.Resize(width, height);
         }
         if (inspectionProxy == null) BeginWindowCapture(session);
-        if (output.Texture.Width != width || output.Texture.Height != height) output.Resize(width, height);
+        int outputWidth = effects && session.Timeline.Get("fish", time) != 0
+            ? Math.Max(width, (Math.Clamp(PresentationWidth, 320, 7680) + 15) / 16 * 16) : width;
+        if (output.Texture.Width != outputWidth || output.Texture.Height != outputWidth * 9 / 16)
+        {
+            canvas.Flush();
+            output.Resize(outputWidth, outputWidth * 9 / 16);
+        }
         PrepareImages(session);
         var timeline = session.Timeline;
         double M(string n, int p = -1) => timeline.Get(n, time, p);
@@ -341,7 +348,7 @@ public sealed partial class SceneRenderer : IDisposable
         if(effects)RenderNativeComposite(session,time,output,afterGui:false);
         // The inspection image contains only the selected proxy, without fixed combo/story HUD.
         if (inspectionProxy != null) { canvas.Flush(); return; }
-        canvas.Begin(output, RenderWidth, RenderHeight, 320, 180);
+        canvas.Begin(output, output.Texture.Width, output.Texture.Height, 320, 180);
         // o_combodisplay / judgement 属于固定 GUI，不进入 application proxy，也不跟 uialpha 淡出。
         nativeGimmick.DrawComponents(GimmickComponentStage.EarlyGui,session,time,output,gameUi);
         if (!nativeHudBeforePost)

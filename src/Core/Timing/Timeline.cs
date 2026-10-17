@@ -32,7 +32,33 @@ public sealed partial class Timeline
     public NativeGimmickProfile? Native { get; }
     /// <summary>时间轴末端（秒）：取音频时长与所有 tween、回调尾部占用的较大值，跳转和导出都以它为界。</summary>
     public double End { get; private set; }
-    public double Scroll { get; }
+    public double Scroll { get; private set; }
+    bool liveScroll;
+
+    /// <summary>只更新流速轨道的默认值和继承端点，不重载歌曲、音频或粒子。</summary>
+    public void SetScrollSpeed(double speed)
+    {
+        if (!double.IsFinite(speed) || speed <= 0 || speed > 50)
+            throw new ArgumentOutOfRangeException(nameof(speed));
+        if (Scroll == speed) return;
+        Scroll = speed;
+        liveScroll = true;
+        foreach (var key in Tracks.Keys.Where(key => key.Name == "scrollspeed").ToArray())
+        {
+            var updated = new List<Segment>(Tracks[key].Count);
+            foreach (var segment in Tracks[key])
+            {
+                double atStart = Evaluate(updated, segment.Time, Initial(key.Name, key.Proxy));
+                updated.Add(segment with
+                {
+                    From = segment.Event.From == 573613 ? atStart : segment.Event.From,
+                    To = segment.Event.To == 573613 ? atStart : segment.Event.To
+                });
+            }
+            // Rust 的验证参考仍持有原列表；替换而不修改这份不可变快照。
+            Tracks[key] = updated;
+        }
+    }
     public string Difficulty { get; }
     readonly List<System.Numerics.Vector2> particleOffsets = [];
     readonly Chart chart;

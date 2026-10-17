@@ -93,7 +93,7 @@ public sealed partial class Viewer
             float y = r.Y + 90;
             float w = r.X + r.W - 14 - x;
             float bottom = r.Y + r.H - 70;
-            bool dashboard = settingsSection == "general" && w >= 800 && bottom - y >= 650;
+            bool dashboard = settingsSection == "general" && w >= 800 && bottom - y >= 664;
             if (dashboard)
             {
                 float gap = 12;
@@ -102,11 +102,11 @@ public sealed partial class Viewer
                 float rx = x + leftW + gap;
                 DrawSettingsInterface(new(x, y, leftW, 190));
                 DrawSettingsAudio(new(rx, y, rightW, 190));
-                DrawSettingsDisplay(new(x, y + 202, leftW, 110));
-                DrawSettingsWorkflow(new(rx, y + 202, rightW, 110));
-                DrawSettingsVsUi(new(x, y + 324, leftW, 210));
-                DrawSettingsPerformance(new(rx, y + 324, rightW, 308), compact: true);
-                DrawSettingsExport(new(x, y + 546, leftW, 104));
+                DrawSettingsDisplay(new(x, y + 202, leftW, 124));
+                DrawSettingsWorkflow(new(rx, y + 202, rightW, 124));
+                DrawSettingsVsUi(new(x, y + 338, leftW, 210));
+                DrawSettingsPerformance(new(rx, y + 338, rightW, 326), compact: true);
+                DrawSettingsExport(new(x, y + 560, leftW, 104));
             }
             else
             {

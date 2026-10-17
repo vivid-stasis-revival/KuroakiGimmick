@@ -198,7 +198,8 @@ internal static unsafe partial class RustTimelineBridge
             int index = 0;
             foreach (var track in tracks)
             {
-                if (segments.Count > uint.MaxValue || track.Value.Count > uint.MaxValue - (uint)segments.Count)
+                // List<T> uses Int32 counts, so enforce its limit before appending.
+                if (track.Value.Count > int.MaxValue - segments.Count)
                     throw new InvalidDataException("RustTimeline segment count overflow.");
                 double defaultValue = initial(track.Key.Name, track.Key.Proxy);
                 specs[index] = new TrackSpec { Offset = (uint)segments.Count,
@@ -258,6 +259,8 @@ internal static unsafe partial class RustTimelineBridge
                 }
                 chart.Mods.Add(new ModEvent(0, 0, "linear", 0, 1, "pra", 4, order++));
                 chart.Mods.Add(new ModEvent(0, 0, "linear", 0, 7, "pra", 4, order++));
+                chart.Mods.Add(new ModEvent(2, 4, "linear", 573613, 6, "scrollspeed", -1, order++));
+                chart.Mods.Add(new ModEvent(3, 2, "inQuad", 573613, 573613, "scrollspeed", -1, order++));
                 var timeline = new Timeline(chart, new ViewerProject {Bpm = 120, ScrollSpeed = 3}, 2);
                 if (timeline.RustTracks == null)
                     throw new InvalidOperationException("Native RustTimeline was not initialized.");
@@ -276,8 +279,20 @@ internal static unsafe partial class RustTimelineBridge
                     if (!Near(timeline.Get("pra", time, 5),0))
                         throw new InvalidDataException("RustTimeline default proxy state changed.");
                 }
+                foreach (double speed in new[] { 1.2, 5.0, 3.0, 2.46 })
+                {
+                    timeline.SetScrollSpeed(speed);
+                    var rebuilt = new Timeline(chart, new ViewerProject { Bpm = 120, ScrollSpeed = speed }, 2);
+                    foreach (double time in new[] { -.1, 0, 1, 1.25, 1.5, 1.75, 2.5, 4 })
+                    {
+                        timeline.PrepareFrame(time);
+                        rebuilt.PrepareFrame(time);
+                        if (!timeline.RustTracks.Active || !Near(timeline.Get("scrollspeed", time), rebuilt.Get("scrollspeed", time)))
+                            throw new InvalidDataException("Live scroll speed disagrees with rebuilt timeline or invalidates native verification.");
+                    }
+                }
             }
-            Console.WriteLine("PASS RustTimeline: 31 easings, reverse seek, tied events, proxy isolation, managed/native parity");
+            Console.WriteLine("PASS RustTimeline: 31 easings, reverse seek, tied events, proxy isolation, live scroll/inherited endpoints, managed/native parity");
         }
         finally {Environment.SetEnvironmentVariable("KG_RUST_ENGINE", old);}
     }

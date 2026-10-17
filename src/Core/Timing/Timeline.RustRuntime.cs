@@ -11,6 +11,7 @@ public sealed partial class Timeline
     private bool TryNativeBase(string name, double time, int proxy, out double value)
     {
         value = 0;
+        if (liveScroll && name == "scrollspeed") return false;
         if (RustTracks == null) return false;
         // These transforms need C# recursion or semantic filters on top of raw
         // tracks. The default values and raw tracks can still be accelerated.

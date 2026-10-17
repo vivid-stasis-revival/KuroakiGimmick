@@ -21,7 +21,7 @@ public sealed class NativeFunctionTimeline
         for (int order=0;order<chart.PerFrame.Count;order++)
         {
             var f=chart.PerFrame[order];
-            if(definition?.FunctionPrograms.TryGetValue(f.Function,out var program)!=true)continue;
+            if(definition == null || !definition.FunctionPrograms.TryGetValue(f.Function,out var program))continue;
             void Add(int proxy, string names, double min=double.NegativeInfinity, double max=double.PositiveInfinity)
             {
                 double start=Math.Max(f.StartBeat,min), end=Math.Min(f.EndBeat,max);

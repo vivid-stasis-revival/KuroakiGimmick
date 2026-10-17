@@ -27,7 +27,7 @@ public sealed partial class NativeGimmickRenderer
         float x, float y, double alpha, float rotation = 0, float scaleY = 1)
     {
         string allison = "sp_note_" + suffix + "_allison", normal = "sp_note_" + suffix + "_normal";
-        if (current?.Sprites.TryGetValue(allison, out var target) != true || Image(allison) is not { } image) return;
+        if (current == null || !current.Sprites.TryGetValue(allison, out var target) || Image(allison) is not { } image) return;
         Shader? shader = null;
         if (!state.Direct)
         {

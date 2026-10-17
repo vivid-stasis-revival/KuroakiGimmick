@@ -193,8 +193,14 @@ public sealed class VideoExport : IDisposable
             if (rendered < TotalFrames && downloads.Count < readbacks.Length)
             {
                 using var frameTiming = PerformanceStats.Measure(PerformanceStats.Stage.Frame);
-                if(presentationRoute)renderer.RenderPresentation(session,route.ChartAt(rendered/(double)Options.Fps),Options.Notes,Options.Effects);
-                else renderer.Render(session, route.ChartAt(rendered / (double) Options.Fps), Options.Notes, Options.Effects);
+                int previewWidth = renderer.PresentationWidth;
+                try
+                {
+                    renderer.PresentationWidth = Options.Width;
+                    if(presentationRoute)renderer.RenderPresentation(session,route.ChartAt(rendered/(double)Options.Fps),Options.Notes,Options.Effects);
+                    else renderer.Render(session, route.ChartAt(rendered / (double) Options.Fps), Options.Notes, Options.Effects);
+                }
+                finally { renderer.PresentationWidth = previewWidth; }
                 canvas.Pass(target, renderer.Final.Texture, canvas.Basic);
                 var slot = readbacks[nextSlot];
                 canvas.BeginReadback(slot, target);

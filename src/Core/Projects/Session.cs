@@ -30,6 +30,13 @@ public sealed partial class Session
     public bool HasNativeSequenceAudio => !ReferenceEquals(Audio, SourceAudio);
     public NativeInterludeRoute? Interludes { get; }
     public double PresentationDuration => Interludes?.PresentationAt(Duration,true) ?? Duration;
+    public double ScenePresentationTime(double time) => time - Project.TimelineOffsetMs / 1000;
+    public double SceneTime(double songTime)
+    {
+        double presentation = Interludes?.PresentationAt(songTime) ?? songTime;
+        double shifted = ScenePresentationTime(presentation);
+        return Interludes?.SongAt(shifted) ?? shifted;
+    }
     public CustomText Texts { get; }
     /// <summary>谱面内剧情（custom_episode）；谱面没写这个 gimmick 时为 null。</summary>
     public EpisodeScript? Episode { get; }
@@ -88,7 +95,8 @@ public sealed partial class Session
         }
         if (p.NoteAlignment is < 0 or > 1 || !ViewerSettings.Widths.Contains(p.RenderWidth) || !double.IsFinite(p.PreviewVolume)
             || p.PreviewVolume is < 0 or > 1 || !double.IsFinite(p.AudioDelayMs) || Math.Abs(p.AudioDelayMs) > 2000
-            || !double.IsFinite(p.VisualDelayMs) || Math.Abs(p.VisualDelayMs) > 2000)
+            || !double.IsFinite(p.VisualDelayMs) || Math.Abs(p.VisualDelayMs) > 2000
+            || !double.IsFinite(p.TimelineOffsetMs) || Math.Abs(p.TimelineOffsetMs) > 2000)
         {
             throw new InvalidDataException("Invalid viewer settings: alignment 0/1, supported render width, volume 0..1 and delays -2000..2000 ms required.");
         }

@@ -20,20 +20,22 @@ public sealed partial class SceneRenderer
     void DrawNativeAfterEffects(Session session, double time, bool notes, Target output, bool applicationProxy, bool nativePost)
     {
         if (session.NativeGimmick.Data == null) return;
-        canvas.Begin(output, RenderWidth, RenderHeight, 320, 180);
+        canvas.Begin(output, output.Texture.Width, output.Texture.Height, 320, 180);
         nativeGimmick.DrawStage(session, time, GimmickStages.AfterEffects, notes);
         canvas.Flush();
         CaptureNativeApplication(session,output);
         if (!applicationProxy) return;
         canvas.Pass(field,session.NativeGimmick.Data.ApplicationProxyUsesUnfilteredSource && nativeProxySource!=null
             ?nativeProxySource.Texture:output.Texture,canvas.Basic);
-        BeginNativeProxySurface(session,time);
-        CompositeField(session,time,true,session.NativeGimmick.Data.ClearProxyFooter,nativeProxySurface);
+        Target proxySurface=BeginNativeProxySurface(session,time);
+        CompositeField(session,time,true,session.NativeGimmick.Data.ClearProxyFooter,proxySurface);
         ApplyNativeFeedback(session,time);
-        Texture composed=nativeProxySurface.Texture;
+        Texture composed=proxySurface.Texture;
         if(nativePost)
         {
-            nativeProxyPost??=new(canvas.Gpu,320,180);
+            nativeProxyPost??=new(canvas.Gpu,output.Texture.Width,output.Texture.Height);
+            if(nativeProxyPost.Texture.Width!=output.Texture.Width || nativeProxyPost.Texture.Height!=output.Texture.Height)
+            {canvas.Flush();nativeProxyPost.Resize(output.Texture.Width,output.Texture.Height);}
             nativeGimmick.RenderPost(nativeProxyPost,composed,session,time);
             composed=nativeProxyPost.Texture;
         }

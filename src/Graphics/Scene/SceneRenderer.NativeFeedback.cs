@@ -22,7 +22,7 @@ public sealed partial class SceneRenderer
         int width=ViewerSettings.ValidWidth(session.Project.RenderWidth);
         var p=session.Project;
         int visualKey=HashCode.Combine(p.GameUiEnabled,p.GameUiScore,p.GameUiExScore,p.GameUiCombo,p.GameUiJudgement,
-            p.GameUiHoldEffects,p.GameUiFont,HashCode.Combine(p.VisualDelayMs,p.NoteAlignment,inspectionProxy??-1));
+            p.GameUiHoldEffects,p.GameUiFont,HashCode.Combine(p.VisualDelayMs,p.NoteAlignment,p.ScrollSpeed,inspectionProxy??-1,PresentationWidth));
         if(!ReferenceEquals(feedbackOwner,session)||notes!=feedbackNotes||effects!=feedbackEffects||width!=feedbackWidth||visualKey!=feedbackVisualKey)
         {
             canvas.Flush();ClearNativeFeedback();feedbackOwner=session;feedbackNotes=notes;feedbackEffects=effects;feedbackWidth=width;feedbackVisualKey=visualKey;
@@ -64,7 +64,7 @@ public sealed partial class SceneRenderer
         }
     }
 
-    void BeginNativeProxySurface(Session session,double time)
+    Target BeginNativeProxySurface(Session session,double time)
     {
         nativeProxySurface??=new(canvas.Gpu,320,180);
         // The source never clears pixelated_topscreen between frames. Its black
@@ -77,6 +77,7 @@ public sealed partial class SceneRenderer
         canvas.Begin(nativeProxySurface,320,180,320,180);
         canvas.Fill(new(0,0,320,180),Color.Hex(0).Alpha(1-session.Timeline.Get("hom",time)));
         canvas.Flush();
+        return nativeProxySurface;
     }
 
     void ApplyNativeFeedback(Session session,double time)

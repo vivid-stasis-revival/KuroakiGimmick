@@ -252,12 +252,25 @@ public sealed partial class Viewer : IDisposable
     }
 
     /// <summary>
-    /// 用修改后的 project 副本在后台重建会话；只传入的参数生效，其余保持不变。BPM 与 offset 改动必须走重建，
-    /// 因为时间轴是解析期产物；播放位置同 Reload 一样在加载完成后恢复。
+    /// 按游戏设置单位即时更新流速，保留当前播放和编辑状态。
     /// </summary>
-    void Rebuild(double? bpm = null, double? offset = null, double? scroll = null, string? room = null)
+    void SetNoteSpeed(double speed)
     {
-        if (GuardUnsaved(() => Rebuild(bpm, offset, scroll, room))) return;
+        Current.Project.NoteSpeed = Math.Round(speed, 1);
+        Current.Timeline.SetScrollSpeed(Current.Project.ScrollSpeed);
+        if (editor != null) editor.Project.ScrollSpeed = Current.Project.ScrollSpeed;
+    }
+
+    void SetTimelineOffset(double milliseconds)
+    {
+        Current.Project.TimelineOffsetMs = Math.Clamp(milliseconds, -2000, 2000);
+        if (editor != null) editor.Project.TimelineOffsetMs = Current.Project.TimelineOffsetMs;
+    }
+
+    /// <summary>BPM/房间改变仍需重建会话；即时流速和呈现偏移不走此路径。</summary>
+    void Rebuild(double? bpm = null, double? offset = null, string? room = null)
+    {
+        if (GuardUnsaved(() => Rebuild(bpm, offset, room))) return;
         if (Busy)
         {
             return;
@@ -271,10 +284,6 @@ public sealed partial class Viewer : IDisposable
         if (offset.HasValue)
         {
             p.OffsetMs = offset.Value;
-        }
-        if (scroll.HasValue)
-        {
-            p.ScrollSpeed = scroll.Value;
         }
         if (room != null)
         {

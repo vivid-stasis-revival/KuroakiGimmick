@@ -19,10 +19,46 @@ public sealed partial class Viewer
     /// </summary>
     public void SmokeUi()
     {
+        SmokeSharedImageExport();
         // 检查的是稳定后的命中矩形。有限过渡的数学由独立的 CPU 测试覆盖。
         preferences.UiAnimations = false;
         // 下面的合成坐标都基于未经缩放的 1440x940 测试画布。
         preferences.Workspace = new WorkspaceLayout { FollowDisplayScale = false, UiScale = 1 };
+        // 即时校准不能重建会话、暂停播放或丢掉正在编辑的文档。
+        var timingSession = Current;
+        var timingEditor = editor;
+        var probeEditor = new KuroakiGimmick.Core.Editing.EditorDocument(Current);
+        editor = probeEditor;
+        double originalScroll = Current.Project.ScrollSpeed, originalOffset = Current.Project.TimelineOffsetMs;
+        double originalPosition = transport.Position;
+        bool originalPlaying = transport.Playing;
+        transport.SetPlaying(true);
+        try
+        {
+            SetNoteSpeed(20.1);
+            if (Current.Project.NoteSpeed != 20 || Current.Timeline.Scroll != 5)
+                throw new Exception("Game note speed upper bound/conversion failed.");
+            SetNoteSpeed(.9);
+            if (Current.Project.NoteSpeed != 1 || Math.Abs(Current.Timeline.Scroll - 1.2) > 1e-9)
+                throw new Exception("Game note speed lower bound/conversion failed.");
+            SetTimelineOffset(125);
+            if (Current.ScenePresentationTime(2) != 1.875)
+                throw new Exception("Live timeline offset was not applied.");
+            if (probeEditor.Project.NoteSpeed != 1 || probeEditor.Project.TimelineOffsetMs != 125)
+                throw new Exception("Live timing settings were not retained in the saved/exported editor project.");
+            if (!ReferenceEquals(Current, timingSession) || !ReferenceEquals(editor, probeEditor)
+                || loading != null || !transport.Playing)
+                throw new Exception("Live timing adjustment interrupted playback or editing.");
+        }
+        finally
+        {
+            Current.Project.ScrollSpeed = originalScroll;
+            Current.Timeline.SetScrollSpeed(originalScroll);
+            Current.Project.TimelineOffsetMs = originalOffset;
+            editor = timingEditor;
+            transport.SetPlaying(originalPlaying);
+            transport.Seek(originalPosition);
+        }
         bool before = notes;
         // scancode 17 = N：切换音符显示，再按一次还原。
         Handle(new()
