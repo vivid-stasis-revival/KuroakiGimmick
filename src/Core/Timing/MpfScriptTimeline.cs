@@ -77,7 +77,8 @@ internal sealed class MpfScriptTimeline
         if (writes.TryGetValue((name, proxy), out var list))
         {
             int index = SortedSearch.UpperBound(list, time, static w => w.Time) - 1;
-            if (index >= 0) return list[index].Value;
+            if (index >= 0 && timeline.NativeTrackWriteTime(name, proxy, time) < list[index].Time - 1e-9)
+                return list[index].Value;
         }
         return timeline.NativeRawValue(name, time, proxy);
     }
@@ -242,6 +243,33 @@ internal sealed class MpfScriptTimeline
         }
     }
 
+    internal bool HasProxyWrites => writes.Keys.Any(key => key.Proxy >= 0);
+
+    /// <summary>Exactly the same GLOBAL/difficulty precedence for playback and export.</summary>
+    internal static IReadOnlyDictionary<string, string> FindFiles(string root, string difficulty)
+    {
+        string dir = Path.Combine(root, "cmpf");
+        var files = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (!Directory.Exists(dir)) return files;
+        var candidates = Directory.EnumerateFiles(dir)
+            .Where(f => Path.GetFileName(f).EndsWith(".vsmpf", StringComparison.OrdinalIgnoreCase))
+            .Order(StringComparer.Ordinal).Take(257).ToArray();
+        if (candidates.Length > 256) throw new InvalidDataException("cmpf contains too many MPF files (256 maximum).");
+        foreach (int pass in new[] { 0, 1 })
+        foreach (string file in candidates)
+        {
+            string stem = Path.GetFileName(file)[..^6];
+            int dot = stem.IndexOf('.');
+            if (dot < 1 || dot == stem.Length - 1) continue;
+            string selector = stem[..dot], name = stem[(dot + 1)..];
+            if (pass == 0 && selector.Equals("GLOBAL", StringComparison.OrdinalIgnoreCase))
+                files.TryAdd(name, file);
+            if (pass == 1 && selector.Equals(difficulty, StringComparison.OrdinalIgnoreCase))
+                files[name] = file;
+        }
+        return files;
+    }
+
     public bool Supports(string name) => scripts.ContainsKey(name);
 
     public bool TryValue(string name, double time, int proxy, out double value)
@@ -272,28 +300,7 @@ internal sealed class MpfScriptTimeline
             return null;
         }
         string difficulty = SongFiles.Difficulty(project.Chart ?? project.Gimmick ?? "").ToUpperInvariant();
-        // GLOBAL first; difficulty-specific programs override only same-name globals.
-        var files = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (string file in Directory.EnumerateFiles(dir).Order(StringComparer.Ordinal))
-        {
-            string leaf = Path.GetFileName(file);
-            if (!leaf.EndsWith(".vsmpf", StringComparison.OrdinalIgnoreCase)) continue;
-            string stem = leaf[..^6];
-            int dot = stem.IndexOf('.');
-            if (dot < 1 || dot == stem.Length - 1) continue;
-            string selector = stem[..dot].ToUpperInvariant(), name = stem[(dot + 1)..];
-            if (selector == "GLOBAL") files.TryAdd(name, file);
-        }
-        foreach (string file in Directory.EnumerateFiles(dir).Order(StringComparer.Ordinal))
-        {
-            string leaf = Path.GetFileName(file);
-            if (!leaf.EndsWith(".vsmpf", StringComparison.OrdinalIgnoreCase)) continue;
-            string stem = leaf[..^6];
-            int dot = stem.IndexOf('.');
-            if (dot < 1 || dot == stem.Length - 1) continue;
-            if (stem[..dot].Equals(difficulty, StringComparison.OrdinalIgnoreCase))
-                files[stem[(dot + 1)..]] = file;
-        }
+        var files = FindFiles(root, difficulty);
         var ranges = new List<ActiveRange>();
         foreach (var source in chart.PerFrame)
         {
@@ -311,7 +318,7 @@ internal sealed class MpfScriptTimeline
                     runtime.scripts.Add(source.Function, script);
                     if (lang.RiskLevel is "HIGH_RISK" or "CRITICAL_RISK")
                         chart.Diagnostics.Add(new(file, 0, "MPF declares " + lang.RiskLevel
-                            + "; judgment mutation cannot be simulated in K/G and such calls are rejected.", true));
+                            + "; judgment mutation cannot be simulated in K/G and such calls are rejected."));
                 }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidDataException or FormatException)
                 {
