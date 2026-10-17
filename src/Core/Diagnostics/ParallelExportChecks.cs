@@ -53,7 +53,8 @@ internal static class ParallelExportChecks
                         var pixels = reader.Current;
                         try
                         {
-                            if (!SHA256.HashData(pixels.AsSpan(0, width * height * 4)).AsSpan().SequenceEqual(expected[frame]))
+                            // Switch's managed SHA-256 accepts byte arrays; exclude unused ArrayPool capacity.
+                            if (!SHA256.HashData(pixels.AsSpan(0, width * height * 4).ToArray()).AsSpan().SequenceEqual(expected[frame]))
                                 throw new InvalidOperationException($"Parallel frame mismatch: feedback={feedback}, workers={workers}, frame={frame}.");
                         }
                         finally { ArrayPool<byte>.Shared.Return(pixels); }
