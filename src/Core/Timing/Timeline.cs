@@ -34,6 +34,8 @@ public sealed partial class Timeline
     public double End { get; private set; }
     public double Scroll { get; private set; }
     bool liveScroll;
+    MpfScriptTimeline? mpfScripts;
+    public bool HasMpfProxyWrites => mpfScripts?.HasProxyWrites == true;
 
     /// <summary>只更新流速轨道的默认值和继承端点，不重载歌曲、音频或粒子。</summary>
     public void SetScrollSpeed(double speed)
@@ -350,9 +352,13 @@ public sealed partial class Timeline
         {
             c.Diagnostics.Add(new("text", 0, $"Text tracks without matching text files: {string.Join(", ",missingTexts.Take(8))}"));
         }
+        // CGMK 1.14 .vsmpf runs before object particle baking and is sampled once
+        // for deterministic scrubbing and parallel video export.
+        mpfScripts = MpfScriptTimeline.Load(this, c, project);
         foreach (var f in c.PerFrame)
         {
-            if (Native?.Data?.PerFrameBindings.ContainsKey(f.Function) != true && !NativeFunctionTimeline.Supports(Native?.Data,f.Function))
+            if (Native?.Data?.PerFrameBindings.ContainsKey(f.Function) != true && !NativeFunctionTimeline.Supports(Native?.Data,f.Function)
+                && mpfScripts?.Supports(f.Function) != true)
             {
                 c.Diagnostics.Add(new("renderer", 0, $"Unsupported per-frame function: {f.Function}"));
             }
