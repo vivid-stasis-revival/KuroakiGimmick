@@ -18,7 +18,7 @@ public static class VscReader
     // C# remains the authoritative compatibility fallback and verify oracle.
     internal static Chart LoadOriginal(string path)
     {
-        if (new FileInfo(path).Length > 128 * 1024 * 1024)
+        if (ChartLoadLimits.Exceeds(new FileInfo(path).Length, 128 * 1024 * 1024))
         {
             throw new InvalidDataException("VSC exceeds 128 MiB.");
         }

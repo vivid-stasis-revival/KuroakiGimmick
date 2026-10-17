@@ -22,7 +22,7 @@ public sealed partial class VsmDocument
         /// <summary>整个片段真正结束的拍，含最后一次重复的时长；负 Duration 按 0 处理。</summary>
         public double End => LastBeat + Math.Max(0, Duration);
         /// <summary>重复次数；1e-7 容差吸收浮点误差，上限一百万，防止病态区间展开成天文数字。</summary>
-        public int RepeatCount => RepeatEnd is double end ? (int)Math.Min(1_000_000, Math.Floor((end - Beat) / RepeatStep + 1e-7) + 1) : 1;
+        public int RepeatCount => RepeatEnd is double end ? (int)Math.Min(ChartLoadLimits.CountLimit(1_000_000), Math.Floor((end - Beat) / RepeatStep + 1e-7) + 1) : 1;
         /// <summary>同一条轨道的判别键。proxy 必须参与其中——同名 mod 作用在不同 proxy 上是彼此独立的两条轨。</summary>
         public string TrackKey => $"{Proxy}:{Name}";
     }
@@ -47,8 +47,9 @@ public sealed partial class VsmDocument
     /// <summary>识别并记住 BOM 与编码，写回时原样还原；64 MiB 上限先于解码生效。</summary>
     public static VsmDocument Load(string path)
     {
+        if (ChartLoadLimits.Exceeds(new FileInfo(path).Length, 64 * 1024 * 1024)) throw new InvalidDataException("VSM exceeds 64 MiB.");
         byte[] bytes = File.ReadAllBytes(path);
-        if (bytes.Length > 64 * 1024 * 1024) throw new InvalidDataException("VSM exceeds 64 MiB.");
+        if (ChartLoadLimits.Exceeds(bytes.Length, 64 * 1024 * 1024)) throw new InvalidDataException("VSM exceeds 64 MiB.");
         var doc = new VsmDocument();
         // UTF-32 的 BOM 前两字节与 UTF-16 LE 相同，必须先判 4 字节形式，否则会误判编码。
         if (bytes.AsSpan().StartsWith(new byte[] { 0xEF, 0xBB, 0xBF })) doc.Preamble = [0xEF, 0xBB, 0xBF];
@@ -212,7 +213,11 @@ public sealed partial class VsmDocument
     /// <summary>诊断用的 1 基源行号；事件身份始终是 Id，行号会随插入删除变化，不要拿它做标识。</summary>
     public int SourceLine(Guid id) => Lines.FindIndex(l => l.Event?.Id == id) + 1;
     /// <summary>整份行表回到快照。Line 是不可变 record，直接复用同一批对象即可，不必也不应深拷贝文本。</summary>
-    public void Restore(Line[] snapshot) => Lines = snapshot.ToList();
+    public void Restore(Line[] snapshot)
+    {
+        Lines = snapshot.ToList();
+        NewLine = Lines.FirstOrDefault(line => line.Ending.Length > 0)?.Ending ?? "\n";
+    }
     /// <summary>按原编码写出，并在前面补回原始 BOM；未编辑的文档由此可逐字节还原。</summary>
     public byte[] Bytes()
     {

@@ -105,6 +105,7 @@ public sealed partial class Viewer
         {
             AddModTrack(EpisodeScript.ModName, -1);
         }
+        GroupGimmickRows();
         ApplyTrackOrder();
         layoutRevision = editor.Revision;
     }
@@ -154,6 +155,10 @@ public sealed partial class Viewer
         if (EButton(L.Get("UP"), new(r.X + r.W - 116, r.Y + 7, 49, 25))) trackScroll = Math.Max(0, trackScroll - 1);
         if (EButton(L.Get("DOWN"), new(r.X + r.W - 61, r.Y + 7, 53, 25))) trackScroll++;
         float labelW = Math.Clamp(LayoutOptions.TrackLabelWidth, 180, Math.Min(500, r.W - 360)), x = r.X + labelW, rulerY = r.Y + 40, markerY = rulerY + 27, audioY = markerY + 27, noteY = audioY + 27, tracksY = noteY + 58;
+        if (EButton(L.Get(preferences.GroupGimmickTracks ? "GROUPED" : "RAW EVENTS"), new(r.X + 90, rulerY, labelW - 98, 24), key: "gimmick-view"))
+            SetGimmickGrouping(!preferences.GroupGimmickTracks);
+        if (EButton("VSM / VSP", new(r.X + 90, markerY, labelW - 98, 24), enabled: !Busy, key: "source-editor"))
+            OpenSourceEditor();
         editorTracksRect = new(x, tracksY, r.W - labelW - 10, Math.Max(1, r.Y + r.H - tracksY - 8));
         trackLabelGrip = new(x - 3, rulerY, 6, r.Y + r.H - rulerY - 7);
         double endBeat = beatStart + editorTracksRect.W / pixelsPerBeat;
@@ -241,8 +246,8 @@ public sealed partial class Viewer
             message = L.Format($"NOTE lane {picked.Lane} / beat {pickedBeat:0.######}. Add a gimmick here; the note is unchanged.");
         }
         Canvas.Clip(null);
-        Label(L.Get("MARKERS / E"), r.X + 12, markerY + 5);
-        Label(L.Get("BEATS"), r.X + 12, rulerY + 5); Label(waveformAudio == null ? L.Get("NO AUDIO") : L.Get("AUDIO / PEAKS"), r.X + 12, audioY + 7);
+        Text(L.Get("MARKERS / E"), r.X + 12, markerY + 5, 11, muted, true, 72);
+        Text(L.Get("BEATS"), r.X + 12, rulerY + 5, 11, muted, true, 72); Label(waveformAudio == null ? L.Get("NO AUDIO") : L.Get("AUDIO / PEAKS"), r.X + 12, audioY + 7);
         Label(L.Get("NOTES / READ ONLY"), r.X + 12, noteY + 7);
         Text("1   2   3   4", r.X + 12, noteY + 28, 10, muted, true);
         int visibleRows = Math.Max(1, (int)(editorTracksRect.H / 35));
@@ -278,11 +283,18 @@ public sealed partial class Viewer
             var grip = new Rect(x - 81, y + 5, 18, 24);
             bool labelInteractive = !UiBlockingOverlayVisible && !Busy && !ImageGestureActive &&
                 !(trackHelpVisualActive && trackHelpHitRectValid && trackHelpHitRect.Contains(mouseX, mouseY));
-            if (TrackRoot(track) == track.Key && labelInteractive && draggedTrackKey == null && click &&
+            if (labelInteractive && draggedTrackKey == null && click &&
                 mouseY >= clipY && mouseY < clipEnd &&
-                (grip.Contains(mouseX, mouseY) || !track.ImageGroup && track.TextId == null && labelRect.Contains(mouseX, mouseY)))
+                (grip.Contains(mouseX, mouseY) || !track.ImageGroup && track.TextId == null && labelRect.Contains(mouseX, mouseY)
+                    && (!track.GimmickGroup || mouseX > r.X + 30)))
                 BeginTrackOrder(track);
-            if (track.TextId is { } tid)
+            if (track.GimmickGroup)
+            {
+                if (EButton(expandedGimmickTracks.Contains(track.Target) ? "-" : ">", new(r.X + 5, y + 5, 22, 24), key: "gimmick-expand:" + track.Target))
+                { if (!expandedGimmickTracks.Add(track.Target)) expandedGimmickTracks.Remove(track.Target); layoutRevision = -1; }
+                Text(ImageShortText(track.Label, labelW - 122), r.X + 33, y + 10, 12, white, true, labelW - 122);
+            }
+            else if (track.TextId is { } tid)
             {
                 if (EButton(expandedTextTracks.Contains(tid) ? "-" : ">", new(r.X + 5, y + 5, 22, 24), key: "text-expand:" + tid))
                 { if (!expandedTextTracks.Add(tid)) expandedTextTracks.Remove(tid); layoutRevision = -1; }
@@ -298,15 +310,12 @@ public sealed partial class Viewer
                 { SelectImageObject(track.ImageId!); click = false; }
             }
             else Text(ImageShortText(track.Label, labelW - 96), r.X + 10, y + 10, 12, track.Window ? Color.Hex(0xDAB6FF) : white, true, labelW - 96);
-            if (TrackRoot(track) == track.Key)
-            {
-                for (int n = 0; n < 3; n++) Canvas.Line(grip.X + 4, y + 12 + n * 4, grip.X + 13, y + 12 + n * 4, 1, muted);
-            }
+            for (int n = 0; n < 3; n++) Canvas.Line(grip.X + 4, y + 12 + n * 4, grip.X + 13, y + 12 + n * 4, 1, muted);
             string targetBadge = track.TextId != null ? "TXT" : track.ImageGroup ? "IMG" : track.Window ? "W" + track.Target : track.Target < 0 ? "G" : "P" + track.Target;
             Text(targetBadge, x - 58, y + 11, 11, muted, true, 25);
             if (labelRect.Contains(mouseX, mouseY) && mouseY >= clipY && mouseY < clipEnd)
             {
-                if (!track.ImageGroup && track.TextId == null) hoveredEditTrack = track;
+                if (!track.GimmickGroup && !track.ImageGroup && track.TextId == null) hoveredEditTrack = track;
                 Canvas.Fill(new(labelRect.X, labelRect.Y, 2, labelRect.H), soft);
             }
             if (EButton("+", new(x - 27, y + 5, 21, 24), enabled: !Busy && y + 5 >= clipY && y + 29 <= clipEnd, key: "track-add:" + track.Key))
@@ -324,7 +333,12 @@ public sealed partial class Viewer
             if (step > 0 && step < 1 && pixelsPerBeat * step >= 8)
                 for (double b = Math.Ceiling(beatStart / step) * step; b <= endBeat; b += step)
                     Canvas.Line(BeatX(b), y, BeatX(b), y + 34, 1, Mix(Theme.Grid, Theme.Background, .35f));
-            if (track.TextId is { } textTarget) DrawTextGroupClips(textTarget, y, timelineInteractive);
+            if (track.GimmickGroup)
+            {
+                if (!expandedGimmickTracks.Contains(track.Target) || preferences.ShowExpandedGimmickSummary)
+                    DrawGimmickGroupClips(track.Target, y, timelineInteractive);
+            }
+            else if (track.TextId is { } textTarget) DrawTextGroupClips(textTarget, y, timelineInteractive);
             else if (track.ImageGroup) DrawImageGroupClips(track.ImageId!, y, timelineInteractive);
             else if (track.Window)
             {
@@ -386,7 +400,7 @@ public sealed partial class Viewer
     /// 片段最小宽 9 像素，保证零时长事件也点得到；右端 7 像素内按下才算拉伸，且只有可拉伸的窗口操作才允许。
     /// </summary>
     void DrawEventClip(float y, double beat, double end, string label, bool selected, bool window,
-        VsmDocument.Clip? clip, JsonObject? e, int windowIndex, bool interactive)
+        VsmDocument.Clip? clip, JsonObject? e, int windowIndex, bool interactive, VsmDocument.Clip[]? gimmickGroup = null)
     {
         bool dragging = editDrag != null && (clip != null && editDrag.Clip?.Id == clip.Id || e != null && editDrag.WindowIndex == windowIndex);
         if (dragging)
@@ -415,6 +429,7 @@ public sealed partial class Viewer
         if (bx + width < editorTracksRect.X || bx > editorTracksRect.X + editorTracksRect.W) return;
         var r = new Rect(bx, y + 6, width, 23);
         if (clip != null) clipHits.Add((clip.Id, r));
+        if (gimmickGroup != null) foreach (var member in gimmickGroup.Skip(1)) clipHits.Add((member.Id, r));
         bool batched = clip != null && BatchSelection && selectedClips.Contains(clip.Id);
         selected |= batched;
         var color = window ? Mix(Theme.Accent, Color.Hex(0x7854A8), .55f) : Theme.Accent.Alpha(.58f);
@@ -438,11 +453,21 @@ public sealed partial class Viewer
         {
             SelectImageFromClip(clip);
             // Shift / command 点击在批量选择里增删成员；普通点击只留下这一个。
-            if (clip != null) ClipClicked(clip.Id, (Sdl.SDL_GetModState() & (3 | 0x0CC0)) != 0);
+            if (gimmickGroup != null) SelectGimmickGroup(gimmickGroup, (Sdl.SDL_GetModState() & (3 | 0x0CC0)) != 0);
+            else if (clip != null)
+            {
+                bool additive = (Sdl.SDL_GetModState() & (3 | 0x0CC0)) != 0;
+                if (!additive && preferences.GroupGimmickTracks && BatchSelection
+                    && gimmickGroupsByClip.TryGetValue(clip.Id, out var existingGroup)
+                    && existingGroup.Length == selectedClips.Count && existingGroup.All(c => selectedClips.Contains(c.Id)))
+                    SetClipSelection(clip.Id);
+                else ClipClicked(clip.Id, additive);
+            }
             else SetClipSelection(null);
             selectedWindowEvent = window ? windowIndex : -1; inspectorScroll = 0; selectedNoteTime = null;
+            if (gimmickGroup != null && !selectedClips.Contains(clip!.Id)) { click = false; return; }
             bool resize = width >= 13 && mouseX >= r.X + r.W - 7 && (clip != null || WindowMotionConfig.Text(e!, "op") is "NewWindowDance" or "WindowResize");
-            editDrag = new(clip, e == null ? null : (JsonObject)e.DeepClone(), windowIndex, beat, end, BeatAt(mouseX), resize);
+            editDrag = new(clip, e == null ? null : (JsonObject)e.DeepClone(), windowIndex, beat, end, BeatAt(mouseX), resize, gimmickGroup?.Select(c => c.Id).ToArray());
             transport.SetPlaying(false); click = false;
         }
     }
@@ -473,6 +498,13 @@ public sealed partial class Viewer
         if (Math.Abs(BeatAt(mouseX) - d.MouseBeat) * pixelsPerBeat < 3) return;
         if (d.Clip is { } c)
         {
+            if (d.Resize && d.GroupIds is { Length: > 1 } ids)
+            {
+                var resized = ids.Select(EditorFindClip).OfType<VsmDocument.Clip>()
+                    .Select(item => item with { Duration = VsmDurationAt(item.LastBeat, item.LastBeat + dragDuration) }).ToArray();
+                Edit(L.Get("Resize gimmick group"), () => { foreach (var item in resized) editor.Vsm.Replace(item); });
+                return;
+            }
             // 批量选择里拖动其中一个 = 整组按同一个位移搬家，组内相对间距不变，撤销也只有一步。
             if (!d.Resize && BatchSelection && selectedClips.Contains(c.Id))
             {

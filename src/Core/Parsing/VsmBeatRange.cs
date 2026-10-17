@@ -35,7 +35,7 @@ public sealed record VsmBeatRange(double Start, double? End, double Step, bool P
         if (!double.IsFinite(start) || !double.IsFinite(end ?? start) || !double.IsFinite(step) || step <= 0 || end < start)
             throw new FormatException("Beat range must be finite and ascend with a positive step.");
         double count = Math.Floor(((end ?? start) - start) / step + 1e-7) + 1;
-        if (!double.IsFinite(count) || count > 1_000_000) throw new FormatException("Beat range expands beyond one million events.");
+        if (!double.IsFinite(count) || count > ChartLoadLimits.CountLimit(1_000_000)) throw new FormatException("Beat range expands beyond one million events.");
         return new(start, end, step, parenthesized);
     }
 }

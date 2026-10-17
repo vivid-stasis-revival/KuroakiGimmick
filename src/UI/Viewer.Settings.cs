@@ -78,7 +78,7 @@ public sealed partial class Viewer
             (string Key, string Name)[] entries =
             [
                 ("general", "General"), ("audio", "Audio & Sync"),
-                ("display", "Display"), ("vsui", "VS UI"),
+                ("display", "Display"), ("editor", "Editor"), ("vsui", "VS UI"),
                 ("performance", "Performance"), ("export", "Export")
             ];
             for (int i = 0; i < entries.Length; i++)
@@ -117,6 +117,7 @@ public sealed partial class Viewer
                 {
                     case "audio": DrawSettingsAudio(focus); break;
                     case "display": DrawSettingsDisplay(new(x, y, w, 135)); DrawSettingsWorkflow(new(x, y + 148, w, 135)); break;
+                    case "editor": DrawSettingsEditor(focus); break;
                     case "vsui": DrawSettingsVsUi(focus); break;
                     case "performance": DrawSettingsPerformance(focus, compact: focus.H < 430); break;
                     case "export": DrawSettingsExport(focus); break;
@@ -130,6 +131,9 @@ public sealed partial class Viewer
                 var p = Current.Project;
                 preferences.UiAnimations = true;
                 preferences.ModalValueEditor = false;
+                preferences.GroupGimmickTracks = true; ResetGimmickTracks(); layoutRevision = -1;
+                preferences.ShowExpandedGimmickSummary = false;
+                preferences.UnlimitedChartSize = false;
                 preferences.AlwaysFollow = false;
                 preferences.OverwriteExports = false;
                 preferences.PutImageGimmickIntoAssetsFolder = false;

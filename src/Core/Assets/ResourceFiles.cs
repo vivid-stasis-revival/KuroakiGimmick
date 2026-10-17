@@ -53,7 +53,7 @@ public static class ResourceFiles
     public static string ReadText(string path, long limit = ManifestLimit)
     {
         long length = new FileInfo(path).Length;
-        if (length < 1 || length > limit)
+        if (length < 1 || ChartLoadLimits.Exceeds(length, limit))
         {
             throw new InvalidDataException($"Resource must contain 1..{limit} bytes: {path}");
         }

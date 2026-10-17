@@ -255,7 +255,7 @@ public sealed partial class Viewer
         panActive = false;
         if (panMoved || Busy || editor == null) return;
         if (!editorTracksRect.Contains(x, y)) return;
-        var hit = clipHits.FirstOrDefault(h => h.Rect.Contains(x, y));
+        var hit = clipHits.LastOrDefault(h => h.Rect.Contains(x, y));
         var row = rowHits.FirstOrDefault(h => h.Rect.Contains(x, y));
         if (hit.Id == Guid.Empty && row.Track == null) return;
         CloseInline();
@@ -263,7 +263,12 @@ public sealed partial class Viewer
         menuTrack = row.Track;
         menuBeat = Snap(BeatAt(x));
         // 右键一个不在选择集里的片段：先把它选上再弹菜单，菜单作用的对象和用户看到的高亮始终一致。
-        if (menuClip is Guid id && !selectedClips.Contains(id)) { SetClipSelection(id); inspectorScroll = 0; }
+        if (menuClip is Guid id && !selectedClips.Contains(id))
+        {
+            if (row.Track?.GimmickGroup == true && gimmickGroupsByClip.TryGetValue(id, out var group)) SelectGimmickGroup(group, false);
+            else SetClipSelection(id);
+            inspectorScroll = 0;
+        }
         // 真正的菜单矩形要等这一帧画出来才知道（贴边时会翻转），先按未翻转的位置占一个位，
         // 免得菜单还没画过就收到点击时拿旧矩形做命中。
         menuRect = new(x, y, 232, 39);
@@ -426,6 +431,12 @@ public sealed partial class Viewer
             if (p >= EditableProxyCount) throw new FormatException(L.Get("Proxy exceeds !proxies."));
             EditClips(c => c with { Proxy = p }, L.Get("Set proxy"));
         });
+        if (!sameMod)
+            foreach (var clip in picked)
+            {
+                Field(clip.Name + " / " + L.Get("From"), clip.From, v => Edit(L.Get("Set from"), () => editor.Vsm.Replace(clip with { From = v })));
+                Field(clip.Name + " / " + L.Get("To"), clip.To, v => Edit(L.Get("Set to"), () => editor.Vsm.Replace(clip with { To = v })));
+            }
         Text(sameMod ? L.Get("Beat moves the group; spacing is kept.") : L.Get("Mixed mods: from / to stay per clip."),
             r.X, r.Y + r.H - 22, 10, soft, true, r.W);
         inspectorScroll = Math.Clamp(inspectorScroll, 0, Math.Max(0, fieldCount - Math.Max(1, (int)((r.H - 88) / 31))));

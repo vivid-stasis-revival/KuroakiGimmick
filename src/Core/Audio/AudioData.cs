@@ -13,8 +13,8 @@ public sealed record AudioData(float[] Samples, int Rate, int Channels)
     public static int ValidateSampleCount(long count)
     {
         if (count < 0) throw new InvalidDataException("Invalid decoded audio sample count.");
-        if (count > MaxDecodedBytes / sizeof(float)) throw new InvalidDataException("Decoded audio exceeds 1024 MB.");
-        return (int)count;
+        if (ChartLoadLimits.Exceeds(count, MaxDecodedBytes / sizeof(float))) throw new InvalidDataException("Decoded audio exceeds 1024 MB.");
+        return checked((int)count);
     }
     /// <summary>时长由采样数推导，单位秒；不读设备状态，也不随窗口刷新率变化。</summary>
     public double Duration => Samples.Length / (double)(Rate * Channels);
@@ -77,7 +77,7 @@ public sealed record AudioData(float[] Samples, int Rate, int Channels)
         int read;
         while ((read = p.StandardOutput.BaseStream.Read(block)) > 0)
         {
-            if (buffer.Length + read > MaxDecodedBytes)
+            if (ChartLoadLimits.Exceeds(buffer.Length + read, MaxDecodedBytes))
             {
                 p.Kill();
                 throw new InvalidDataException("Decoded audio exceeds 1024 MB.");

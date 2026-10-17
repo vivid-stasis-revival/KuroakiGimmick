@@ -31,7 +31,7 @@ public sealed class VspDocument
         if (session.Project.ImagePathsRelativeToVsp && session.Images.Path != null) root = Path.GetDirectoryName(session.Images.Path)!;
         if (session.Project.Images != null && !File.Exists(source))
             throw new FileNotFoundException("Attached VSP is missing; refusing to replace it with an empty document.", source);
-        if (File.Exists(source) && new FileInfo(source).Length > 16 * 1024 * 1024) throw new InvalidDataException("VSP exceeds 16 MiB.");
+        if (File.Exists(source) && ChartLoadLimits.Exceeds(new FileInfo(source).Length, 16 * 1024 * 1024)) throw new InvalidDataException("VSP exceeds 16 MiB.");
         return new(File.Exists(source) ? File.ReadAllText(source) : "", root, source);
     }
     /// <summary>撤销/重做时整份文本回滚到旧快照；staged 里的暂存图片不清除，因为回滚后还可能再被重做引用。</summary>
@@ -75,7 +75,7 @@ public sealed class VspDocument
     /// <summary>插入一条新的图片声明：新建独占图层 + 在 #Image 段追加一行，已有文本只做插入不做改写。</summary>
     public void Add(string id, ImageImportBatch.Image image)
     {
-        if (Ids().Count >= 4096) throw new InvalidDataException("VSP image limit is 4096.");
+        if (ChartLoadLimits.Exceeds((long)Ids().Count + 1, 4096)) throw new InvalidDataException("VSP image limit is 4096.");
         if (Ids().Contains(id)) throw new InvalidDataException("Image ID already exists: " + id);
         string text = Text;
         // 每次导入都新分配一个图层。绝不能按名字复用作者已有的图层——同名不同优先级会悄悄改变别人图片的叠放次序。

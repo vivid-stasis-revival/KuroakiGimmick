@@ -160,7 +160,7 @@ public sealed class GameFxProfile
         {
             try
             {
-                if (new FileInfo(result.Path).Length > 1024 * 1024)
+                if (ChartLoadLimits.Exceeds(new FileInfo(result.Path).Length, 1024 * 1024))
                 {
                     throw new InvalidDataException("FX profile exceeds 1 MiB.");
                 }
@@ -244,10 +244,10 @@ public sealed class GameFxProfile
                     string local = System.IO.Path.GetFullPath(sampler, System.IO.Path.GetDirectoryName(origin)!);
                     string bundled = System.IO.Path.Combine(Paths.Assets, "GameFX", sampler + ".png");
                     layer.TexturePath = File.Exists(local) ? local : File.Exists(bundled) ? bundled : throw new FileNotFoundException("Missing film texture: " + sampler);
-                    if (new FileInfo(layer.TexturePath).Length > 64 * 1024 * 1024) throw new InvalidDataException("Film texture exceeds 64 MiB.");
+                    if (ChartLoadLimits.Exceeds(new FileInfo(layer.TexturePath).Length, 64 * 1024 * 1024)) throw new InvalidDataException("Film texture exceeds 64 MiB.");
                     using var stream = File.OpenRead(layer.TexturePath);
                     var info = ImageInfo.FromStream(stream) ?? throw new InvalidDataException("Invalid film texture.");
-                    if (info.Width < 1 || info.Height < 1 || (long)info.Width * info.Height * 4 > 64 * 1024 * 1024)
+                    if (info.Width < 1 || info.Height < 1 || ChartLoadLimits.Exceeds(checked((long)info.Width * info.Height * 4), 64 * 1024 * 1024))
                         throw new InvalidDataException("Film texture decoded size exceeds limit.");
                 }
                 else if (layer.Filter is "_filter_heathaze" or "_filter_underwater")
@@ -291,13 +291,13 @@ public sealed class GameFxProfile
                     string local = System.IO.Path.GetFullPath(sampler, System.IO.Path.GetDirectoryName(origin)!);
                     string bundled = System.IO.Path.Combine(Paths.Assets, "GameFX", sampler + ".png");
                     layer.TexturePath = File.Exists(local) ? local : File.Exists(bundled) ? bundled : throw new FileNotFoundException("Missing FX noise texture: " + sampler);
-                    if (new FileInfo(layer.TexturePath).Length > 64 * 1024 * 1024)
+                    if (ChartLoadLimits.Exceeds(new FileInfo(layer.TexturePath).Length, 64 * 1024 * 1024))
                     {
                         throw new InvalidDataException("FX texture exceeds 64 MiB.");
                     }
                     using var f = File.OpenRead(layer.TexturePath);
                     var info = ImageInfo.FromStream(f) ?? throw new InvalidDataException("Invalid FX texture.");
-                    if (info.Width is < 1 or > 16384 || info.Height is < 1 or > 16384 || (long) info.Width * info.Height * 4 > 64 * 1024 * 1024)
+                    if (info.Width < 1 || info.Height < 1 || ChartLoadLimits.Exceeds(info.Width, 16384) || ChartLoadLimits.Exceeds(info.Height, 16384) || ChartLoadLimits.Exceeds(checked((long)info.Width * info.Height * 4), 64 * 1024 * 1024))
                     {
                         throw new InvalidDataException("FX texture decoded size exceeds limit.");
                     }
@@ -397,7 +397,7 @@ public sealed class GameFxProfile
             {
                 try
                 {
-                    if (new FileInfo(definitions).Length > 1024 * 1024)
+                    if (ChartLoadLimits.Exceeds(new FileInfo(definitions).Length, 1024 * 1024))
                     {
                         throw new InvalidDataException("FX definitions exceed 1 MiB.");
                     }

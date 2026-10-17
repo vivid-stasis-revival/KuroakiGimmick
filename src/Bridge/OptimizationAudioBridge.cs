@@ -17,6 +17,8 @@ internal static unsafe partial class OptimizationAudioBridge
     }
     [LibraryImport(Library, EntryPoint = "kg_audio_decode")]
     private static partial int NativeDecode(byte* path, nuint pathLength, byte* cache, nuint cacheLength, NativeAudio* output);
+    [LibraryImport(Library, EntryPoint = "kg_audio_decode_unlimited")]
+    private static partial int NativeDecodeUnlimited(byte* path, nuint pathLength, byte* cache, nuint cacheLength, NativeAudio* output);
     [LibraryImport(Library, EntryPoint = "kg_audio_free")]
     private static partial void NativeFree(float* samples, nuint length);
 
@@ -33,8 +35,9 @@ internal static unsafe partial class OptimizationAudioBridge
             fixed (byte* pathPointer = filename)
             fixed (byte* cachePointer = cachePath)
             {
-                int status = NativeDecode(pathPointer, (nuint)filename.Length, cachePointer,
-                    (nuint)cachePath.Length, &native);
+                int status = ChartLoadLimits.Unlimited
+                    ? NativeDecodeUnlimited(pathPointer, (nuint)filename.Length, cachePointer, (nuint)cachePath.Length, &native)
+                    : NativeDecode(pathPointer, (nuint)filename.Length, cachePointer, (nuint)cachePath.Length, &native);
                 if (status != 0) throw new InvalidDataException($"Rust audio decode failed ({status}).");
             }
             try

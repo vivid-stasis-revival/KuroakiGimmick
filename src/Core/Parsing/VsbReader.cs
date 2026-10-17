@@ -17,7 +17,7 @@ public static class VsbReader
 
     internal static Chart LoadOriginal(string path, string? definitionPath = null, string profile = "auto")
     {
-        if (new FileInfo(path).Length > 128 * 1024 * 1024)
+        if (ChartLoadLimits.Exceeds(new FileInfo(path).Length, 128 * 1024 * 1024))
         {
             throw new InvalidDataException("VSB exceeds the 128 MiB limit.");
         }
@@ -208,7 +208,7 @@ public static class VsbReader
                         {
                             throw Bad(r, m);
                         }
-                        if (c.Mods.Count + c.PerFrame.Count > 1_000_000)
+                        if (ChartLoadLimits.Exceeds((long)c.Mods.Count + c.PerFrame.Count, 1_000_000))
                         {
                             throw new InvalidDataException("Too many gimmick events.");
                         }

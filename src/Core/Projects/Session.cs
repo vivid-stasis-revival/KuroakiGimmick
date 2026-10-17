@@ -74,6 +74,7 @@ public sealed partial class Session
         IReadOnlyDictionary<string, string>? editedTexts = null)
     {
         bool loadProfile = Environment.GetEnvironmentVariable("KG_LOAD_PROFILE") == "1";
+        using var loadLimits = ChartLoadLimits.Capture();
         long loadStart = Stopwatch.GetTimestamp(), lastMark = loadStart;
         void Profile(string section)
         {

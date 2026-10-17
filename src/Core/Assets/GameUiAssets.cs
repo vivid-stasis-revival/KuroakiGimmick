@@ -98,7 +98,7 @@ public sealed class GameUiAssets
                 }
                 return result;
             }
-            if (new FileInfo(result.Manifest).Length > 16 * 1024 * 1024)
+            if (ChartLoadLimits.Exceeds(new FileInfo(result.Manifest).Length, 16 * 1024 * 1024))
             {
                 throw new InvalidDataException("UI manifest exceeds 16 MiB.");
             }
@@ -147,14 +147,14 @@ public sealed class GameUiAssets
                 {
                     throw new InvalidDataException("UI asset must stay inside its pack.");
                 }
-                if (new FileInfo(path).Length > 64 * 1024 * 1024)
+                if (ChartLoadLimits.Exceeds(new FileInfo(path).Length, 64 * 1024 * 1024))
                 {
                     throw new InvalidDataException("UI image exceeds 64 MiB.");
                 }
                 using var stream = System.IO.File.OpenRead(path);
                 var info = ImageInfo.FromStream(stream) ?? throw new InvalidDataException("Invalid UI image: " + file);
-                bytes += (long) info.Width * info.Height * 4;
-                if (info.Width is < 1 or > 8192 || info.Height is < 1 or > 8192 || bytes > 192 * 1024 * 1024)
+                bytes = checked(bytes + (long)info.Width * info.Height * 4);
+                if (info.Width < 1 || info.Height < 1 || ChartLoadLimits.Exceeds(info.Width, 8192) || ChartLoadLimits.Exceeds(info.Height, 8192) || ChartLoadLimits.Exceeds(bytes, 192 * 1024 * 1024))
                 {
                     throw new InvalidDataException("UI decoded texture budget exceeded.");
                 }

@@ -60,7 +60,7 @@ public sealed partial class Viewer
         if (CustomImages.TryMod(name, out _, out var imageId) && declaredImageIds.Contains(imageId))
         { FocusImageTrack(imageId, beat); transport.SetPlaying(false); transport.Seek(Current.Timeline.Bpm.Time(beat)); return; }
         layoutRevision = -1; RebuildEditTracks();
-        int index = editTracks.FindIndex(t => !t.Window && t.Property == name && t.Target == proxy);
+        int index = editTracks.FindIndex(t => !t.Window && t.Target == proxy && (t.Property == name || t.GimmickGroup));
         int rows = Math.Max(1, (int)(editorTracksRect.H / 35));
         if (index >= 0 && (index < trackScroll || index >= trackScroll + rows)) trackScroll = Math.Max(0, index - rows / 2);
         motion.Snap("timeline-track-scroll", trackScroll);
@@ -205,6 +205,11 @@ public sealed partial class Viewer
     bool HandleWorkflowInput(Sdl.Event e)
     {
         if (!WorkflowVisible || modalActive) return false;
+        if (workflow == "source") return HandleSourceInput(e);
+#if !KG_MOBILE && !KG_SWITCH
+        if (workflow == "chart-size-warning" && e.Type == 0x403)
+        { chartSizeWarningScroll -= (int)Math.Round(e.WheelY * 3); return true; }
+#endif
         if (valueAlpha > .001f) { click = held = false; return true; }
         if (inlineField == AddSearchKey && HandleInlineInput(e)) return true;
         if (e.Type is 0x400 or 0x401 or 0x402)
@@ -249,9 +254,17 @@ public sealed partial class Viewer
     /// </summary>
     void DrawWorkflow(int w, int h)
     {
-        if (!WorkflowVisible) return;
+        if (!WorkflowVisible)
+        {
+            sourceOwner = null; sourceVsm = sourceVsp = null;
+            return;
+        }
         using var fade = Canvas.Opacity(workflowAlpha);
         Canvas.Clip(null); Canvas.Fill(new(0, 0, w, h), Color.Hex(0, .88f));
+        if (displayedWorkflow == "source") { DrawSourceEditor(w, h); return; }
+#if !KG_MOBILE && !KG_SWITCH
+        if (displayedWorkflow == "chart-size-warning") { DrawChartSizeWarning(w, h); return; }
+#endif
         float width = Math.Min(w - 48, displayedWorkflow == "add" ? 970 : 820), height = Math.Min(h - 48, 690);
         var box = new Rect((w - width) / 2, (h - height) / 2 + (1 - workflowAlpha) * 10, width, height);
         Canvas.Fill(box, panel); Canvas.Border(box, soft);

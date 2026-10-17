@@ -27,7 +27,7 @@ fn encode_chart(c: &Chart, include_notes: bool) -> Result<Vec<u8>, String> {
     // representation is 33 bytes (24 fixed + 4 extra count + 1 flag + 4 count).
     let min_note_bytes = c.notes.len().checked_mul(33)
         .ok_or("Rust parse note packet size overflow")?;
-    if min_note_bytes > MAX_PACKET { return Err("Rust parse output exceeds 512 MiB".to_string()); }
+    if !crate::load_limits::unlimited() && min_note_bytes > MAX_PACKET { return Err("Rust parse output exceeds 512 MiB".to_string()); }
     let reserve = c.notes.len().saturating_mul(48).saturating_add(4096).min(MAX_PACKET);
     let mut b = Vec::with_capacity(reserve);
     b.extend_from_slice(b"KGS2");
@@ -61,7 +61,7 @@ fn encode_chart(c: &Chart, include_notes: bool) -> Result<Vec<u8>, String> {
             u8_(&mut b, if val.is_some(){1}else{0});
             if let Some(value)=val {text(&mut b,value)?;}
         }
-        if b.len() > MAX_PACKET { return Err("Rust parse output exceeds 512 MiB".to_string()); }
+        if !crate::load_limits::unlimited() && b.len() > MAX_PACKET { return Err("Rust parse output exceeds 512 MiB".to_string()); }
     }}
     u32_(&mut b,c.mods.len())?;
     for m in &c.mods {
@@ -80,7 +80,7 @@ fn encode_chart(c: &Chart, include_notes: bool) -> Result<Vec<u8>, String> {
         u32_(&mut b, *line)?;
         text(&mut b, message)?;
     }
-    if b.len()>MAX_PACKET {return Err("Rust parse output exceeds 512 MiB".to_string());}
+    if !crate::load_limits::unlimited() && b.len()>MAX_PACKET {return Err("Rust parse output exceeds 512 MiB".to_string());}
     Ok(b)
 }
 
@@ -96,7 +96,7 @@ unsafe fn run_packet<F>(data: *const u8, len: usize, output: *mut *mut u8, size:
 where F: FnOnce(&[u8])->Result<Vec<u8>,String> {
     if output.is_null() || size.is_null() {return -1;}
     *output=std::ptr::null_mut();*size=0;
-    if len>limit || len>isize::MAX as usize {return -2;}
+    if (!crate::load_limits::unlimited() && len>limit) || len>isize::MAX as usize {return -2;}
     if len>0 && data.is_null() {return -1;}
     let outcome=catch_unwind(AssertUnwindSafe(|| {
         let bytes=if len==0 {&[][..]} else {unsafe{std::slice::from_raw_parts(data,len)}};
@@ -168,7 +168,7 @@ pub unsafe extern "C" fn kg_core_build_bpm(changes:*const BpmChange,count:usize,
             else {segments.push((change.time,beat,change.bpm));}
         }}
         let packet_bytes=segments.len().checked_mul(24).and_then(|n|n.checked_add(8))
-            .filter(|n|*n<=MAX_PACKET).ok_or("Rust BPM output exceeds 512 MiB")?;
+            .filter(|n|crate::load_limits::unlimited() || *n<=MAX_PACKET).ok_or("Rust BPM output exceeds 512 MiB")?;
         let mut b=Vec::with_capacity(packet_bytes);
         b.extend_from_slice(b"KGB1");u32_(&mut b,segments.len())?;
         for (t,beat,bpm) in segments {f64_(&mut b,t);f64_(&mut b,beat);f64_(&mut b,bpm);}
@@ -183,7 +183,7 @@ pub unsafe extern "C" fn kg_core_build_bpm(changes:*const BpmChange,count:usize,
 
 #[no_mangle]
 pub unsafe extern "C" fn kg_core_free_packet(ptr:*mut u8,len:usize){
-    if !ptr.is_null() && len>0 && len<=MAX_PACKET {
+    if !ptr.is_null() && len>0 && len<=isize::MAX as usize {
         let slice=std::ptr::slice_from_raw_parts_mut(ptr,len);
         drop(Box::from_raw(slice));
     }
@@ -273,4 +273,22 @@ mod tests {
         assert_eq!(u32::from_le_bytes(s[4..8].try_into().unwrap()),3);
         unsafe{kg_core_free_packet(ptr,len)};
     }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn kg_core_parse_vsc_unlimited(data:*const u8,len:usize,output:*mut *mut u8,size:*mut usize)->i32 {
+    crate::load_limits::with_unlimited(|| kg_core_parse_vsc(data,len,output,size))
+}
+#[no_mangle]
+pub unsafe extern "C" fn kg_core_parse_vsb_unlimited(data:*const u8,len:usize,output:*mut *mut u8,size:*mut usize)->i32 {
+    crate::load_limits::with_unlimited(|| kg_core_parse_vsb(data,len,output,size))
+}
+#[no_mangle]
+pub unsafe extern "C" fn kg_core_parse_vsm_unlimited(data:*const u8,len:usize,output:*mut *mut u8,size:*mut usize)->i32 {
+    crate::load_limits::with_unlimited(|| kg_core_parse_vsm(data,len,output,size))
+}
+#[no_mangle]
+pub unsafe extern "C" fn kg_core_build_bpm_unlimited(changes:*const BpmChange,count:usize,base:f64,
+    offset_ms:f64,fixed:f64,has_fixed:u32,output:*mut *mut u8,size:*mut usize)->i32 {
+    crate::load_limits::with_unlimited(|| kg_core_build_bpm(changes,count,base,offset_ms,fixed,has_fixed,output,size))
 }

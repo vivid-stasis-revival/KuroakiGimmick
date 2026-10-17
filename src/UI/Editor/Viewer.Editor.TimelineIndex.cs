@@ -63,6 +63,7 @@ public sealed partial class Viewer
             timelineTextIndices[id] = new(groups);
             timelineTextAnimations[id] = groups.Where(g => g.Value.Clip.Duration > 0).Select(g => g.Value.Clip).ToArray();
         }
+        BuildGimmickGroups();
         timelineIndexOwner = editor; timelineIndexRevision = editor.VsmRevision; timelineIndexTiming = Current.NoteIndex;
     }
 

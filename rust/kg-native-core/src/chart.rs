@@ -72,7 +72,7 @@ fn check_note(kind: u8, lane: u8, time: f64, end: f64) -> Result<()> {
 }
 fn read_limited(path: &Path, limit: u64) -> Result<Vec<u8>> {
     let size = fs::metadata(path).map_err(|e| format!("{}: {e}",path.display()))?.len();
-    if size > limit { return Err(format!("file exceeds {} MiB limit",limit / (1024 * 1024))); }
+    if !crate::load_limits::unlimited() && size > limit { return Err(format!("file exceeds {} MiB limit",limit / (1024 * 1024))); }
     fs::read(path).map_err(|e| format!("{}: {e}",path.display()))
 }
 pub fn load(path: &Path) -> Result<Chart> {
@@ -256,7 +256,7 @@ pub fn parse_vsb(bytes:&[u8],title:String)->Result<Chart>{
                             236=> {let start=r.f32()?;let end=r.f32()?;let function=r.cstring()?;c.per_frame.push(PerFrame{start,end,function});},
                             x=>return Err(r.unexpected(x)),
                         }
-                        if c.mods.len()+c.per_frame.len()>MAX_MODS{return Err("too many mod events".into());}
+                        if !crate::load_limits::unlimited() && c.mods.len()+c.per_frame.len()>MAX_MODS{return Err("too many mod events".into());}
                     },
                     x=>return Err(r.unexpected(x)),
                 }
@@ -284,8 +284,12 @@ fn beat_range(s:&str)->Result<Vec<f64>>{
         (number(p[0])?,if p.len()>=2{number(p[1])?}else{number(p[0])?},if p.len()==3{number(p[2])?}else{1.0})
     };
     if step<=0.0 || b<a {return Err("invalid beat range direction/step".into());}
-    let count=(((b-a)/step+1e-7).floor()+1.0) as usize;
-    if count>MAX_MODS {return Err("beat range expands above one million events".into());}
+    let amount=((b-a)/step+1e-7).floor()+1.0;
+    if !amount.is_finite() || amount > (isize::MAX as usize / std::mem::size_of::<f64>()) as f64 {
+        return Err("beat range cannot be represented in memory".into());
+    }
+    let count=amount as usize;
+    if !crate::load_limits::unlimited() && count>MAX_MODS {return Err("beat range expands above one million events".into());}
     Ok((0..count).map(|i|a+(i as f64)*step).collect())
 }
 fn normalize_ease(s:&str)->String {
@@ -343,7 +347,7 @@ pub fn parse_vsm(text:&str,c:&mut Chart)->Result<()> {
             }}
             c.warnings.push(format!("VSM line {}: malformed mpf row",i+1));
         }else{match parse(){
-            Ok(mut mods)=>{ if c.mods.len()+mods.len()>MAX_MODS{return Err("too many mods".into());}
+            Ok(mut mods)=>{ if !crate::load_limits::unlimited() && c.mods.len()+mods.len()>MAX_MODS{return Err("too many mods".into());}
                 for mut event in mods.drain(..) {event.order=c.mods.len();c.mods.push(event);}
             },
             Err(e)=>c.warnings.push(format!("VSM line {}: {e}",i+1)),

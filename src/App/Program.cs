@@ -37,6 +37,7 @@ internal static class Program
         // 这一串是所有无人值守模式（自测、检查、导出、截图）。cli 为真时失败只写 stderr，不弹消息框卡住脚本。
         bool cli = args.Any(a => a is "--bake-mobile-shaders" or "--bake-switch-shaders" or "--inspect" or "--render" or "--snapshot" or "--card" or "--smoke-ui" or "--smoke-touch-ui" or "--smoke-workspace-memory" or "--smoke-startup" or "--smoke-mac-menu" or "--smoke-windows-menu" or "--smoke-proxy-guides" or "--proxy-pick-test" or "--reference-layout-test" or "--gimmick-definition-test" or "--smoke-text-ui" or "--smoke-i18n" or "--rust-engine-test" or "--rust-timeline-test" or "--rust-bridge-test" or "--rust-audio-test");
         string startupLanguage = UiLanguage.SystemLanguage;
+        cli |= args.Contains("--chart-size-test") || args.Contains("--smoke-size-warning");
         try
         {
             if (args.Length >= 3 && args[0] == "--bake-mobile-shaders")
@@ -67,6 +68,7 @@ internal static class Program
                 return 0;
             }
             if (args.Contains("--proxy-pick-test")) return ProxyPickingChecks.Run();
+            if (args.Contains("--chart-size-test")) return ChartSizeChecks.Run();
             if (args.Contains("--gimmick-definition-test")) return GimmickDefinitionChecks.Run();
             if (args.Contains("--reference-layout-test")) return ReferenceMarkdownChecks.Run();
             if (args.Contains("--rust-audio-test"))
@@ -162,6 +164,15 @@ internal static class Program
 #endif
             Console.Error.WriteLine("Build: " + Paths.BuildRevision);
             Console.Error.WriteLine("GPU: " + host.Device);
+#if !KG_MOBILE && !KG_SWITCH
+            if (options.ContainsKey("smoke-size-warning"))
+            {
+                bool shown = NativeRiskMessageBox.TryShow(host.Window,
+                    ChartSizeWarningText.Get(UiLanguage.Resolve(options.GetValueOrDefault("language")) == UiLanguage.Chinese), out bool accepted);
+                Console.WriteLine($"Native size warning: shown={shown}, confirmed={accepted}; settings unchanged.");
+                return shown ? 0 : 1;
+            }
+#endif
             if (options.ContainsKey("render"))
             {
                 using var canvas = new Canvas(host.Gpu);
@@ -404,6 +415,7 @@ internal static class Program
             "smoke-workspace-memory", "smoke-startup",
             "smoke-mac-menu",
             "smoke-windows-menu",
+            "smoke-size-warning",
             "smoke-text-ui",
             "smoke-proxy-guides",
             "smoke-i18n",

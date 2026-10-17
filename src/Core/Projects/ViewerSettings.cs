@@ -35,6 +35,9 @@ public sealed class ViewerSettings
     /// true = 回到传统的全屏输入框模态。多行文本和超长值无论这里怎么设都仍然走模态，单行字段放不下。
     /// </summary>
     public bool ModalValueEditor { get; set; }
+    public bool GroupGimmickTracks { get; set; } = true;
+    public bool ShowExpandedGimmickSummary { get; set; }
+    public bool UnlimitedChartSize { get; set; }
     /// <summary>
     /// 播放中手动平移时间轴时 FOLLOW 怎么办：false（默认）= 自动关闭，把视图让给你；
     /// true = 始终 follow，平移只是暂时的，松手后仍然滑回播放头。缩放和跳转都不算手动平移。

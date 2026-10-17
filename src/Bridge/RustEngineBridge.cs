@@ -29,8 +29,17 @@ internal static unsafe partial class RustEngineBridge
     private static partial int ParseVsb(byte* data, nuint length, byte** output, nuint* size);
     [LibraryImport(Library, EntryPoint = "kg_core_parse_vsm")]
     private static partial int ParseVsm(byte* data, nuint length, byte** output, nuint* size);
+    [LibraryImport(Library, EntryPoint = "kg_core_parse_vsc_unlimited")]
+    private static partial int ParseVscUnlimited(byte* data, nuint length, byte** output, nuint* size);
+    [LibraryImport(Library, EntryPoint = "kg_core_parse_vsb_unlimited")]
+    private static partial int ParseVsbUnlimited(byte* data, nuint length, byte** output, nuint* size);
+    [LibraryImport(Library, EntryPoint = "kg_core_parse_vsm_unlimited")]
+    private static partial int ParseVsmUnlimited(byte* data, nuint length, byte** output, nuint* size);
     [LibraryImport(Library, EntryPoint = "kg_core_build_bpm")]
     private static partial int BuildBpm(BpmChange* changes, nuint count, double baseBpm,
+        double offsetMs, double fixedBpm, uint hasFixed, byte** output, nuint* size);
+    [LibraryImport(Library, EntryPoint = "kg_core_build_bpm_unlimited")]
+    private static partial int BuildBpmUnlimited(BpmChange* changes, nuint count, double baseBpm,
         double offsetMs, double fixedBpm, uint hasFixed, byte** output, nuint* size);
     [LibraryImport(Library, EntryPoint = "kg_core_free_packet")]
     private static partial void FreePacket(byte* packet, nuint size);
@@ -43,7 +52,7 @@ internal static unsafe partial class RustEngineBridge
     {
         try
         {
-            if (length > MaxPacketBytes || length > int.MaxValue)
+            if (length > (nuint)Array.MaxLength || ChartLoadLimits.Exceeds((long)length, MaxPacketBytes))
                 throw new InvalidDataException("RustBridge packet length exceeds budget.");
             if (length > 0 && packet == null)
                 throw new InvalidDataException("RustBridge returned a null packet.");
@@ -62,9 +71,9 @@ internal static unsafe partial class RustEngineBridge
             byte* output = null; nuint length = 0;
             int rc = kind switch
             {
-                0 => ParseVsc(data,(nuint)input.Length,&output,&length),
-                1 => ParseVsb(data,(nuint)input.Length,&output,&length),
-                2 => ParseVsm(data,(nuint)input.Length,&output,&length),
+                0 => ChartLoadLimits.Unlimited ? ParseVscUnlimited(data,(nuint)input.Length,&output,&length) : ParseVsc(data,(nuint)input.Length,&output,&length),
+                1 => ChartLoadLimits.Unlimited ? ParseVsbUnlimited(data,(nuint)input.Length,&output,&length) : ParseVsb(data,(nuint)input.Length,&output,&length),
+                2 => ChartLoadLimits.Unlimited ? ParseVsmUnlimited(data,(nuint)input.Length,&output,&length) : ParseVsm(data,(nuint)input.Length,&output,&length),
                 _ => throw new ArgumentOutOfRangeException(nameof(kind))
             };
             return Receive(rc, output, length);
@@ -82,9 +91,9 @@ internal static unsafe partial class RustEngineBridge
     {
         using var stream = File.OpenRead(path);
         long length = stream.Length;
-        if (length > MaxChartBytes)
+        if (ChartLoadLimits.Exceeds(length, MaxChartBytes))
             throw new InvalidDataException("Chart exceeds the 128 MiB limit.");
-        var bytes = new byte[(int)length];
+        var bytes = new byte[checked((int)length)];
         stream.ReadExactly(bytes);
         return bytes;
     }
@@ -93,6 +102,7 @@ internal static unsafe partial class RustEngineBridge
     {
         result = null;
         if (!Enabled) return false;
+        if (ChartLoadLimits.Unlimited && new FileInfo(path).Length > Array.MaxLength) return false; // Streaming managed parser.
         try
         {
             var timer = Stopwatch.StartNew();
@@ -119,6 +129,7 @@ internal static unsafe partial class RustEngineBridge
     {
         result=null;
         if (!Enabled) return false;
+        if (ChartLoadLimits.Unlimited && new FileInfo(path).Length > Array.MaxLength) return false;
         try
         {
             var timer=Stopwatch.StartNew();
@@ -259,7 +270,7 @@ internal static unsafe partial class RustEngineBridge
             throw new InvalidDataException("RustBridge chart wire version mismatch.");
         var chart = new Chart { Title=title, VscDialect=reader.ReadByte()!=0 ? VscDialect.Csm340 : VscDialect.Legacy,
             ProxyCountDeclared=reader.ReadByte()!=0, Proxies=reader.ReadByte(), ObjectName=ReadText(reader) };
-        int meta=ReadCount(reader,100_000);
+        int meta=ReadCount(reader,ChartLoadLimits.CountLimit(100_000));
         for(int i=0;i<meta;i++) chart.Metadata[ReadText(reader)] = ReadText(reader);
         // No arbitrary note-count cap: validate against packet bytes instead.
         // Each encoded note requires at least 33 bytes (time/type/lane/end,
@@ -281,7 +292,7 @@ internal static unsafe partial class RustEngineBridge
                     _=>throw new InvalidDataException("Invalid Rust extra type.")};
             }
             bool hasModExtra=reader.ReadByte()!=0;
-            int mcount=ReadCount(reader,100_000);
+            int mcount=ReadCount(reader,ChartLoadLimits.CountLimit(100_000));
             Dictionary<string,string?>? modExtra=hasModExtra?new Dictionary<string,string?>(StringComparer.Ordinal):null;
             if(!hasModExtra && mcount>0) throw new InvalidDataException("Invalid Rust modExtra presence flag.");
             for(int m=0;m<mcount;m++)
@@ -290,19 +301,19 @@ internal static unsafe partial class RustEngineBridge
             }
             chart.Notes.Add(new(time,kind,lane,end,extras ?? Note.EmptyExtra,modExtra));
         }
-        int events=ReadCount(reader,(int)MaxEvents);
+        int events=ReadCount(reader,ChartLoadLimits.CountLimit((int)MaxEvents));
         for(int i=0;i<events;i++)
         {
             double beat=reader.ReadDouble(), duration=reader.ReadDouble(), from=reader.ReadDouble(), to=reader.ReadDouble();
-            int proxy=reader.ReadInt32(), order=ReadCount(reader,(int)MaxEvents), line=ReadCount(reader,int.MaxValue);
+            int proxy=reader.ReadInt32(), order=ReadCount(reader,ChartLoadLimits.CountLimit((int)MaxEvents)), line=ReadCount(reader,int.MaxValue);
             string ease=ReadText(reader), name=ReadText(reader);
             chart.Mods.Add(new(beat,duration,ease,from,to,name,proxy,order,line));
         }
-        int frames=ReadCount(reader,(int)MaxEvents);
+        int frames=ReadCount(reader,ChartLoadLimits.CountLimit((int)MaxEvents));
         for(int i=0;i<frames;i++) chart.PerFrame.Add(new(reader.ReadDouble(),reader.ReadDouble(),ReadText(reader)));
         if (wireVersion == "KGS2")
         {
-            int count = ReadCount(reader, 1_000_000);
+            int count = ReadCount(reader, ChartLoadLimits.CountLimit(1_000_000));
             if (count > 0 && sourcePath is null)
                 throw new InvalidDataException("Rust diagnostics require a source path.");
             for (int i = 0; i < count; i++)
@@ -321,7 +332,7 @@ internal static unsafe partial class RustEngineBridge
     }
     private static string ReadText(BinaryReader r)
     {
-        int n=ReadCount(r,64*1024*1024);
+        int n=ReadCount(r,ChartLoadLimits.CountLimit(64*1024*1024));
         if(n>r.BaseStream.Length-r.BaseStream.Position) throw new EndOfStreamException("Truncated native string.");
         return Encoding.UTF8.GetString(r.ReadBytes(n));
     }
@@ -337,7 +348,9 @@ internal static unsafe partial class RustEngineBridge
             byte* packet=null;nuint length=0;
             fixed (BpmChange* data=changes)
             {
-                int rc=BuildBpm(data,(nuint)changes.Length,baseBpm,offsetMs,fixedBpm??0,fixedBpm.HasValue?1u:0u,&packet,&length);
+                int rc=ChartLoadLimits.Unlimited
+                    ? BuildBpmUnlimited(data,(nuint)changes.Length,baseBpm,offsetMs,fixedBpm??0,fixedBpm.HasValue?1u:0u,&packet,&length)
+                    : BuildBpm(data,(nuint)changes.Length,baseBpm,offsetMs,fixedBpm??0,fixedBpm.HasValue?1u:0u,&packet,&length);
                 var bytes=Receive(rc,packet,length);
                 using var stream=new MemoryStream(bytes,false);
                 using var r=new BinaryReader(stream);

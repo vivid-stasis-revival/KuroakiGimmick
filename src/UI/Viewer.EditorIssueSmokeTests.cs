@@ -8,6 +8,8 @@ public sealed partial class Viewer
     void SmokeEditorIssues()
     {
         if (editor == null) throw new InvalidOperationException("Editor issue tests need a chart.");
+        bool grouped = preferences.GroupGimmickTracks;
+        SetGimmickGrouping(false, persist: false); // Legacy row-drag coverage uses the original flat view.
         void Check(bool value, string message) { if (!value) throw new InvalidOperationException(message); }
         void Frame() { renderedRevision = editor.Revision; Draw(1440, 940); }
         void Key(int scan, ushort modifiers = 0) => Handle(new() { Type = 0x300, Scan = scan, Modifiers = modifiers });
@@ -72,5 +74,6 @@ public sealed partial class Viewer
         int last = editTracks.FindLastIndex(t => TrackRoot(t) == groupKey);
         Check(first >= 0 && editTracks[first].Key == groupKey && editTracks.Skip(first).Take(last - first + 1).All(t => TrackRoot(t) == groupKey), "Moving a text group split its child channels");
         Console.WriteLine("PASS #42/#43 UI: inline/modal search, real text input, live filtering, track label drag, undo/redo and Escape");
+        SetGimmickGrouping(grouped, persist: false);
     }
 }

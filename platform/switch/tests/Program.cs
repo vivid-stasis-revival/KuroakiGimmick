@@ -7,6 +7,11 @@ var assembly = Assembly.LoadFrom(Path.GetFullPath(args[0]));
 // Persist twice to exercise an existing settings destination, then simulate
 // interruption between preserving the previous settings and publishing the new.
 var settingsType = assembly.GetType("KuroakiGimmick.Core.ViewerSettings")!;
+var desktopSetting = Activator.CreateInstance(settingsType)!;
+settingsType.GetProperty("UnlimitedChartSize")!.SetValue(desktopSetting, true);
+assembly.GetType("KuroakiGimmick.Core.OptimizationEngineSettings")!.GetMethod("Apply", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, [desktopSetting]);
+if ((bool)assembly.GetType("KuroakiGimmick.Core.ChartLoadLimits")!.GetProperty("Unlimited")!.GetValue(null)!)
+    throw new Exception("Switch honored a desktop-only unlimited setting.");
 string settingsDirectory = Path.Combine(Path.GetTempPath(), "kg-settings-" + Guid.NewGuid());
 Directory.CreateDirectory(settingsDirectory);
 try

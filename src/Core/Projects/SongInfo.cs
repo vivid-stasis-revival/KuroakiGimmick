@@ -162,7 +162,7 @@ public sealed class SongInfo
     {
         try
         {
-            if (new FileInfo(file).Length > 4 * 1024 * 1024)
+            if (ChartLoadLimits.Exceeds(new FileInfo(file).Length, 4 * 1024 * 1024))
             {
                 throw new InvalidDataException("Song info exceeds the 4 MiB limit.");
             }

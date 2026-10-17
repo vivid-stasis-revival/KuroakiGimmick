@@ -102,5 +102,6 @@ public sealed partial class Viewer
         SmokeFish();
         SmokeEditorIssues();
         SmokeProxyFooter();
+        SmokeGimmickSource();
     }
 }

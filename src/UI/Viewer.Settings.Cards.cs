@@ -138,6 +138,26 @@ public sealed partial class Viewer
             active: preferences.AlwaysFollow, key: "settings-always-follow")) preferences.AlwaysFollow = !preferences.AlwaysFollow;
     }
 
+    void DrawSettingsEditor(Rect r)
+    {
+        SettingsCard(r, "Editor");
+        float x = r.X + 14, y = r.Y + 46, toggleX = r.X + r.W - 126;
+        Text(L.Get("Group gimmick tracks"), x, y + 7, 13, white, max: toggleX - x - 12);
+        if (Button(L.Get(preferences.GroupGimmickTracks ? "ON" : "OFF"), new(toggleX, y, 110, 30),
+            active: preferences.GroupGimmickTracks, key: "settings-group-gimmicks"))
+            SetGimmickGrouping(!preferences.GroupGimmickTracks);
+        y += 48;
+        Text(L.Get("Show expanded GMK summaries"), x, y + 7, 13, white, max: toggleX - x - 12);
+        if (Button(L.Get(preferences.ShowExpandedGimmickSummary ? "ON" : "OFF"), new(toggleX, y, 110, 30),
+            active: preferences.ShowExpandedGimmickSummary, key: "settings-expanded-gimmick-summary"))
+        { preferences.ShowExpandedGimmickSummary = !preferences.ShowExpandedGimmickSummary; SaveSettings(); }
+        SettingsHint("Collapsed groups always show summaries. Expanded groups keep their title and collapse button.", x, y + 46, r.W - 28);
+#if !KG_MOBILE && !KG_SWITCH
+        Divider(x, r.Y + 180, r.W - 28);
+        DrawChartSizeOptions(new(r.X, r.Y + 192, r.W, r.H - 192));
+#endif
+    }
+
     void DrawSettingsVsUi(Rect r)
     {
         SettingsCard(r, "VS UI");

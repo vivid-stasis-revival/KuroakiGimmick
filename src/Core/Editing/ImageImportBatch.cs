@@ -39,7 +39,7 @@ public sealed class ImageImportBatch : IDisposable
                 if (!Accepts(entry)) throw new ArgumentException("Use static PNG, JPEG, BMP or TGA images: " + entry);
                 string path = Path.GetFullPath(entry);
                 using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-                if (input.Length is < 1 or > 64 * 1024 * 1024) throw new InvalidDataException("Image exceeds 64 MiB or is empty: " + path);
+                if (input.Length < 1 || ChartLoadLimits.Exceeds(input.Length, 64 * 1024 * 1024)) throw new InvalidDataException("Image exceeds 64 MiB or is empty: " + path);
                 // 原文件名（包括扩展名大小写）保持不变；通过独立目录隔离重复导入和同名文件。
                 string imageDirectory = Path.Combine(folder, batch.images.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
                 string staged = Path.Combine(imageDirectory, Path.GetFileName(path));
@@ -51,11 +51,11 @@ public sealed class ImageImportBatch : IDisposable
                 // 后续的读取、解码与哈希一律针对暂存副本，不再回头碰原文件——原文件在这中间被改动也不会影响本批结果。
                 using var stream = File.OpenRead(staged);
                 var info = ImageInfo.FromStream(stream) ?? throw new InvalidDataException("Unsupported or corrupt image: " + path);
-                long bytes = (long)info.Width * info.Height * 4;
-                if (info.Width is < 1 or > 16384 || info.Height is < 1 or > 16384 || bytes > 64L * 1024 * 1024)
+                long bytes = checked((long)info.Width * info.Height * 4);
+                if (info.Width < 1 || info.Height < 1 || ChartLoadLimits.Exceeds(info.Width, 16384) || ChartLoadLimits.Exceeds(info.Height, 16384) || ChartLoadLimits.Exceeds(bytes, 64L * 1024 * 1024))
                     throw new InvalidDataException("Image exceeds 16384 px or 64 MiB decoded: " + path);
                 total += bytes;
-                if (total > 256L * 1024 * 1024) throw new InvalidDataException("Image batch exceeds 256 MiB decoded.");
+                if (ChartLoadLimits.Exceeds(total, 256L * 1024 * 1024)) throw new InvalidDataException("Image batch exceeds 256 MiB decoded.");
                 stream.Position = 0;
                 // 落定之前必须真的解一遍像素，不能只看文件头：像素流损坏的图片一旦生成了事件，只会在渲染时才崩。
                 ImageResult decoded;

@@ -3,6 +3,7 @@
 //! No SDL / GPU / UI state enters Rust. Units: ms for distances, px for positions.
 use std::panic::{catch_unwind, AssertUnwindSafe};
 mod chart;
+mod load_limits;
 mod audio;
 mod source_ffi;
 mod timeline_runtime;

@@ -61,7 +61,7 @@ public static class ModWeights
     {
         try
         {
-            if (new FileInfo(path).Length > 1024 * 1024)
+            if (ChartLoadLimits.Exceeds(new FileInfo(path).Length, 1024 * 1024))
             {
                 return null;
             }

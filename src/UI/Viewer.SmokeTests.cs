@@ -20,6 +20,9 @@ public sealed partial class Viewer
     public void SmokeUi()
     {
         SmokeSharedImageExport();
+#if !KG_MOBILE && !KG_SWITCH
+        SmokeChartSizeWarningUi();
+#endif
         // 检查的是稳定后的命中矩形。有限过渡的数学由独立的 CPU 测试覆盖。
         preferences.UiAnimations = false;
         // 下面的合成坐标都基于未经缩放的 1440x940 测试画布。

@@ -62,6 +62,9 @@ internal static class Checks
         string original = Environment.CurrentDirectory;
         try
         {
+            KuroakiGimmick.Core.OptimizationEngineSettings.Apply(new() { UnlimitedChartSize = true });
+            Assert(!KuroakiGimmick.Core.ChartLoadLimits.Unlimited, "Mobile honored a desktop-only unlimited setting.");
+            KuroakiGimmick.Core.OptimizationEngineSettings.Apply(new());
             Assert(!typeof(Checks).Assembly.GetManifestResourceNames().Any(n => n.Contains("Assets.Gimmicks") || n.EndsWith("VsmReference.json") || n.EndsWith("JacketCatalog.json")), "Private resources were embedded in external-assets build.");
             if (args.Length > 1) CheckResourcePack(args[1], args[0], root);
             string assets = Path.Combine(root, "Assets");

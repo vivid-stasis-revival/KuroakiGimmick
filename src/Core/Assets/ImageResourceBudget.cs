@@ -14,18 +14,18 @@ public sealed class ImageResourceBudget
         {
             return known;
         }
-        if (new FileInfo(path).Length > ResourceFiles.ImageFileLimit)
+        if (ChartLoadLimits.Exceeds(new FileInfo(path).Length, ResourceFiles.ImageFileLimit))
         {
             throw new InvalidDataException("Image exceeds 32 MiB: " + path);
         }
         using var stream = File.OpenRead(path);
         var info = ImageInfo.FromStream(stream) ?? throw new InvalidDataException("Invalid image: " + path);
-        if (info.Width is < 1 or > 4096 || info.Height is < 1 or > 4096)
+        if (info.Width < 1 || info.Height < 1 || ChartLoadLimits.Exceeds(info.Width, 4096) || ChartLoadLimits.Exceeds(info.Height, 4096))
         {
             throw new InvalidDataException("Image dimensions must be 1..4096: " + path);
         }
-        long bytes = (long) info.Width * info.Height * 4;
-        if (decodedBytes + bytes > ResourceFiles.DecodedImageLimit)
+        long bytes = checked((long)info.Width * info.Height * 4);
+        if (ChartLoadLimits.Exceeds(checked(decodedBytes + bytes), ResourceFiles.DecodedImageLimit))
         {
             throw new InvalidDataException("Object images exceed the 128 MiB decoded budget.");
         }

@@ -9,7 +9,7 @@ public sealed partial class VsmDocument
         var picked = Clips.Where(c => ids.Contains(c.Id)).ToArray();
         if (picked.Length != ids.Count) throw new FormatException("A selected event no longer exists.");
         if (!picked.Any(c => c.RepeatEnd != null)) throw new FormatException("Select a loop to split.");
-        if (picked.Sum(c => (long)c.RepeatCount) > 1_000_000)
+        if (ChartLoadLimits.Exceeds(picked.Sum(c => (long)c.RepeatCount), 1_000_000))
             throw new FormatException("Split at most one million occurrences at a time.");
         var lines = new List<Line>();
         var result = new List<Guid>();
@@ -58,7 +58,7 @@ public sealed partial class VsmDocument
                 throw new FormatException("Other source events lie between the selection. Merge adjacent source events to preserve execution order.");
         }
         long count = clips.Sum(c => (long)c.RepeatCount);
-        if (count > 1_000_000) throw new FormatException("A loop supports at most one million occurrences.");
+        if (ChartLoadLimits.Exceeds(count, 1_000_000)) throw new FormatException("A loop supports at most one million occurrences.");
         double step = first.RepeatCount > 1 ? first.RepeatStep : clips[1].Beat - first.Beat;
         if (!double.IsFinite(step) || step <= 0)
             throw new FormatException("Events must occur in increasing source order at a positive interval.");

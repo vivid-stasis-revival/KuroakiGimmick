@@ -327,7 +327,7 @@ public sealed class NativeGimmickProfile
             try
             {
                 string file=ResourceFiles.ContainedFile(definitionRoot,action.Path!);
-                if(new FileInfo(file).Length>128*1024*1024)throw new InvalidDataException("Interlude audio exceeds 128 MiB.");
+                if(ChartLoadLimits.Exceeds(new FileInfo(file).Length, 128*1024*1024))throw new InvalidDataException("Interlude audio exceeds 128 MiB.");
                 result.Resources["interlude-audio/"+action.Path]=file;
             }
             catch(Exception ex) when(ResourceFiles.IsResourceError(ex)){result.Fail("interlude-audio/"+action.Path,ex.Message);}
@@ -337,7 +337,7 @@ public sealed class NativeGimmickProfile
             try
             {
                 string file = ResourceFiles.ContainedFile(definitionRoot, cue.Path);
-                if (new FileInfo(file).Length > 128 * 1024 * 1024) throw new InvalidDataException("Voice resource exceeds 128 MiB.");
+                if (ChartLoadLimits.Exceeds(new FileInfo(file).Length, 128 * 1024 * 1024)) throw new InvalidDataException("Voice resource exceeds 128 MiB.");
                 result.Resources["audio/" + cue.Path] = file;
             }
             catch (Exception ex) when (ResourceFiles.IsResourceError(ex)) { result.Fail("audio/" + cue.Path, ex.Message); }

@@ -11,12 +11,14 @@ public static class VsmReader
     /// <summary>从文件整体替换 mod 与逐帧轨道；超过 64 MiB 直接拒绝，不做部分读取。</summary>
     public static void ReplaceMods(Chart c, string path)
     {
-        if (new FileInfo(path).Length > 64 * 1024 * 1024)
+        if (ChartLoadLimits.Exceeds(new FileInfo(path).Length, 64 * 1024 * 1024))
         {
             throw new InvalidDataException("VSM exceeds 64 MiB.");
         }
         // The Rust parser is only used when it can preserve the C# representation.
         // Native errors, unsupported syntax or diagnostics return to the original code.
+        if (ChartLoadLimits.Unlimited && new FileInfo(path).Length > Array.MaxLength)
+        { ReplaceModsLines(c, File.ReadLines(path), path); return; }
         if (RustEngineBridge.TryApplyVsm(c, File.ReadAllText(path), path)) return;
         ReplaceModsLines(c, File.ReadLines(path), path);
     }
@@ -133,7 +135,7 @@ public static class VsmReader
                 var range = VsmBeatRange.Parse(parts[0], Number);
                 double start = range.Start, step = range.Step;
                 int count = range.Count;
-                if (count + c.Mods.Count > 1_000_000)
+                if (ChartLoadLimits.Exceeds((long)count + c.Mods.Count, 1_000_000))
                 {
                     throw new FormatException("Beat range expands beyond one million events.");
                 }

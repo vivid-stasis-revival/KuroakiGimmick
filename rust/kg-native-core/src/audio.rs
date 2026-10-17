@@ -43,7 +43,7 @@ fn cache_file(path: &Path, dir: &Path) -> PathBuf {
 fn cache_read(path: &Path, source_stamp:Stamp) -> Option<Audio> {
     let mut file = File::open(path).ok()?;
     let size = file.metadata().ok()?.len();
-    if !(48..=MAX_CACHE_FILE_BYTES).contains(&size) { return None; }
+    if size < 48 || (!crate::load_limits::unlimited() && size > MAX_CACHE_FILE_BYTES) { return None; }
     let mut header = [0u8; 48];
     file.read_exact(&mut header).ok()?;
     if &header[..8] != MAGIC {return None;}
@@ -56,9 +56,11 @@ fn cache_read(path: &Path, source_stamp:Stamp) -> Option<Audio> {
     let count = get_u64(40..48);
     if raw_len != source_stamp.size || (u128::from(mtime_hi)<<64 | u128::from(mtime_lo)) != source_stamp.mtime
         || !(8000..=384000).contains(&rate) || !(1..=32).contains(&channels)
-        || count == 0 || count > MAX_PCM_BYTES as u64 / 4 || count.checked_mul(4)?.checked_add(48)? != size
+        || count == 0 || (!crate::load_limits::unlimited() && count > MAX_PCM_BYTES as u64 / 4) || count.checked_mul(4)?.checked_add(48)? != size
         || count % channels as u64 != 0 { return None; }
-    let mut bytes = vec![0; (count as usize)*4];
+    let byte_len=usize::try_from(count.checked_mul(4)?).ok()?;
+    if byte_len>isize::MAX as usize { return None; }
+    let mut bytes = vec![0; byte_len];
     file.read_exact(&mut bytes).ok()?;
     let samples = bytes.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect();
     Some(Audio { samples,rate,channels,cache_hit:2 })
@@ -132,7 +134,7 @@ fn decode(path: &Path) -> Result<Audio,String> {
         if rate!=spec.rate || channels!=spec.channels.count() as u32 {return Err("Mid-stream audio format change".into());}
         let samples_count = (decoded.frames() as usize).checked_mul(channels as usize)
             .ok_or("Decoded audio sample count overflow")?;
-        if samples_count.checked_mul(4).and_then(|n|n.checked_add(pcm.len()*4)).is_none_or(|n| n>MAX_PCM_BYTES) {
+        if samples_count.checked_mul(4).and_then(|n|n.checked_add(pcm.len()*4)).is_none_or(|n| !crate::load_limits::unlimited() && n>MAX_PCM_BYTES) {
             return Err("Decoded audio exceeds 1024 MB".into());
         }
         if decoded.capacity() > sample_capacity {
@@ -197,7 +199,9 @@ pub unsafe extern "C" fn kg_audio_decode(path:*const u8,path_len:usize,cache:*co
             Some(Path::new(p))
         }else{None};
         let data=decode_cached(Path::new(pb),cache_dir)?;
-        let len=data.samples.len();let mut boxed=data.samples.into_boxed_slice();
+        let len=data.samples.len();
+        if !crate::load_limits::unlimited() && len > MAX_PCM_BYTES / 4 { return Err("Decoded audio exceeds 1024 MB".into()); }
+        let mut boxed=data.samples.into_boxed_slice();
         let ptr=boxed.as_mut_ptr();std::mem::forget(boxed);
         Ok(AudioResult{data:ptr,length:len,sample_rate:data.rate,channels:data.channels,cache_hit:data.cache_hit})
     };
@@ -209,7 +213,7 @@ pub unsafe extern "C" fn kg_audio_decode(path:*const u8,path_len:usize,cache:*co
 }
 #[no_mangle]
 pub unsafe extern "C" fn kg_audio_free(data:*mut f32,length:usize){
-    if data.is_null() || length==0 || length>MAX_PCM_BYTES/4 {return;}
+    if data.is_null() || length==0 || length>isize::MAX as usize/4 {return;}
     let _=std::panic::catch_unwind(||unsafe{
         drop(Box::from_raw(std::ptr::slice_from_raw_parts_mut(data,length)));
     });
@@ -259,4 +263,9 @@ mod tests {
         let _=fs::remove_dir_all(dir);
     }
 
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn kg_audio_decode_unlimited(path:*const u8,path_len:usize,cache:*const u8,cache_len:usize,out:*mut AudioResult)->i32 {
+    crate::load_limits::with_unlimited(|| kg_audio_decode(path,path_len,cache,cache_len,out))
 }

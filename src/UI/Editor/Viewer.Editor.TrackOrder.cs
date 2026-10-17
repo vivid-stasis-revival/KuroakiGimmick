@@ -6,7 +6,8 @@ namespace KuroakiGimmick.UI;
 
 public sealed partial class Viewer
 {
-    string? draggedTrackKey, trackDropBefore;
+    string? draggedTrackKey, draggedTrackParent, trackDropBefore;
+    int trackDropIndex;
     string draggedTrackLabel = "";
     float trackDragStartY, trackShownScroll;
     bool trackOrderMoved, trackDropValid;
@@ -18,6 +19,7 @@ public sealed partial class Viewer
         if (track.TextId != null) return "T:" + track.TextId;
         if (!track.Window && CustomText.TryMod(track.Property, out _, out var id) && editor?.TextSources.ContainsKey(id) == true)
             return "T:" + id;
+        if (preferences.GroupGimmickTracks && IsGimmickTrack(track)) return GimmickTrackKey(track.Target);
         return track.Key;
     }
 
@@ -27,7 +29,16 @@ public sealed partial class Viewer
         var groups = editTracks.GroupBy(TrackRoot).ToDictionary(g => g.Key, g => g.ToArray(), StringComparer.Ordinal);
         var ordered = editor.OrderedTracks(groups.Keys);
         editTracks.Clear();
-        foreach (string key in ordered) editTracks.AddRange(groups[key]);
+        foreach (string key in ordered)
+        {
+            var group = groups[key];
+            var header = group.FirstOrDefault(track => track.Key == key);
+            if (header == null || group.Length == 1) { editTracks.AddRange(group); continue; }
+            editTracks.Add(header);
+            // Preserve the original core-track/document order unless the author saved a custom order.
+            var children = group.Where(track => track.Key != key).ToDictionary(track => track.Key, StringComparer.Ordinal);
+            foreach (string child in editor.OrderedTracks(children.Keys)) editTracks.Add(children[child]);
+        }
     }
 
     void BeginTrackOrder(EditTrack track)
@@ -35,7 +46,9 @@ public sealed partial class Viewer
         if (editor == null || Busy || editDrag != null || ImageGestureActive) return;
         if (!track.Window && track.Target >= 0 && track.ImageId == null && track.TextId == null)
             newProxy = track.Target;
-        draggedTrackKey = TrackRoot(track); draggedTrackLabel = track.Label;
+        string root = TrackRoot(track);
+        draggedTrackKey = track.Key; draggedTrackParent = root == track.Key ? null : root;
+        draggedTrackLabel = track.Label;
         trackDragStartY = mouseY; trackOrderMoved = trackDropValid = false;
         trackScrollTick = uptime.Elapsed.TotalSeconds;
         hoveredEditTrack = displayedHelpTrack = null; trackHelpVisualActive = trackHelpHitRectValid = false;
@@ -46,7 +59,7 @@ public sealed partial class Viewer
     void CancelTrackOrder()
     {
         if (draggedTrackKey == null) return;
-        draggedTrackKey = null; trackDropValid = false;
+        draggedTrackKey = draggedTrackParent = null; trackDropValid = false;
         click = held = false; Sdl.SDL_CaptureMouse(false);
     }
 
@@ -67,7 +80,9 @@ public sealed partial class Viewer
             string key = draggedTrackKey;
             string? before = trackDropBefore;
             bool apply = trackOrderMoved && trackDropValid;
-            var roots = editTracks.Select(TrackRoot).Distinct(StringComparer.Ordinal).ToArray();
+            var roots = draggedTrackParent is { } parent
+                ? editTracks.Where(track => track.Key != parent && TrackRoot(track) == parent).Select(track => track.Key).ToArray()
+                : editTracks.Select(TrackRoot).Distinct(StringComparer.Ordinal).ToArray();
             CancelTrackOrder();
             if (apply && editor != null)
             {
@@ -85,9 +100,21 @@ public sealed partial class Viewer
         if (!trackDropValid) return;
         int at = Math.Clamp((int)Math.Floor((mouseY - editorTracksRect.Y) / 35 + trackShownScroll), 0, editTracks.Count - 1);
         string root = TrackRoot(editTracks[at]);
+        if (draggedTrackParent is { } parent)
+        {
+            if (root != parent) { trackDropValid = false; return; }
+            int firstChild = editTracks.FindIndex(track => track.Key != parent && TrackRoot(track) == parent);
+            int lastChild = editTracks.FindLastIndex(track => track.Key != parent && TrackRoot(track) == parent);
+            if (firstChild < 0) { trackDropValid = false; return; }
+            float middle = editorTracksRect.Y + (at + .5f - trackShownScroll) * 35;
+            trackDropIndex = Math.Clamp(mouseY < middle ? at : at + 1, firstChild, lastChild + 1);
+            trackDropBefore = trackDropIndex <= lastChild ? editTracks[trackDropIndex].Key : null;
+            return;
+        }
         int first = editTracks.FindIndex(t => TrackRoot(t) == root), last = editTracks.FindLastIndex(t => TrackRoot(t) == root);
         float midpoint = editorTracksRect.Y + ((first + last + 1) / 2f - trackShownScroll) * 35;
         int boundary = mouseY < midpoint ? first : last + 1;
+        trackDropIndex = boundary;
         trackDropBefore = boundary < editTracks.Count ? TrackRoot(editTracks[boundary]) : null;
     }
 
@@ -108,8 +135,7 @@ public sealed partial class Viewer
         Canvas.Clip(new(editorTimelineRect.X, editorTracksRect.Y, editorTimelineRect.W, editorTracksRect.H));
         if (trackDropValid)
         {
-            int index = trackDropBefore == null ? editTracks.Count : editTracks.FindIndex(t => TrackRoot(t) == trackDropBefore);
-            float y = editorTracksRect.Y + (index - trackShownScroll) * 35;
+            float y = editorTracksRect.Y + (trackDropIndex - trackShownScroll) * 35;
             Canvas.Line(editorTimelineRect.X + 2, y, editorTracksRect.X + editorTracksRect.W, y, 3, soft);
         }
         var ghost = new Rect(editorTimelineRect.X + 5, mouseY - 16, Math.Max(40, editorTracksRect.X - editorTimelineRect.X - 10), 32);

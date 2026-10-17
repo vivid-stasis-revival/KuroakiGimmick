@@ -87,7 +87,7 @@ public sealed class CustomImages
         }
         try
         {
-            if ((editedText != null ? System.Text.Encoding.UTF8.GetByteCount(editedText) : new FileInfo(result.Path).Length) > 16 * 1024 * 1024)
+            if (ChartLoadLimits.Exceeds(editedText != null ? System.Text.Encoding.UTF8.GetByteCount(editedText) : new FileInfo(result.Path).Length, 16 * 1024 * 1024))
             {
                 throw new InvalidDataException("VSP exceeds 16 MiB.");
             }
@@ -140,7 +140,7 @@ public sealed class CustomImages
                         {
                             throw new InvalidDataException("Wrong image column count.");
                         }
-                        if (result.Items.Count >= 4096)
+                        if (ChartLoadLimits.Exceeds((long)result.Items.Count + 1, 4096))
                         {
                             throw new InvalidDataException("Image declaration limit is 4096.");
                         }
@@ -163,14 +163,14 @@ public sealed class CustomImages
                             {
                                 throw new FileNotFoundException("Missing image: " + path);
                             }
-                            if (new FileInfo(path).Length > 64 * 1024 * 1024)
+                            if (ChartLoadLimits.Exceeds(new FileInfo(path).Length, 64 * 1024 * 1024))
                             {
                                 throw new InvalidDataException("Image exceeds 64 MiB: " + path);
                             }
                             using var stream = File.OpenRead(path);
                             var info = ImageInfo.FromStream(stream) ?? throw new InvalidDataException("Unsupported or corrupt image: " + path);
-                            long bytes = (long) info.Width * info.Height * 4;
-                            if (info.Width is < 1 or > 16384 || info.Height is < 1 or > 16384 || bytes > 64 * 1024 * 1024)
+                            long bytes = checked((long)info.Width * info.Height * 4);
+                            if (info.Width < 1 || info.Height < 1 || ChartLoadLimits.Exceeds(info.Width, 16384) || ChartLoadLimits.Exceeds(info.Height, 16384) || ChartLoadLimits.Exceeds(bytes, 64 * 1024 * 1024))
                             {
                                 throw new InvalidDataException("Image dimensions or per-image 64 MiB decoded limit exceeded: " + path);
                             }

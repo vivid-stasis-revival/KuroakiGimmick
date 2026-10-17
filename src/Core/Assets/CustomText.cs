@@ -81,12 +81,12 @@ public sealed class CustomText
         var sources = edited != null ? edited.Select(x => (Id: x.Key, Path: "editor-text:" + x.Key, Body: (string?)x.Value)) :
             p.TextFiles != null ? p.TextFiles.Select(x => (Id: x.Key, Path: x.Value, Body: (string?)null)) :
             paths.Select(path => (Id: path == legacy ? "" : System.IO.Path.GetFileNameWithoutExtension(path)[prefix.Length..], Path: path, Body: (string?)null));
-        foreach (var source in sources.Take(4096))
+        foreach (var source in sources.Take(ChartLoadLimits.CountLimit(4096)))
         {
             string id = source.Id, path = source.Path;
             if (source.Body == null && !File.Exists(path))
             { chart.Diagnostics.Add(new(path, 0, "Text file is missing.", true)); continue; }
-            if ((source.Body == null ? new FileInfo(path).Length : System.Text.Encoding.UTF8.GetByteCount(source.Body)) > 4 * 1024 * 1024)
+            if (ChartLoadLimits.Exceeds(source.Body == null ? new FileInfo(path).Length : System.Text.Encoding.UTF8.GetByteCount(source.Body), 4 * 1024 * 1024))
             {
                 chart.Diagnostics.Add(new(path, 0, "Text file exceeds 4 MiB.", true));
                 continue;

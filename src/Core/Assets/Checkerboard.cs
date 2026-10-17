@@ -36,7 +36,7 @@ public sealed class Checkerboard
             {
                 foreach (string file in frames)
                 {
-                    if (new FileInfo(file).Length > 1024 * 1024)
+                    if (ChartLoadLimits.Exceeds(new FileInfo(file).Length, 1024 * 1024))
                     {
                         throw new InvalidDataException("Checker tile exceeds 1 MiB.");
                     }

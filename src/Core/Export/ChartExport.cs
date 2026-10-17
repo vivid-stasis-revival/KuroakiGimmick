@@ -93,7 +93,7 @@ public static class ChartExport
             var info = new FileInfo(path);
             files[name] = new(name, path, null, info.Length, HashFile(path, cancellation));
             // 20000 个文件 / 20 GiB 的硬上限：防止误选家目录之类的根目录被整个复制。
-            if (files.Count > 20000 || files.Values.Sum(f => f.Length) > 20L * 1024 * 1024 * 1024)
+            if (ChartLoadLimits.Exceeds(files.Count, 20000) || ChartLoadLimits.Exceeds(files.Values.Sum(f => f.Length), 20L * 1024 * 1024 * 1024))
                 throw new IOException("Chart Folder exceeds 20000 files or 20 GiB. Use a dedicated song folder.");
         }
         string stem = ChartExportInput.Stem(input.Project);

@@ -72,7 +72,7 @@ public sealed partial class EditorDocument
             next = raw[..match.Index] + (content == null ? "" : encoded + match.Groups[2].Value) + raw[(match.Index + match.Length)..];
         else if (content == null) throw new InvalidOperationException("No text cue exists at the selected beat.");
         else next = raw + (raw.Length > 0 && !raw.EndsWith('\n') && !raw.EndsWith('\r') ? ending : "") + encoded + ending;
-        if (Encoding.UTF8.GetByteCount(next) > 4 * 1024 * 1024) throw new InvalidDataException("Text file exceeds 4 MiB.");
+        if (ChartLoadLimits.Exceeds(Encoding.UTF8.GetByteCount(next), 4 * 1024 * 1024)) throw new InvalidDataException("Text file exceeds 4 MiB.");
         texts[id] = next;
     }
     public void SetTextCue(string id, double beat, string content) => Change("Edit text cue", () => WriteTextCue(id, beat, content));

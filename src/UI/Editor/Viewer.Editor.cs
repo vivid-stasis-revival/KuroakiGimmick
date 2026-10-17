@@ -97,11 +97,11 @@ public sealed partial class Viewer
     byte mouseClicks;
     bool editorScrub;
     /// <summary>一条时间轴轨道。Label 只用于显示，Property 始终是源文件里的原始 mod identifier，两者不可互换。</summary>
-    sealed record EditTrack(string Key, string Label, bool Window, int Target, string Property, string? ImageId = null, bool ImageGroup = false, string? TextId = null);
+    sealed record EditTrack(string Key, string Label, bool Window, int Target, string Property, string? ImageId = null, bool ImageGroup = false, string? TextId = null, bool GimmickGroup = false);
     readonly List<EditTrack> editTracks = [];
     EditTrack? hoveredEditTrack;
     /// <summary>拖拽起始快照，全部以拍为单位。MouseBeat 记录按下点，用于保持抓取处的相对偏移；Resize 为 true 时只动右端。</summary>
-    sealed record DragState(VsmDocument.Clip? Clip, JsonObject? Window, int WindowIndex, double Beat, double End, double MouseBeat, bool Resize);
+    sealed record DragState(VsmDocument.Clip? Clip, JsonObject? Window, int WindowIndex, double Beat, double End, double MouseBeat, bool Resize, Guid[]? GroupIds = null);
     DragState? editDrag;
     double dragBeat, dragDuration;
     bool modalActive, modalInput, modalSelectAll, modalTrim = true;
@@ -150,6 +150,7 @@ public sealed partial class Viewer
         CancelTrackOrder();
         ResetTextObjects();
         ResetImageObjects();
+        ResetGimmickTracks();
         CancelImageImport(); droppedImages.Clear(); imageDropActive = false;
         if (editorBuild is { IsCompleted: false }) retiredImageReaders.Add(editorBuild);
         activeMarker = null; workflow = ""; workflowAlpha = 0; chartExportPlan = null;

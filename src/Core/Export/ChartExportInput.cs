@@ -57,7 +57,7 @@ public sealed record ChartExportInput(ViewerProject Project, string? Images, str
         var check = new Chart(); VsmReader.ReplaceModsText(check, normalizedVsm, "export.vsm");
         // 结构化编辑在提交时已校验过。导入的不透明行必须能逐字导出：
         // 报出它们的解析提示，而不是悄悄删掉。可解析事件则统一 canonicalize，成品里不保留浮点运算尾巴。
-        if (normalizedVsmBytes.LongLength > 64L * 1024 * 1024)
+        if (ChartLoadLimits.Exceeds(normalizedVsmBytes.LongLength, 64L * 1024 * 1024))
             throw new InvalidDataException("VSM exceeds 64 MiB.");
         return new(project, document.Images.HasContent ? document.Images.SourcePath : null, normalizedVsm, normalizedVsmBytes,
             config.ToJsonString(ViewerProject.Json), document.ImportedPaths.Concat(new[] { project.Chart, project.Gimmick, project.WindowMotion }

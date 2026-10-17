@@ -55,7 +55,7 @@ public static class EditorClipboard
     /// </summary>
     public static Payload? Read(string? text)
     {
-        if (string.IsNullOrWhiteSpace(text) || text.Length > MaxLength)
+        if (string.IsNullOrWhiteSpace(text) || ChartLoadLimits.Exceeds(text.Length, MaxLength))
         {
             return null;
         }
@@ -76,11 +76,11 @@ public static class EditorClipboard
             if (root["events"] is JsonArray rows)
             {
                 // 逐行走一遍真正的 VSM 解析器；解析不出片段的行直接丢弃，不猜它想表达什么。
-                var lines = rows.Select(r => r?.GetValue<string>()).Where(s => !string.IsNullOrWhiteSpace(s)).Take(MaxItems);
+                var lines = rows.Select(r => r?.GetValue<string>()).Where(s => !string.IsNullOrWhiteSpace(s)).Take(ChartLoadLimits.CountLimit(MaxItems));
                 events.AddRange(VsmDocument.FromText(string.Join('\n', lines)).Clips);
             }
             var windows = root["windows"] is JsonArray list
-                ? list.OfType<JsonObject>().Take(MaxItems).Select(w => (JsonObject)w.DeepClone()).ToArray()
+                ? list.OfType<JsonObject>().Take(ChartLoadLimits.CountLimit(MaxItems)).Select(w => (JsonObject)w.DeepClone()).ToArray()
                 : [];
             if (events.Count + windows.Length == 0)
             {
@@ -99,7 +99,7 @@ public static class EditorClipboard
     {
         try
         {
-            var clips = VsmDocument.FromText(text).Clips.Take(MaxItems).ToArray();
+            var clips = VsmDocument.FromText(text).Clips.Take(ChartLoadLimits.CountLimit(MaxItems)).ToArray();
             return clips.Length == 0 ? null : new(clips.Min(c => c.Beat), clips, []);
         }
         catch (Exception ex) when (ex is FormatException or InvalidDataException or OverflowException)
