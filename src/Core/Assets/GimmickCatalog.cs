@@ -99,6 +99,12 @@ public static class GimmickCatalog
                 return FileSource(ResourceFiles.ContainedFile(shared, objectName + "/manifest.json"), "shared");
             }
         }
+        // Base/Custom gimmicks have first-class renderers and do not require a
+        // native object manifest. Reaching an empty embedded catalog for one of
+        // these objects is not a resource failure (even in unpacked CLI builds).
+        // Explicit/song/shared manifests above still take precedence.
+        if (!alias && (objectName == "obj_base_gimmick" || objectName == "obj_custom_gimmick"))
+            return null;
         foreach (var item in builtIns.Value)
         {
             if (alias ? item.Data.ProfileAliases.Contains(profile, StringComparer.OrdinalIgnoreCase) : item.Data.ObjectName == objectName)

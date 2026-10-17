@@ -6,7 +6,8 @@ namespace KuroakiGimmick.Core;
 /// Deterministic, bounded Custom Gimmicks 1.14 MPF preview. Programs run on the
 /// original 60 Hz song clock into immutable sample tracks; seeking, snapshots,
 /// parallel export and Rust base-track evaluation cannot advance script state.
-/// Gameplay mutation and original-engine callbacks are NOT simulated.
+/// Read-only score queries use an explicit zero-state offline baseline; gameplay
+/// mutation and original-engine callbacks are NOT simulated.
 /// </summary>
 internal sealed class MpfScriptTimeline
 {
@@ -25,6 +26,7 @@ internal sealed class MpfScriptTimeline
         internal bool Dead;
         internal bool SeedChanged;
         internal int DebugMessages;
+        internal bool ReadOnlyStateNotice;
     }
     sealed class ActiveRange(FrameEvent range, Script script)
     {
@@ -126,6 +128,15 @@ internal sealed class MpfScriptTimeline
             else i++;
         }
     }
+    void WarnReadOnlyState(Script script)
+    {
+        if (script.ReadOnlyStateNotice) return;
+        script.ReadOnlyStateNotice = true;
+        chart.Diagnostics.Add(new(script.Path, 0,
+            "MPF " + script.Name + ": get_judge_cnt/get_combo/get_max_combo use zeroed offline preview counters; "
+            + "live player input, misses and real AC/FC state are NOT simulated."));
+    }
+
     object? Invoke(Script script, string function, object?[] a)
     {
         static List<object?> ArrayArg(object?[] a, int i) =>
@@ -220,10 +231,26 @@ internal sealed class MpfScriptTimeline
                 if (script.DebugMessages++ < 8)
                     chart.Diagnostics.Add(new(script.Path, 0, "MPF " + function + ": " + Format(a[0])));
                 return 0d;
-            // The original game mutates live judgment/score and dispatches instance
-            // callbacks. Pretending the editor's autoplay has the same state
-            // would silently produce incorrect previews.
-            case "get_judge_cnt": case "get_combo": case "get_max_combo":
+            // Preview has no judgement/replay input. Permit read-only queries to
+            // evaluate with an explicitly disclosed zero-state baseline, so
+            // legitimate AC/FC visual effects still render for inspection.
+            // Never claim that this is the actual player's score.
+            case "get_judge_cnt":
+            {
+                Count(function, a, 1, 1);
+                double kind = Num(a[0]);
+                if (Math.Truncate(kind) != kind || kind is < 0 or > 4)
+                    throw new InvalidDataException("IndexError: judgment type must be 0..4.");
+                WarnReadOnlyState(script);
+                return 0d;
+            }
+            case "get_combo":
+            case "get_max_combo":
+                Count(function, a, 0, 0);
+                WarnReadOnlyState(script);
+                return 0d;
+            // No live player, mutable score or GameMaker instance callbacks:
+            // rejecting writes/callbacks is safer than inventing game state.
             case "add_judge_cnt": case "set_judge_timing": case "reset_judge_timing":
             case "call_callback_mod": case "call_callback_mod_at":
                 throw new NotSupportedException(function + " requires original-game live state/callbacks; this MPF preview does not simulate it.");
