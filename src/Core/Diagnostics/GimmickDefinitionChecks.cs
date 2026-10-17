@@ -40,6 +40,18 @@ internal static class GimmickDefinitionChecks
             Check(definition.CompositeLifecycle?.Create.SequenceEqual(new[] { "effect.on" }) == true,
                 "v2 lifecycle was discarded");
 
+            // Core Base/Custom charts must work without any native definitions.
+            // They have built-in render paths, while genuine native objects still
+            // report missing or invalid manifests.
+            var customCore = NativeGimmickProfile.Load(new ViewerProject { Profile = "auto" },
+                new Chart { ObjectName = "obj_custom_gimmick" }, root);
+            Check(customCore.Data == null && customCore.Issues.Count == 0,
+                "Custom core object incorrectly requires embedded definitions");
+            var baseCore = NativeGimmickProfile.Load(new ViewerProject { Profile = "auto" },
+                new Chart { ObjectName = "obj_base_gimmick" }, root);
+            Check(baseCore.Data == null && baseCore.Issues.Count == 0,
+                "Base core object incorrectly requires embedded definitions");
+
             string directory = Path.Combine(root, "Gimmicks", objectName);
             Directory.CreateDirectory(directory);
             string manifest = Path.Combine(directory, "manifest.json");
