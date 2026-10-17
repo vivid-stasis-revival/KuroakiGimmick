@@ -174,7 +174,7 @@ public static class ChartExport
                 Bytes(Path.GetFileNameWithoutExtension(destination) + "_cgmk_config.json", configBytes);
             else warnings.Add("VSM only: window movement and cgmk settings are NOT included.");
             warnings.Add("Images, subtitles, VSV and audio stay external. Keep the original chart resources.");
-            if (input.VsmText.Replace("\\r\\n", "\\n").Contains("\\nmpf\\n", StringComparison.Ordinal))
+            if (input.VsmText.Split('\n').Any(line => line.Trim() == "mpf"))
                 warnings.Add("External cmpf/*.vsmpf scripts are NOT bundled in VSM-only exports. Use Chart Folder export to include referenced scripts.");
             if (input.ImageText != null) warnings.Add("Authored VSP and image files are NOT included. Use Chart Folder for imported images.");
             if (input.TextSources?.Count > 0) warnings.Add("Edited subtitle contents are NOT included. Use Chart Folder to include text files.");
