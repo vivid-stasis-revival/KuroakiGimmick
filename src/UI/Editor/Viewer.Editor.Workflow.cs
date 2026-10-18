@@ -60,7 +60,9 @@ public sealed partial class Viewer
         if (CustomImages.TryMod(name, out _, out var imageId) && declaredImageIds.Contains(imageId))
         { FocusImageTrack(imageId, beat); transport.SetPlaying(false); transport.Seek(Current.Timeline.Bpm.Time(beat)); return; }
         layoutRevision = -1; RebuildEditTracks();
-        int index = editTracks.FindIndex(t => !t.Window && t.Target == proxy && (t.Property == name || t.GimmickGroup));
+        // Expanded groups precede their children; prefer the exact row so adding there keeps it in view.
+        int index = editTracks.FindIndex(t => !t.Window && !t.GimmickGroup && t.Target == proxy && t.Property == name);
+        if (index < 0) index = editTracks.FindIndex(t => t.GimmickGroup && t.Target == proxy);
         int rows = Math.Max(1, (int)(editorTracksRect.H / 35));
         if (index >= 0 && (index < trackScroll || index >= trackScroll + rows)) trackScroll = Math.Max(0, index - rows / 2);
         motion.Snap("timeline-track-scroll", trackScroll);

@@ -30,6 +30,7 @@ public sealed partial class Viewer
             Check(editTracks.Count(t => t.GimmickGroup) == 3, "Global/proxy events did not collapse into one row per target.");
             Check(expandedGimmickTracks.SetEquals(new[] { -1 }) && editTracks.Any(t => t.Key == "-1:scrollspeed"), "Global must be expanded by default, with proxies collapsed.");
             Check(editor.Vsm.Text == fixture, "Grouping changed the original source.");
+            SmokeAddedGimmickTrackFocus();
             SmokeExpandedGimmickSummaries();
             if (Environment.GetEnvironmentVariable("KG_GROUP_SCREENSHOT") is { } groupedScreenshot)
                 Canvas.SavePpm(UiTarget, groupedScreenshot);
@@ -100,6 +101,66 @@ public sealed partial class Viewer
             ResetGimmickTracks(); SetClipSelection(null); editDrag = null; layoutRevision = -1;
             sourceOwner = null; sourceVsm = sourceVsp = null;
         }
+    }
+
+    void SmokeAddedGimmickTrackFocus()
+    {
+        if (editor == null) throw new InvalidOperationException("Track focus test needs an editor.");
+        void Check(bool value, string message) { if (!value) throw new InvalidOperationException(message); }
+        void Frame() { renderedRevision = editor.Revision; Draw(1440, 940); }
+        void Mouse(uint type, float x, float y) => Handle(new() { Type = type, Button = 1, X = x, Y = y });
+        string source = editor.Vsm.Text;
+        editor.Change("#54 track focus fixture", () =>
+        {
+            foreach (int target in new[] { -1, 1 })
+                for (int i = 0; i < 24; i++)
+                    editor.Vsm.Add(new(Guid.NewGuid(), 0, 1, "linear", "0", "1", "issue54_" + i, target));
+        });
+        expandedGimmickTracks.Add(1);
+        activeMarker = null;
+        foreach (bool grouped in new[] { true, false })
+        {
+            SetGimmickGrouping(grouped, persist: false); Frame();
+            foreach (int target in new[] { -1, 1 })
+            {
+                string key = target + ":issue54_12";
+                int index = editTracks.FindIndex(t => t.Key == key);
+                trackScroll = index - 1; motion.Snap("timeline-track-scroll", trackScroll); Frame();
+                int beforeScroll = trackScroll;
+                var row = rowHits.Single(hit => hit.Track.Key == key).Rect;
+                if (grouped)
+                    Check(editTracks.FindIndex(t => t.GimmickGroup && t.Target == target) < trackScroll,
+                        "#54 fixture must scroll the group header out of view.");
+                transport.Seek(Current.Timeline.Bpm.Time(12));
+                var ids = editor.Vsm.Clips.Select(c => c.Id).ToHashSet();
+                float x = editorTracksRect.X - 16, y = row.Y + 17;
+                Mouse(0x401, x, y); Frame(); Mouse(0x402, x, y); Frame();
+                // Proxy insertion may also add its initial visibility event in the same undo step.
+                var added = editor.Vsm.Clips.Single(c => !ids.Contains(c.Id) && c.Name == "issue54_12" && c.Proxy == target);
+                Check(added.Name == "issue54_12" && added.Proxy == target && added.Beat == 12 && selectedClip == added.Id,
+                    "#54 row + did not add/select an event on the requested track and beat.");
+                Check(trackScroll == beforeScroll && rowHits.Single(hit => hit.Track.Key == key).Rect.Y == row.Y,
+                    $"#54 row + jumped away from its child track (grouped={grouped}, target={target}).");
+                editor.Undo(); Frame();
+                Check(editor.Vsm.Clips.Select(c => c.Id).ToHashSet().SetEquals(ids), "#54 added events did not undo together.");
+                editor.Redo(); Frame();
+                Check(editor.Vsm.Clips.Any(c => c.Id == added.Id), "#54 added event did not redo.");
+                editor.Undo(); Frame();
+
+                trackScroll = 0; motion.Snap("timeline-track-scroll", 0);
+                FocusAddedTrack("issue54_12", target, 12); Frame();
+                Check(rowHits.Any(hit => hit.Track.Key == key), "#54 offscreen child track was not brought into view.");
+            }
+        }
+        SetGimmickGrouping(true, persist: false);
+        expandedGimmickTracks.Remove(1); layoutRevision = -1; Frame();
+        FocusAddedTrack("issue54_12", 1, 12); Frame();
+        Check(rowHits.Any(hit => hit.Track.GimmickGroup && hit.Track.Target == 1)
+            && !expandedGimmickTracks.Contains(1), "#54 collapsed group did not retain header focus.");
+        editor.Undo(); SetClipSelection(null);
+        trackScroll = 0; beatStart = 0; motion.Snap("timeline-track-scroll", 0); Frame();
+        Check(editor.Vsm.Text == source, "#54 focus checks changed the original source.");
+        Console.WriteLine("PASS #54 track focus: row + preserves scroll in grouped/raw views, global/proxy children, offscreen focus, collapsed fallback and undo/redo");
     }
 
     void SmokeExpandedGimmickSummaries()
