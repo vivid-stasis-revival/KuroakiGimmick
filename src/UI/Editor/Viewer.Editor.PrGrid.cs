@@ -108,7 +108,7 @@ public sealed partial class Viewer
     {
         if (prGridHudDragging)
         {
-            if (e.WindowID != 0 && e.WindowID != Sdl.SDL_GetWindowID(host.Window)) return false;
+            if (e.WindowID != 0 && e.WindowID != ActiveUiWindowId) return false;
             if (e.Type == 0x400 || e.Type == 0x402 && e.Button == 1)
             {
                 mouseX = e.X; mouseY = e.Y;
@@ -131,7 +131,7 @@ public sealed partial class Viewer
             { prGridHudDragging = false; Sdl.SDL_CaptureMouse(false); return false; }
             return e.Type is >= 0x400 and <= 0x403;
         }
-        if (e.WindowID != 0 && e.WindowID != Sdl.SDL_GetWindowID(host.Window)) return false;
+        if (e.WindowID != 0 && e.WindowID != ActiveUiWindowId) return false;
         if (!editorMode || settings || UiOverlayVisible || Busy || !TryPrGridTarget(out int target) ||
             e.Type != 0x401 || e.Button != 1) return false;
         mouseX = e.X; mouseY = e.Y;

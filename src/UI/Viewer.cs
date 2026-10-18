@@ -15,6 +15,9 @@ namespace KuroakiGimmick.UI;
 public sealed partial class Viewer : IDisposable
 {
     readonly Host host;
+    readonly WorkspaceWindowManager workspaceWindows;
+    WorkspaceWindowManager.Window activeWorkspaceWindow;
+    readonly WorkspaceManager workspaceManager;
     public Canvas Canvas { get; }
     public SceneRenderer Renderer { get; }
     readonly Fonts fonts;
@@ -28,6 +31,7 @@ public sealed partial class Viewer : IDisposable
     WindowsMenuBar? windowsMenu;
     int menuStateHash = int.MinValue;
     bool settings, settingsInput;
+    bool dockContextInput;
     public Session Current { get; private set; }
     Target? uiTarget;
     public Target UiTarget => uiTarget!;
@@ -41,8 +45,14 @@ public sealed partial class Viewer : IDisposable
     Task<Session>? loading;
     string? loadingSourcePath;
     VideoExport? export;
-    float mouseX, mouseY;
-    bool click, held, seeking, quit, full, notes = true, effects = true, integerScale, diagnostics, help;
+    readonly WorkspacePointerState mainPointer = new();
+    WorkspacePointerState activePointer;
+    float mouseX { get => activePointer.MouseX; set => activePointer.MouseX = value; }
+    float mouseY { get => activePointer.MouseY; set => activePointer.MouseY = value; }
+    bool click { get => activePointer.Click; set => activePointer.Click = value; }
+    bool held { get => activePointer.Held; set => activePointer.Held = value; }
+    bool seeking { get => activePointer.Seeking; set => activePointer.Seeking = value; }
+    bool quit, full, notes = true, effects = true, integerScale, diagnostics, help;
     // Mute is transient UI state, not a project volume value. Keeping it separate prevents M from
     // overwriting PreviewVolume and lets a second press restore the exact configured level.
     bool audioMuted;
@@ -62,14 +72,19 @@ public sealed partial class Viewer : IDisposable
     /// <summary>所有 GPU 资源（Canvas、字体、logo、Renderer）在窗口线程创建；silent 表示无音频、也不套用用户偏好。</summary>
     public Viewer(Host h, Session session, bool silent = false, bool applyPreferences = true, string? uiLanguage = null, bool showStartup = false, string? initialPath = null, string? settingsPath = null)
     {
+        activePointer = mainPointer;
         this.applyPreferences = applyPreferences;
         this.settingsPath = settingsPath;
         preferences = ViewerSettings.Load(settingsPath);
+        workspaceManager = new(preferences.Workspace);
         OptimizationEngineSettings.Apply(preferences);
         persistRecentProjects = !silent || settingsPath != null;
         if (uiLanguage != null) preferences.UiLanguage = UiLanguage.Normalize(uiLanguage);
         L.SetLanguage(preferences.UiLanguage);
         host = h;
+        workspaceWindows = new(h.Gpu, h.Window);
+        activeWorkspaceWindow = workspaceWindows.Main;
+        if (!silent) ApplyMainWindowBounds(WorkspaceMode.Viewer);
         Canvas = new(h.Gpu);
         fonts = new();
         fonts.SetInterfaceLanguage(L.Language);
@@ -159,16 +174,26 @@ public sealed partial class Viewer : IDisposable
 #endif
                 Update();
                 if (quit) break;
-                if (!host.Gpu.PresentationReady()) { Sdl.SDL_Delay(1); continue; }
+                SyncDockWindows();
+                bool mainReady = host.Gpu.PresentationReady();
+                if (!mainReady && dockWindowIds.Count == 0 && nativeWindows == null)
+                { Sdl.SDL_Delay(1); continue; }
 #if KG_SWITCH
                 long updateEnd = Stopwatch.GetTimestamp();
 #endif
-                Draw();
+                if (mainReady) Draw();
+                else
+                {
+                    // Keep the shared scene current while the main swapchain is under backpressure.
+                    Renderer.RenderPresentation(Current, transport.PresentationPosition, notes, effects);
+                    Canvas.Flush();
+                }
 #if KG_SWITCH
                 long drawEnd = Stopwatch.GetTimestamp();
 #endif
-                host.Gpu.Submit(present: true);
+                host.Gpu.Submit(present: mainReady);
                 PresentNativeWindows();
+                PresentDockWindows();
 #if KG_SWITCH
                 frameMetrics.Record(frameBegin, inputEnd, updateEnd, drawEnd, Stopwatch.GetTimestamp(), transport.Playing);
 #endif
@@ -478,11 +503,14 @@ public sealed partial class Viewer : IDisposable
     {
         bool available = enabled && !ImageGestureActive && !dialogOpen && (!LayoutVisible || (layoutInput && layoutOpen)) && (!ImageImportVisible || imageImportInput) &&
             (resizingLayout == 0) && !ReferenceVisible && !UiClosingOverlay && (!WorkflowVisible || workflowInput || modalInput) && (!settings || settingsInput) &&
+            (dockContextPanel == null || dockContextInput) &&
             (!infoCard || infoCardInput) &&
             (!StartupVisible || startupInput && startup) &&
             ((!modalActive && pendingDiscard == null && !help) || modalInput);
-        bool over = available && r.Contains(mouseX, mouseY);
-        string id = "control:" + (key ?? caller + ":" + callerLine + ":" + label);
+        bool over = available && r.Contains(mouseX, mouseY) &&
+            (activeWorkspaceWindow.Main && !drawingMainDockPanel || inputPanelBounds.Contains(mouseX, mouseY) || modalInput);
+        string id = (activeWorkspaceWindow.Main ? "control:" : "control:" + activeWorkspaceWindow.Id + ":")
+            + (key ?? caller + ":" + callerLine + ":" + label);
         float hover = motion.To(id + ":hover", over ? 1 : 0, .12, 0);
         float selected = motion.To(id + ":selected", active ? 1 : 0, .16, active ? 1 : 0);
         if (over && click) motion.Snap(id + ":press", 1);
@@ -542,15 +570,20 @@ public sealed partial class Viewer : IDisposable
     /// </summary>
     public void Dispose()
     {
+        SaveSettings();
         macMenu?.Dispose();
         windowsMenu?.Dispose();
         chartExportCancellation?.Cancel();
         CancelTouchInput();
         CancelImageGesture();
+        CancelDockDrag();
+        if (dockSplitDrag != null) EndDockSplit(true);
         ReleaseImageImports();
         if (resizingLayout != 0) EndLayoutResize();
+        if (modalWindow != 0) Sdl.SDL_StopTextInput(modalWindow);
+        if (inlineWindow != 0 && inlineWindow != modalWindow) Sdl.SDL_StopTextInput(inlineWindow);
         nativeWindows?.Dispose();
-        if (modalActive || InlineActive) Sdl.SDL_StopTextInput(host.Window);
+        workspaceWindows.Dispose();
         export?.Dispose();
         transport.Dispose();
         cardRenderer?.Dispose();

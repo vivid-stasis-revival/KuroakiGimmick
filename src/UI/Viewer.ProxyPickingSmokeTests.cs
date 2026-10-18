@@ -26,6 +26,7 @@ public sealed partial class Viewer
             File.WriteAllText(textPath, "0,Pick text\n");
             preferences.UiAnimations = false;
             preferences.Workspace = new WorkspaceLayout { FollowDisplayScale = false, UiScale = 1 };
+            ResetDockWorkspaces();
             void Frame() => Draw(1440, 940);
             void Scene(string mods, bool image = false, bool text = false)
             {

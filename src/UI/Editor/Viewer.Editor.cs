@@ -110,9 +110,11 @@ public sealed partial class Viewer
     Guid? selectedClip;
     int selectedWindowEvent = -1;
     double? selectedNoteTime;
-    Rect editorTimelineRect, editorTracksRect, editorInspectorRect;
+    Rect editorTimelineRect { get => activePointer.EditorTimelineRect; set => activePointer.EditorTimelineRect = value; }
+    Rect editorTracksRect { get => activePointer.EditorTracksRect; set => activePointer.EditorTracksRect = value; }
+    Rect editorInspectorRect { get => activePointer.EditorInspectorRect; set => activePointer.EditorInspectorRect = value; }
     byte mouseClicks;
-    bool editorScrub;
+    bool editorScrub { get => activePointer.EditorScrub; set => activePointer.EditorScrub = value; }
     /// <summary>一条时间轴轨道。Label 只用于显示，Property 始终是源文件里的原始 mod identifier，两者不可互换。</summary>
     sealed record EditTrack(string Key, string Label, bool Window, int Target, string Property, string? ImageId = null, bool ImageGroup = false, string? TextId = null, bool GimmickGroup = false, int Lane = 0);
     readonly List<EditTrack> editTracks = [];
@@ -139,7 +141,17 @@ public sealed partial class Viewer
         try
         {
             editor ??= new EditorDocument(Current);
+            if (persistRecentProjects && !editorMode) CaptureMainWindowForMode(WorkspaceMode.Viewer);
             editorMode = true; help = false; settings = false;
+            if (DockingEnabled && !editorDockTabRestored && EditorSourceTabs() is { } sourceTabs)
+            {
+                imageSources = sourceTabs.Active == "images";
+                textSources = sourceTabs.Active == "text";
+                editorDockTabRestored = true;
+            }
+            workspaceManager.Switch(WorkspaceMode.Editor);
+            if (persistRecentProjects) ApplyMainWindowBounds(WorkspaceMode.Editor);
+            if (persistRecentProjects) SaveSettings();
             beatStart = Math.Max(0, Current.Timeline.Bpm.Beat(transport.Position) - 2);
             transport.SetDuration(EditorDuration());
             message = L.Get("EDITOR: click a note, add a clip, drag its body or right edge. Save creates an editable copy.");
@@ -149,11 +161,16 @@ public sealed partial class Viewer
     /// <summary>在拖拽、手势或模态进行中拒绝切换，避免留下半途的编辑状态；退出只隐藏工作区，未保存的修改仍保留在 editor 里。</summary>
     void ToggleWorkspace()
     {
-        if (modalActive || editDrag != null || ImageGestureActive || Busy) return;
+        if (drawingWorkspaceFrame) { workspaceTogglePending = true; click = held = false; return; }
+        if (modalActive || editDrag != null || ImageGestureActive || dockDrag != null || dockSplitDrag != null || Busy) return;
         if (!editorMode) OpenEditor();
         else
         {
+            if (persistRecentProjects) CaptureMainWindowForMode(WorkspaceMode.Editor);
             editorMode = false; help = false; hoveredEditTrack = null; trackHelpWHeld = false;
+            workspaceManager.Switch(WorkspaceMode.Viewer);
+            if (persistRecentProjects) ApplyMainWindowBounds(WorkspaceMode.Viewer);
+            if (persistRecentProjects) SaveSettings();
             message = editor?.Dirty == true ? L.Get("Viewer / unsaved editor changes are still active.") : L.Get("Viewer");
         }
     }
@@ -302,17 +319,23 @@ public sealed partial class Viewer
     /// 打开数值 / 文本输入模态。会暂停播放并开启 SDL 文本输入。preserveWhitespace 用于文字内容一类
     /// 首尾空白有意义的场合，此时不做 Trim。同时吞掉本帧的 click，避免打开模态的那一次点击穿透到下层控件。
     /// </summary>
-    void OpenValue(string title, string value, Action<string> accept, bool preserveWhitespace = false)
+    void OpenValue(string title, string value, Action<string> accept, bool preserveWhitespace = false,
+        bool pausePlayback = true)
     {
         if (modalActive) return;
         // 模态要接管键盘，就地编辑必须先让位；否则两边都在收 0x303，输入会同时进两个缓冲。
         CloseInline();
-        transport.SetPlaying(false); modalActive = true; modalTitle = title; modalValue = value;
+        if (pausePlayback) transport.SetPlaying(false);
+        modalActive = true; modalTitle = title; modalValue = value;
+        modalWindow = ActiveUiWindow;
         modalAccept = accept; modalError = ""; modalSelectAll = true; modalTrim = !preserveWhitespace;
-        if (!Sdl.SDL_StartTextInput(host.Window)) { modalError = L.Get("Text input: ") + Sdl.Error; }
+        if (!Sdl.SDL_StartTextInput(ActiveUiWindow)) { modalError = L.Get("Text input: ") + Sdl.Error; }
         click = false;
     }
-    void CloseValue() { modalActive = false; modalAccept = null; Sdl.SDL_StopTextInput(host.Window); click = false; }
+    nint modalWindow;
+    void CloseValue() { modalActive = false; modalAccept = null;
+        if (modalWindow != 0) Sdl.SDL_StopTextInput(modalWindow);
+        modalWindow = 0; click = false; }
     /// <summary>accept 抛异常时只把错误显示在模态里并保持打开，用户可以继续改；不会静默关闭而丢掉输入。</summary>
     void AcceptValue()
     {

@@ -53,6 +53,7 @@ public sealed partial class Canvas : IDisposable
     Target? target;
 
     Sdl.IntRect? clip;
+    Rect? clipLimit;
 
     Shader? currentShader;
 
@@ -98,6 +99,7 @@ public sealed partial class Canvas : IDisposable
         this.pixelWidth = pixelWidth;
         this.pixelHeight = pixelHeight;
         clip = null;
+        clipLimit = null;
         Gpu.Begin(target, pixelWidth, pixelHeight, clear);
         currentShader = null;
     }
@@ -107,6 +109,17 @@ public sealed partial class Canvas : IDisposable
     public void Clip(Rect? bounds)
     {
         Flush();
+        if (clipLimit is { } limit)
+        {
+            if (bounds is { } requested)
+            {
+                float clipLeft = Math.Max(limit.X, requested.X), clipTop = Math.Max(limit.Y, requested.Y);
+                float clipRight = Math.Min(limit.X + limit.W, requested.X + requested.W);
+                float clipBottom = Math.Min(limit.Y + limit.H, requested.Y + requested.H);
+                bounds = new(clipLeft, clipTop, Math.Max(0, clipRight - clipLeft), Math.Max(0, clipBottom - clipTop));
+            }
+            else bounds = limit;
+        }
         if (bounds is not { } r)
         {
             clip = null;
@@ -123,6 +136,13 @@ public sealed partial class Canvas : IDisposable
             w = right - left,
             h = bottom - top
         };
+    }
+
+    /// <summary>Panel scissor boundary; inner Clip(null) restores this boundary until it is removed.</summary>
+    public void LimitClip(Rect? bounds)
+    {
+        clipLimit = bounds;
+        Clip(null);
     }
 
     /// <summary>纹理或 shader 变化时先 Flush，让已累积的几何仍按旧状态提交；shader 为 null 时回退到 Basic。</summary>
@@ -144,6 +164,8 @@ public sealed partial class Canvas : IDisposable
         {
             return;
         }
+        if (clip is { w: <= 0 } or { h: <= 0 })
+        { vertices.Clear(); return; }
         currentShader.Vec2("u_resolution", width, height);
         currentShader.Int("gm_BaseTexture", 0);
         Gpu.Draw(target, pixelWidth, pixelHeight, currentShader, currentTexture, clip, blendSource, blendDestination,

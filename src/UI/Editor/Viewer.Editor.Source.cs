@@ -31,13 +31,13 @@ public sealed partial class Viewer
         sourceImageTab = sourceSelecting = false; sourceTop = 0; sourceLeft = 0;
         workflow = displayedWorkflow = "source"; workflowError = "";
         settings = help = false; held = click = false;
-        Sdl.SDL_StartTextInput(host.Window);
+        Sdl.SDL_StartTextInput(ActiveUiWindow);
     }
 
     void CloseSourceEditor()
     {
         workflow = ""; sourceSelecting = false; held = click = false;
-        Sdl.SDL_CaptureMouse(false); Sdl.SDL_StopTextInput(host.Window);
+        Sdl.SDL_CaptureMouse(false); Sdl.SDL_StopTextInput(ActiveUiWindow);
     }
 
     void ApplySourceEditor()

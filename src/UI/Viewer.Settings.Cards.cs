@@ -94,6 +94,17 @@ public sealed partial class Viewer
             SettingsHint("Visual delay shifts notes; gimmick timing stays on the song clock.", sx, r.Y + 174, r.W - 28);
     }
 
+    void DrawSettingsWorkspace(Rect r)
+    {
+        SettingsCard(r, "Workspace");
+        Text(L.Get("Dockable multi-window workspace (experimental)"), r.X + 14, r.Y + 50, 15, white, max: r.W - 28);
+        if (Button(DockingEnabled ? L.Get("ON") : L.Get("OFF"), new(r.X + 14, r.Y + 84, 150, 34),
+            active: DockingEnabled, enabled: WorkspaceWindowManager.SupportsDetachedWindows,
+            key: "settings-docking")) SetDockingEnabled(!DockingEnabled);
+        Text(L.Get("Off by default. Use the original single-window interface."), r.X + 14, r.Y + 142, 13, muted, max: r.W - 28);
+        Text(L.Get("Disabling closes tool windows and keeps your custom layout for later."), r.X + 14, r.Y + 172, 13, muted, max: r.W - 28);
+    }
+
     void DrawSettingsDisplay(Rect r)
     {
         SettingsCard(r, "Display");

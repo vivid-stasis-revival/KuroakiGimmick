@@ -56,7 +56,8 @@ public sealed partial class Viewer
                 MenuCommand.Delete or MenuCommand.AddMod or MenuCommand.Loop or MenuCommand.Follow => editorMode && editor != null,
             MenuCommand.Undo => editorMode && editor?.CanUndo == true,
             MenuCommand.Redo => editorMode && editor?.CanRedo == true,
-            MenuCommand.Layout or MenuCommand.Fullscreen or MenuCommand.Quit => true,
+            MenuCommand.RestoreHiddenPanels => DockingEnabled && workspaceManager.Current.Hidden.Count > 0,
+            MenuCommand.Layout or MenuCommand.ResetLayout or MenuCommand.Fullscreen or MenuCommand.Quit => true,
             _ => false
         };
     }
@@ -84,6 +85,7 @@ public sealed partial class Viewer
         state.Add(Current.IsEmpty); state.Add(editorMode); state.Add(editor?.CanUndo); state.Add(editor?.CanRedo);
         state.Add(notes); state.Add(effects); state.Add(Current.Project.GameUiEnabled); state.Add(full);
         state.Add(loopEnabled); state.Add(editorFollow); state.Add(transport.Playing);
+        state.Add(workspaceManager.Current.Hidden.Count);
         int hash = state.ToHashCode();
         if (hash == menuStateHash) return;
         menuStateHash = hash;
@@ -150,6 +152,8 @@ public sealed partial class Viewer
             case MenuCommand.GameUi: Current.Project.GameUiEnabled = !Current.Project.GameUiEnabled; break;
             case MenuCommand.Fullscreen: ToggleFull(); break;
             case MenuCommand.Layout: OpenLayout(); break;
+            case MenuCommand.ResetLayout: ResetCurrentWorkspace(); break;
+            case MenuCommand.RestoreHiddenPanels: RestoreHiddenPanels(); break;
             case MenuCommand.Settings:
                 startup = false; OpenSettings(); click = false; break;
             case MenuCommand.QuickHelp:

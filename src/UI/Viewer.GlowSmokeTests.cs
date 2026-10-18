@@ -1,4 +1,3 @@
-using System.Text.Json;
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Graphics;
 
@@ -12,7 +11,7 @@ public sealed partial class Viewer
         using var source = new Target(Canvas.Gpu, 320, 180);
         using var output = new Target(Canvas.Gpu, 320, 180);
         var layer = new GameFxProfile.Layer();
-        void Parameter(string name, double value) => layer.Parameters[name] = JsonSerializer.SerializeToElement(value);
+        void Parameter(string name, double value) => layer.Parameters[name] = AppJson.SerializeToElement(value);
         Parameter("g_GlowRadius", 141); Parameter("g_GlowGamma", 0);
         // A constant image is unchanged by the disk kernel, isolating the original bm_max blend.
         // In particular, five faint passes must accumulate instead of taking their maximum.

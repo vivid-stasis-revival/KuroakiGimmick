@@ -34,51 +34,8 @@ public sealed partial class Viewer
         if (EButton(L.Get("SAVE"), new(w - 157, 25, 65, 31), primary: true, enabled: !Busy)) SaveEditor();
         if (EButton("?", new(w - 84, 25, 55, 31))) help = !help;
         Divider(24, 79, w - 48);
-        var geometry = workspaceGeometry;
-        float timelineY = geometry.SplitY, left = 24, leftW = geometry.LeftWidth,
-            previewX = geometry.PreviewX, rightX = geometry.RightX;
-        float previewW = geometry.PreviewWidth, previewH = timelineY - 163;
-        DrawEditorSources(new(left, 96, leftW, Math.Max(1, timelineY - 110)));
-        Label(textCanvas ? L.Get("TEXT CANVAS / LOCAL") : imageCanvas ? L.Get("IMAGE CANVAS / LOCAL COORDINATES") : L.Get("PREVIEW / SAME RENDERER"), previewX, 96);
-        if (EButton(L.Get("IMAGE CANVAS"), new(previewX + previewW - 342, 89, 130, 25), active: imageCanvas, enabled: Current.Images.Items.Count > 0))
-        { imageCanvas = !imageCanvas; textCanvas = false; if (imageCanvas) desktopPreview = false; }
-        if (EButton(desktopPreview ? L.Get("DESKTOP") : L.Get("SCENE"), new(previewX + previewW - 204, 89, 94, 25), active: desktopPreview, key: "editor-desktop")) { if (textCanvas || imageCanvas) desktopPreview = false; else desktopPreview = !desktopPreview; imageCanvas = textCanvas = false; }
-        if (EButton(nativeWindows != null ? L.Get("LIVE: ON") : L.Get("LIVE: OFF"), new(previewX + previewW - 104, 89, 104, 25), active: nativeWindows != null, key: "editor-live")) ToggleNativeWindows();
-        var frame = new Rect(previewX, 122, previewW, previewH);
-        previewFrame = frame; previewImage = Canvas.PreviewRect(frame, pw / (float)w, ph / (float)h, false);
-        Canvas.Fill(frame, Color.Hex(0x030205)); Canvas.Border(frame, line);
-        using (Canvas.Unfaded())
-        {
-            if (textCanvas) DrawTextCanvas(previewImage, time);
-            else if (imageCanvas) DrawImageCanvas(previewImage, time);
-            else if (desktopPreview) DrawDesktop(frame, time);
-            else
-            {
-                if (prGridSoloRendered && (!TryPrGridTarget(out int selectedProxy) || selectedProxy != prGridSoloTarget)) prGridSoloRendered = false;
-                Canvas.Quad(prGridSoloRendered ? Renderer.ProxyInspectionTexture! : Renderer.Final.Texture, previewImage, Color.White);
-                if (!prGridSoloRendered) DrawSceneDirectManipulation(previewImage, time);
-                DrawPrCalibrationGrid(previewImage, time);
-            }
-        }
-        float controlsY = frame.Y + frame.H + 8;
-        if (EButton(transport.Playing ? L.Get("PAUSE") : L.Get("PLAY"), new(previewX, controlsY, 69, 27), primary: true, enabled: !Busy, key: "editor-play")) transport.SetPlaying(!transport.Playing);
-        if (EButton(L.Get("NOTES"), new(previewX + 77, controlsY, 65, 27), active: notes)) notes = !notes;
-        if (EButton(L.Get("FX"), new(previewX + 150, controlsY, 39, 27), active: effects)) effects = !effects;
-        if (EButton($"{transport.Speed:0.00}x", new(previewX + 197, controlsY, 61, 27), key: "editor-speed")) transport.SetSpeed(transport.Speed >= 2 ? .25 : transport.Speed + .25);
-        Text("B " + Current.Timeline.Bpm.Beat(time).ToString("0.###") + " / " + Clock(time), previewX + 270, controlsY + 6, 12, white, true, previewW - 270);
-        editorInspectorRect = new(rightX, 91, geometry.RightWidth, timelineY - 104);
-        string inspectorKey = imageInspector ? "image:" + selectedImageId + ":" + selectedImageGroup
-            : BatchSelection ? "batch:" + selectedClips.Count
-            : selectedClip?.ToString() ?? "window:" + selectedWindowEvent;
-        if (animatedInspector != inspectorKey)
-        {
-            animatedInspector = inspectorKey;
-            motion.Snap("inspector", 0);
-            motion.Snap("inspector-scroll", inspectorScroll);
-        }
-        using (Canvas.Opacity(motion.To("inspector", 1, .14))) DrawEditorInspector(editorInspectorRect, time);
-        editorTimelineRect = new(24, timelineY, w - 48, h - timelineY - 61);
-        DrawEditTimeline(editorTimelineRect, time, w, h);
+        EditorDockRects(w, h);
+        DrawMainDockPanels(w, h, pw, ph, time, true);
         Divider(24, h - 51, w - 48);
         using (Canvas.Opacity(motion.To("status", 1, .15)))
             Text((editor.Dirty ? L.Get("UNSAVED | ") : L.Get("SAVED | ")) + message, 24, h - 37, 11, editor.Dirty ? soft : muted, max: w - 300);
@@ -115,14 +72,87 @@ public sealed partial class Viewer
 
     }
 
+    /// <summary>One renderer dispatch for the registered editor panels, independent of native window identity.</summary>
+    void DrawEditorDockPanel(string id, Rect rect, int w, int h, int pw, int ph, double time)
+    {
+        switch (id)
+        {
+            case "tools": editorSourceRect = rect; DrawEditorTools(rect); break;
+            case "images": editorSourceRect = rect; DrawImageSources(rect); break;
+            case "text": editorSourceRect = rect; DrawTextSources(rect); break;
+            case "preview": DrawEditorPreview(rect, w, h, pw, ph, time); break;
+            case "inspector":
+                editorInspectorRect = new(rect.X, rect.Y, rect.W, Math.Max(1, rect.H - 7));
+                string inspectorKey = imageInspector ? "image:" + selectedImageId + ":" + selectedImageGroup
+                    : BatchSelection ? "batch:" + selectedClips.Count
+                    : selectedClip?.ToString() ?? "window:" + selectedWindowEvent;
+                if (animatedInspector != inspectorKey)
+                {
+                    animatedInspector = inspectorKey;
+                    motion.Snap("inspector", 0);
+                    motion.Snap("inspector-scroll", inspectorScroll);
+                }
+                using (Canvas.Opacity(motion.To("inspector", 1, .14))) DrawEditorInspector(editorInspectorRect, time);
+                break;
+            case "timeline": editorTimelineRect = rect; DrawEditTimeline(rect, time, w, h); break;
+            default: throw new ArgumentOutOfRangeException(nameof(id), id, "Unknown editor dock panel.");
+        }
+    }
+
+    /// <summary>Draw the shared Scene/Image/Text preview in any dock panel rectangle.</summary>
+    void DrawEditorPreview(Rect dockPreview, int w, int h, int pw, int ph, double time)
+    {
+        float previewX = dockPreview.X + PreviewHorizontalPadding, previewW = Math.Max(1, dockPreview.W - 2 * PreviewHorizontalPadding),
+            previewH = Math.Max(1, dockPreview.H - 66), previewTop = dockPreview.Y;
+        Label(textCanvas ? L.Get("TEXT CANVAS / LOCAL") : imageCanvas ? L.Get("IMAGE CANVAS / LOCAL COORDINATES") : L.Get("PREVIEW / SAME RENDERER"), previewX, previewTop + 5);
+        if (EButton(L.Get("IMAGE CANVAS"), new(previewX + previewW - 342, previewTop - 2, 130, 25), active: imageCanvas, enabled: Current.Images.Items.Count > 0))
+        { imageCanvas = !imageCanvas; textCanvas = false; if (imageCanvas) desktopPreview = false; }
+        if (EButton(desktopPreview ? L.Get("DESKTOP") : L.Get("SCENE"), new(previewX + previewW - 204, previewTop - 2, 94, 25), active: desktopPreview, key: "editor-desktop")) { if (textCanvas || imageCanvas) desktopPreview = false; else desktopPreview = !desktopPreview; imageCanvas = textCanvas = false; }
+        if (EButton(nativeWindows != null ? L.Get("LIVE: ON") : L.Get("LIVE: OFF"), new(previewX + previewW - 104, previewTop - 2, 104, 25), active: nativeWindows != null, key: "editor-live")) ToggleNativeWindows();
+        var frame = new Rect(previewX, previewTop + 31, previewW, previewH);
+        previewFrame = frame; previewImage = Canvas.PreviewRect(frame, pw / (float)w, ph / (float)h, false);
+        Canvas.Fill(frame, Color.Hex(0x030205)); Canvas.Border(frame, line);
+        using (Canvas.Unfaded())
+        {
+            if (textCanvas) DrawTextCanvas(previewImage, time);
+            else if (imageCanvas) DrawImageCanvas(previewImage, time);
+            else if (desktopPreview) DrawDesktop(frame, time);
+            else
+            {
+                if (prGridSoloRendered && (!TryPrGridTarget(out int selectedProxy) || selectedProxy != prGridSoloTarget)) prGridSoloRendered = false;
+                Canvas.Quad(prGridSoloRendered ? Renderer.ProxyInspectionTexture! : Renderer.Final.Texture, previewImage, Color.White);
+                if (!prGridSoloRendered) DrawSceneDirectManipulation(previewImage, time);
+                DrawPrCalibrationGrid(previewImage, time);
+            }
+        }
+        float controlsY = frame.Y + frame.H + 8;
+        if (EButton(transport.Playing ? L.Get("PAUSE") : L.Get("PLAY"), new(previewX, controlsY, 69, 27), primary: true, enabled: !Busy, key: "editor-play")) transport.SetPlaying(!transport.Playing);
+        if (EButton(L.Get("NOTES"), new(previewX + 77, controlsY, 65, 27), active: notes)) notes = !notes;
+        if (EButton(L.Get("FX"), new(previewX + 150, controlsY, 39, 27), active: effects)) effects = !effects;
+        if (EButton($"{transport.Speed:0.00}x", new(previewX + 197, controlsY, 61, 27), key: "editor-speed")) transport.SetSpeed(transport.Speed >= 2 ? .25 : transport.Speed + .25);
+        Text("B " + Current.Timeline.Bpm.Beat(time).ToString("0.###") + " / " + Clock(time), previewX + 270, controlsY + 6, 12, white, true, previewW - 270);
+    }
+
     /// <summary>左侧面板的三个页签。TOOLS / IMAGES / TEXT 互斥，切走时顺带关掉对应的 inspector，避免残留在不可见的选择上。</summary>
     void DrawEditorSources(Rect r)
     {
         editorSourceRect = r;
+        string beforeTab = textSources ? "text" : imageSources ? "images" : "tools";
         float third = (r.W - 12) / 3;
-        if (EButton(L.Get("TOOLS"), new(r.X, r.Y, third, 27), active: !imageSources && !textSources)) imageSources = textSources = false;
-        if (EButton(L.Get("IMAGES"), new(r.X + third + 6, r.Y, third, 27), active: imageSources)) { imageSources = true; textSources = textInspector = false; }
-        if (EButton(L.Get("TEXT"), new(r.X + 2 * (third + 6), r.Y, third, 27), active: textSources)) { textSources = true; imageSources = false; }
+        IReadOnlyList<string> order = DockingEnabled ? workspaceManager.Editor.TabsFor("tools") ?? ["tools", "images", "text"] : ["tools", "images", "text"];
+        for (int index = 0; index < order.Count; index++)
+        {
+            string id = order[index];
+            if (!EButton(L.Get(id.ToUpperInvariant()), new(r.X + index * (third + 6), r.Y, third, 27),
+                active: id == beforeTab, key: "editor-source-tab:" + id)) continue;
+            imageSources = id == "images";
+            textSources = id == "text";
+            if (imageSources) textInspector = false;
+        }
+        string activeTab = textSources ? "text" : imageSources ? "images" : "tools";
+        activePanel = activeTab;
+        if (DockingEnabled) workspaceManager.Editor.Activate(activeTab);
+        if (activeTab != beforeTab && persistRecentProjects) SaveSettings();
         var body = new Rect(r.X, r.Y + 35, r.W, Math.Max(1, r.H - 35));
         if (textSources) DrawTextSources(body); else if (imageSources) DrawImageSources(body); else DrawEditorTools(body);
     }

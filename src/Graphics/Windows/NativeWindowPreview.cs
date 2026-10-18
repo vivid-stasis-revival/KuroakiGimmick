@@ -103,7 +103,8 @@ public sealed class NativeWindowPreview : IDisposable
     void Close(int id)
     {
         if (!windows.Remove(id, out var e)) return;
-        gpu.Submit(); Sdl.SDL_ReleaseWindowFromGPUDevice(gpu.Handle, e.Handle); Sdl.SDL_DestroyWindow(e.Handle);
+        gpu.Submit(); Sdl.Require(Sdl.SDL_WaitForGPUSwapchain(gpu.Handle, e.Handle));
+        Sdl.SDL_ReleaseWindowFromGPUDevice(gpu.Handle, e.Handle); Sdl.SDL_DestroyWindow(e.Handle);
     }
     public void Dispose() { foreach (int id in windows.Keys.ToArray()) Close(id); }
 }

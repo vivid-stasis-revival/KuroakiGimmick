@@ -74,6 +74,7 @@ public sealed partial class Viewer
     {
         if (editor == null) return;
         EnsureTexts(); selectedTextId = id; textSources = textInspector = true; textCanvas = canvas;
+        workspaceManager.Editor.Activate("text");
         imageSources = imageInspector = imageCanvas = desktopPreview = false;
         selectedImageId = null; selectedImageGroup = null;
         selectedClip = null; textAnimation = null; selectedWindowEvent = -1; inspectorScroll = 0;

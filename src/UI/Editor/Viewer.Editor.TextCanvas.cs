@@ -103,7 +103,7 @@ public sealed partial class Viewer
     {
         if (textDrag is { } drag)
         {
-            if (e.WindowID != 0 && e.WindowID != Sdl.SDL_GetWindowID(host.Window)) return false;
+            if (e.WindowID != 0 && e.WindowID != ActiveUiWindowId) return false;
             if (e.Type is 0x20F or 0x100 or Sdl.WindowCloseRequested || e.Type == 0x300 && e.Scan == 41)
             { textDrag = null; textDragValues = null; held = click = false; Sdl.SDL_CaptureMouse(false); return e.Type is not (0x100 or Sdl.WindowCloseRequested); }
             if (e.Type == 0x400) { mouseX = e.X; mouseY = e.Y; UpdateTextDrag(new(e.X, e.Y)); return true; }

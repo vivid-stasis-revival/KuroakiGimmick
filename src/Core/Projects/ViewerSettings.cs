@@ -20,7 +20,26 @@ public sealed class ViewerSettings
         "monaco" => MonacoFont,
         _ => value
     };
+    /// <summary>Opt-in desktop docking UI. Missing fields in older settings remain disabled.</summary>
+    public bool DockableWorkspaceEnabled { get; set; }
     public WorkspaceLayout Workspace { get; set; } = new();
+    /// <summary>Named, device-local workspace presets. Keys are prefixed with viewer: or editor:.</summary>
+    public Dictionary<string, DockLayoutFile> WorkspacePresets { get; set; } = new(StringComparer.Ordinal);
+    void NormalizeWorkspacePresets()
+    {
+        var safe = new Dictionary<string, DockLayoutFile>(StringComparer.Ordinal);
+        foreach (var (name, file) in WorkspacePresets ?? [])
+        {
+            if (safe.Count >= 64) break;
+            if (file == null || name.Length is < 8 or > 100 ||
+                !(name.StartsWith("viewer:", StringComparison.Ordinal) && !file.Editor ||
+                  name.StartsWith("editor:", StringComparison.Ordinal) && file.Editor) ||
+                file.Version != 1 || file.Windows == null || file.Nodes == null ||
+                file.Windows.Count > 33 || file.Nodes.Count > 128) continue;
+            safe[name] = file;
+        }
+        WorkspacePresets = safe;
+    }
     // Device-local performance preferences (never saved into a song project).
     public string CalculationEngine { get; set; } = "optimization";
     public string AudioEngine { get; set; } = "optimization";
@@ -136,6 +155,8 @@ public sealed class ViewerSettings
                 File.Move(previous, path);
 #endif
             if (!File.Exists(path)) return new();
+            if (new FileInfo(path).Length > 4 * 1024 * 1024)
+                throw new JsonException("Settings file exceeds the safe size limit.");
             // 最近工程是可丢弃的设备历史：它坏了只清这一项，不连带丢掉音量、字体等其它偏好。
             var data = JsonNode.Parse(File.ReadAllText(path));
             string? recentKey = (data as JsonObject)?.Select(pair => pair.Key)
@@ -153,6 +174,7 @@ public sealed class ViewerSettings
             }
             var settings = AppJson.Deserialize<ViewerSettings>(data?.ToJsonString() ?? "null", ViewerProject.Json) ?? new();
             settings.Workspace ??= new(); settings.Workspace.Normalize(); settings.UiTheme = ValidTheme(settings.UiTheme);
+            settings.NormalizeWorkspacePresets();
             settings.CalculationEngine = ValidCalculationEngine(settings.CalculationEngine);
             settings.AudioEngine = ValidAudioEngine(settings.AudioEngine);
             settings.UiLanguage = Core.UiLanguage.Normalize(settings.UiLanguage);
@@ -187,6 +209,7 @@ public sealed class ViewerSettings
     public void Save(ViewerProject p, string? path = null)
     {
         Workspace ??= new(); Workspace.Normalize(); UiTheme = ValidTheme(UiTheme);
+        NormalizeWorkspacePresets();
         CalculationEngine = ValidCalculationEngine(CalculationEngine); AudioEngine = ValidAudioEngine(AudioEngine);
         UiLanguage = Core.UiLanguage.Normalize(UiLanguage);
         NoteAlignment = p.NoteAlignment;
@@ -207,6 +230,7 @@ public sealed class ViewerSettings
     public void Persist(string? path = null)
     {
         Workspace ??= new(); Workspace.Normalize(); UiTheme = ValidTheme(UiTheme);
+        NormalizeWorkspacePresets();
         CalculationEngine = ValidCalculationEngine(CalculationEngine); AudioEngine = ValidAudioEngine(AudioEngine);
         UiLanguage = Core.UiLanguage.Normalize(UiLanguage);
         NormalizeRecentProjects();

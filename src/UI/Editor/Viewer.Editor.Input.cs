@@ -14,7 +14,7 @@ public sealed partial class Viewer
     {
         // 辅助窗口的鼠标坐标绝不能进入编辑器宿主窗口的命中测试，否则会按别的窗口坐标去点工作区。
         bool windowEvent = e.Type is >= 0x202 and <= 0x21B or >= 0x300 and <= 0x303 or >= 0x400 and <= 0x403 or >= 0x1000 and <= 0x1004;
-        if (windowEvent && e.WindowID != 0 && e.WindowID != Sdl.SDL_GetWindowID(host.Window))
+        if (windowEvent && e.WindowID != 0 && e.WindowID != ActiveUiWindowId)
         {
             if (nativeWindows?.Owns(e.WindowID) == true && (e.Type == Sdl.WindowCloseRequested || e.Type == 0x300 && e.Scan == 41))
             { nativeWindows.Dispose(); nativeWindows = null; message = L.Get("Live windows closed."); }

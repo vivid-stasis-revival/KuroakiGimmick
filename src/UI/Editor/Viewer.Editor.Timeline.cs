@@ -150,13 +150,22 @@ public sealed partial class Viewer
         if (EButton("B", new(r.X + 466, r.Y + 7, 31, 25))) loopOut = Math.Max(loopIn + .125, Current.Timeline.Bpm.Beat(time));
         if (EButton(L.Get("LOOP"), new(r.X + 505, r.Y + 7, 63, 25), active: loopEnabled)) loopEnabled = !loopEnabled;
         if (EButton(L.Get("FOLLOW"), new(r.X + 576, r.Y + 7, 74, 25), active: editorFollow)) editorFollow = !editorFollow;
-        if (EButton(L.Get("MARK / E"), new(r.X + 662, r.Y + 7, 82, 25))) MarkTimestamp();
-        if (EButton(L.Get("CLEAR TARGET"), new(r.X + 752, r.Y + 7, 110, 25), enabled: activeMarker != null)) activeMarker = null;
+        if (r.W >= 1010)
+        {
+            if (EButton(L.Get("MARK / E"), new(r.X + 662, r.Y + 7, 82, 25))) MarkTimestamp();
+            if (EButton(L.Get("CLEAR TARGET"), new(r.X + 752, r.Y + 7, 110, 25), enabled: activeMarker != null)) activeMarker = null;
+        }
+        else if (EButton(activeMarker == null ? L.Get("MARK / E") : L.Get("CLEAR TARGET"),
+            new(r.X + 662, r.Y + 7, 110, 25)))
+        { if (activeMarker == null) MarkTimestamp(); else activeMarker = null; }
         if (r.W > 1150) Text(activeMarker != null ? L.Format($"TARGET B {InsertionBeat:0.###}") : L.Format($"{editTracks.Count} tracks"),
             r.X + 874, r.Y + 14, 11, activeMarker != null ? soft : muted, true, r.W - 1005);
         if (EButton(L.Get("UP"), new(r.X + r.W - 116, r.Y + 7, 49, 25))) trackScroll = Math.Max(0, trackScroll - 1);
         if (EButton(L.Get("DOWN"), new(r.X + r.W - 61, r.Y + 7, 53, 25))) trackScroll++;
-        float labelW = Math.Clamp(LayoutOptions.TrackLabelWidth, 180, Math.Min(500, r.W - 360)), x = r.X + labelW, rulerY = r.Y + 40, markerY = rulerY + 27, audioY = markerY + 27, noteY = audioY + 27, tracksY = noteY + 58;
+        float labelMax = Math.Min(500, Math.Max(40, r.W - 160));
+        float labelW = Math.Clamp(LayoutOptions.TrackLabelWidth, Math.Min(180, labelMax), labelMax),
+            x = r.X + labelW, rulerY = r.Y + 40, markerY = rulerY + 27, audioY = markerY + 27,
+            noteY = audioY + 27, tracksY = noteY + 58;
         if (EButton(L.Get(preferences.GroupGimmickTracks ? "GROUPED" : "RAW EVENTS"), new(r.X + 90, rulerY, labelW - 98, 24), key: "gimmick-view"))
             SetGimmickGrouping(!preferences.GroupGimmickTracks);
         if (EButton(L.Get("SOURCE"), new(r.X + 90, markerY, labelW - 98, 24), enabled: !Busy, key: "source-editor"))
@@ -249,7 +258,10 @@ public sealed partial class Viewer
         }
         Canvas.Clip(null);
         Text(L.Get("MARKERS / E"), r.X + 12, markerY + 5, 11, muted, true, 72);
-        Text(L.Get("BEATS"), r.X + 12, rulerY + 5, 11, muted, true, 72); Label(waveformAudio == null ? L.Get("NO AUDIO") : L.Get("AUDIO / PEAKS"), r.X + 12, audioY + 7);
+        Text(L.Get("BEATS"), r.X + 12, rulerY + 5, 11, muted, true, 72);
+        Canvas.Fill(new(r.X + 72, rulerY + 8, 12, 2), soft);
+        Canvas.Fill(new(r.X + 72, rulerY + 13, 12, 2), soft);
+        Label(waveformAudio == null ? L.Get("NO AUDIO") : L.Get("AUDIO / PEAKS"), r.X + 12, audioY + 7);
         Label(L.Get("NOTES / READ ONLY"), r.X + 12, noteY + 7);
         Text("1   2   3   4", r.X + 12, noteY + 28, 10, muted, true);
         int visibleRows = Math.Max(1, (int)(editorTracksRect.H / 35));

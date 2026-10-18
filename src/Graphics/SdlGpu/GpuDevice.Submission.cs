@@ -113,7 +113,14 @@ public sealed unsafe partial class GpuDevice : IDisposable
             if (present && (!hidden || presentWindow != 0))
             {
                 using (PerformanceStats.Measure(PerformanceStats.Stage.GpuWait))
-                    Require(SDL_WaitAndAcquireGPUSwapchainTexture(command, outputWindow, out swapchain, out swapWidth, out swapHeight));
+                {
+                    // Auxiliary windows must never make the main workspace wait for a minimized or
+                    // compositor-throttled swapchain. SDL returns a null texture when one is unavailable.
+                    if (presentWindow != 0)
+                        Require(SDL_AcquireGPUSwapchainTexture(command, outputWindow, out swapchain, out swapWidth, out swapHeight));
+                    else
+                        Require(SDL_WaitAndAcquireGPUSwapchainTexture(command, outputWindow, out swapchain, out swapWidth, out swapHeight));
+                }
                 acquired = swapchain != 0;
                 if (acquired)
                 {

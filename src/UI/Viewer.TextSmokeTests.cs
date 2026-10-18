@@ -14,6 +14,7 @@ public sealed partial class Viewer
     {
         preferences.UiAnimations = false;
         preferences.Workspace = new WorkspaceLayout { FollowDisplayScale = false, UiScale = 1 };
+        ResetDockWorkspaces();
         OpenEditor();
         if (editor == null) throw new InvalidOperationException("Text smoke test needs a chart.");
         string id = editor.AddText("Text canvas", 0, true);

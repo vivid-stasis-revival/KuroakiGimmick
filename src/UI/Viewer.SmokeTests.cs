@@ -27,6 +27,7 @@ public sealed partial class Viewer
         preferences.UiAnimations = false;
         // 下面的合成坐标都基于未经缩放的 1440x940 测试画布。
         preferences.Workspace = new WorkspaceLayout { FollowDisplayScale = false, UiScale = 1 };
+        ResetDockWorkspaces();
         // 即时校准不能重建会话、暂停播放或丢掉正在编辑的文档。
         var timingSession = Current;
         var timingEditor = editor;

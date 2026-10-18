@@ -30,8 +30,19 @@ public sealed partial class Viewer
     /// <summary>把当前 project 的预览偏好写回设置文件。IO / 权限失败只提示不抛出，设置落盘失败不能打断交互。</summary>
     void SaveSettings()
     {
+        if (!persistRecentProjects && settingsPath == null) return;
         try
         {
+            if (DockingEnabled && workspaceWindows.TryCapture(workspaceWindows.Main, DockLayout.MainWindow) is { } mainBounds)
+            {
+                mainBounds.UiScale = LayoutOptions.UiScale;
+                workspaceManager.RememberWindow(workspaceManager.Mode, mainBounds);
+            }
+            foreach (var (id, identity) in dockWindowIds)
+                if (workspaceWindows.TryGet(id, out var window) && window != null &&
+                    workspaceWindows.TryCapture(window, identity.Root) is { } bounds)
+                    workspaceManager.RememberWindow(identity.Mode, bounds);
+            if (DockingEnabled) workspaceManager.Save(LayoutOptions);
             preferences.Save(Current.Project, settingsPath);
             OptimizationEngineSettings.Apply(preferences);
         }
@@ -79,7 +90,7 @@ public sealed partial class Viewer
             [
                 ("general", "General"), ("audio", "Audio & Sync"),
                 ("display", "Display"), ("editor", "Editor"), ("vsui", "VS UI"),
-                ("performance", "Performance"), ("export", "Export")
+                ("performance", "Performance"), ("export", "Export"), ("workspace", "Workspace")
             ];
             for (int i = 0; i < entries.Length; i++)
             {
@@ -121,6 +132,7 @@ public sealed partial class Viewer
                     case "vsui": DrawSettingsVsUi(focus); break;
                     case "performance": DrawSettingsPerformance(focus, compact: focus.H < 430); break;
                     case "export": DrawSettingsExport(focus); break;
+                    case "workspace": DrawSettingsWorkspace(focus); break;
                     default: DrawSettingsInterface(focus); break;
                 }
             }
@@ -129,6 +141,7 @@ public sealed partial class Viewer
             if (Button(L.Get("RESET DEFAULTS"), new(x, r.Y + r.H - 50, 190, 32), key: "settings-reset"))
             {
                 var p = Current.Project;
+                SetDockingEnabled(false);
                 preferences.UiAnimations = true;
                 preferences.ModalValueEditor = false;
                 preferences.GroupGimmickTracks = true; ResetGimmickTracks(); layoutRevision = -1;

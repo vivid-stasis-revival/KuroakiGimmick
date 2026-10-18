@@ -108,6 +108,7 @@ public sealed partial class Viewer
 
         preferences.UiAnimations = false;
         preferences.Workspace = new WorkspaceLayout { FollowDisplayScale = false, UiScale = 1 };
+        ResetDockWorkspaces();
         string vsm = "!obj:obj_custom_gimmick\n!proxies:2\n" + Mod("pra", 1) + Mod("prx", -65) +
             Mod("pra", 1, 1) + Mod("prx", 35, 1) + Mod("prrz", 12, 1) + Mod("prtrY", .002, 1) +
             Mod("shcl", .47, 1) + Mod("shcr", .38, 1) + Mod("shfl", .035, 1) + Mod("shfr", .02, 1);

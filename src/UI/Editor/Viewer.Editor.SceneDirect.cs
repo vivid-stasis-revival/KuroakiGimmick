@@ -175,7 +175,7 @@ public sealed partial class Viewer
     {
         if (sceneDirectDrag is { } drag)
         {
-            if (e.WindowID != 0 && e.WindowID != Sdl.SDL_GetWindowID(host.Window)) return false;
+            if (e.WindowID != 0 && e.WindowID != ActiveUiWindowId) return false;
             if (e.Type == 0x20F || e.Type == 0x300 && e.Scan == 41)
             { CancelSceneDirectGesture(); return true; }
             if (e.Type is 0x100 or Sdl.WindowCloseRequested) { CancelSceneDirectGesture(); return false; }

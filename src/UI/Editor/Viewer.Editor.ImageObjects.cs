@@ -123,6 +123,7 @@ public sealed partial class Viewer
         bool changed = selectedImageId != id;
         textInspector = textSources = textCanvas = false;
         selectedImageId = id; selectedImageGroup = groupId; imageInspector = imageSources = true;
+        workspaceManager.Editor.Activate("images");
         if (canvas) { imageCanvas = true; desktopPreview = false; }
         selectedWindowEvent = -1; imageObjectError = "";
         if (groupId != null)

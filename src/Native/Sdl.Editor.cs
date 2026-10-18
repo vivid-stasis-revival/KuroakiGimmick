@@ -8,6 +8,9 @@ namespace KuroakiGimmick.Native;
 /// </summary>
 public static partial class Sdl
 {
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool SDL_SetWindowAspectRatio(nint window, float minimum, float maximum);
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] public static extern ulong SDL_GetWindowFlags(nint window);
     public const uint WindowCloseRequested = 0x210;
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] public static extern uint SDL_GetWindowID(nint window);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] public static extern ushort SDL_GetModState();
@@ -18,12 +21,14 @@ public static partial class Sdl
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool SDL_SetClipboardText([MarshalAs(UnmanagedType.LPUTF8Str)] string text);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] public static extern void SDL_free(nint memory);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool SDL_SetWindowPosition(nint window, int x, int y);
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool SDL_GetWindowPosition(nint window, out int x, out int y);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool SDL_SetWindowSize(nint window, int w, int h);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool SDL_ShowWindow(nint window);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool SDL_HideWindow(nint window);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool SDL_SetWindowBordered(nint window, [MarshalAs(UnmanagedType.I1)] bool value);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool SDL_RaiseWindow(nint window);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] public static extern uint SDL_GetDisplayForWindow(nint window);
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] public static extern nint SDL_GetDisplays(out int count);
     /// <summary>桌面坐标系下该显示器的矩形，含多显示器的负坐标；单位是逻辑点，不是物理像素。</summary>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool SDL_GetDisplayBounds(uint display, out IntRect bounds);
 }

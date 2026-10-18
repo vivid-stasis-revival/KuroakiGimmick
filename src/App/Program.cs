@@ -37,7 +37,7 @@ internal static class Program
         // 这一串是所有无人值守模式（自测、检查、导出、截图）。cli 为真时失败只写 stderr，不弹消息框卡住脚本。
         bool cli = args.Any(a => a is "--bake-mobile-shaders" or "--bake-switch-shaders" or "--inspect" or "--render" or "--snapshot" or "--card" or "--smoke-ui" or "--smoke-touch-ui" or "--smoke-workspace-memory" or "--smoke-startup" or "--smoke-mac-menu" or "--smoke-windows-menu" or "--smoke-proxy-guides" or "--proxy-pick-test" or "--reference-layout-test" or "--gimmick-definition-test" or "--smoke-text-ui" or "--smoke-i18n" or "--rust-engine-test" or "--rust-timeline-test" or "--rust-bridge-test" or "--rust-audio-test");
         string startupLanguage = UiLanguage.SystemLanguage;
-        cli |= args.Contains("--chart-size-test") || args.Contains("--mpf-test") || args.Contains("--smoke-size-warning") || args.Contains("--parallel-export-test");
+        cli |= args.Contains("--chart-size-test") || args.Contains("--mpf-test") || args.Contains("--smoke-size-warning") || args.Contains("--parallel-export-test") || args.Contains("--dock-layout-test") || args.Contains("--smoke-dock-window");
         try
         {
             if (args.Length >= 3 && args[0] == "--bake-mobile-shaders")
@@ -68,6 +68,7 @@ internal static class Program
                 return 0;
             }
             if (args.Contains("--proxy-pick-test")) return ProxyPickingChecks.Run();
+            if (args.Contains("--dock-layout-test")) return DockLayoutChecks.Run();
             if (args.Contains("--chart-size-test")) return ChartSizeChecks.Run();
             if (args.Contains("--mpf-test"))
             {
@@ -283,6 +284,11 @@ internal static class Program
                 return 0;
             }
             if (options.ContainsKey("editor")) viewer.OpenEditor();
+            if (options.ContainsKey("smoke-dock-window"))
+            {
+                viewer.SmokeDockNative();
+                return 0;
+            }
             if (options.TryGetValue("proxy", out var proxyId))
                 viewer.ConfigureProxyPreview(int.Parse(proxyId, CultureInfo.InvariantCulture), options.ContainsKey("proxy-solo"), options.ContainsKey("proxy-crop"));
             if (options.ContainsKey("settings"))
@@ -420,6 +426,7 @@ internal static class Program
             "snapshot",
             "card",
             "smoke-ui", "smoke-touch-ui",
+            "smoke-dock-window",
             "smoke-workspace-memory", "smoke-startup",
             "smoke-mac-menu",
             "smoke-windows-menu",
@@ -519,8 +526,10 @@ internal static class Program
     Parallel video rendering: --render-workers N (max: CPU logical cores minus 2, minimum 1; default 1; Settings > Export)
     Proxy preview: --snapshot --proxy 4 [--proxy-solo] [--proxy-crop] --time 60
     Touch input check (SDL/GPU, synthetic events): --smoke-touch-ui
+    Native dock window check (SDL/GPU, sample project): --smoke-dock-window
     Proxy guide check: --smoke-proxy-guides --time 0 --out proxy-guides.ppm
     Proxy picking (no SDL): --proxy-pick-test
+    Dock tree and workspace persistence (no SDL): --dock-layout-test
     Object definition compatibility (no SDL/assets): --gimmick-definition-test
     Documentation Markdown/layout (no SDL): --reference-layout-test
     UI localization check: --smoke-i18n [--editor] --out i18n.ppm

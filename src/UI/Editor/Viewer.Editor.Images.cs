@@ -36,7 +36,7 @@ public sealed partial class Viewer
     /// </summary>
     bool HandleImageDrop(Sdl.Event e)
     {
-        if (e.WindowID != 0 && e.WindowID != Sdl.SDL_GetWindowID(host.Window)) return false;
+        if (e.WindowID != 0 && e.WindowID != ActiveUiWindowId) return false;
         if (ImageImportVisible)
         {
             if (e.Type is 0x400 or 0x401 or 0x402)

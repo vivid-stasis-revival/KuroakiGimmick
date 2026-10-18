@@ -16,6 +16,18 @@ public sealed partial class Viewer
     /// <summary>只处理输入状态和命令，不在事件分支内直接执行耗时文件加载。</summary>
     public void Handle(Sdl.Event e)
     {
+        activePointer = mainPointer;
+        activeWorkspaceWindow = workspaceWindows.Main;
+        if (e.Type is 0x20E or 0x20F)
+            workspaceWindows.Observe(e, LayoutOptions, out _);
+        bool windowEvent = e.Type is >= 0x202 and <= 0x21B or >= 0x300 and <= 0x303 or
+            >= 0x400 and <= 0x403 or >= 0x1000 and <= 0x1004;
+        if (windowEvent && e.WindowID != 0 && workspaceWindows.TryGet(e.WindowID, out var dockWindow) &&
+            dockWindow is { Main: false } && HandleDockWindowEvent(e, dockWindow)) return;
+        // Window Motion and stale closed-window events cannot start workspace gestures.
+        if (windowEvent && e.WindowID != 0 && e.WindowID != ActiveUiWindowId) return;
+        if ((e.Type is 0x401 or 0x20E) && inlineWindow != 0 && inlineWindow != ActiveUiWindow)
+        { AcceptInline(); if (InlineActive) return; }
         // 先换算到逻辑坐标，再按优先级交给各手势 / 覆盖层处理器；任一处理器吃掉事件后，下方的 viewer 快捷键不再响应。
         // Handle SDL native fingers before LogicalInput: their coordinates and windowID
         // occupy different offsets from mouse events. Discard SDL's duplicate touch-mouse.
@@ -24,6 +36,13 @@ public sealed partial class Viewer
         if (e.Type == 0x401 && e.Button == 1) mouseClickFromTouch = sendingTouchMouse;
         if (e.Type == 0x20F && touchContacts.Count != 0) CancelTouchInput();
         e = LogicalInput(e);
+        if (e.Type is 0x400 or 0x401 or 0x402)
+            FocusDockPanel(DockLayout.MainWindow, e.X, e.Y);
+        else if (e.Type == 0x403)
+            FocusDockPanel(DockLayout.MainWindow, mouseX, mouseY);
+        if (HandleDockContextInput(e, workspaceWindows.Main)) return;
+        if (HandleDockSplitInput(e, workspaceWindows.Main)) return;
+        if (HandleDockDragInput(e, workspaceWindows.Main)) return;
         if (HandleStartupInput(e)) return;
         if (HandleTrackOrderInput(e)) return;
         if (HandlePrGridGesture(e)) return; // Floating PR calibration HUD owns its header drag and [+] toggle.
@@ -34,6 +53,11 @@ public sealed partial class Viewer
         if (HandleLayoutInput(e)) return;
         if (HandleImageDrop(e)) return;
         if (HandleEditorInput(e)) return;
+        HandleViewerFallback(e);
+    }
+
+    void HandleViewerFallback(Sdl.Event e)
+    {
         // 事件类型：0x100 退出，0x400/0x401/0x402 鼠标移动/按下/抬起，0x403 滚轮，0x1000 拖入文件，0x300 按键按下。
         if (e.Type == 0x100)
         {
@@ -68,8 +92,14 @@ public sealed partial class Viewer
         }
         if (e.Type == 0x403 && !Busy && !settings)
         {
+            if (activePanel == "sources")
+            {
+                viewerSourceScroll = Math.Clamp(viewerSourceScroll - e.WheelY * 36, 0,
+                    Math.Max(0, 700 - activePanelRect.H + (activeWorkspaceWindow.Main ? 0 : 30)));
+                return;
+            }
             // 报告面板上方的滚轮翻页；其余位置每格滚动 seek 0.25 秒。
-            if (diagnostics && mouseX > workspaceGeometry.RightX)
+            if (activePanel == "diagnostics")
             {
                 diagnosticPage = Math.Max(0, diagnosticPage - (int) e.WheelY);
             }
@@ -100,6 +130,11 @@ public sealed partial class Viewer
             else if (help)
             {
                 help = false;
+            }
+            else if (!activeWorkspaceWindow.Main && activeWorkspaceWindow.Fullscreen)
+            {
+                activeWorkspaceWindow.Fullscreen = false;
+                Sdl.SDL_SetWindowFullscreen(ActiveUiWindow, false);
             }
             else if (full)
             {
@@ -148,7 +183,12 @@ public sealed partial class Viewer
                 transport.Seek(Current.Duration);
                 break;
             case 9:
-                ToggleFull();
+                if (activeWorkspaceWindow.Main) ToggleFull();
+                else
+                {
+                    activeWorkspaceWindow.Fullscreen = !activeWorkspaceWindow.Fullscreen;
+                    Sdl.SDL_SetWindowFullscreen(ActiveUiWindow, activeWorkspaceWindow.Fullscreen);
+                }
                 break;
             case 21:
                 Reload();

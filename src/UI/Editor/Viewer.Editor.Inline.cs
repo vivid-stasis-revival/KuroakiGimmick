@@ -31,6 +31,7 @@ public sealed partial class Viewer
     const int InlineMax = 1024;
 
     bool InlineActive => inlineField != null;
+    nint inlineWindow;
     int InlineLow => Math.Min(inlineCaret, inlineAnchor);
     int InlineHigh => Math.Max(inlineCaret, inlineAnchor);
     string InlineSelectedText => inlineValue[InlineLow..InlineHigh];
@@ -47,7 +48,9 @@ public sealed partial class Viewer
         inlineError = ""; inlineTrim = !preserveWhitespace; inlineSelecting = false; inlineScroll = 0;
         inlineAnchor = 0; inlineCaret = value.Length;
         inlineBlinkFrom = uptime.Elapsed.TotalSeconds;
-        if (!Sdl.SDL_StartTextInput(host.Window)) inlineError = L.Get("Text input: ") + Sdl.Error;
+        if (inlineWindow != 0 && inlineWindow != ActiveUiWindow) Sdl.SDL_StopTextInput(inlineWindow);
+        inlineWindow = ActiveUiWindow;
+        if (!Sdl.SDL_StartTextInput(ActiveUiWindow)) inlineError = L.Get("Text input: ") + Sdl.Error;
         click = false;
     }
 
@@ -57,7 +60,8 @@ public sealed partial class Viewer
         if (!InlineActive) return;
         inlineField = null; inlineAccept = null; inlineSelecting = false; inlineVisible = false; inlineError = "";
         // 模态自己也在用文本输入，它还开着的时候不能顺手把输入法关掉。
-        if (!modalActive) Sdl.SDL_StopTextInput(host.Window);
+        if (!modalActive && inlineWindow != 0) Sdl.SDL_StopTextInput(inlineWindow);
+        inlineWindow = 0;
     }
 
     /// <summary>

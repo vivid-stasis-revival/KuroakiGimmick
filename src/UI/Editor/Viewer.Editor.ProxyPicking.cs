@@ -29,7 +29,7 @@ public sealed partial class Viewer
     bool HandleProxySceneGesture(Sdl.Event e, bool forceProxy)
     {
         if (e.Type != 0x401 || e.Button != 1 ||
-            e.WindowID != 0 && e.WindowID != Sdl.SDL_GetWindowID(host.Window)) return false;
+            e.WindowID != 0 && e.WindowID != ActiveUiWindowId) return false;
         if (!editorMode || settings || UiOverlayVisible || Busy || sceneDirectDrag != null ||
             ImageGestureActive || editDrag != null || resizingLayout != 0 || prGridHudDragging || !TryPrGridTarget(out _)) return false;
         if (proxyPickFrame is not { } frame || !ReferenceEquals(frame.Session, Current) ||

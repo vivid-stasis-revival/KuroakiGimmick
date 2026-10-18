@@ -963,5 +963,10 @@
   "NO MPF SCRIPT": "暂无 MPF 脚本",
   "SOURCE": "源码",
   "NEW": "新建",
-  "VSM/VSP applied. Save or discard the remaining MPF drafts before closing.": "VSM/VSP 已应用，未保存的 MPF 草稿仍保留在编辑器中。"
+  "VSM/VSP applied. Save or discard the remaining MPF drafts before closing.": "VSM/VSP 已应用，未保存的 MPF 草稿仍保留在编辑器中。",
+  "Dockable multi-window workspace (experimental)": "可停靠、多窗口工作区（实验性）",
+  "Off by default. Use the original single-window interface.": "默认关闭，使用原来的单窗口界面。",
+  "Disabling closes tool windows and keeps your custom layout for later.": "关闭后收起工具窗口，并保留自定义布局供下次启用。",
+  "RESTORE DEFAULT LAYOUT": "一键还原默认布局",
+  "RESTORE HIDDEN PANELS": "恢复隐藏面板"
 }

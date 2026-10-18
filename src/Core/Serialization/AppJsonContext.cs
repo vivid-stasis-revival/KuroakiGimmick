@@ -5,6 +5,7 @@ namespace KuroakiGimmick.Core;
 // Register application JSON roots so NativeAOT never needs runtime-generated serializers.
 [JsonSerializable(typeof(ViewerProject))]
 [JsonSerializable(typeof(ViewerSettings))]
+[JsonSerializable(typeof(DockLayoutFile))]
 [JsonSerializable(typeof(Dictionary<string, string>))]
 [JsonSerializable(typeof(Dictionary<string, string[]>))]
 [JsonSerializable(typeof(Dictionary<string, int>))]
@@ -17,6 +18,7 @@ namespace KuroakiGimmick.Core;
 [JsonSerializable(typeof(RoomAssociations.Catalog))]
 [JsonSerializable(typeof(string[]))]
 [JsonSerializable(typeof(float[]))]
+[JsonSerializable(typeof(double))]
 [JsonSerializable(typeof(Timeline.SourceNoOp[]))]
 [JsonSerializable(typeof(ChartPlaybackMap.Segment[]))]
 [JsonSerializable(typeof(ChartPlaybackMap.Control[]))]

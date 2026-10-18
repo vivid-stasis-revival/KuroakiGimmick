@@ -963,5 +963,10 @@
   "NO MPF SCRIPT": "NO MPF SCRIPT",
   "SOURCE": "SOURCE",
   "NEW": "NEW",
-  "VSM/VSP applied. Save or discard the remaining MPF drafts before closing.": "VSM/VSP applied. Save or discard the remaining MPF drafts before closing."
+  "VSM/VSP applied. Save or discard the remaining MPF drafts before closing.": "VSM/VSP applied. Save or discard the remaining MPF drafts before closing.",
+  "Dockable multi-window workspace (experimental)": "Dockable multi-window workspace (experimental)",
+  "Off by default. Use the original single-window interface.": "Off by default. Use the original single-window interface.",
+  "Disabling closes tool windows and keeps your custom layout for later.": "Disabling closes tool windows and keeps your custom layout for later.",
+  "RESTORE DEFAULT LAYOUT": "RESTORE DEFAULT LAYOUT",
+  "RESTORE HIDDEN PANELS": "RESTORE HIDDEN PANELS"
 }

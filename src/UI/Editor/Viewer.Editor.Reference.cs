@@ -52,7 +52,7 @@ public sealed partial class Viewer
         if (VsmReference.Shared.Find(referenceSelected) == null)
             referenceSelected = VsmReference.Shared.Entries.FirstOrDefault()?.Id ?? "";
         BuildReferenceNavigation();
-        Sdl.SDL_StopTextInput(host.Window);
+        Sdl.SDL_StopTextInput(ActiveUiWindow);
     }
 
     /// <summary>
@@ -73,15 +73,15 @@ public sealed partial class Viewer
         referenceOpen = referenceSearchFocus = referenceSelectAll = false;
         referenceComposition = referenceDrag = "";
         held = click = seeking = editorScrub = false;
-        Sdl.SDL_StopTextInput(host.Window);
+        Sdl.SDL_StopTextInput(ActiveUiWindow);
     }
     void FocusReferenceSearch(bool focus, bool selectAll = false)
     {
         referenceSearchFocus = focus;
         referenceSelectAll = selectAll;
         referenceComposition = "";
-        if (focus) Sdl.SDL_StartTextInput(host.Window);
-        else Sdl.SDL_StopTextInput(host.Window);
+        if (focus) Sdl.SDL_StartTextInput(ActiveUiWindow);
+        else Sdl.SDL_StopTextInput(ActiveUiWindow);
     }
     /// <summary>
     /// 构建左侧导航。有搜索词时是平铺的结果列表，否则按两份源文档分组成章节树，

@@ -16,7 +16,7 @@ public readonly record struct WorkspaceGeometry(float LeftWidth, float RightWidt
     public static WorkspaceGeometry Create(int width, int height, bool editor, WorkspaceLayout options)
     {
         options.Normalize();
-        float left = options.LeftWidth, right = options.RightWidth;
+        float left = options.SideWidth(editor, true), right = options.SideWidth(editor, false);
         // 两侧面板挤占预览区时，按各自超出最小宽度的部分等比回缩，而不是一刀切裁掉某一侧。
         float excess = Math.Max(0, left + right - Math.Max(476, width - 88 - 590));
         float grow = left - 194 + right - 282;

@@ -22,6 +22,13 @@ public static partial class Sdl
         out float x,
         out float y);
 
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint SDL_GetGlobalMouseState(out float x, out float y);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool SDL_WarpMouseGlobal(float x, float y);
+
     /// <summary>
     /// SDL_Event 的联合体镜像，固定 128 字节。字段重叠是设计本身：同一个 [FieldOffset] 上挂着
     /// 不同事件类型的成员（偏移 24 同时是 TextData / WheelX / Scan / Button，偏移 40 是 DropData），

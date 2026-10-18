@@ -10,6 +10,17 @@ public readonly record struct UiViewport(int Width, int Height, int PixelWidth, 
     /// </summary>
     public static UiViewport Create(int windowWidth, int windowHeight, int pixelWidth, int pixelHeight,
         float displayScale, float pixelDensity, WorkspaceLayout options)
+        => CreateForMinimum(windowWidth, windowHeight, pixelWidth, pixelHeight, displayScale, pixelDensity,
+            options, 1180, 860);
+
+    /// <summary>Auxiliary dock windows use panel-sized minima instead of the main workspace's 1180×860.</summary>
+    public static UiViewport CreateAuxiliary(int windowWidth, int windowHeight, int pixelWidth, int pixelHeight,
+        float displayScale, float pixelDensity, WorkspaceLayout options, int minimumWidth = 240, int minimumHeight = 160)
+        => CreateForMinimum(windowWidth, windowHeight, pixelWidth, pixelHeight, displayScale, pixelDensity,
+            options, Math.Clamp(minimumWidth, 160, 2000), Math.Clamp(minimumHeight, 100, 1500));
+
+    static UiViewport CreateForMinimum(int windowWidth, int windowHeight, int pixelWidth, int pixelHeight,
+        float displayScale, float pixelDensity, WorkspaceLayout options, int minimumWidth, int minimumHeight)
     {
         options.Normalize();
         windowWidth = Math.Max(1, windowWidth); windowHeight = Math.Max(1, windowHeight);
@@ -19,10 +30,10 @@ public readonly record struct UiViewport(int Width, int Height, int PixelWidth, 
         if (!float.IsFinite(displayScale) || displayScale <= 0) displayScale = pixelDensity;
         // 跟随系统缩放时只取 displayScale 与 pixelDensity 的比值，避免把已经体现在像素尺寸里的 DPI 再乘一遍。
         double requested = options.UiScale * (options.FollowDisplayScale ? displayScale / pixelDensity : 1);
-        double fit = Math.Min(windowWidth / 1180.0, windowHeight / 860.0);
+        double fit = Math.Min(windowWidth / (double)minimumWidth, windowHeight / (double)minimumHeight);
         double applied = Math.Max(.01, Math.Min(requested, fit));
-        int width = Math.Max(1180, (int)Math.Round(windowWidth / applied));
-        int height = Math.Max(860, (int)Math.Round(windowHeight / applied));
+        int width = Math.Max(minimumWidth, (int)Math.Round(windowWidth / applied));
+        int height = Math.Max(minimumHeight, (int)Math.Round(windowHeight / applied));
         // 留 1e-5 容差，避免浮点误差让 FitLimited 在缩放恰好等于上限时抖动。
         return new(width, height, pixelWidth, pixelHeight, width / (float)windowWidth,
             height / (float)windowHeight, applied + .00001 < requested);

@@ -140,6 +140,7 @@ public sealed partial class Viewer
     {
         preferences.UiAnimations = false;
         preferences.Workspace = new WorkspaceLayout { FollowDisplayScale = false, UiScale = 1 };
+        ResetDockWorkspaces();
         OpenEditor();
         if (editor == null) return;
         Draw(1440, 940);
