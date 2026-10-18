@@ -943,5 +943,16 @@
   "Memory + disk PCM cache; stored in the application cache directory.": "内存与磁盘 PCM 缓存，保存在应用缓存目录。",
   "RESET PERFORMANCE": "重置性能选项",
   "ENABLED": "已启用",
-  "DISABLED": "已禁用"
+  "DISABLED": "已禁用",
+  "DELETE PROXY": "删除 Proxy",
+  "Proxy deleted / later IDs shifted down / undo available": "已删除 Proxy / 后续编号已前移 / 可撤销",
+  "DUPLICATE ROW": "复制当前行",
+  "Split overlapping clips into rows": "重叠片段自动分行",
+  "CUT": "剪切",
+  "CUT SELECTION": "剪切选中项",
+  "Select something to cut first.": "请先选择要剪切的内容。",
+  "Selection cannot be cut because it exceeds clipboard limits or contains unsupported events.": "所选内容超过剪贴板限制或包含不支持的事件，无法剪切。",
+  "Cut {0} items": "剪切 {0} 项",
+  "Cut rejected: ": "剪切被拒绝：",
+  "Cut {0} items to the clipboard.": "已剪切 {0} 项到剪贴板。"
 }

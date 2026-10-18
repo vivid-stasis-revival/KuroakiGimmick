@@ -20,7 +20,7 @@ public sealed partial class Viewer
         if (!track.Window && CustomText.TryMod(track.Property, out _, out var id) && editor?.TextSources.ContainsKey(id) == true)
             return "T:" + id;
         if (preferences.GroupGimmickTracks && IsGimmickTrack(track)) return GimmickTrackKey(track.Target);
-        return track.Key;
+        return track.Window ? $"W:{track.Target}:{track.Property}" : ModTrackKey(track);
     }
 
     void ApplyTrackOrder()

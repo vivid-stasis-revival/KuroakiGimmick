@@ -52,7 +52,7 @@ public sealed partial class Viewer
                 MenuCommand.Effects or MenuCommand.GameUi => !Current.IsEmpty,
             MenuCommand.AttachFiles => true,
             MenuCommand.ExportChart => !Current.IsEmpty,
-            MenuCommand.Copy or MenuCommand.Paste or MenuCommand.Duplicate or
+            MenuCommand.Cut or MenuCommand.Copy or MenuCommand.Paste or MenuCommand.Duplicate or
                 MenuCommand.Delete or MenuCommand.AddMod or MenuCommand.Loop or MenuCommand.Follow => editorMode && editor != null,
             MenuCommand.Undo => editorMode && editor?.CanUndo == true,
             MenuCommand.Redo => editorMode && editor?.CanRedo == true,
@@ -129,6 +129,7 @@ public sealed partial class Viewer
                 break;
             case MenuCommand.Undo: editor!.Undo(); layoutRevision = -1; break;
             case MenuCommand.Redo: editor!.Redo(); layoutRevision = -1; break;
+            case MenuCommand.Cut: CutSelection(); break;
             case MenuCommand.Copy: CopySelection(); break;
             case MenuCommand.Paste: PasteClipboard(); break;
             case MenuCommand.Duplicate: DuplicateSelection(); break;

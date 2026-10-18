@@ -1,6 +1,9 @@
+using System.Security.Cryptography;
+using System.Text;
+
 namespace KuroakiGimmick.Core;
 
-internal static class ProjectBackups
+internal static partial class ProjectBackups
 {
     static void EnsureHiddenRoot(string path)
     {
@@ -11,7 +14,14 @@ internal static class ProjectBackups
             File.SetAttributes(root, File.GetAttributes(root) | FileAttributes.Hidden);
     }
     internal static string WorkingFolder(string path) => Path.Combine(Path.GetDirectoryName(path)!, ".kuroaki", "projects", Path.GetFileName(path));
-    static string Folder(string path) => Path.Combine(Path.GetDirectoryName(path)!, ".kuroaki", "backup", Path.GetFileName(path));
+    internal static string StorageRoot(string path)
+    {
+        string full = Path.GetFullPath(path);
+        if (OperatingSystem.IsWindows()) full = full.ToUpperInvariant();
+        string id = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(full)))[..24];
+        return Path.Combine(Paths.LogDirectory, "ProjectHistory", id);
+    }
+    internal static string Folder(string path) => Path.Combine(StorageRoot(path), "backup", Path.GetFileName(path));
 
     internal static IEnumerable<string> Files(string path)
     {
@@ -40,16 +50,24 @@ internal static class ProjectBackups
 
     internal static void ArchiveLegacy(string path)
     {
+        MigrateHistory(path);
         var files = LegacyFiles(path).ToList();
         files.AddRange(files.Append(path).Select(f => f + ".bak").Where(File.Exists).ToArray());
         if (files.Count == 0) return;
-        EnsureHiddenRoot(path);
-        string root = Path.Combine(Path.GetDirectoryName(path)!, ".kuroaki", "legacy", Path.GetFileName(path), Guid.NewGuid().ToString("N"));
+        string root = Path.Combine(StorageRoot(path), "legacy", Path.GetFileName(path), Guid.NewGuid().ToString("N"));
         foreach (string file in files)
         {
             string target = Path.Combine(root, Path.GetRelativePath(Path.GetDirectoryName(path)!, file));
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            File.Move(file, target);
+            File.Copy(file, target);
+        }
+        // Cross-volume archives must be complete and verified before removing any original.
+        foreach (string file in files)
+            VerifyFile(file, Path.Combine(root, Path.GetRelativePath(Path.GetDirectoryName(path)!, file)));
+        foreach (string file in files)
+        {
+            VerifyFile(file, Path.Combine(root, Path.GetRelativePath(Path.GetDirectoryName(path)!, file)));
+            File.Delete(file);
         }
         string stem = Path.GetFileName(path)[..^9];
         foreach (string suffix in new[] { ".editor-assets", ".editor-texts" })
@@ -109,8 +127,8 @@ internal static class ProjectBackups
 
     internal static void Create(string path)
     {
+        MigrateHistory(path);
         if (!File.Exists(path)) return;
-        EnsureHiddenRoot(path);
         string root = Folder(path), token = DateTime.UtcNow.ToString("yyyyMMddTHHmmssfffffff") + "-" + Guid.NewGuid().ToString("N");
         string temporary = Path.Combine(root, ".tmp-" + token);
         try

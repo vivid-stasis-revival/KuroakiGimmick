@@ -103,5 +103,8 @@ public sealed partial class Viewer
         SmokeEditorIssues();
         SmokeProxyFooter();
         SmokeGimmickSource();
+        SmokeProxyDelete();
+        SmokeTimelineRows();
+        SmokeCut();
     }
 }

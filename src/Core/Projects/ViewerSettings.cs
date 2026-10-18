@@ -36,6 +36,7 @@ public sealed class ViewerSettings
     /// </summary>
     public bool ModalValueEditor { get; set; }
     public bool GroupGimmickTracks { get; set; } = true;
+    public bool SplitOverlappingTimelineClips { get; set; } = true;
     public bool ShowExpandedGimmickSummary { get; set; }
     public bool UnlimitedChartSize { get; set; }
     /// <summary>

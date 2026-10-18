@@ -943,5 +943,16 @@
   "Memory + disk PCM cache; stored in the application cache directory.": "Memory + disk PCM cache; stored in the application cache directory.",
   "RESET PERFORMANCE": "RESET PERFORMANCE",
   "ENABLED": "ENABLED",
-  "DISABLED": "DISABLED"
+  "DISABLED": "DISABLED",
+  "DELETE PROXY": "DELETE PROXY",
+  "Proxy deleted / later IDs shifted down / undo available": "Proxy deleted / later IDs shifted down / undo available",
+  "DUPLICATE ROW": "DUPLICATE ROW",
+  "Split overlapping clips into rows": "Split overlapping clips into rows",
+  "CUT": "CUT",
+  "CUT SELECTION": "CUT SELECTION",
+  "Select something to cut first.": "Select something to cut first.",
+  "Selection cannot be cut because it exceeds clipboard limits or contains unsupported events.": "Selection cannot be cut because it exceeds clipboard limits or contains unsupported events.",
+  "Cut {0} items": "Cut {0} items",
+  "Cut rejected: ": "Cut rejected: ",
+  "Cut {0} items to the clipboard.": "Cut {0} items to the clipboard."
 }

@@ -254,14 +254,15 @@ public sealed partial class Viewer
         if (!panActive) return;
         panActive = false;
         if (panMoved || Busy || editor == null) return;
-        if (!editorTracksRect.Contains(x, y)) return;
-        var hit = clipHits.LastOrDefault(h => h.Rect.Contains(x, y));
-        var row = rowHits.FirstOrDefault(h => h.Rect.Contains(x, y));
+        if (!editorTimelineRect.Contains(x, y)) return;
+        var hit = editorTracksRect.Contains(x, y) ? clipHits.LastOrDefault(h => h.Rect.Contains(x, y)) : default;
+        var row = rowHits.FirstOrDefault(h => y >= h.Rect.Y && y < h.Rect.Y + h.Rect.H
+            && x >= editorTimelineRect.X && x < h.Rect.X + h.Rect.W);
         if (hit.Id == Guid.Empty && row.Track == null) return;
         CloseInline();
         menuClip = hit.Id == Guid.Empty ? null : hit.Id;
         menuTrack = row.Track;
-        menuBeat = Snap(BeatAt(x));
+        menuBeat = x < editorTracksRect.X ? InsertionBeat : Snap(BeatAt(x));
         // 右键一个不在选择集里的片段：先把它选上再弹菜单，菜单作用的对象和用户看到的高亮始终一致。
         if (menuClip is Guid id && !selectedClips.Contains(id))
         {
@@ -294,6 +295,7 @@ public sealed partial class Viewer
             items.Add((L.Get("SELECT SAME MOD"), true, () => SelectSameTrack(first)));
             items.Add((L.Get("DUPLICATE") + suffix, true, () => { if (count > 1) DuplicateClips(); else DuplicateSelection(); }));
             // 整段内容经系统剪贴板往返，与只搬 ease/from/to/duration 的 COPY VALUES 是两回事。
+            items.Add((L.Get("CUT") + suffix, !Busy, CutSelection));
             items.Add((L.Get("COPY") + suffix, true, CopySelection));
             items.Add((L.Get("PASTE"), true, PasteClipboard));
             items.Add((L.Get("SPLIT LOOP") + suffix, picked.Any(c => c.RepeatEnd != null), () => ConvertSelectedLoops(true)));
@@ -333,12 +335,19 @@ public sealed partial class Viewer
                 items.Add((L.Get("SELECT WHOLE TRACK"), true, () =>
                 {
                     selectedClips.Clear();
-                    foreach (var c in editor.Vsm.Clips.Where(c => c.TrackKey == track.Key)) selectedClips.Add(c.Id);
+                    foreach (var c in ClipsOnTimelineRow(track)) selectedClips.Add(c.Id);
                     selectedClip = selectedClips.Count > 0 ? selectedClips.First() : null;
                     SyncPickedProxy(selectedClip);
                     selectedWindowEvent = -1; inspectorScroll = 0;
                     message = L.Format($"Selected {selectedClips.Count} clips on {track.Label}.");
                 }));
+        }
+        if (menuTrack is { } rowTrack)
+        {
+            if (CanDuplicateTimelineRow(rowTrack))
+                items.Add((L.Get("DUPLICATE ROW"), !Busy, () => DuplicateTimelineRow(rowTrack)));
+            if (!rowTrack.Window && rowTrack.Target >= 0 && rowTrack.ImageId == null && rowTrack.TextId == null)
+                items.Add((L.Get("DELETE PROXY") + " P" + rowTrack.Target, !Busy, () => DeleteProxy(rowTrack.Target)));
         }
         return items;
     }

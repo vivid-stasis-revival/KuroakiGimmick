@@ -6,7 +6,7 @@
 
 在同一条时间轴上编排 gimmick、图片、字幕、场景效果和窗口运动，并在歌曲场景中检查实际表现。
 
-![Version](https://img.shields.io/badge/version-0.1.5_%2F_18.2.1-94cddd?style=flat-square)
+![Version](https://img.shields.io/badge/version-0.1.5_%2F_18.2.2-94cddd?style=flat-square)
 ![.NET](https://img.shields.io/badge/.NET-8-b5a3e8?style=flat-square)
 ![Renderer](https://img.shields.io/badge/renderer-SDL3_GPU-94cddd?style=flat-square)
 ![Engine](https://img.shields.io/badge/engine-C%23_%2B_Rust-b5a3e8?style=flat-square)
@@ -72,7 +72,7 @@ KuroakiGimmick 的重点是**演出**，而不只是把 VSM 文本换一种方�
 
 ## 下载与平台支持
 
-当前版本为 **v0.1.5 / Build 18.2.1**，构建序号为 `1821`。
+当前版本为 **v0.1.5 / Build 18.2.2**，构建序号为 `1822`。
 
 [前往 GitHub Releases](https://github.com/vivid-stasis-revival/KuroakiGimmick/releases)
 
@@ -108,6 +108,8 @@ Android、iOS/iPadOS 和 Nintendo Switch 的适配还处于实验阶段。相关
 正式版本以对应 Release 的构建提交为准。
 
 Nightly 用于提供最近的功能、兼容性改进和 Bug 修复。
+
+18.2.2 新增 Proxy 右键删除、默认开启且可在 Editor 设置关闭的重叠片段子行、复制当前行和剪切（Ctrl/Cmd+X）；自动备份与历史归档移至应用数据目录，并支持旧历史校验迁移。
 
 18.2.1 汇总了 18.2 之后的修复和编辑功能，包括 fish/glow 渲染、共享图片资源、即时流速与时间轴偏移、GMK 分组和 VSM/VSP 源码编辑、桌面谱面大小设置，以及多线程视频导出。
 
@@ -416,7 +418,9 @@ TEXT CANVAS 支持多行文字、RGB 颜色、对齐方式、行距、换行宽�
 
 **Chart Folder** 只收集当前难度真正需要的文件，不复制其它难度、未引用素材或 `.kuroaki` 备份。
 
-工程备份仍保留在原工程附近的 `.kuroaki/`。
+自动备份和历史归档保存在应用数据目录的 `KuroakiGimmick/ProjectHistory/` 下，按工程绝对路径隔离；进入编辑或保存旧工程时，会复制并校验该工程的旧备份，成功后移除谱面目录内对应的备份。迁移失败会保留原数据，之后可重试。
+
+`.kuroaki/projects/` 是工程引用的工作文件，仍随工程保留；`.kuroaki/tmp/` 用于保存事务恢复，不会整体搬走。分享谱面时，建议通过 **EXPORT → Chart Folder** 导出到全新目录，再压缩导出结果。覆盖导出到已有目录不会清理其中不相关的文件。
 
 **Video** 输出普通歌曲场景，不是操作系统屏幕录像。
 
@@ -657,7 +661,7 @@ dotnet run -c Release --no-build -- \
 
 ## 构建与发布
 
-当前应用版本为 **v0.1.5 / Build 18.2.1**。
+当前应用版本为 **v0.1.5 / Build 18.2.2**。
 
 最终版本号以 [KuroakiGimmick.csproj](KuroakiGimmick.csproj) 为准。
 

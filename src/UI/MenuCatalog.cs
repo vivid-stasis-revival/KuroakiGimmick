@@ -9,7 +9,7 @@ internal enum MenuCommand
     Undo, Redo, Copy, Paste, Duplicate, Delete, AddMod,
     PlayPause, StepBack, StepForward, JumpStart, JumpEnd, Loop, Follow,
     ToggleEditor, Notes, Effects, GameUi, Fullscreen, Layout, Settings,
-    QuickHelp, Docs
+    QuickHelp, Docs, Cut
 }
 
 internal readonly record struct MenuItemSpec(MenuCommand Command, string Label, string Key = "", bool Shift = false);
@@ -43,6 +43,7 @@ internal static class MenuCatalog
             new(MenuCommand.Undo, "UNDO"),
             new(MenuCommand.Redo, "REDO"),
             new(MenuCommand.None, ""),
+            new(MenuCommand.Cut, "CUT SELECTION"),
             new(MenuCommand.Copy, "COPY SELECTION"),
             new(MenuCommand.Paste, "PASTE EVENTS"),
             new(MenuCommand.Duplicate, "DUPLICATE SELECTION"),

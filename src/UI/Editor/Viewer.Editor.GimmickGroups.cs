@@ -57,7 +57,13 @@ public sealed partial class Viewer
         foreach (var target in editor.Vsm.Clips.Where(c => IsGimmickMod(c.Name, c.Proxy)).GroupBy(c => c.Proxy))
         {
             var groups = target.GroupBy(c => (c.Beat, c.Duration, c.Ease, Repeat: c.RepeatEnd != null ? c.Id : Guid.Empty))
-                .Select(g => g.ToArray()).ToArray();
+                .SelectMany(g =>
+                {
+                    // Equal timing can combine different channels, never two copies of the same channel.
+                    var occurrences = new Dictionary<string, int>(StringComparer.Ordinal);
+                    return g.Select(c => (Clip: c, Lane: occurrences[c.Name] = occurrences.GetValueOrDefault(c.Name) + 1))
+                        .GroupBy(c => c.Lane).Select(row => row.Select(c => c.Clip).ToArray());
+                }).ToArray();
             foreach (var group in groups) foreach (var clip in group) gimmickGroupsByClip[clip.Id] = group;
             gimmickGroupIndices[target.Key] = new(groups.Select((g, order) =>
                 new IntervalIndex<VsmDocument.Clip[]>.Entry(g, g[0].Beat, g.Max(VsmVisualEnd), order)));

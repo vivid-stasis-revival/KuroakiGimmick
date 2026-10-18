@@ -151,10 +151,15 @@ public sealed partial class Viewer
         if (Button(L.Get(preferences.ShowExpandedGimmickSummary ? "ON" : "OFF"), new(toggleX, y, 110, 30),
             active: preferences.ShowExpandedGimmickSummary, key: "settings-expanded-gimmick-summary"))
         { preferences.ShowExpandedGimmickSummary = !preferences.ShowExpandedGimmickSummary; SaveSettings(); }
+        y += 48;
+        Text(L.Get("Split overlapping clips into rows"), x, y + 7, 13, white, max: toggleX - x - 12);
+        if (Button(L.Get(preferences.SplitOverlappingTimelineClips ? "ON" : "OFF"), new(toggleX, y, 110, 30),
+            active: preferences.SplitOverlappingTimelineClips, key: "settings-split-overlapping-clips"))
+            SetSplitOverlappingTimelineClips(!preferences.SplitOverlappingTimelineClips);
         SettingsHint("Collapsed groups always show summaries. Expanded groups keep their title and collapse button.", x, y + 46, r.W - 28);
 #if !KG_MOBILE && !KG_SWITCH
-        Divider(x, r.Y + 180, r.W - 28);
-        DrawChartSizeOptions(new(r.X, r.Y + 192, r.W, r.H - 192));
+        Divider(x, r.Y + 228, r.W - 28);
+        DrawChartSizeOptions(new(r.X, r.Y + 240, r.W, r.H - 240));
 #endif
     }
 

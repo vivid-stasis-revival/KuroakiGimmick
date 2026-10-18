@@ -99,6 +99,9 @@ public sealed partial class EditorDocument
         if (session.ProjectPath is { } projectPath)
         {
             SavedProjectPath = Path.GetFullPath(projectPath);
+            try { ProjectBackups.MigrateHistory(SavedProjectPath); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            { Console.Error.WriteLine("[backup migration] " + ex.Message); }
             foreach (string file in ProjectBackups.Files(SavedProjectPath)) savedHashes[file] = Hash(file);
         }
     }

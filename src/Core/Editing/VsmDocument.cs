@@ -394,8 +394,8 @@ public sealed partial class VsmDocument
     /// </summary>
     public void SetProxyCount(int count)
     {
-        if (count is < 1 or > 64 || Clips.Any(c => c.Proxy >= count))
-            throw new FormatException("Proxy count must be 1..64 and include all existing proxy events.");
+        if (count is < 0 or > 64 || Clips.Any(c => c.Proxy >= count))
+            throw new FormatException("Proxy count must be 0..64 and include all existing proxy events.");
         int i = Lines.FindIndex(line => Body(line.Text).TrimStart().StartsWith("!proxies:", StringComparison.Ordinal));
         if (i >= 0)
         {
@@ -417,6 +417,30 @@ public sealed partial class VsmDocument
         }
         // ProxyCountHint 是导入时的固定回退值，不能跟随可撤销的编辑更新。
         // 否则撤销新建 !proxies 后，UI 会继续显示撤销前的数量。
+    }
+
+    /// <summary>Remove a proxy and compact later IDs, preserving all other source tokens.</summary>
+    public void DeleteProxy(int target)
+    {
+        int count = ProxyCount;
+        if (target < 0 || target >= count) throw new ArgumentOutOfRangeException(nameof(target));
+        bool perFrame = false;
+        for (int i = 0; i < Lines.Count; i++)
+        {
+            var line = Lines[i];
+            string body = Body(line.Text);
+            if (body.Trim() == "mpf") perFrame = true;
+            if (perFrame) continue;
+            string[] fields = body.Split(',');
+            if (fields.Length != 7 || !int.TryParse(fields[6].Trim(), out int proxy) || proxy < target) continue;
+            if (proxy == target) { Lines.RemoveAt(i--); continue; }
+            string token = fields[6];
+            int left = token.Length - token.TrimStart().Length, right = token.Length - token.TrimEnd().Length;
+            fields[6] = token[..left] + (proxy - 1).ToString(CultureInfo.InvariantCulture) + (right > 0 ? token[^right..] : "");
+            Lines[i] = line with { Text = string.Join(',', fields) + line.Text[body.Length..],
+                Event = line.Event is { } clip ? clip with { Proxy = proxy - 1 } : null };
+        }
+        SetProxyCount(count - 1);
     }
 
     /// <summary>

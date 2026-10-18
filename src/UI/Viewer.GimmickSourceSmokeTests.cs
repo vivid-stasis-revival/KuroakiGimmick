@@ -27,7 +27,7 @@ public sealed partial class Viewer
             editor = new(Current); editor.ApplySource(fixture, "");
             preferences.GroupGimmickTracks = true; ResetGimmickTracks();
             beatStart = 0; pixelsPerBeat = 48; trackScroll = 0; Frame();
-            Check(editTracks.Count(t => t.GimmickGroup) == 3, "Global/proxy events did not collapse into one row per target.");
+            Check(editTracks.Count(t => t.GimmickGroup) == 3, "Global/proxy headers must remain unique per target.");
             Check(expandedGimmickTracks.SetEquals(new[] { -1 }) && editTracks.Any(t => t.Key == "-1:scrollspeed"), "Global must be expanded by default, with proxies collapsed.");
             Check(editor.Vsm.Text == fixture, "Grouping changed the original source.");
             SmokeAddedGimmickTrackFocus();
@@ -177,8 +177,8 @@ public sealed partial class Viewer
         {
             bool InHeader()
             {
-                var row = rowHits.Single(hit => hit.Track.GimmickGroup && hit.Track.Target == -1).Rect;
-                return clipHits.Any(hit => hit.Id == clip.Id && hit.Rect.Y >= row.Y && hit.Rect.Y < row.Y + row.H);
+                return rowHits.Where(hit => hit.Track.GimmickGroup && hit.Track.Target == -1).Any(row =>
+                    clipHits.Any(hit => hit.Id == clip.Id && hit.Rect.Y >= row.Rect.Y && hit.Rect.Y < row.Rect.Y + row.Rect.H));
             }
             Check(!new ViewerSettings().ShowExpandedGimmickSummary, "Expanded summaries must default to hidden.");
             preferences.ShowExpandedGimmickSummary = false; expandedGimmickTracks.Add(-1); Frame();

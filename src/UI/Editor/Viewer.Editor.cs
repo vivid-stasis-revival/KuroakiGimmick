@@ -74,6 +74,22 @@ public sealed partial class Viewer
         });
         if (EditableProxyCount > count) { newProxy = count; prGridMode = 1; }
     }
+    void DeleteProxy(int target)
+    {
+        if (editor == null || Busy || target < 0 || target >= EditableProxyCount) return;
+        try
+        {
+            editor.DeleteProxy(target);
+            SetClipSelection(null); selectedWindowEvent = -1; editDrag = null;
+            newProxy = newProxy == target ? -1 : newProxy > target ? newProxy - 1 : newProxy;
+            prGridSolo = false; prGridSoloTarget = -1;
+            var expanded = expandedGimmickTracks.ToArray(); expandedGimmickTracks.Clear();
+            foreach (int id in expanded) if (id != target) expandedGimmickTracks.Add(id > target ? id - 1 : id);
+            layoutRevision = -1;
+            message = L.Get("Proxy deleted / later IDs shifted down / undo available");
+        }
+        catch (Exception ex) { message = L.Get("Edit rejected: ") + ex.Message; }
+    }
     void EnableSelectedProxy()
     {
         if (editor == null || newProxy < 0 || newProxy >= EditableProxyCount || Busy) return;
@@ -97,7 +113,7 @@ public sealed partial class Viewer
     byte mouseClicks;
     bool editorScrub;
     /// <summary>一条时间轴轨道。Label 只用于显示，Property 始终是源文件里的原始 mod identifier，两者不可互换。</summary>
-    sealed record EditTrack(string Key, string Label, bool Window, int Target, string Property, string? ImageId = null, bool ImageGroup = false, string? TextId = null, bool GimmickGroup = false);
+    sealed record EditTrack(string Key, string Label, bool Window, int Target, string Property, string? ImageId = null, bool ImageGroup = false, string? TextId = null, bool GimmickGroup = false, int Lane = 0);
     readonly List<EditTrack> editTracks = [];
     EditTrack? hoveredEditTrack;
     /// <summary>拖拽起始快照，全部以拍为单位。MouseBeat 记录按下点，用于保持抓取处的相对偏移；Resize 为 true 时只动右端。</summary>

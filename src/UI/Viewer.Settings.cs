@@ -133,6 +133,7 @@ public sealed partial class Viewer
                 preferences.ModalValueEditor = false;
                 preferences.GroupGimmickTracks = true; ResetGimmickTracks(); layoutRevision = -1;
                 preferences.ShowExpandedGimmickSummary = false;
+                preferences.SplitOverlappingTimelineClips = true;
                 preferences.UnlimitedChartSize = false;
                 preferences.AlwaysFollow = false;
                 preferences.OverwriteExports = false;

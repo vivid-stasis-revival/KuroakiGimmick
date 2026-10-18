@@ -105,7 +105,9 @@ public sealed partial class Viewer
         {
             AddModTrack(EpisodeScript.ModName, -1);
         }
+        BuildTimelineLanes();
         GroupGimmickRows();
+        SplitTimelineRows();
         ApplyTrackOrder();
         layoutRevision = editor.Revision;
     }
@@ -290,7 +292,7 @@ public sealed partial class Viewer
                 BeginTrackOrder(track);
             if (track.GimmickGroup)
             {
-                if (EButton(expandedGimmickTracks.Contains(track.Target) ? "-" : ">", new(r.X + 5, y + 5, 22, 24), key: "gimmick-expand:" + track.Target))
+                if (EButton(expandedGimmickTracks.Contains(track.Target) ? "-" : ">", new(r.X + 5, y + 5, 22, 24), key: "gimmick-expand:" + track.Key))
                 { if (!expandedGimmickTracks.Add(track.Target)) expandedGimmickTracks.Remove(track.Target); layoutRevision = -1; }
                 Text(ImageShortText(track.Label, labelW - 122), r.X + 33, y + 10, 12, white, true, labelW - 122);
             }
@@ -345,7 +347,7 @@ public sealed partial class Viewer
                 var events = editor.Windows.Events;
                 for (int i = 0; i < (events?.Count ?? 0); i++)
                 {
-                    if (events![i] is not JsonObject e || Integer(e, "w") != track.Target || WindowMotionConfig.Text(e, "op") != track.Property) continue;
+                    if (events![i] is not JsonObject e || Integer(e, "w") != track.Target || WindowMotionConfig.Text(e, "op") != track.Property || windowRowLanes.GetValueOrDefault(i) != track.Lane) continue;
                     double b = Current.Timeline.Bpm.Beat(Number(e, "t")), end = Current.Timeline.Bpm.Beat(Number(e, "t") + Math.Max(0, Duration(e)));
                     DrawEventClip(y, b, end, WindowMotionConfig.Text(e, "preset", track.Property), selectedWindowEvent == i, true, null, e, i, timelineInteractive);
                 }
@@ -354,7 +356,7 @@ public sealed partial class Viewer
             {
                 // 剧情区间画在片段之前，因此片段始终压在上面——可点可拖的东西不该被背景挡住。
                 if (IsEpisodeTrack(track)) DrawEpisodeSpans(y);
-                foreach (var c in VisibleTimelineClips(track.Key))
+                foreach (var c in VisibleTimelineClips(ModTrackKey(track)).Where(c => clipRowLanes.GetValueOrDefault(c.Id) == track.Lane))
                     DrawEventClip(y, c.Beat, VsmVisualEnd(c), c.RepeatEnd != null ? $"{c.RepeatCount}x / {c.From}>{c.To}" : $"{c.From}>{c.To}", selectedClip == c.Id, false, c, null, -1, timelineInteractive);
                 // 区间接住漏掉片段的那些点击，排在片段之后：那 9 像素仍然优先，拖拽也仍然只从片段上开始。
                 if (IsEpisodeTrack(track) && timelineInteractive) ClickEpisodeSpans();
