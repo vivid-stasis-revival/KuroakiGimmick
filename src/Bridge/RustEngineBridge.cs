@@ -47,24 +47,56 @@ internal static unsafe partial class RustEngineBridge
     [StructLayout(LayoutKind.Sequential)]
     private struct BpmChange { public double Time, Bpm; }
 
-    // One managed allocation after a single FFI call. Rust owns and frees its native packet.
-    private static byte[] Receive(int code, byte* packet, nuint length)
+    // Decode directly from Rust-owned memory. A packet can exceed Array.MaxLength
+    // in unlimited mode; copying it into byte[] both capped it and doubled peak memory.
+    sealed class NativePacketStream : UnmanagedMemoryStream
+    {
+        nint owned;
+        readonly nuint size;
+        internal NativePacketStream(byte* packet, nuint length) : base(packet, checked((long)length))
+        { owned = (nint)packet; size = length; }
+        ~NativePacketStream() => Dispose(false);
+        protected override void Dispose(bool disposing)
+        {
+            base.Dispose(disposing);
+            nint packet = System.Threading.Interlocked.Exchange(ref owned, 0);
+            if (packet != 0) FreePacket((byte*)packet, size);
+            if (disposing) GC.SuppressFinalize(this);
+        }
+    }
+
+    static long ValidatePacketLength(nuint length)
+    {
+        if (length > (nuint)nint.MaxValue)
+            throw new InvalidDataException($"RustBridge packet length {length} exceeds the process address range.");
+        long bytes = checked((long)length);
+        if (ChartLoadLimits.Exceeds(bytes, MaxPacketBytes))
+            throw new InvalidDataException($"RustBridge packet is {bytes:N0} bytes; the 512 MiB budget is active because unlimited chart loading is off for this load.");
+        return bytes;
+    }
+
+    private static NativePacketStream Receive(int code, byte* packet, nuint length)
     {
         try
         {
-            if (length > (nuint)Array.MaxLength || ChartLoadLimits.Exceeds((long)length, MaxPacketBytes))
-                throw new InvalidDataException("RustBridge packet length exceeds budget.");
-            if (length > 0 && packet == null)
-                throw new InvalidDataException("RustBridge returned a null packet.");
-            var bytes = new byte[(int)length];
-            if (bytes.Length != 0) Marshal.Copy((nint)packet, bytes, 0, bytes.Length);
+            ValidatePacketLength(length);
             if (code != 0)
-                throw new InvalidDataException("Native parser returned " + code + ": " + Encoding.UTF8.GetString(bytes));
-            return bytes;
+            {
+                // Native errors are short UTF-8 diagnostics; never allocate a giant
+                // managed error string from a failed or incompatible parser.
+                string detail = packet == null ? "no error packet" :
+                    Encoding.UTF8.GetString(new ReadOnlySpan<byte>(packet, (int)Math.Min((ulong)length, 8192UL)));
+                throw new InvalidDataException($"Native parser returned {code}: {detail}");
+            }
+            if (packet == null || length == 0)
+                throw new InvalidDataException("RustBridge returned an empty packet.");
+            var stream = new NativePacketStream(packet, length);
+            packet = null; // The stream now owns the packet, including decode failures.
+            return stream;
         }
         finally { if (packet != null) FreePacket(packet, length); }
     }
-    private static byte[] CallParser(byte[] input, int kind)
+    private static NativePacketStream CallParser(byte[] input, int kind)
     {
         fixed (byte* data = input)
         {
@@ -261,9 +293,8 @@ internal static unsafe partial class RustEngineBridge
     }
 
     // KGS2 adds non-fatal source diagnostics; KGS1 remains accepted for older native libraries.
-    private static Chart DecodeChart(byte[] bytes, string title, string? sourcePath = null)
+    private static Chart DecodeChart(Stream stream, string title, string? sourcePath = null)
     {
-        using var stream = new MemoryStream(bytes, false);
         using var reader = new BinaryReader(stream, Encoding.UTF8, false);
         string wireVersion = Encoding.ASCII.GetString(reader.ReadBytes(4));
         if (wireVersion is not ("KGS1" or "KGS2"))
@@ -274,7 +305,7 @@ internal static unsafe partial class RustEngineBridge
         for(int i=0;i<meta;i++) chart.Metadata[ReadText(reader)] = ReadText(reader);
         // No arbitrary note-count cap: validate against packet bytes instead.
         // Each encoded note requires at least 33 bytes (time/type/lane/end,
-        // extra count, modExtra presence/count). The packet has a 512 MiB budget.
+        // extra count, modExtra presence/count). Limited mode has a 512 MiB budget.
         int notes = ReadCount(reader, int.MaxValue);
         if (notes > (stream.Length - stream.Position) / 33)
             throw new InvalidDataException("RustBridge note count exceeds packet contents.");
@@ -351,8 +382,7 @@ internal static unsafe partial class RustEngineBridge
                 int rc=ChartLoadLimits.Unlimited
                     ? BuildBpmUnlimited(data,(nuint)changes.Length,baseBpm,offsetMs,fixedBpm??0,fixedBpm.HasValue?1u:0u,&packet,&length)
                     : BuildBpm(data,(nuint)changes.Length,baseBpm,offsetMs,fixedBpm??0,fixedBpm.HasValue?1u:0u,&packet,&length);
-                var bytes=Receive(rc,packet,length);
-                using var stream=new MemoryStream(bytes,false);
+                using var stream=Receive(rc,packet,length);
                 using var r=new BinaryReader(stream);
                 if(Encoding.ASCII.GetString(r.ReadBytes(4))!="KGB1") throw new InvalidDataException("Rust BPM wire mismatch.");
                 int count=ReadCount(r,int.MaxValue);

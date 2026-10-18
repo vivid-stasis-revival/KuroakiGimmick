@@ -17,6 +17,7 @@ internal static class ChartSizeChecks
         }
         try
         {
+            RustEngineBridge.PacketSizeChecks();
             Check(!new ViewerSettings().UnlimitedChartSize, "Unlimited loading must default to off.");
             var saved = AppJson.Deserialize<ViewerSettings>(AppJson.Serialize(new ViewerSettings { UnlimitedChartSize = true }, ViewerProject.Json), ViewerProject.Json)!;
             Check(saved.UnlimitedChartSize, "Unlimited setting did not round trip.");
