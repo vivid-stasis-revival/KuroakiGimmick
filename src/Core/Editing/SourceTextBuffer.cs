@@ -7,10 +7,11 @@ public sealed class SourceTextBuffer
     readonly List<Edit> undo = [], redo = [];
     int[]? starts;
     public string Text { get; private set; }
-    public string Original { get; }
+    public string Original { get; private set; }
     public string NewLine { get; }
     public int Cursor { get; private set; }
     public int Anchor { get; private set; }
+    public void MarkSaved() => Original = Text;
     public bool Dirty => Text != Original;
     public int SelectionStart => Math.Min(Cursor, Anchor);
     public int SelectionLength => Math.Abs(Cursor - Anchor);

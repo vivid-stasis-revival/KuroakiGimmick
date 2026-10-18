@@ -15,7 +15,7 @@ public sealed partial class Viewer
     float sourceLeft;
     Rect sourceTextRect;
     const float SourceRowHeight = 21, SourceFontSize = 13;
-    SourceTextBuffer? SourceBuffer => sourceImageTab ? sourceVsp : sourceVsm;
+    SourceTextBuffer? SourceBuffer => sourceMpfTab ? ActiveMpfSource?.Buffer : sourceImageTab ? sourceVsp : sourceVsm;
     static string SourceDisplay(string value) => value.Replace("\t", "    ");
     float SourceWidth(string value) => fonts.Measure(SourceDisplay(value), SourceFontSize, monospaced: true);
 
@@ -27,6 +27,7 @@ public sealed partial class Viewer
         CloseInline(); CloseClipMenu(); transport.SetPlaying(false);
         sourceOwner = editor; sourceRevision = editor.Revision;
         sourceVsm = new(editor.Vsm.Text); sourceVsp = new(editor.Images.Text);
+        sourceMpfTab = false; sourceMpfIndex = 0; sourceMpfFiles.Clear(); sourceMpfDrafts.Clear(); sourceMpfStatus = "";
         sourceImageTab = sourceSelecting = false; sourceTop = 0; sourceLeft = 0;
         workflow = displayedWorkflow = "source"; workflowError = "";
         settings = help = false; held = click = false;
@@ -41,6 +42,7 @@ public sealed partial class Viewer
 
     void ApplySourceEditor()
     {
+        if (sourceMpfTab) { SaveMpfSource(); return; }
         if (sourceOwner == null || sourceVsm == null || sourceVsp == null) return;
         if (editor != sourceOwner || editor.Revision != sourceRevision)
         { workflowError = L.Get("Document changed. Reopen the source editor before applying."); return; }
@@ -49,7 +51,12 @@ public sealed partial class Viewer
             editor.ApplySource(sourceVsm.Text, sourceVsp.Text);
             layoutRevision = -1; SetClipSelection(null); selectedWindowEvent = -1;
             imageInspector = textInspector = false;
-            CloseSourceEditor();
+            if (sourceMpfDrafts.Values.Any(file => file.Buffer.Dirty))
+            {
+                sourceRevision = editor.Revision; sourceVsm.MarkSaved(); sourceVsp.MarkSaved();
+                workflowError = ""; sourceMpfStatus = L.Get("VSM/VSP applied. Save or discard the remaining MPF drafts before closing.");
+            }
+            else CloseSourceEditor();
             message = L.Get("Source applied. Undo restores the previous VSM and VSP.");
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidDataException or IOException or FormatException)
@@ -85,7 +92,12 @@ public sealed partial class Viewer
 
     bool HandleSourceInput(Sdl.Event e)
     {
-        if (SourceBuffer is not { } buffer) return true;
+        if (SourceBuffer is not { } buffer)
+        {
+            if (e.Type is 0x400 or 0x401 or 0x402) { mouseX = e.X; mouseY = e.Y; click = e.Type == 0x401 && e.Button == 1; }
+            if (e.Type == 0x300 && e.Scan == 41) CloseSourceEditor();
+            return true;
+        }
         try
         {
             if (e.Type is 0x400 or 0x401 or 0x402)
@@ -125,6 +137,7 @@ public sealed partial class Viewer
                 switch (e.Scan)
                 {
                     case 40: ApplySourceEditor(); return true;
+                    case 22: if (sourceMpfTab) SaveMpfSource(); return true;
                     case 4: buffer.SelectAll(); break;
                     case 6: if (buffer.SelectionLength > 0) Sdl.SDL_SetClipboardText(buffer.Selection); break;
                     case 27: if (buffer.SelectionLength > 0) { Sdl.SDL_SetClipboardText(buffer.Selection); buffer.Insert(""); } break;
@@ -167,13 +180,15 @@ public sealed partial class Viewer
     {
         var box = new Rect(24, 24, width - 48, height - 48);
         Canvas.Fill(box, panel); Canvas.Border(box, soft);
-        Text(L.Get("VSM / VSP SOURCE"), box.X + 20, box.Y + 16, 20, white, true);
-        if (WorkflowButton("VSM" + (sourceVsm?.Dirty == true ? " *" : ""), new(box.X + 20, box.Y + 52, 100, 28), active: !sourceImageTab))
-        { sourceImageTab = false; sourceTop = 0; sourceLeft = 0; RevealSourceCursor(); }
-        if (WorkflowButton("VSP" + (sourceVsp?.Dirty == true ? " *" : ""), new(box.X + 128, box.Y + 52, 100, 28), active: sourceImageTab))
-        { sourceImageTab = true; sourceTop = 0; sourceLeft = 0; RevealSourceCursor(); }
-        Text(L.Get("Enter: newline | Ctrl/Cmd+Enter: apply | Ctrl/Cmd+Z: undo draft"), box.X + 244, box.Y + 60, 11, muted, max: box.W - 264);
-        var area = new Rect(box.X + 16, box.Y + 91, box.W - 32, box.H - 185);
+        Text(L.Get("VSM / VSP / MPF SOURCE"), box.X + 20, box.Y + 16, 20, white, true);
+        if (WorkflowButton("VSM" + (sourceVsm?.Dirty == true ? " *" : ""), new(box.X + 20, box.Y + 52, 100, 28), active: !sourceMpfTab && !sourceImageTab))
+        { sourceMpfTab = false; sourceImageTab = false; workflowError = ""; sourceTop = 0; sourceLeft = 0; RevealSourceCursor(); }
+        if (WorkflowButton("VSP" + (sourceVsp?.Dirty == true ? " *" : ""), new(box.X + 128, box.Y + 52, 100, 28), active: !sourceMpfTab && sourceImageTab))
+        { sourceMpfTab = false; sourceImageTab = true; workflowError = ""; sourceTop = 0; sourceLeft = 0; RevealSourceCursor(); }
+        if (WorkflowButton("MPF" + (sourceMpfDrafts.Values.Any(file => file.Buffer.Dirty) ? " *" : ""), new(box.X + 236, box.Y + 52, 100, 28), active: sourceMpfTab)) OpenMpfSources();
+        Text(L.Get(sourceMpfTab ? "Ctrl/Cmd+S: save MPF | Ctrl/Cmd+Z: undo draft" : "Enter: newline | Ctrl/Cmd+Enter: apply | Ctrl/Cmd+Z: undo draft"), box.X + 350, box.Y + 60, 11, muted, max: box.W - 370);
+        if (sourceMpfTab) DrawMpfSourcePicker(box);
+        var area = new Rect(box.X + 16, box.Y + (sourceMpfTab ? 133 : 91), box.W - 32, box.H - (sourceMpfTab ? 227 : 185));
         Canvas.Fill(area, bg); Canvas.Border(area, line);
         sourceTextRect = new(area.X + 70, area.Y + 8, area.W - 80, area.H - 16);
         if (SourceBuffer is { } buffer)
@@ -205,8 +220,9 @@ public sealed partial class Viewer
             Canvas.Clip(null);
             Text($"Ln {buffer.LineAt(buffer.Cursor) + 1} / Col {buffer.Cursor - buffer.LineStarts[buffer.LineAt(buffer.Cursor)] + 1}", box.X + 20, box.Y + box.H - 80, 11, muted, true);
         }
+        if (workflowError.Length == 0 && sourceMpfStatus.Length > 0) Text(sourceMpfStatus, box.X + 20, box.Y + box.H - 62, 11, muted, max: box.W - 40);
         if (workflowError.Length > 0) Text(workflowError, box.X + 20, box.Y + box.H - 62, 11, soft, max: box.W - 40);
-        if (WorkflowButton(L.Get("CANCEL"), new(box.X + box.W - 280, box.Y + box.H - 42, 120, 28))) CloseSourceEditor();
-        if (WorkflowButton(L.Get("APPLY SOURCE"), new(box.X + box.W - 150, box.Y + box.H - 42, 130, 28), primary: true)) ApplySourceEditor();
+        if (WorkflowButton(L.Get(sourceMpfTab ? "CLOSE" : "CANCEL"), new(box.X + box.W - 410, box.Y + box.H - 42, 120, 28))) CloseSourceEditor();
+        if (WorkflowButton(L.Get(sourceMpfTab ? "SAVE MPF AND PREVIEW" : "APPLY SOURCE"), new(box.X + box.W - 280, box.Y + box.H - 42, 260, 28), primary: true, enabled: !sourceMpfTab || ActiveMpfSource != null)) ApplySourceEditor();
     }
 }

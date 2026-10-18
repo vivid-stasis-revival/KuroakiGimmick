@@ -34,6 +34,7 @@ public sealed partial class Session
             var dir = Path.GetDirectoryName(path)!;
             p.Chart = Resolve(dir, p.Chart);
             p.Gimmick = Resolve(dir, p.Gimmick);
+            p.MpfSourceRoot = Resolve(dir, p.MpfSourceRoot);
             p.Audio = Resolve(dir, p.Audio);
             p.Images = Resolve(dir, p.Images);
             if (p.TextFiles != null) p.TextFiles = p.TextFiles.ToDictionary(x => x.Key, x => Resolve(dir, x.Value)!);
@@ -71,6 +72,7 @@ public sealed partial class Session
                     return Load(path);
                 }
                 p.Gimmick = path;
+                p.MpfSourceRoot = null; p.MpfSourceDifficulty = null;
                 // 换了 VSM 就回到 auto：资源 profile 与 BPM 由新 gimmick 重新决定，不沿用上一份的固定选择。
                 p.Profile = "auto";
                 break;
@@ -101,6 +103,7 @@ public sealed partial class Session
                     return Load(path);
                 }
                 p.Chart = path;
+                p.MpfSourceRoot = null; p.MpfSourceDifficulty = null;
                 p.Notes = true;
                 break;
             default:
@@ -120,6 +123,7 @@ public sealed partial class Session
         string? Rel(string? x) => x == null ? null : Path.GetRelativePath(dir, x);
         p.Chart = Rel(p.Chart);
         p.Gimmick = Rel(p.Gimmick);
+        p.MpfSourceRoot = Rel(p.MpfSourceRoot);
         p.Audio = Rel(p.Audio);
         p.Images = Rel(p.Images);
         if (p.TextFiles != null) p.TextFiles = p.TextFiles.ToDictionary(x => x.Key, x => Rel(x.Value)!);

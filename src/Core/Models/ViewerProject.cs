@@ -14,6 +14,9 @@ public sealed class ViewerProject
     public List<string> EditorTrackOrder { get; set; } = [];
     public string? Chart { get; set; }
     public string? Gimmick { get; set; }
+    /// <summary>Original CGMK song folder and difficulty, retained when the VSM becomes an editor working copy.</summary>
+    public string? MpfSourceRoot { get; set; }
+    public string? MpfSourceDifficulty { get; set; }
     public string? Images { get; set; }
     /// <summary>可选的显式字幕文件，按文本 ID 索引；空 ID 是旧版写法。</summary>
     public Dictionary<string, string>? TextFiles { get; set; }

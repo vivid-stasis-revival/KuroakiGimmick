@@ -6,7 +6,7 @@
 
 在同一条时间轴上编排 gimmick、图片、字幕、场景效果和窗口运动，并在歌曲场景中检查实际表现。
 
-![Version](https://img.shields.io/badge/version-0.1.5_%2F_18.2.2-94cddd?style=flat-square)
+![Version](https://img.shields.io/badge/version-0.1.5_%2F_18.3-94cddd?style=flat-square)
 ![.NET](https://img.shields.io/badge/.NET-8-b5a3e8?style=flat-square)
 ![Renderer](https://img.shields.io/badge/renderer-SDL3_GPU-94cddd?style=flat-square)
 ![Engine](https://img.shields.io/badge/engine-C%23_%2B_Rust-b5a3e8?style=flat-square)
@@ -72,7 +72,7 @@ KuroakiGimmick 的重点是**演出**，而不只是把 VSM 文本换一种方�
 
 ## 下载与平台支持
 
-当前版本为 **v0.1.5 / Build 18.2.2**，构建序号为 `1822`。
+当前版本为 **v0.1.5 / Build 18.3**，构建序号为 `1830`。
 
 [前往 GitHub Releases](https://github.com/vivid-stasis-revival/KuroakiGimmick/releases)
 
@@ -103,11 +103,23 @@ Android、iOS/iPadOS 和 Nintendo Switch 的适配还处于实验阶段。相关
 
 编译器对此没有发言权。
 
+### Custom Gimmicks 1.14 自定义 MPF
+
+支持读取歌曲目录下的 `cmpf/GLOBAL.<脚本名>.vsmpf` 和 `<难度>.<脚本名>.vsmpf`；同名时难度版本优先。VSM 末尾的 `mpf` 区间会执行脚本的 `::Init::`、`::Main::`、`::Finish::`，支持变量、数组、条件、循环，以及直接/定时 mod 写入和补间。保存工程会保留脚本源目录与难度；Chart Folder 导出包含引用的脚本，单独导出 VSM 不包含脚本文件。
+
+脚本按固定 **60 Hz 预览时钟**预计算，拖动、倒放查看和并行导出复用同一结果。原游戏帧率可能不同，因此依赖“每帧加一”的脚本可能有差异。随机数使用脚本共享的确定性预览序列，不保证与 GameMaker 一致。判定/连击查询返回零值并提示离线基线；修改游戏判定、计分，以及依赖原游戏实例的 `call_callback_mod` 调用尚不模拟，会明确报告错误。脚本的解析深度、循环、累计内存和输出量有预览上限；不会执行任意文件操作或宿主代码。
+
+时间轴左侧的 **源码 → MPF** 可切换并直接编辑实际脚本；使用 **保存 MPF 并预览** 或 **Ctrl/Cmd+S** 保存当前文件并重建预览。输入时保留草稿，Ctrl/Cmd+Z/Y 撤销/重做草稿。保存前校验语法和外部文件冲突，旧版本备份到应用数据目录。VSM 已引用但缺少文件的脚本会提供新建草稿，只有显式保存才创建文件。MPF 文件保存独立于 VSM/VSP 的“应用源码”。
+
+兼容检查：`dotnet run -c Release -- --mpf-test`。测试使用合成脚本，不携带私有游戏代码。
+
 ### 正式版与 Nightly
 
 正式版本以对应 Release 的构建提交为准。
 
 Nightly 用于提供最近的功能、兼容性改进和 Bug 修复。
+
+18.3 接入 Custom Gimmicks 1.14 自定义 MPF，修正脚本时序与补间竞争，保留保存/移动/导出时的脚本关联，并新增 MPF 源码直接编辑、保存和预览更新。
 
 18.2.2 新增 Proxy 右键删除、默认开启且可在 Editor 设置关闭的重叠片段子行、复制当前行和剪切（Ctrl/Cmd+X）；自动备份与历史归档移至应用数据目录，并支持旧历史校验迁移。
 
@@ -117,6 +129,7 @@ Nightly 用于提供最近的功能、兼容性改进和 Bug 修复。
 
 相关版本：
 
+- [v0.1.5 / 18.3](https://github.com/vivid-stasis-revival/KuroakiGimmick/releases/tag/v0.1.5-18.3)
 - [v0.1.5 / 18.2.1](https://github.com/vivid-stasis-revival/KuroakiGimmick/releases/tag/v0.1.5-18.2.1)
 - [全部版本与 Nightly](https://github.com/vivid-stasis-revival/KuroakiGimmick/releases)
 
@@ -661,7 +674,7 @@ dotnet run -c Release --no-build -- \
 
 ## 构建与发布
 
-当前应用版本为 **v0.1.5 / Build 18.2.2**。
+当前应用版本为 **v0.1.5 / Build 18.3**。
 
 最终版本号以 [KuroakiGimmick.csproj](KuroakiGimmick.csproj) 为准。
 

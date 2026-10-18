@@ -6,7 +6,12 @@ on:
       - 'src/Bridge/**'
       - 'src/Graphics/Scene/SceneRenderer*'
       - 'src/Core/Parsing/**'
-      - 'src/Core/Timing/BpmMap.cs'
+      - 'src/Core/Timing/**'
+      - 'src/Core/Diagnostics/Mpf*'
+      - 'src/Core/Export/ChartExport.cs'
+      - 'src/Core/Models/ViewerProject.cs'
+      - 'src/Core/Editing/EditorDocument.cs'
+      - 'src/Core/Projects/Session.ProjectFiles.cs'
       - 'src/Core/Projects/Session.cs'
       - 'src/Core/Projects/ViewerSettings.cs'
       - 'src/Core/Audio/**'
@@ -61,6 +66,12 @@ jobs:
         run: dotnet run -c Release --no-build -- --rust-timeline-test
         env:
           KG_RUST_ENGINE: verify
+      - name: CGMK 1.14 MPF deterministic scripting regressions
+        shell: bash
+        run: dotnet run -c Release --no-build -- --mpf-test
+      - name: Native object definition and core fallback regressions
+        shell: bash
+        run: dotnet run -c Release --no-build -- --gimmick-definition-test
       - name: Optimization Audio headless FFI and PCM smoke test
         shell: bash
         run: dotnet run -c Release --no-build -- --rust-audio-test

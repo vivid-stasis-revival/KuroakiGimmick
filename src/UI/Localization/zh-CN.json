@@ -954,5 +954,14 @@
   "Selection cannot be cut because it exceeds clipboard limits or contains unsupported events.": "所选内容超过剪贴板限制或包含不支持的事件，无法剪切。",
   "Cut {0} items": "剪切 {0} 项",
   "Cut rejected: ": "剪切被拒绝：",
-  "Cut {0} items to the clipboard.": "已剪切 {0} 项到剪贴板。"
+  "Cut {0} items to the clipboard.": "已剪切 {0} 项到剪贴板。",
+  "VSM / VSP / MPF SOURCE": "VSM / VSP / MPF 源码编辑",
+  "Ctrl/Cmd+S: save MPF | Ctrl/Cmd+Z: undo draft": "Ctrl/Cmd+S：保存 MPF | Ctrl/Cmd+Z：撤销草稿",
+  "SAVE MPF AND PREVIEW": "保存 MPF 并预览",
+  "No MPF scripts. Add a named mpf range in VSM, then reopen this tab to create its script.": "没有 MPF 脚本。在 VSM 的 mpf 区间添加脚本名，再重新打开本标签即可新建。",
+  "MPF saved. Preview will rebuild; VSM/VSP drafts are unchanged.": "MPF 已保存，预览将更新；VSM/VSP 草稿保持不变。",
+  "NO MPF SCRIPT": "暂无 MPF 脚本",
+  "SOURCE": "源码",
+  "NEW": "新建",
+  "VSM/VSP applied. Save or discard the remaining MPF drafts before closing.": "VSM/VSP 已应用，未保存的 MPF 草稿仍保留在编辑器中。"
 }

@@ -11,6 +11,13 @@ public sealed partial class Timeline
     internal double NativeRawValue(string name,double time,int proxy=-1) =>
         Tracks.TryGetValue((ResolveNativeMod(name),proxy),out var list)?Evaluate(list,time,Initial(name,proxy)):Initial(name,proxy);
 
+    internal double NativeTrackStartTime(string name, int proxy, double time)
+    {
+        if (!Tracks.TryGetValue((ResolveNativeMod(name), proxy), out var list)) return double.NegativeInfinity;
+        int index = SortedSearch.UpperBound(list, time, static x => x.Time) - 1;
+        return index < 0 ? double.NegativeInfinity : list[index].Time;
+    }
+
     internal double NativeTrackWriteTime(string name,int proxy,double time)
     {
         if(!Tracks.TryGetValue((ResolveNativeMod(name),proxy),out var list))return double.NegativeInfinity;

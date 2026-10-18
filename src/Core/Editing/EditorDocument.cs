@@ -209,7 +209,7 @@ public sealed partial class EditorDocument
         string vsmPath = Path.Combine(working, stem + ".editor.vsm");
         string windowsPath = Path.Combine(working, stem + ".editor_cgmk_config.json");
         var outputWindows = CompiledWindows().AsInlineGameConfig();
-        var p = Project.Copy(); p.EditorMarkers = markers.ToList(); p.Gimmick = vsmPath; p.WindowMotion = windowsPath;
+        var p = Project.Copy(); MpfScriptSources.Preserve(p); p.EditorMarkers = markers.ToList(); p.Gimmick = vsmPath; p.WindowMotion = windowsPath;
         // 保存/导出的 VSM 一律使用 canonical 作者数值；编辑会话本身仍保留未触碰源行，避免无关改动污染撤销历史。
         string normalizedVsm = Vsm.NormalizedText;
         byte[] normalizedVsmBytes = Vsm.NormalizedBytes();
@@ -251,6 +251,7 @@ public sealed partial class EditorDocument
         jsonProject.Audio = Rel(p.Audio); jsonProject.Images = Rel(p.Images); jsonProject.Jacket = Rel(p.Jacket);
         jsonProject.FxProfile = Rel(p.FxProfile); jsonProject.GameUi = Rel(p.GameUi); jsonProject.GimmickAssets = Rel(p.GimmickAssets);
         jsonProject.GimmickDefinition = Rel(p.GimmickDefinition);
+        jsonProject.MpfSourceRoot = Rel(p.MpfSourceRoot);
         jsonProject.TextFiles = p.TextFiles.ToDictionary(x => x.Key, x => Rel(x.Value)!);
         files[vsmPath] = normalizedVsmBytes;
         files[windowsPath] = Encoding.UTF8.GetBytes(outputWindows.Serialize());

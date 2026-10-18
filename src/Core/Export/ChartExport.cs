@@ -174,6 +174,8 @@ public static class ChartExport
                 Bytes(Path.GetFileNameWithoutExtension(destination) + "_cgmk_config.json", configBytes);
             else warnings.Add("VSM only: window movement and cgmk settings are NOT included.");
             warnings.Add("Images, subtitles, VSV and audio stay external. Keep the original chart resources.");
+            if (input.VsmText.Split('\n').Any(line => line.Trim() == "mpf"))
+                warnings.Add("External cmpf/*.vsmpf scripts are NOT bundled in VSM-only exports. Use Chart Folder export to include referenced scripts.");
             if (input.ImageText != null) warnings.Add("Authored VSP and image files are NOT included. Use Chart Folder for imported images.");
             if (input.TextSources?.Count > 0) warnings.Add("Edited subtitle contents are NOT included. Use Chart Folder to include text files.");
         }
@@ -208,10 +210,32 @@ public static class ChartExport
             foreach (string name in new[] { stem + ".vsv", "GLOBAL.vsv" })
                 if (SongFiles.Existing(root, name) is { } path) Dependency(path);
             var sourceChart = new Chart(); VsmReader.ReplaceModsText(sourceChart, input.VsmText, "export.vsm");
+            // MPF files are external per-difficulty programs, not embedded in the
+            // VSM. Preserve the selected difficulty override (or GLOBAL fallback)
+            // in Chart Folder exports; do not silently omit its runtime dependency.
+            var mpfSources = MpfScriptSources.Resolve(input.Project);
+            warnings.AddRange(mpfSources.Errors);
+            int includedMpf = 0;
+            foreach (string function in sourceChart.PerFrame.Select(f => f.Function).Distinct(StringComparer.Ordinal))
+            {
+                if (mpfSources.Files.TryGetValue(function, out string? sourceMpf))
+                {
+                    // Source scripts can live beside an independently attached VSM.
+                    // Export under the target difficulty so reopening uses the same selected program.
+                    Copy("cmpf/" + stem + "." + function + ".vsmpf", sourceMpf);
+                    includedMpf++;
+                }
+                else if (sourceChart.ObjectName == "obj_custom_gimmick")
+                    warnings.Add("No external MPF script found for '" + function + "' (difficulty "
+                        + mpfSources.Difficulty + "). If this is not an installed native function, playback requires its cmpf script.");
+            }
+            if (includedMpf > 0)
+                warnings.Add("CGMK 1.14 MPF scripts are included under cmpf/. Install the matching Custom Gimmicks mod to run them in the game.");
             if (sourceChart.Mods.Any(e => e.Name == EpisodeScript.ModName) && EpisodeScript.Find(input.Project, sourceChart) is { } story)
                 Dependency(story);
             var project = input.Project.Copy();
             project.Chart = Path.GetRelativePath(root, chart).Replace('\\', '/');
+            project.MpfSourceRoot = "."; project.MpfSourceDifficulty = stem;
             project.Gimmick = stem + ".vsm"; project.WindowMotion = stem + "_cgmk_config.json";
             // 当前难度的编辑内容覆盖依赖同名项，其它难度不参与导出。
             Bytes(project.Gimmick, input.VsmBytes); Bytes(project.WindowMotion, configBytes);

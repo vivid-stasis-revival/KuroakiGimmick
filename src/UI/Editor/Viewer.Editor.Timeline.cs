@@ -159,7 +159,7 @@ public sealed partial class Viewer
         float labelW = Math.Clamp(LayoutOptions.TrackLabelWidth, 180, Math.Min(500, r.W - 360)), x = r.X + labelW, rulerY = r.Y + 40, markerY = rulerY + 27, audioY = markerY + 27, noteY = audioY + 27, tracksY = noteY + 58;
         if (EButton(L.Get(preferences.GroupGimmickTracks ? "GROUPED" : "RAW EVENTS"), new(r.X + 90, rulerY, labelW - 98, 24), key: "gimmick-view"))
             SetGimmickGrouping(!preferences.GroupGimmickTracks);
-        if (EButton("VSM / VSP", new(r.X + 90, markerY, labelW - 98, 24), enabled: !Busy, key: "source-editor"))
+        if (EButton(L.Get("SOURCE"), new(r.X + 90, markerY, labelW - 98, 24), enabled: !Busy, key: "source-editor"))
             OpenSourceEditor();
         editorTracksRect = new(x, tracksY, r.W - labelW - 10, Math.Max(1, r.Y + r.H - tracksY - 8));
         trackLabelGrip = new(x - 3, rulerY, 6, r.Y + r.H - rulerY - 7);

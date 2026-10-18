@@ -25,6 +25,7 @@ public sealed partial class Viewer
     Task<Session>? editorBuild;
     long compilingRevision = -1, renderedRevision = -1, layoutRevision = -1;
     EditorDocument? compilingDocument;
+    long editorResourceRevision, compilingResourceRevision, renderedResourceRevision;
     double beatStart, pixelsPerBeat = 54, loopIn, loopOut = 8;
     /// <summary>FOLLOW 打开时播放头停靠在可视区宽度的这个比例处，后面那 66% 留给"接下来会发生什么"。</summary>
     const double FollowAnchor = .34;
@@ -206,19 +207,19 @@ public sealed partial class Viewer
             try
             {
                 var s = editorBuild.GetAwaiter().GetResult();
-                if (ReferenceEquals(editor, compilingDocument) && editor?.Revision == compilingRevision)
+                if (ReferenceEquals(editor, compilingDocument) && editor?.Revision == compilingRevision && editorResourceRevision == compilingResourceRevision)
                 {
-                    Current = s; renderedRevision = compilingRevision; windowTimelineConfig = null;
+                    Current = s; renderedRevision = compilingRevision; renderedResourceRevision = compilingResourceRevision; windowTimelineConfig = null;
                     transport.SetDuration(EditorDuration());
                     message = L.Get("Preview updated. ") + Current.Chart.Diagnostics.Count + L.Get(" compatibility notices (not hidden).");
                 }
             }
-            catch (Exception ex) { message = L.Get("Preview rebuild failed: ") + ex.Message; renderedRevision = compilingRevision; }
+            catch (Exception ex) { message = L.Get("Preview rebuild failed: ") + ex.Message; renderedRevision = compilingRevision; renderedResourceRevision = compilingResourceRevision; }
             editorBuild = null;
         }
-        if (editor != null && editorBuild == null && editor.Revision != renderedRevision && !Busy && editDrag == null && !ImageGestureActive)
+        if (editor != null && editorBuild == null && (editor.Revision != renderedRevision || editorResourceRevision != renderedResourceRevision) && !Busy && editDrag == null && !ImageGestureActive)
         {
-            compilingDocument = editor; compilingRevision = editor.Revision;
+            compilingDocument = editor; compilingRevision = editor.Revision; compilingResourceRevision = editorResourceRevision;
             // 实时预览和最终保存/导出必须消费同一份 canonical VSM；否则 inspector 已显示 14.125，
             // renderer 仍可能从未规范化源文本重新读回 14.1250138333。
             // Immutable line records can safely cross to the load worker. Normalize large VSM text there,
