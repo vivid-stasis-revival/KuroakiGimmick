@@ -22,12 +22,15 @@ internal static class MpfSourceChecks
             string vsm = Path.Combine(root, "ENCORE.vsm");
             const string text = "!obj:obj_custom_gimmick\nmpf\n0,4,wave\n";
             File.WriteAllText(vsm, text);
+            // A synthetic script fixture has no licensed jacket catalog. Keep the normal
+            // jacket path explicit so this Session also works in a clean CI checkout.
+            File.WriteAllText(Path.Combine(root, "cgmk_config.json"), "{\"JACKET_MANAGE_MODE\":\"normal\"}");
             string global = Path.Combine(scripts, "GLOBAL.wave.vsmpf");
             string local = Path.Combine(scripts, "encore.wave.vsmpf");
             File.WriteAllText(global, "::Main::\nset_mod_val(\"cover1\",0.2);\n");
             File.WriteAllText(local, "::Main::\nset_mod_val(\"cover1\",0.8);\n");
             File.WriteAllText(Path.Combine(scripts, "FINALE.wave.vsmpf"), "::Main::\n");
-            var project = new ViewerProject { Gimmick = vsm, Profile = "core" };
+            var project = new ViewerProject { Gimmick = vsm, Profile = "core", RoomPreset = "none", GameUiEnabled = false };
             Check(MpfScriptSources.Resolve(project).Files["wave"] == local, "difficulty override ignores selector case");
             Check(!MpfScriptSources.Resolve(project).Files.ContainsKey("WAVE"), "script names are case sensitive");
             File.Delete(local);
