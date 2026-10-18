@@ -33,38 +33,32 @@ internal static class IosEntry
         {
             string root = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             string bundled = Path.Combine(NSBundle.MainBundle.BundlePath, "Assets");
-            MobilePlatform.Configure(root, bundled, Pick);
-            MobilePlatform.InstallShaders(bundled);
-            MobilePlatform.StartFrameLoop = StartFrames;
             Directory.CreateDirectory(Path.Combine(root, "UserData"));
             Console.SetError(TextWriter.Synchronized(new StreamWriter(Path.Combine(root, "UserData", "mobile.log"), append: true) { AutoFlush = true }));
+            Console.Error.WriteLine($"[{DateTimeOffset.Now:O}] iOS startup");
+            MobilePlatform.Configure(root, bundled, Pick);
+            MobilePlatform.StartFrameLoop = StartFrames;
             string installed = MobileAssetPack.Ready(bundled) ? bundled : Path.Combine(root, "Assets");
-            if (!MobileAssetPack.Ready(installed))
+            // SDL's native message box attaches to the active UIKit scene even
+            // before Host exists, and pumps the run loop while Files copies assets.
+            while (!MobileAssetPack.Ready(installed))
             {
-                UIApplication.SharedApplication.BeginInvokeOnMainThread(() => RequestAssets(root));
-                return 0;
+                Console.Error.WriteLine("Waiting for iOS resource pack: " + installed);
+                Sdl.Require(Sdl.SDL_ShowSimpleMessageBox(0x40, "Install resource pack / 安装素材包",
+                    "Copy your iOS resource pack's Assets folder (including MobileShaders) in Files to On My iPad/iPhone → Kuroaki/Gimmick. Then tap OK to check again.\n\n" +
+                    "请在“文件”App 中，将 iOS 素材包的 Assets 文件夹（包含 MobileShaders）复制到“我的 iPad/iPhone → Kuroaki/Gimmick”，再点“好”重新检查。", 0));
             }
             MobilePlatform.Configure(root, installed, Pick);
+            MobilePlatform.InstallShaders(installed);
             return Program.RunMobile(MobilePlatform.LaunchArguments());
         }
-        catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
-    }
-    static void RequestAssets(string root)
-    {
-        string installed = Path.Combine(root, "Assets");
-        if (dialogWindow != null) { dialogWindow.Hidden = true; dialogWindow.Dispose(); dialogWindow = null; }
-        var controller = DialogPresenter();
-        var alert = UIAlertController.Create("Install resource pack",
-            "In Files, copy your iOS resource pack's Assets folder (including MobileShaders) to On My iPad/iPhone → Kuroaki/Gimmick. Then tap Retry.", UIAlertControllerStyle.Alert);
-        alert.AddAction(UIAlertAction.Create("Retry", UIAlertActionStyle.Default, _ =>
+        catch (Exception ex)
         {
-            if (!MobileAssetPack.Ready(installed)) { RequestAssets(root); return; }
-            if (dialogWindow != null) { dialogWindow.Hidden = true; dialogWindow.Dispose(); dialogWindow = null; }
-            MobilePlatform.Configure(root, installed, Pick);
-            try { Program.RunMobile(MobilePlatform.LaunchArguments()); }
-            catch (Exception ex) { Console.Error.WriteLine(ex); RequestAssets(root); }
-        }));
-        controller.PresentViewController(alert, true, null);
+            Console.Error.WriteLine(ex);
+            if (!Sdl.SDL_ShowSimpleMessageBox(0x10, "Kuroaki/Gimmick", ex.Message + "\n\nSee UserData/mobile.log for details.", 0))
+                Console.Error.WriteLine("Startup message box: " + Sdl.Error);
+            return 1;
+        }
     }
 
     static void StartFrames(Host h, KuroakiGimmick.UI.Viewer v)
