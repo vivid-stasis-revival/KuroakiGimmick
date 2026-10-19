@@ -150,7 +150,7 @@ Nightly 用于提供最近的功能、兼容性改进和 Bug 修复。
 | Linux | Vulkan / SDL3 GPU |
 | 游戏素材 | 用户自行准备本地 `Assets/`；仓库内 `Assets/App/` 仅包含应用自身资源 |
 | 音频 | Symphonia 及兼容的 NVorbis 音频路径 |
-| 视频导出 | FFmpeg，可通过 `PATH` 或 `KUROAKI_FFMPEG` 指定 |
+| 视频导出 | 桌面 CI Release 自带 FFmpeg（H.264/AAC）；源码构建可通过 `PATH` 或 `KUROAKI_FFMPEG` 指定 |
 
 首次恢复 NuGet 包需要网络连接。
 

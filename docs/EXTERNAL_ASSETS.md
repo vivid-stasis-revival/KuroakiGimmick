@@ -2,6 +2,8 @@
 
 CI packages contain the application, public application branding, fonts/notices and built-in shader code. Game assets are private: they are neither downloaded by Actions nor committed, embedded, or uploaded with builds. A program package alone cannot open the editor without a matching resource pack.
 
+Desktop CI Release archives (Windows x64, macOS ARM64, Linux x64) include a checksum-verified GPL-licensed FFmpeg CLI beside the executable, including `libx264` for MP4 output. No separate FFmpeg install is required for these archives. Private game assets remain external. Local builds may still use `KUROAKI_FFMPEG` or the system `PATH`.
+
 - Windows / macOS / Linux: place your complete `Assets` directory beside the executable. Linux uses Vulkan; driver/device validation is still required.
 - Switch: extract your Switch resource pack to `sdmc:/switch/KuroakiGimmick/Assets`. Copy the package's `mono` directory to the SD root too; it contains the required ICU runtime data. Launch the NRO in full application mode. The resource pack must include `SwitchShaders`.
 - Android: on first launch choose your Android resource ZIP using the system file picker. The app validates and installs it to its private `Documents/Assets` directory. Existing resources are preserved under `Assets-previous-*` when replaced. Cancelling closes the initial setup. No storage-wide permission is required.
