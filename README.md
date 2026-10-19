@@ -12,7 +12,7 @@
 ![Engine](https://img.shields.io/badge/engine-C%23_%2B_Rust-b5a3e8?style=flat-square)
 ![Language](https://img.shields.io/badge/UI-中文_%2F_English-e8a4bd?style=flat-square)
 
-[下载正式版](https://github.com/vivid-stasis-revival/KuroakiGimmick/releases/latest) · [全部版本与 Nightly](https://github.com/vivid-stasis-revival/KuroakiGimmick/releases) · [更新日志](CHANGELOG.md) · [问题反馈](https://github.com/vivid-stasis-revival/KuroakiGimmick/issues)
+[下载正式版](https://github.com/vivid-stasis-revival/KuroakiGimmick/releases/latest) · [全部版本与 Nightly](https://github.com/vivid-stasis-revival/KuroakiGimmick/releases) · [更新日志](CHANGELOG.md) · [问题反馈](https://github.com/vivid-stasis-revival/KuroakiGimmick/issues) · [k/g交流群](https://qm.qq.com/q/FvPPOa77Kq)
 
 ---
 
