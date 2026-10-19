@@ -9,14 +9,15 @@ namespace KuroakiGimmick.Core;
 public sealed record ExportOptions(string Path, double Start, double End, int Fps = 60, int Width = 1920, int Height = 1080, bool Notes = true,
     bool Effects = true, bool Overwrite = false, int RenderWorkers = 1)
 {
-    public static int MaxRenderWorkers => Math.Max(1, Environment.ProcessorCount - 2);
+    // Each worker owns a GPU context. Maximum/default uses all available logical CPU cores.
+    public static int MaxRenderWorkers => Math.Max(1, Environment.ProcessorCount);
     /// <summary>要编码的总帧数，至少 1 帧。减 1e-9 是为了让刚好落在帧边界的区间不多出一帧。</summary>
     public int FrameCount => Math.Max(1, (int) Math.Ceiling((End - Start) * Fps - 1e-9));
     /// <summary>区间不超过 1 小时、帧率 1..240、分辨率必须是 320×180 到 7680×4320 之间的偶数 16:9。</summary>
     public void Validate()
     {
         if (RenderWorkers < 1 || RenderWorkers > MaxRenderWorkers)
-            throw new ArgumentException($"Render workers must be 1..{MaxRenderWorkers} (CPU logical cores minus 2, minimum 1).");
+            throw new ArgumentException($"Render workers must be 1..{MaxRenderWorkers} (available CPU logical cores, minimum 1).");
         if (!double.IsFinite(Start) || !double.IsFinite(End) || Start < 0 || End <= Start || End - Start > 3600)
         {
             throw new ArgumentException("Export range must be positive and at most one hour.");

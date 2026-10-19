@@ -225,6 +225,10 @@ jobs:
             exit 1
           fi
 
+      - name: Verify max-core render default and explicit user preferences
+        shell: bash
+        run: 'artifacts/${{ matrix.rid }}/${{ matrix.executable }} --render-workers-default-test'
+
       - name: Verify reference Markdown in the actual published executable
         shell: bash
         run: |
