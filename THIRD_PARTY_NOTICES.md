@@ -11,6 +11,7 @@
 | SPIRV-Cross native | Silk.NET.SPIRV.Cross.Native 2.23.0 | Apache-2.0 / MIT; included license |
 | Silk.NET native packaging | 2.23.0 | MIT; included license |
 | Symphonia | 0.5.4 facade; enabled 0.5.x codec/container components resolved by Cargo | MPL-2.0; original Rust source is unmodified; source and license references in ThirdParty/Symphonia-NOTICE.txt |
+| FFmpeg CLI (desktop CI releases) | Windows/Linux: BtbN FFmpeg Builds, pinned September 2026 GPL static release; macOS ARM64: vanloctech ffmpeg-macos 2026.06.11 | Separately executed GPL-licensed FFmpeg binary with libx264. See `FFMPEG-BUILDINFO.txt`, `ThirdParty/FFmpeg-LICENSE.md`, `ThirdParty/FFmpeg-COPYING.GPLv2.txt` and `ThirdParty/FFmpeg-COPYING.GPLv3.txt`; no FFmpeg shared-library API linkage. |
 | NVorbis | 0.10.5 | MIT, included notice |
 | StbImageSharp | 2.30.16 | Public domain / MIT; included license |
 | StbImageWriteSharp | 1.16.7 | Public domain / MIT; included license; used to encode exported info cards as PNG |
@@ -48,3 +49,7 @@ The interface is drawn with **Noto Sans SC**, shipped as two static font files u
 Earlier releases rasterized the interface from IBM Plex Sans SC into bitmap atlases named Kuroaki UI Sans. Those atlases are no longer loaded; the IBM Plex notice and license are retained in `ThirdParty/IBM-Plex-OFL.txt` for the history of that artwork. Copyright © 2017 IBM Corp. Upstream: https://github.com/IBM/plex.
 
 Mobile builds compile official SDL 3.4.18 (zlib license). Switch Full AOT packages also include ICU 77.1 data (Unicode/ICU notices in `ThirdParty/ICU-LICENSE.txt`), mono-nx and .NET runtime notices copied from the matching toolchain at packaging time.
+
+## FFmpeg desktop CI bundle
+
+The desktop Release ZIP ships the FFmpeg CLI as a separate child-process executable. Kuroaki/Gimmick calls it using `ProcessStartInfo`; this is not a link against libavcodec, libavformat or other FFmpeg shared libraries. The Windows/Linux GPL builds come from [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-09-30-13-08); the Apple Silicon GPL build comes from [vanloctech/ffmpeg-macos](https://github.com/vanloctech/ffmpeg-macos/releases/tag/ffmpeg-2026.06.11). The packaged `FFMPEG-BUILDINFO.txt` records exact asset URLs and verified SHA-256 checksums. Corresponding build recipes and upstream source references are available in those repositories. If redistributing the binaries independently, preserve the GPL license notices and ensure the exact corresponding source and any patches remain available under the applicable license.

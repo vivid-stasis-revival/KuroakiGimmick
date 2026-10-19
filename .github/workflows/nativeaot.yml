@@ -134,6 +134,10 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev libx11-6 libxext6 libwayland-client0 libvulkan1 zip
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
       - uses: actions/setup-dotnet@v6
         id: dotnet
         with:
@@ -175,6 +179,10 @@ jobs:
           source scripts/rust-native-common.sh
           kg_rust_publish '${{ matrix.rid }}' 'artifacts/${{ matrix.rid }}'
 
+      - name: Bundle verified FFmpeg for desktop MP4 export
+        shell: bash
+        run: python scripts/ci/bundle_ffmpeg.py '${{ matrix.rid }}' 'artifacts/${{ matrix.rid }}'
+
       - name: Include package readme and dependency notices
         shell: bash
         run: |
@@ -198,6 +206,11 @@ jobs:
           test -f 'artifacts/${{ matrix.rid }}/${{ matrix.shaderc }}'
           test -f 'artifacts/${{ matrix.rid }}/${{ matrix.spirv_cross }}'
           test -s 'artifacts/${{ matrix.rid }}/${{ matrix.rust_core }}'
+          case '${{ matrix.rid }}' in
+            win-*) test -s 'artifacts/${{ matrix.rid }}/ffmpeg.exe' ;;
+            *) test -x 'artifacts/${{ matrix.rid }}/ffmpeg' ;;
+          esac
+          test -s 'artifacts/${{ matrix.rid }}/FFMPEG-BUILDINFO.txt'
 
           test ! -f 'artifacts/${{ matrix.rid }}/KuroakiGimmick.runtimeconfig.json'
           test ! -f 'artifacts/${{ matrix.rid }}/KuroakiGimmick.deps.json'
@@ -211,6 +224,10 @@ jobs:
             echo "Version mismatch: '$actual' != '$BUILD_LABEL'" >&2
             exit 1
           fi
+
+      - name: Verify max-core render default and explicit user preferences
+        shell: bash
+        run: 'artifacts/${{ matrix.rid }}/${{ matrix.executable }} --render-workers-default-test'
 
       - name: Verify reference Markdown in the actual published executable
         shell: bash

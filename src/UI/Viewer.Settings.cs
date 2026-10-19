@@ -150,7 +150,7 @@ public sealed partial class Viewer
                 preferences.UnlimitedChartSize = false;
                 preferences.AlwaysFollow = false;
                 preferences.OverwriteExports = false;
-                preferences.VideoRenderWorkers = 1;
+                preferences.VideoRenderWorkers = ExportOptions.MaxRenderWorkers;
                 preferences.PutImageGimmickIntoAssetsFolder = false;
                 preferences.UiTheme = "Nekomiya";
                 preferences.CardWidth = new ViewerSettings().CardWidth;
