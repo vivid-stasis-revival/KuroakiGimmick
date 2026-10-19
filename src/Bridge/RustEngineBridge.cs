@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO.MemoryMappedFiles;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -15,6 +16,7 @@ internal static unsafe partial class RustEngineBridge
     const string Library = "kg_native_core";
     const int MaxPacketBytes = 512 * 1024 * 1024;
     const int MaxChartBytes = 128 * 1024 * 1024;
+    const int MappedInputThreshold = 4 * 1024 * 1024;
     const uint MaxEvents = 1_000_000;
     static string Mode => OptimizationEngineSettings.CalculationMode;
     static bool Enabled => Mode is "auto" or "verify" or "required";
@@ -99,17 +101,19 @@ internal static unsafe partial class RustEngineBridge
     private static NativePacketStream CallParser(byte[] input, int kind)
     {
         fixed (byte* data = input)
+            return CallParser(data, (nuint)input.Length, kind);
+    }
+    private static NativePacketStream CallParser(byte* data, nuint inputLength, int kind)
+    {
+        byte* output = null; nuint length = 0;
+        int rc = kind switch
         {
-            byte* output = null; nuint length = 0;
-            int rc = kind switch
-            {
-                0 => ChartLoadLimits.Unlimited ? ParseVscUnlimited(data,(nuint)input.Length,&output,&length) : ParseVsc(data,(nuint)input.Length,&output,&length),
-                1 => ChartLoadLimits.Unlimited ? ParseVsbUnlimited(data,(nuint)input.Length,&output,&length) : ParseVsb(data,(nuint)input.Length,&output,&length),
-                2 => ChartLoadLimits.Unlimited ? ParseVsmUnlimited(data,(nuint)input.Length,&output,&length) : ParseVsm(data,(nuint)input.Length,&output,&length),
-                _ => throw new ArgumentOutOfRangeException(nameof(kind))
-            };
-            return Receive(rc, output, length);
-        }
+            0 => ChartLoadLimits.Unlimited ? ParseVscUnlimited(data,inputLength,&output,&length) : ParseVsc(data,inputLength,&output,&length),
+            1 => ChartLoadLimits.Unlimited ? ParseVsbUnlimited(data,inputLength,&output,&length) : ParseVsb(data,inputLength,&output,&length),
+            2 => ChartLoadLimits.Unlimited ? ParseVsmUnlimited(data,inputLength,&output,&length) : ParseVsm(data,inputLength,&output,&length),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind))
+        };
+        return Receive(rc, output, length);
     }
     private static void Report(Exception e, string area)
     {
@@ -119,26 +123,166 @@ internal static unsafe partial class RustEngineBridge
         if (Required) throw new InvalidOperationException($"RustEngine {area} failed", e);
     }
 
-    private static byte[] ReadChartBytes(string path)
+    // The native parser borrows this mapping only for the synchronous call. Its
+    // returned packet owns all output bytes and remains valid after the mapping closes.
+    private static NativePacketStream CallFileParser(string path, int kind)
     {
         using var stream = File.OpenRead(path);
         long length = stream.Length;
-        if (ChartLoadLimits.Exceeds(length, MaxChartBytes))
-            throw new InvalidDataException("Chart exceeds the 128 MiB limit.");
-        var bytes = new byte[checked((int)length)];
-        stream.ReadExactly(bytes);
-        return bytes;
+        ValidateInputLength(length, kind);
+        if (length <= MappedInputThreshold)
+        {
+            if (kind == 2)
+            {
+                using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+                return CallVsmTextParser(reader.ReadToEnd());
+            }
+            var bytes = new byte[(int)length];
+            stream.ReadExactly(bytes);
+            return CallParser(bytes, kind);
+        }
+        // Windows enforces FileShare.Read against writers/truncation. Unix file
+        // locks are advisory: mapping a user file there could SIGBUS if another
+        // application truncates it. Map a private bounded snapshot instead.
+        if (OperatingSystem.IsWindows()) return CallFileParser(stream, kind, normalizeVsm: kind == 2);
+        using var snapshot = CreateInputTemporary();
+        byte[] buffer = new byte[64 * 1024];
+        long remaining = length;
+        while (remaining > 0)
+        {
+            int count = stream.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining));
+            if (count == 0) throw new EndOfStreamException("Chart was truncated while reading its input snapshot.");
+            snapshot.Write(buffer, 0, count);
+            remaining -= count;
+        }
+        snapshot.Flush();
+        snapshot.Position = 0;
+        return CallFileParser(snapshot, kind, normalizeVsm: kind == 2);
+    }
+    private static void ValidateInputLength(long length, int kind)
+    {
+        int limit = kind == 2 ? 64 * 1024 * 1024 : MaxChartBytes;
+        if (ChartLoadLimits.Exceeds(length, limit))
+            throw new InvalidDataException(kind == 2 ? "VSM exceeds 64 MiB." : "Chart exceeds the 128 MiB limit.");
+        if ((ulong)length > (ulong)nint.MaxValue)
+            throw new InvalidDataException("Chart exceeds the process address range.");
+    }
+    private static NativePacketStream CallFileParser(FileStream stream, int kind, bool normalizeVsm)
+    {
+        long length = stream.Length;
+        ValidateInputLength(length, kind);
+        if (length == 0) return CallParser([], kind);
+        using var mapped = MemoryMappedFile.CreateFromFile(stream, null, 0, MemoryMappedFileAccess.Read,
+            HandleInheritability.None, leaveOpen: true);
+        using var view = mapped.CreateViewAccessor(0, length, MemoryMappedFileAccess.Read);
+        byte* pointer = null;
+        view.SafeMemoryMappedViewHandle.AcquirePointer(ref pointer);
+        try
+        {
+            pointer += view.PointerOffset;
+            int preamble = 0;
+            if (normalizeVsm && VsmNeedsTranscoding(pointer, length, out preamble))
+            {
+                stream.Position = 0;
+                using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true,
+                    bufferSize: 64 * 1024, leaveOpen: true);
+                return CallNormalizedVsmParser(reader);
+            }
+            return CallParser(pointer + preamble, checked((nuint)(length - preamble)), kind);
+        }
+        finally { view.SafeMemoryMappedViewHandle.ReleasePointer(); }
+    }
+    private static bool VsmNeedsTranscoding(byte* pointer, long length, out int preamble)
+    {
+        preamble = 0;
+        var prefix = new ReadOnlySpan<byte>(pointer, (int)Math.Min(length, 4));
+        if (prefix.StartsWith(new byte[] { 0xff, 0xfe }) || prefix.StartsWith(new byte[] { 0xfe, 0xff }) ||
+            prefix.StartsWith(new byte[] { 0, 0, 0xfe, 0xff })) return true;
+        if (prefix.StartsWith(new byte[] { 0xef, 0xbb, 0xbf })) preamble = 3;
+        // File.ReadAllText used replacement fallback for invalid UTF-8. Preserve
+        // that behavior instead of making required mode reject previously valid loads.
+        var decoder = new UTF8Encoding(false, true).GetDecoder();
+        const int chunkSize = 64 * 1024;
+        // GetCharCount does not advance Decoder state. GetChars must carry an
+        // incomplete UTF-8 sequence into the next chunk; allow two extra UTF-16
+        // units for a sequence begun in the previous chunk.
+        char[] decoded = new char[chunkSize + 2];
+        try
+        {
+            for (long offset = preamble; offset < length;)
+            {
+                int count = (int)Math.Min(chunkSize, length - offset);
+                var bytes = new ReadOnlySpan<byte>(pointer + offset, count);
+                decoder.GetChars(bytes, decoded, flush: offset + count == length);
+                int position = 0;
+                while (position < count)
+                {
+                    int next = bytes[position..].IndexOf((byte)'\r');
+                    if (next < 0) break;
+                    position += next;
+                    if (offset + position + 1 == length || pointer[offset + position + 1] != '\n') return true;
+                    position++;
+                }
+                offset += count;
+            }
+        }
+        catch (DecoderFallbackException) { return true; }
+        return false;
+    }
+    private static NativePacketStream CallNormalizedVsmParser(TextReader reader)
+    {
+        // UTF-16/32, malformed UTF-8 and CR-only sources need the same decoding
+        // and newline normalization as the old string path. A temporary UTF-8
+        // file bounds RAM while keeping native required/verify semantics.
+        using var temporary = CreateInputTemporary();
+        using (var writer = new StreamWriter(temporary, new UTF8Encoding(false), 64 * 1024, leaveOpen: true))
+        {
+            char[] buffer = new char[64 * 1024];
+            bool previousCr = false;
+            int count;
+            while ((count = reader.Read(buffer, 0, buffer.Length)) != 0)
+            {
+                int start = 0;
+                for (int i = 0; i < count; i++)
+                {
+                    char character = buffer[i];
+                    if (character == '\r' || character == '\n' && previousCr)
+                    {
+                        writer.Write(buffer, start, i - start);
+                        if (character == '\r') writer.Write('\n');
+                        start = i + 1;
+                    }
+                    previousCr = character == '\r';
+                }
+                writer.Write(buffer, start, count - start);
+            }
+        }
+        temporary.Position = 0;
+        return CallFileParser(temporary, 2, normalizeVsm: false);
+    }
+    private static NativePacketStream CallVsmTextParser(string text)
+    {
+        if (text.Length <= MappedInputThreshold)
+            return CallParser(Encoding.UTF8.GetBytes(text.Replace("\r\n", "\n").Replace('\r', '\n')), 2);
+        using var reader = new StringReader(text);
+        return CallNormalizedVsmParser(reader);
+    }
+    private static FileStream CreateInputTemporary()
+    {
+        var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.ReadWrite,
+            Share = FileShare.None, BufferSize = 64 * 1024, Options = FileOptions.DeleteOnClose };
+        if (!OperatingSystem.IsWindows()) options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        return new FileStream(Path.Combine(Path.GetTempPath(), "kg-chart-input-" + Guid.NewGuid().ToString("N") + ".tmp"), options);
     }
 
     internal static bool TryLoadVsc(string path, out Chart? result)
     {
         result = null;
         if (!Enabled) return false;
-        if (ChartLoadLimits.Unlimited && new FileInfo(path).Length > Array.MaxLength) return false; // Streaming managed parser.
         try
         {
             var timer = Stopwatch.StartNew();
-            var chart = DecodeChart(CallParser(ReadChartBytes(path), 0), Path.GetFileNameWithoutExtension(path), path);
+            var chart = DecodeChart(CallFileParser(path, 0), Path.GetFileNameWithoutExtension(path), path);
             if (Verify)
             {
                 var reference = VscReader.LoadOriginal(path);
@@ -151,7 +295,7 @@ internal static unsafe partial class RustEngineBridge
             return true;
         }
         catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException
-            or InvalidDataException or IOException or ArgumentException or OverflowException)
+            or InvalidDataException or IOException or ArgumentException or OverflowException or PlatformNotSupportedException)
         {
             Report(e,"VSC");return false;
         }
@@ -161,11 +305,10 @@ internal static unsafe partial class RustEngineBridge
     {
         result=null;
         if (!Enabled) return false;
-        if (ChartLoadLimits.Unlimited && new FileInfo(path).Length > Array.MaxLength) return false;
         try
         {
             var timer=Stopwatch.StartNew();
-            var chart=DecodeChart(CallParser(ReadChartBytes(path),1),Path.GetFileNameWithoutExtension(path));
+            var chart=DecodeChart(CallFileParser(path,1),Path.GetFileNameWithoutExtension(path));
             // The binary encoding stores numeric IDs for object-local Mods. Rust parses the
             // binary; existing catalog lookup retains the original extension ID ordering.
             var extras=GimmickCatalog.ReadExtraMods(chart.ObjectName,Path.GetDirectoryName(path),definitionPath,profile);
@@ -190,25 +333,33 @@ internal static unsafe partial class RustEngineBridge
             return true;
         }
         catch(Exception e) when (e is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException
-            or InvalidDataException or IOException or ArgumentException or OverflowException)
+            or InvalidDataException or IOException or ArgumentException or OverflowException or PlatformNotSupportedException)
         {
             Report(e,"VSB");return false;
         }
     }
 
     internal static bool TryApplyVsm(Chart destination, string text, string source)
+        => TryApplyVsmCore(destination, source, () => CallVsmTextParser(text),
+            reference => VsmReader.ReplaceModsTextOriginal(reference, text, source));
+
+    internal static bool TryApplyVsmFile(Chart destination, string path)
+        => TryApplyVsmCore(destination, path, () => CallFileParser(path, 2),
+            reference => VsmReader.ReplaceModsOriginal(reference, path));
+
+    private static bool TryApplyVsmCore(Chart destination, string source, Func<NativePacketStream> parse,
+        Action<Chart> readReference)
     {
         if (!Enabled) return false;
         try
         {
             var timer = Stopwatch.StartNew();
-            text = text.Replace("\r\n", "\n").Replace('\r', '\n');
-            var parsed = DecodeChart(CallParser(Encoding.UTF8.GetBytes(text), 2), "VSM", source);
+            var parsed = DecodeChart(parse(), "VSM", source);
             if (Verify)
             {
                 var reference = new Chart { ObjectName = destination.ObjectName,
                     Proxies = destination.Proxies, ProxyCountDeclared = destination.ProxyCountDeclared };
-                VsmReader.ReplaceModsTextOriginal(reference, text, source);
+                readReference(reference);
                 var converted = new Chart { ObjectName = destination.ObjectName,
                     Proxies = destination.Proxies, ProxyCountDeclared = destination.ProxyCountDeclared };
                 ApplyVsm(converted, parsed);
@@ -221,7 +372,7 @@ internal static unsafe partial class RustEngineBridge
             return true;
         }
         catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException
-            or InvalidDataException or IOException or ArgumentException or OverflowException)
+            or InvalidDataException or IOException or ArgumentException or OverflowException or PlatformNotSupportedException)
         {
             Report(e,"VSM");return false;
         }
@@ -309,6 +460,7 @@ internal static unsafe partial class RustEngineBridge
         int notes = ReadCount(reader, int.MaxValue);
         if (notes > (stream.Length - stream.Position) / 33)
             throw new InvalidDataException("RustBridge note count exceeds packet contents.");
+        chart.Notes.EnsureCapacity(notes);
         for(int i=0;i<notes;i++)
         {
             double time=reader.ReadDouble(); int kind=reader.ReadInt32(); int lane=reader.ReadInt32(); double end=reader.ReadDouble();
@@ -333,14 +485,30 @@ internal static unsafe partial class RustEngineBridge
             chart.Notes.Add(new(time,kind,lane,end,extras ?? Note.EmptyExtra,modExtra));
         }
         int events=ReadCount(reader,ChartLoadLimits.CountLimit((int)MaxEvents));
+        if (events > (stream.Length - stream.Position) / 52)
+            throw new InvalidDataException("RustBridge event count exceeds packet contents.");
+        chart.Mods.EnsureCapacity(events);
+        // Event identifiers usually repeat millions of times. Keep sharing local
+        // to one load, with a bounded cache so adversarial unique names stay bounded.
+        var symbols = new Dictionary<string, string>(StringComparer.Ordinal);
+        string Symbol(string text)
+        {
+            if (text.Length > 256) return text;
+            if (symbols.TryGetValue(text, out var existing)) return existing;
+            if (symbols.Count < 4096) symbols.Add(text, text);
+            return text;
+        }
         for(int i=0;i<events;i++)
         {
             double beat=reader.ReadDouble(), duration=reader.ReadDouble(), from=reader.ReadDouble(), to=reader.ReadDouble();
             int proxy=reader.ReadInt32(), order=ReadCount(reader,ChartLoadLimits.CountLimit((int)MaxEvents)), line=ReadCount(reader,int.MaxValue);
-            string ease=ReadText(reader), name=ReadText(reader);
+            string ease=Symbol(ReadText(reader)), name=Symbol(ReadText(reader));
             chart.Mods.Add(new(beat,duration,ease,from,to,name,proxy,order,line));
         }
         int frames=ReadCount(reader,ChartLoadLimits.CountLimit((int)MaxEvents));
+        if (frames > (stream.Length - stream.Position) / 20)
+            throw new InvalidDataException("RustBridge frame count exceeds packet contents.");
+        chart.PerFrame.EnsureCapacity(frames);
         for(int i=0;i<frames;i++) chart.PerFrame.Add(new(reader.ReadDouble(),reader.ReadDouble(),ReadText(reader)));
         if (wireVersion == "KGS2")
         {
@@ -365,6 +533,19 @@ internal static unsafe partial class RustEngineBridge
     {
         int n=ReadCount(r,ChartLoadLimits.CountLimit(64*1024*1024));
         if(n>r.BaseStream.Length-r.BaseStream.Position) throw new EndOfStreamException("Truncated native string.");
+        if (r.BaseStream is UnmanagedMemoryStream memory)
+        {
+            var bytes = new ReadOnlySpan<byte>(memory.PositionPointer, n);
+            string text = Encoding.UTF8.GetString(bytes);
+            memory.Position += n;
+            return text;
+        }
+        if (n <= 256)
+        {
+            Span<byte> bytes = stackalloc byte[n];
+            r.BaseStream.ReadExactly(bytes);
+            return Encoding.UTF8.GetString(bytes);
+        }
         return Encoding.UTF8.GetString(r.ReadBytes(n));
     }
 

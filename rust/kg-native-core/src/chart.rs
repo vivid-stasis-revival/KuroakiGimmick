@@ -272,7 +272,15 @@ pub fn load_vsm(path: &Path, c:&mut Chart)->Result<()> {
     let text=std::str::from_utf8(&bytes).map_err(|e|format!("VSM UTF-8: {e}"))?;
     parse_vsm(text,c)
 }
-fn beat_range(s:&str)->Result<Vec<f64>>{
+#[derive(Debug, Clone, Copy)]
+struct BeatRange { start: f64, step: f64, count: usize }
+impl BeatRange {
+    fn iter(self) -> impl ExactSizeIterator<Item=f64> {
+        // Do not use repeated addition: rounding must match the original expansion.
+        (0..self.count).map(move |i| self.start+(i as f64)*self.step)
+    }
+}
+fn beat_range(s:&str)->Result<BeatRange>{
     let (a,b,step)=if let Some((a,tail))=s.split_once('('){
         let tail=tail.strip_suffix(')').ok_or("invalid parenthesized beat range")?;
         let p:Vec<&str>=tail.split(':').collect();
@@ -290,13 +298,13 @@ fn beat_range(s:&str)->Result<Vec<f64>>{
     }
     let count=amount as usize;
     if !crate::load_limits::unlimited() && count>MAX_MODS {return Err("beat range expands above one million events".into());}
-    Ok((0..count).map(|i|a+(i as f64)*step).collect())
+    Ok(BeatRange {start:a,step,count})
 }
-fn normalize_ease(s:&str)->String {
+fn normalize_ease(s:&str)->&str {
     let raw=s.trim();
     let stripped=if raw.get(..4).is_some_and(|prefix|prefix.eq_ignore_ascii_case("ease")) {&raw[4..]} else {raw};
     let known="linear inSine outSine inOutSine inQuad outQuad inOutQuad inCubic outCubic inOutCubic inQuart outQuart inOutQuart inQuint outQuint inOutQuint inExpo outExpo inOutExpo inCirc outCirc inOutCirc inBack outBack inOutBack inElastic outElastic inOutElastic inBounce outBounce inOutBounce";
-    known.split_whitespace().find(|k|k.eq_ignore_ascii_case(stripped)).unwrap_or(stripped).to_string()
+    known.split_whitespace().find(|k|k.eq_ignore_ascii_case(stripped)).unwrap_or(stripped)
 }
 
 pub fn parse_vsm(text:&str,c:&mut Chart)->Result<()> {
@@ -330,7 +338,7 @@ pub fn parse_vsm(text:&str,c:&mut Chart)->Result<()> {
             continue;
         }
         let p:Vec<&str>=line.split(',').map(str::trim).collect();
-        let parse=||->Result<Vec<ModEvent>> {
+        let parse=||->Result<(BeatRange,f64,f64,f64,i8)> {
             if per_frame{return Err("per-frame requires separate parser".into());}
             if p.len()!=7{return Err("expected beat,duration,ease,from,to,mod,proxy".into());}
             let range=beat_range(p[0])?;
@@ -339,7 +347,7 @@ pub fn parse_vsm(text:&str,c:&mut Chart)->Result<()> {
             let to=if p[4]=="_" {573613.0}else{number(p[4])?};
             let proxy=p[6].parse::<i8>().map_err(|_|"invalid proxy")?;
             if !(-1..=63).contains(&proxy){return Err("proxy out of range".into());}
-            Ok(range.into_iter().map(|beat|ModEvent{beat,duration,ease:normalize_ease(p[2]),from,to,name:p[5].to_owned(),proxy,order:0,source_line:i+1}).collect())
+            Ok((range,duration,from,to,proxy))
         };
         if per_frame {
             if p.len()==3 {if let (Ok(start),Ok(end))=(number(p[0]),number(p[1])) {
@@ -347,8 +355,15 @@ pub fn parse_vsm(text:&str,c:&mut Chart)->Result<()> {
             }}
             c.warnings.push(format!("VSM line {}: malformed mpf row",i+1));
         }else{match parse(){
-            Ok(mut mods)=>{ if !crate::load_limits::unlimited() && c.mods.len()+mods.len()>MAX_MODS{return Err("too many mods".into());}
-                for mut event in mods.drain(..) {event.order=c.mods.len();c.mods.push(event);}
+            Ok((range,duration,from,to,proxy))=>{
+                if !crate::load_limits::unlimited() && c.mods.len()+range.count>MAX_MODS{return Err("too many mods".into());}
+                // Validate the entire row and cumulative budget before allocating or
+                // appending any expanded records. No temporary beats/events vector.
+                let ease=normalize_ease(p[2]);
+                for beat in range.iter() {
+                    let order=c.mods.len();
+                    c.mods.push(ModEvent{beat,duration,ease:ease.to_owned(),from,to,name:p[5].to_owned(),proxy,order,source_line:i+1});
+                }
             },
             Err(e)=>c.warnings.push(format!("VSM line {}: {e}",i+1)),
         }}
@@ -357,6 +372,182 @@ pub fn parse_vsm(text:&str,c:&mut Chart)->Result<()> {
         c.diagnostics.push((line, "K/G accepts trailing // comments, but the original read_mods_file does not strip them. Remove trailing comments before using this file in the game.".into()));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod vsm_repeat_tests {
+    use super::*;
+
+    #[test]
+    fn compact_ranges_preserve_bitwise_progression() {
+        let cases = [
+            ("-0", -0.0, 1.0, 1),
+            ("3:5", 3.0, 1.0, 3),
+            ("0.1:0.7:0.1", 0.1, 0.1, 7),
+            ("-1(:1:0.3)", -1.0, 0.3, 7),
+            // Preserve the historical endpoint tolerance, even when it overshoots.
+            ("0:0.99999995:1", 0.0, 1.0, 2),
+            // Some adjacent events round to the same beat at this magnitude.
+            ("10000000000000000:10000000000000006:1", 1e16, 1.0, 7),
+        ];
+        for (text, start, step, count) in cases {
+            let range = beat_range(text).unwrap();
+            assert_eq!(range.count, count, "{text}");
+            assert_eq!(range.iter().len(), count, "{text}");
+            for (i, beat) in range.iter().enumerate() {
+                let expected: f64 = start + (i as f64) * step;
+                assert_eq!(beat.to_bits(), expected.to_bits(), "{text}, event {i}");
+            }
+        }
+    }
+
+    #[test]
+    fn compact_ranges_preserve_errors_and_limits() {
+        for (text, error) in [
+            ("1(:2:1", "invalid parenthesized beat range"),
+            ("1(2:3:1)", "expected start(:end:step)"),
+            ("1:2:3:4", "invalid beat range"),
+            ("2:1", "invalid beat range direction/step"),
+            ("1:2:0", "invalid beat range direction/step"),
+            ("1:2:-1", "invalid beat range direction/step"),
+            ("0:1e30:1", "beat range cannot be represented in memory"),
+            ("0:1e308:1e-308", "beat range cannot be represented in memory"),
+            ("0:1000000", "beat range expands above one million events"),
+        ] {
+            assert_eq!(beat_range(text).unwrap_err(), error, "{text}");
+        }
+        assert_eq!(beat_range("0:999999").unwrap().count, MAX_MODS);
+        crate::load_limits::with_unlimited(|| {
+            assert_eq!(beat_range("0:1000000").unwrap().count, MAX_MODS + 1);
+            assert_eq!(beat_range("0:1e30:1").unwrap_err(),
+                "beat range cannot be represented in memory");
+        });
+        assert!(!crate::load_limits::unlimited());
+    }
+
+    #[test]
+    fn repeated_rows_preserve_fields_order_and_diagnostics() {
+        let text = "!proxies:2\n\
+            1:1.2:0.1,0.5,EASEOUTsine,_,2,prx,-1 // comment\n\
+            -0,-1,easeCustom,3,_,pry,63\n\
+            0:3,1,linear,0,1,prx,64\n\
+            2(:2.5:0.25),2,LiNeAr,4,5,prz,0\n\
+            // standalone\n\
+            mpf\n\
+            0,3,custom_function\n";
+        let mut c = Chart::default();
+        parse_vsm(text, &mut c).unwrap();
+        assert_eq!(c.mods.len(), 7);
+        for (order, event) in c.mods.iter().enumerate() {
+            assert_eq!(event.order, order);
+            assert_eq!(event.source_line, [2, 2, 2, 3, 5, 5, 5][order]);
+        }
+        for (i, event) in c.mods[..3].iter().enumerate() {
+            assert_eq!(event.beat.to_bits(), (1.0 + (i as f64) * 0.1).to_bits());
+            assert_eq!(event.duration, 0.5);
+            assert_eq!(event.ease, "outSine");
+            assert_eq!((event.from, event.to), (573613.0, 2.0));
+            assert_eq!(event.name, "prx");
+            assert_eq!(event.proxy, -1);
+        }
+        let event = &c.mods[3];
+        assert_eq!(event.beat.to_bits(), 0.0_f64.to_bits());
+        assert_eq!(event.duration, -1.0);
+        assert_eq!(event.ease, "Custom");
+        assert_eq!((event.from, event.to), (3.0, 573613.0));
+        assert_eq!(event.proxy, 63);
+        for (i, event) in c.mods[4..].iter().enumerate() {
+            assert_eq!(event.beat, 2.0 + (i as f64) * 0.25);
+            assert_eq!(event.ease, "linear");
+        }
+        assert_eq!(c.warnings, [
+            "VSM line 4: proxy out of range",
+            "VSM line 6: original game may reject comment rows",
+        ]);
+        assert_eq!(c.diagnostics, vec![(2, "K/G accepts trailing // comments, but the original read_mods_file does not strip them. Remove trailing comments before using this file in the game.".into())]);
+        assert_eq!(c.per_frame, vec![PerFrame {start:0.0,end:3.0,function:"custom_function".into()}]);
+        assert_eq!(c.proxies, 2);
+    }
+
+    #[test]
+    fn malformed_repeat_rows_are_atomic_and_keep_error_precedence() {
+        let mut c = Chart::default();
+        parse_vsm("0,1,linear,0,1,prx,0\n\
+            0:999999,bad,linear,0,1,prx,0\n\
+            0:999999,1,linear,bad,1,prx,0\n\
+            0:999999,1,linear,0,bad,prx,0\n\
+            0:999999,1,linear,0,1,prx,bad\n\
+            0:999999,1,linear,0,1,prx,64\n\
+            0:1000000,bad,linear,0,1,prx,0\n\
+            2,1,linear,0,1,pry,0", &mut c).unwrap();
+        assert_eq!(c.mods.len(), 2);
+        assert_eq!((c.mods[1].order, c.mods[1].source_line), (1, 8));
+        assert_eq!(c.warnings, [
+            "VSM line 2: invalid number: 'bad'",
+            "VSM line 3: invalid number: 'bad'",
+            "VSM line 4: invalid number: 'bad'",
+            "VSM line 5: invalid proxy",
+            "VSM line 6: proxy out of range",
+            "VSM line 7: beat range expands above one million events",
+        ]);
+    }
+
+    #[test]
+    fn unlimited_malformed_repeat_does_not_expand_before_validation() {
+        let mut c = Chart::default();
+        crate::load_limits::with_unlimited(|| {
+            // The old eager beat vector would allocate 800 MB before rejecting
+            // this row. The count also fits the existing bound on 32-bit targets.
+            parse_vsm("0:99999999,1,linear,0,1,prx,64", &mut c).unwrap();
+        });
+        assert!(c.mods.is_empty());
+        assert_eq!(c.mods.capacity(), 0);
+        assert_eq!(c.warnings, ["VSM line 1: proxy out of range"]);
+    }
+
+    #[test]
+    fn mixed_repeat_and_single_rows_keep_amortized_capacity() {
+        let mut c = Chart::default();
+        parse_vsm("0:32,1,linear,0,1,prx,0\n\
+            0,1,linear,0,1,pry,0", &mut c).unwrap();
+        let mut original_growth = Vec::new();
+        for event in &c.mods {
+            original_growth.push(event.clone());
+        }
+        // Reserving exactly 33 slots for the first row would double to 66 on
+        // the last row, while ordinary amortized growth needs only 64 slots.
+        assert_eq!(c.mods.capacity(), original_growth.capacity());
+        assert_eq!(c.mods.len(), 34);
+    }
+
+    #[test]
+    fn cumulative_limit_rejects_the_whole_row_after_validation() {
+        let mut c = Chart::default();
+        let error = parse_vsm("0:999999,1,linear,0,1,prx,0\n\
+            0:1,1,linear,0,1,pry,64\n\
+            0:1,1,linear,0,1,pry,0", &mut c).unwrap_err();
+        assert_eq!(error, "too many mods");
+        assert_eq!(c.mods.len(), MAX_MODS);
+        assert_eq!(c.mods.last().unwrap().order, MAX_MODS - 1);
+        assert!(c.mods.iter().all(|event| event.name == "prx" && event.source_line == 1));
+        assert_eq!(c.warnings, ["VSM line 2: proxy out of range"]);
+    }
+
+    #[test]
+    #[ignore = "allocates more than one million mod events; run explicitly for stress testing"]
+    fn unlimited_repeats_expand_above_one_million() {
+        let mut c = Chart::default();
+        crate::load_limits::with_unlimited(|| {
+            parse_vsm("0:1000000,1,linear,0,1,prx,0\n\
+                2:3,1,linear,0,1,pry,0", &mut c).unwrap();
+        });
+        assert_eq!(c.mods.len(), MAX_MODS + 3);
+        assert_eq!(c.mods[MAX_MODS].beat, MAX_MODS as f64);
+        assert_eq!(c.mods[MAX_MODS].order, MAX_MODS);
+        assert_eq!(c.mods[MAX_MODS + 1].beat, 2.0);
+        assert_eq!(c.mods[MAX_MODS + 1].source_line, 2);
+        assert!(c.warnings.is_empty());
+    }
 }
 
 // Opt-in high-memory regression at the historical hard-coded boundary.

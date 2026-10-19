@@ -18,7 +18,7 @@ public sealed partial class EditorDocument
     readonly List<Snapshot> undo = [], redo = [];
     /// <summary>上次保存时各伴生文件的 SHA-256。再次保存前比对，用来发现文件在编辑器之外被改过。</summary>
     readonly Dictionary<string, string> savedHashes = new(StringComparer.Ordinal);
-    string cleanText, cleanWindows, cleanImages, cleanTexts;
+    string cleanWindows, cleanImages, cleanTexts;
     VsmDocument.Line[] cleanVsmLines = [];
     TimelineMarker[] cleanMarkers;
     string[] cleanTrackOrder;
@@ -50,7 +50,7 @@ public sealed partial class EditorDocument
     }
     bool VsmTextChanged()
     {
-        if (Vsm.Lines.Count != cleanVsmLines.Length) return Vsm.Text != cleanText;
+        if (Vsm.Lines.Count != cleanVsmLines.Length) return !VsmDocument.TextEquals(Vsm.Lines, cleanVsmLines);
         for (int i = 0; i < cleanVsmLines.Length; i++)
             if (Vsm.Lines[i].Text != cleanVsmLines[i].Text || Vsm.Lines[i].Ending != cleanVsmLines[i].Ending) return true;
         return false;
@@ -95,7 +95,7 @@ public sealed partial class EditorDocument
         Images = VspDocument.FromSession(session);
         foreach (var track in CustomText.Load(Project, new Chart(), enabled: true).Tracks) texts.Add(track.Id, track.SourceText);
         cleanTexts = TextSnapshot();
-        cleanVsmLines = Vsm.Lines.ToArray(); cleanText = Vsm.Text; cleanWindows = Windows.Serialize(); cleanImages = Images.Text;
+        cleanVsmLines = Vsm.Lines.ToArray(); cleanWindows = Windows.Serialize(); cleanImages = Images.Text;
         if (session.ProjectPath is { } projectPath)
         {
             SavedProjectPath = Path.GetFullPath(projectPath);
@@ -280,7 +280,7 @@ public sealed partial class EditorDocument
         }
         // 全部就位之后才更新哈希与四份 clean 基线，Dirty 随即变回 false；任何一步失败都不会走到这里，脏状态原样保留。
         foreach (string target in files.Keys) savedHashes[target] = Hash(target);
-        Project = p; SavedProjectPath = path; cleanVsmLines = Vsm.Lines.ToArray(); cleanText = Vsm.Text; cleanWindows = Windows.Serialize(); cleanMarkers = markers.ToArray(); cleanImages = Images.Text; cleanTexts = TextSnapshot(); cleanTrackOrder = Project.EditorTrackOrder.ToArray();
+        Project = p; SavedProjectPath = path; cleanVsmLines = Vsm.Lines.ToArray(); cleanWindows = Windows.Serialize(); cleanMarkers = markers.ToArray(); cleanImages = Images.Text; cleanTexts = TextSnapshot(); cleanTrackOrder = Project.EditorTrackOrder.ToArray();
         dirtyRevision = Revision; cachedDirty = false;
         try { ProjectBackups.ArchiveLegacy(path); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Console.Error.WriteLine("[save migration] " + ex.Message); }

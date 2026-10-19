@@ -29,7 +29,12 @@ public sealed partial class VsmDocument
 
     // record 是不可变的。历史快照因此可以共享未改动的行，不必复制上兆字节的文本。
     public sealed record Line(string Text, string Ending, Clip? Event);
-    public List<Line> Lines { get; private set; } = [];
+    List<Line> lines = [];
+    public List<Line> Lines
+    {
+        get => lines;
+        private set { lines = value; InvalidateLookup(); }
+    }
     /// <summary>源文件的编码，写回时照此还原。默认是不带 BOM 的 UTF-8 且对非法字节抛错，不做静默替换。</summary>
     public Encoding Encoding { get; private set; } = new UTF8Encoding(false, true);
     /// <summary>读到的 BOM 原始字节，写回时原样放在最前面；源文件没有 BOM 就不会凭空补一个。</summary>
@@ -42,26 +47,31 @@ public sealed partial class VsmDocument
     /// <summary>按行拼回完整源文本。逐行保留原换行符，因此未编辑的文件重新写出时与输入逐字节一致。</summary>
     public string Text => string.Concat(Lines.Select(x => x.Text + x.Ending));
     /// <summary>原样保留但无法可视化编辑的非空行数，用来在 UI 上提示“这份源里还有 N 行只能改源文本”。</summary>
-    public int PreservedLineCount => Lines.Count(x => x.Event == null && !string.IsNullOrWhiteSpace(x.Text));
+    public int PreservedLineCount => GetPreservedLineCount();
 
     /// <summary>识别并记住 BOM 与编码，写回时原样还原；64 MiB 上限先于解码生效。</summary>
     public static VsmDocument Load(string path)
     {
         if (ChartLoadLimits.Exceeds(new FileInfo(path).Length, 64 * 1024 * 1024)) throw new InvalidDataException("VSM exceeds 64 MiB.");
-        byte[] bytes = File.ReadAllBytes(path);
-        if (ChartLoadLimits.Exceeds(bytes.Length, 64 * 1024 * 1024)) throw new InvalidDataException("VSM exceeds 64 MiB.");
+        using var stream = File.OpenRead(path);
+        if (ChartLoadLimits.Exceeds(stream.Length, 64 * 1024 * 1024)) throw new InvalidDataException("VSM exceeds 64 MiB.");
+        Span<byte> prefix = stackalloc byte[4];
+        int read = stream.ReadAtLeast(prefix, prefix.Length, throwOnEndOfStream: false);
+        var bytes = prefix[..read];
         var doc = new VsmDocument();
         // UTF-32 的 BOM 前两字节与 UTF-16 LE 相同，必须先判 4 字节形式，否则会误判编码。
-        if (bytes.AsSpan().StartsWith(new byte[] { 0xEF, 0xBB, 0xBF })) doc.Preamble = [0xEF, 0xBB, 0xBF];
-        else if (bytes.AsSpan().StartsWith(new byte[] { 0xFF, 0xFE, 0, 0 }))
+        if (bytes.StartsWith(new byte[] { 0xEF, 0xBB, 0xBF })) doc.Preamble = [0xEF, 0xBB, 0xBF];
+        else if (bytes.StartsWith(new byte[] { 0xFF, 0xFE, 0, 0 }))
         { doc.Encoding = new UTF32Encoding(false, false, true); doc.Preamble = [0xFF, 0xFE, 0, 0]; }
-        else if (bytes.AsSpan().StartsWith(new byte[] { 0, 0, 0xFE, 0xFF }))
+        else if (bytes.StartsWith(new byte[] { 0, 0, 0xFE, 0xFF }))
         { doc.Encoding = new UTF32Encoding(true, false, true); doc.Preamble = [0, 0, 0xFE, 0xFF]; }
-        else if (bytes.AsSpan().StartsWith(new byte[] { 0xFF, 0xFE }))
+        else if (bytes.StartsWith(new byte[] { 0xFF, 0xFE }))
         { doc.Encoding = new UnicodeEncoding(false, false, true); doc.Preamble = [0xFF, 0xFE]; }
-        else if (bytes.AsSpan().StartsWith(new byte[] { 0xFE, 0xFF }))
+        else if (bytes.StartsWith(new byte[] { 0xFE, 0xFF }))
         { doc.Encoding = new UnicodeEncoding(true, false, true); doc.Preamble = [0xFE, 0xFF]; }
-        doc.Parse(doc.Encoding.GetString(bytes, doc.Preamble.Length, bytes.Length - doc.Preamble.Length));
+        stream.Position = doc.Preamble.Length;
+        using var reader = new StreamReader(stream, doc.Encoding, detectEncodingFromByteOrderMarks: false, bufferSize: 64 * 1024);
+        doc.Parse(reader);
         return doc;
     }
 
@@ -100,12 +110,17 @@ public sealed partial class VsmDocument
 
     void Parse(string text)
     {
+        using var reader = new StringReader(text);
+        Parse(reader);
+    }
+
+    void Parse(TextReader reader)
+    {
         bool perFrame = false;
         // 逐行切分并把行尾单独留存，使 CRLF/CR/LF 混排的源文件也能原样写回。
-        foreach (Match m in Regex.Matches(text, @"([^\r\n]*)(\r\n|\r|\n|$)"))
+        foreach (var source in SourceLines.Read(reader))
         {
-            if (m.Length == 0) continue;
-            string line = m.Groups[1].Value, ending = m.Groups[2].Value;
+            string line = source.Text, ending = source.Ending;
             string meaningful = Body(line).Trim();
             // 原版 read_mods_file 的 mode 只能 mods→mpf 走一次，没有写 "mods" 回去的路，
             // 所以这里也不认那个标记：mpf 之后的行一律当不透明文本保留。
@@ -209,9 +224,13 @@ public sealed partial class VsmDocument
     }
 
     /// <summary>按事件身份查片段。找不到返回 null，通常意味着这条已被撤销或删除，调用方应当放弃本次操作而不是新建一条。</summary>
-    public Clip? Find(Guid id) => Lines.FirstOrDefault(l => l.Event?.Id == id)?.Event;
+    public Clip? Find(Guid id)
+    {
+        int i = FindLineIndex(id);
+        return i >= 0 ? Lines[i].Event : null;
+    }
     /// <summary>诊断用的 1 基源行号；事件身份始终是 Id，行号会随插入删除变化，不要拿它做标识。</summary>
-    public int SourceLine(Guid id) => Lines.FindIndex(l => l.Event?.Id == id) + 1;
+    public int SourceLine(Guid id) => FindLineIndex(id) + 1;
     /// <summary>整份行表回到快照。Line 是不可变 record，直接复用同一批对象即可，不必也不应深拷贝文本。</summary>
     public void Restore(Line[] snapshot)
     {
@@ -337,7 +356,7 @@ public sealed partial class VsmDocument
     /// <summary>就地改写同一源行，保持事件身份与行序不变；只重写真正变化的字段，其余字段连同原有空白和注释一并保留。</summary>
     public void Replace(Clip next)
     {
-        int i = Lines.FindIndex(l => l.Event?.Id == next.Id);
+        int i = FindLineIndex(next.Id);
         if (i < 0) throw new InvalidOperationException("The source event no longer exists.");
         var line = Lines[i]; var previous = line.Event!;
         // 拍/时长是编辑器自己算出来的，提交边界必须先 canonicalize；From/To 仍只改用户真正碰过的字段。
@@ -349,8 +368,8 @@ public sealed partial class VsmDocument
         Validate(next);
         EnsureProxyDeclaration(next.Proxy);
         // EnsureProxyDeclaration may insert a header before this event, so resolve the stable Id again instead of reusing the old index.
-        i = Lines.FindIndex(l => l.Event?.Id == next.Id);
-        Lines[i] = RewriteLine(Lines[i], next);
+        i = FindLineIndex(next.Id);
+        ReplaceIndexedLine(i, RewriteLine(Lines[i], next));
     }
 
     static Line RewriteLine(Line line, Clip next)
@@ -449,7 +468,7 @@ public sealed partial class VsmDocument
     /// </summary>
     void EnsureProxyDeclaration(int proxy)
     {
-        if (proxy < 0 || Lines.Any(line => Body(line.Text).TrimStart().StartsWith("!proxies:", StringComparison.Ordinal))) return;
+        if (proxy < 0 || HasProxyDeclaration()) return;
         int insert = Lines.FindIndex(line => Body(line.Text).TrimStart().StartsWith("!obj:", StringComparison.Ordinal));
         int count = Math.Clamp(Math.Max(proxy + 1, ProxyCountHint), 1, 64);
         if (insert >= 0 && Lines[insert].Ending.Length == 0)

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PublishAot>false</PublishAot>
+    <PublishSingleFile>false</PublishSingleFile>
+    <KuroakiRepo Condition="'$(KuroakiRepo)' == ''">$(MSBuildThisFileDirectory)../..</KuroakiRepo>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(KuroakiRepo)/KuroakiGimmick.csproj" AdditionalProperties="PublishAot=false;PublishSingleFile=false" />
+  </ItemGroup>
+</Project>
