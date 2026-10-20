@@ -45,6 +45,16 @@ public sealed class ViewerSettings
     public string AudioEngine { get; set; } = "optimization";
     public bool ParallelLoading { get; set; } = true;
     public bool DecodedAudioCache { get; set; } = true;
+    /// <summary>Bound repeated layers in interactive previews. Missing fields in old settings default to on.</summary>
+    public bool StackLimit { get; set; } = true;
+    public const int MinStackLayers = 16, MaxStackLayers = 1024, DefaultStackLayers = 256;
+    int stackLimitLayers = DefaultStackLayers;
+    public int StackLimitLayers
+    {
+        get => stackLimitLayers;
+        set => stackLimitLayers = ValidStackLayers(value);
+    }
+    public static int ValidStackLayers(int value) => Math.Clamp(value, MinStackLayers, MaxStackLayers);
     public static string ValidCalculationEngine(string? name) => name == "compatibility" ? "compatibility" : "optimization";
     public static string ValidAudioEngine(string? name) => name == "nvorbis" ? "nvorbis" : "optimization";
     public bool UiAnimations { get; set; } = true;

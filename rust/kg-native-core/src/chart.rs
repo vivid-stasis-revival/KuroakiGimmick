@@ -1,6 +1,6 @@
 //! Independent, std-only chart core. Units: seconds internally; VSC/VSB note timestamps: ms.
 //! Reference: uploaded KuroakiGimmick Core/Parsing/VscReader.cs and VsbReader.cs.
-use std::{collections::BTreeMap, fs, path::Path};
+use std::{collections::{BTreeMap, HashMap}, fs, path::Path};
 
 pub type Result<T> = std::result::Result<T, String>;
 const MAX_CHART: u64 = 128 * 1024 * 1024;
@@ -85,12 +85,32 @@ pub fn load(path: &Path) -> Result<Chart> {
     }
 }
 pub fn parse_vsc(s: &str, title: String) -> Result<Chart> {
+    let (mut chart, _) = parse_vsc_records(s, title, false)?;
+    chart.stable_sort();
+    Ok(chart)
+}
+
+// Cache only short, diagnostic-free source rows. References retain every occurrence
+// and stable source order; this is representation sharing, never note removal.
+pub fn parse_vsc_records(s: &str, title: String, compact: bool) -> Result<(Chart, Vec<u32>)> {
     let mut chart = Chart { title, ..Chart::default() };
+    let mut references = Vec::new();
+    let mut cache: HashMap<&str, u32> = HashMap::new();
     for (i, raw) in s.trim_start_matches('\u{feff}').lines().enumerate() {
         let value = raw.trim();
         if value.is_empty() || value.starts_with("//") || value.starts_with('#') { continue; }
+        if compact {
+            if let Some(&index) = cache.get(value) {
+                references.push(index);
+                continue;
+            }
+        }
+        let diagnostics_before = chart.diagnostics.len();
         let parse = || -> Result<Note> {
-            let p: Vec<&str> = value.splitn(5, ',').collect();
+            let mut fields = [""; 5];
+            let mut count = 0;
+            for field in value.splitn(5, ',') { fields[count] = field; count += 1; }
+            let p = &fields[..count];
             if p.len() < 3 { return Err("expected time_ms,type,lane[,extra[,modExtra]]".into()); }
             let time = number(p[0])? / 1000.0;
             let kind = p[1].trim().parse::<u8>().map_err(|_|"bad note type")?;
@@ -154,12 +174,68 @@ pub fn parse_vsc(s: &str, title: String) -> Result<Chart> {
                         }
                     }
                 }
+                if compact {
+                    let index = u32::try_from(chart.notes.len()).map_err(|_| "too many VSC records")?;
+                    references.push(index);
+                    if cache.len() < 4096 && value.len() <= 1024 && chart.diagnostics.len() == diagnostics_before {
+                        cache.insert(value, index);
+                    }
+                }
                 chart.notes.push(n)
             },
             Err(e) => chart.warnings.push(format!("VSC line {}: {e}",i+1)),
         }
     }
-    chart.stable_sort(); Ok(chart)
+    if compact {
+        references.sort_by(|&a, &b| chart.notes[a as usize].time.partial_cmp(&chart.notes[b as usize].time).unwrap());
+    }
+    Ok((chart, references))
+}
+
+/// Exact periodic-source shortcut. A bounded prefix finds a candidate period;
+/// byte equality over the ENTIRE source proves it before any expansion is skipped.
+/// Each descriptor repeats one equal-time subsequence, retaining stable tie order.
+pub fn parse_periodic_vsc(s: &str) -> Option<(Chart, Vec<(usize, usize, usize)>, usize)> {
+    let s = s.trim_start_matches('\u{feff}');
+    let bytes = s.as_bytes();
+    if bytes.len() < 256 * 1024 { return None; }
+    let sample = &bytes[..bytes.len().min(64 * 1024)];
+    let mut prefix = vec![0usize; sample.len()];
+    for i in 1..sample.len() {
+        let mut matched = prefix[i - 1];
+        while matched > 0 && sample[i] != sample[matched] { matched = prefix[matched - 1]; }
+        if sample[i] == sample[matched] { matched += 1; }
+        prefix[i] = matched;
+    }
+    let period = sample.len() - prefix[sample.len() - 1];
+    if period * 2 > sample.len() || bytes[period - 1] != b'\n' ||
+        bytes[period..] != bytes[..bytes.len() - period] { return None; }
+    let repeats = bytes.len() / period;
+    let mut chart = parse_vsc(&s[..period], String::new()).ok()?;
+    let tail = parse_vsc(&s[repeats * period..], String::new()).ok()?;
+    // Diagnostics require their original line numbers for every occurrence.
+    // Let the normal reader handle these and any malformed trailing row.
+    if chart.notes.is_empty() || !chart.warnings.is_empty() || !chart.diagnostics.is_empty() ||
+        !tail.warnings.is_empty() || !tail.diagnostics.is_empty() { return None; }
+    let base_count = chart.notes.len();
+    let total = base_count.checked_mul(repeats)?.checked_add(tail.notes.len())?;
+    if total > i32::MAX as usize { return None; }
+    chart.csm_340 |= tail.csm_340;
+    chart.notes.extend(tail.notes);
+    let mut groups = Vec::new();
+    for (begin, end, repeat) in [(0, base_count, repeats), (base_count, chart.notes.len(), 1)] {
+        let mut start = begin;
+        while start < end {
+            let mut next = start + 1;
+            while next < end && chart.notes[next].time == chart.notes[start].time { next += 1; }
+            groups.push((start, next - start, repeat));
+            start = next;
+        }
+    }
+    // Stable sort keeps the trailing partial block after all full repetitions
+    // when timestamps tie, even if the block's source times were unsorted.
+    groups.sort_by(|a, b| chart.notes[a.0].time.partial_cmp(&chart.notes[b.0].time).unwrap());
+    Some((chart, groups, total))
 }
 
 struct Reader<'a> { bytes:&'a [u8], pos:usize }
@@ -562,5 +638,45 @@ mod unbounded_note_tests {
         let input = "0,0,0\n".repeat(COUNT);
         let chart = parse_vsc(&input, "stress".to_string()).unwrap();
         assert_eq!(chart.notes.len(), COUNT);
+    }
+}
+
+#[cfg(test)]
+mod compact_vsc_tests {
+    use super::*;
+    #[test]
+    fn compact_references_preserve_order_metadata_and_diagnostics() {
+        let block = "200,0,2\n100,0,1\n100,0,3\n100,2,0,500,k:undefined|x:a:b\n100,3,0,b:180|v:1\n0,0,0,,\n";
+        let text = block.repeat(100);
+        let original = parse_vsc(&text, String::new()).unwrap();
+        let (compact, ids) = parse_vsc_records(&text, String::new(), true).unwrap();
+        let restored: Vec<_> = ids.iter().map(|&id| compact.notes[id as usize].clone()).collect();
+        assert_eq!(original.notes, restored);
+        assert_eq!(original.diagnostics, compact.diagnostics);
+        assert_eq!(original.csm_340, compact.csm_340);
+        assert!(compact.notes.len() < original.notes.len());
+    }
+
+    #[test]
+    fn periodic_source_preserves_ties_partial_tail_and_metadata() {
+        let block = "200,0,2\n100,0,1\n100,2,0,500,k:undefined|x:雪:b\n100,3,0,b:180\n-10,0,0,,\n# comment\n";
+        for tail in ["", "200,0,2\n100,0,1\n", "200,0,2"] {
+            let text = block.repeat(5000) + tail;
+            let original = parse_vsc(&text, String::new()).unwrap();
+            let (chart, groups, total) = parse_periodic_vsc(&text).expect("period not detected");
+            let mut restored = Vec::new();
+            for (start, count, repeats) in groups {
+                for _ in 0..repeats { restored.extend_from_slice(&chart.notes[start..start+count]); }
+            }
+            assert_eq!(original.notes.len(), total);
+            assert_eq!(original.notes, restored);
+            assert_eq!(original.csm_340, chart.csm_340);
+        }
+        // A bounded-prefix match alone must never classify the entire file.
+        let mut changed = block.repeat(5000).into_bytes();
+        changed[block.len()*4000] = b'9';
+        assert!(parse_periodic_vsc(std::str::from_utf8(&changed).unwrap()).is_none());
+        let diagnostic = "100,3,0,b:180|v:1\n".repeat(20000);
+        assert!(parse_periodic_vsc(&diagnostic).is_none());
     }
 }

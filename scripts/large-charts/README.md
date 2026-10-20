@@ -144,3 +144,12 @@ or prolonged Editor/Viewer switching.
 The adjacent `native-vsm-repeat-bench.py` and `.rs` provide an isolated Rust repeated
 VSM expansion benchmark; run that script with `--help` for its baseline/candidate
 checkout options and allocator/RSS metrics.
+
+## VSC playback-data initialization
+
+`vsc-session --input file.vsc --engine required --unlimited` measures parsing,
+BPM construction, NoteIndex and ScoreState separately. Despite the short case name,
+it does not create a complete Session, load assets/audio or open a GPU window.
+`Matched` reports the score's judgement count. Every source note is included in
+the checksum, including repeated notes and extension fields. Run large baselines
+under an RSS/time watchdog; dense input can need far more memory than padded input.

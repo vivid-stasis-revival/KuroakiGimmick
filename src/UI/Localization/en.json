@@ -968,5 +968,8 @@
   "Off by default. Use the original single-window interface.": "Off by default. Use the original single-window interface.",
   "Disabling closes tool windows and keeps your custom layout for later.": "Disabling closes tool windows and keeps your custom layout for later.",
   "RESTORE DEFAULT LAYOUT": "RESTORE DEFAULT LAYOUT",
-  "RESTORE HIDDEN PANELS": "RESTORE HIDDEN PANELS"
+  "RESTORE HIDDEN PANELS": "RESTORE HIDDEN PANELS",
+  "Video": "Video",
+  "16–1024 layers. +/- 64; Shift +/- 16. Preview only.": "16–1024 layers. +/- 64; Shift +/- 16. Preview only.",
+  "Limit repeated layers in previews. Scores and full-detail exports are unchanged.": "Limit repeated layers in previews. Scores and full-detail exports are unchanged."
 }

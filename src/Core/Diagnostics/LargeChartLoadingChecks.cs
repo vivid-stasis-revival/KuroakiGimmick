@@ -17,6 +17,26 @@ internal static class LargeChartLoadingChecks
             using var limits = ChartLoadLimits.Override(true);
             void Check(bool condition, string reason)
             { if (!condition) throw new InvalidOperationException(reason); }
+            if (OperatingSystem.IsMacOS())
+            {
+                string cloneSource = Path.Combine(root, "clone-source.vsc");
+                File.WriteAllText(cloneSource, "100,0,1\n");
+                using var source = new FileStream(cloneSource, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite);
+                string? cloneDirectory = null;
+                try
+                {
+                    using var clone = RustEngineBridge.TryCloneInput(source, out cloneDirectory);
+                    if (clone != null)
+                    {
+                        Check(File.GetUnixFileMode(cloneDirectory!) ==
+                            (UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute), "Snapshot directory is not private.");
+                        source.SetLength(0); source.Flush();
+                        using var reader = new StreamReader(clone, leaveOpen: true);
+                        Check(reader.ReadToEnd() == "100,0,1\n", "Truncating the source changed the cloned snapshot.");
+                    }
+                }
+                finally { if (cloneDirectory != null) Directory.Delete(cloneDirectory); }
+            }
 
             // The regex is a test oracle for the previous parser, never a load path.
             foreach (string source in new[] { "", "\r", "\n\r\n", "a\rb\nc\r\nd", "a\n", "a\r\n\r\n",
@@ -29,6 +49,33 @@ internal static class LargeChartLoadingChecks
                     .Select(match => new SourceLines.Line(match.Groups[1].Value, match.Groups[2].Value)).ToArray();
                 Check(actual.SequenceEqual(expected), "Source line delimiter/buffer-boundary mismatch.");
             }
+
+            // Repeated records must retain multiplicity, tie order, metadata and
+            // per-source-line diagnostics across compact and legacy native packets.
+            string vsc = Path.Combine(root, "repeated.vsc");
+            string[] rows = ["200,0,2", "100,0,1", "100,0,3", "100,2,0,500,k:undefined|x:a:b",
+                "100,3,0,b:180|v:1", "0,0,0,", "0,0,0,,"];
+            File.WriteAllText(vsc, string.Join("\n", Enumerable.Range(0, 100).SelectMany(_ => rows)));
+            Environment.SetEnvironmentVariable("KG_RUST_ENGINE", "verify");
+            var repeated = VscReader.Load(vsc);
+            Check(repeated.Notes.Count == 700 && repeated.Diagnostics.Count == 100, "Compact VSC lost records or diagnostics.");
+            // Exhaust the bounded cache, then exercise additional unique rows and
+            // hits on previously cached rows. Verify compares every decoded field.
+            File.WriteAllText(vsc, string.Join("\n", Enumerable.Range(0, 4200).Select(i => $"{i},0,0")) + "\n100,0,0\n0,0,0");
+            Check(VscReader.Load(vsc).Notes.Count == 4202, "Compact VSC cache saturation lost records.");
+            const string pattern = "200,0,2\n100,0,1\n100,2,0,500,k:undefined|x:雪:b\n100,3,0,b:180\n-10,0,0,,\n# comment\n";
+            string periodic = string.Concat(Enumerable.Repeat(pattern, 5000));
+            foreach (string tail in new[] { "", "200,0,2\n100,0,1\n", "200,0,2" })
+            {
+                File.WriteAllText(vsc, periodic + tail);
+                // Verify compares every occurrence, including stable ties, extras,
+                // negative times and a partial final block without a newline.
+                var loaded = VscReader.Load(vsc);
+                Check(loaded.Notes.Count == 25000 + (tail.Length == 0 ? 0 : tail.Contains('\n') ? 2 : 1),
+                    "Periodic VSC expansion count mismatch.");
+            }
+            File.WriteAllText(vsc, periodic[..^pattern.Length] + pattern.Replace("200,0,2", "900,0,2"));
+            Check(VscReader.Load(vsc).Notes[^1].Time == .9, "Periodic detection ignored a changed suffix.");
 
             const string text = "!obj:obj_custom_gimmick\r\n!proxies:2\r!title:雪🎵\n\n0,0,linear,0,1,prx,0\r\n1:3:1,0,linear,1,2,pry,1\rmpf\n0,4,callback";
             Encoding[] encodings = [new UTF8Encoding(false), new UTF8Encoding(true),

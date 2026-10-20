@@ -110,7 +110,7 @@ public sealed partial class SceneRenderer
             }
         }
         judgmentTemplates.Clear();
-        foreach (var h in session.Score.HitsBetween(t - IndicatorLife, t, holdTicks))
+        foreach (var h in session.Score.HitsBetween(t - IndicatorLife, t, holdTicks, preview: interactivePreview, layers: previewLayers))
         {
             if (!judgmentSingleTexture || judgmentWhite == null) { DrawHit(h); continue; }
             var key = (h.Time, h.Lane, h.Kind, h.Lead);
@@ -142,7 +142,7 @@ public sealed partial class SceneRenderer
     void DrawComboParticles(Session session, double t)
     {
         if (!session.Project.GameUiEnabled || session.Project.GameUiCombo <= 0) return;
-        foreach (var hit in session.Score.HitsBetween(t - ComboDustAlpha * ComboDustLife / 240, t))
+        foreach (var hit in session.Score.HitsBetween(t - ComboDustAlpha * ComboDustLife / 240, t, preview: interactivePreview, layers: previewLayers))
         {
             // 字宽要按这次判定当时的连击数来量，不能用当前帧的：数字位数一变，喷射点会整体外扩。
             double hitTime = hit.Time;

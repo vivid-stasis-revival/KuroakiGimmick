@@ -207,7 +207,8 @@ public sealed partial class Viewer
         bool timelineInteractive = !UiOverlayVisible && !Busy && !ImageGestureActive;
         // 画两趟：先 bumper 后 chip。同一拍上 chip 落在 bumper 的色带里，后画才不会被盖掉。
         Note? picked = null; int pickedRows = 5; double pickedBeat = 0;
-        var visibleNotes = Current.NoteIndex.Visible(Current.Timeline.Bpm.Time(beatStart), Current.Timeline.Bpm.Time(endBeat));
+        double noteFrom = Current.Timeline.Bpm.Time(beatStart), noteTo = Current.Timeline.Bpm.Time(endBeat);
+        var visibleNotes = Current.NoteIndex.PreviewVisible(noteFrom, noteTo, preferences.StackLimitLayers, preferences.StackLimit);
         if (Canvas.NoteInstances != null && timelineNotePainter == null && !timelineNotePainterFailed && Environment.GetEnvironmentVariable("KG_TIMELINE_INSTANCING") != "off")
         {
             try { timelineNotePainter = new(Canvas); }

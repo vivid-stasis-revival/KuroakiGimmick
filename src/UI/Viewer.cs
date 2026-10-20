@@ -124,7 +124,7 @@ public sealed partial class Viewer : IDisposable
         foreach (var diagnostic in s.Chart.Diagnostics.Where(d => d.Source == "audio"))
             Console.Error.WriteLine("[K/G audio] " + diagnostic.Message);
 #endif
-        message = L.Format($"Loaded {s.Chart.Notes.Count(n=>n.Type is not (3 or 4 or 5)):N0} notes / {s.Chart.Mods.Count:N0} events.");
+        message = L.Format($"Loaded {s.NoteIndex.Count:N0} notes / {s.Chart.Mods.Count:N0} events.");
         if (s.IsEmpty)
         {
             message = L.Get("Open a chart, .vsm or song folder to begin.");
@@ -185,7 +185,8 @@ public sealed partial class Viewer : IDisposable
                 else
                 {
                     // Keep the shared scene current while the main swapchain is under backpressure.
-                    Renderer.RenderPresentation(Current, transport.PresentationPosition, notes, effects);
+                    using (Renderer.Preview(preferences.StackLimit, preferences.StackLimitLayers))
+                        Renderer.RenderPresentation(Current, transport.PresentationPosition, notes, effects);
                     Canvas.Flush();
                 }
 #if KG_SWITCH

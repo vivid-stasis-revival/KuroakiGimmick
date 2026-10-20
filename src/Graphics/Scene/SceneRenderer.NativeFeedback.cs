@@ -23,6 +23,7 @@ public sealed partial class SceneRenderer
         var p=session.Project;
         int visualKey=HashCode.Combine(p.GameUiEnabled,p.GameUiScore,p.GameUiExScore,p.GameUiCombo,p.GameUiJudgement,
             p.GameUiHoldEffects,p.GameUiFont,HashCode.Combine(p.VisualDelayMs,p.NoteAlignment,p.ScrollSpeed,inspectionProxy??-1,PresentationWidth));
+        visualKey=HashCode.Combine(visualKey,interactivePreview && (session.NoteIndex.HasDensePreview || session.Score.HasDensePreview) ? previewLayers : 0);
         if(!ReferenceEquals(feedbackOwner,session)||notes!=feedbackNotes||effects!=feedbackEffects||width!=feedbackWidth||visualKey!=feedbackVisualKey)
         {
             canvas.Flush();ClearNativeFeedback();feedbackOwner=session;feedbackNotes=notes;feedbackEffects=effects;feedbackWidth=width;feedbackVisualKey=visualKey;

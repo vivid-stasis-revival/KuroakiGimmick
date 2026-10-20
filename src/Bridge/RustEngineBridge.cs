@@ -25,6 +25,12 @@ internal static unsafe partial class RustEngineBridge
     static int failed;
     static int nativeVscHits, nativeVsbHits, nativeVsmHits, nativeBpmHits;
 
+    [LibraryImport(Library, EntryPoint = "kg_core_parse_vsc_compact")]
+    private static partial int ParseVscCompact(byte* data, nuint length, byte unlimited, byte** output, nuint* size);
+
+    [LibraryImport("/usr/lib/libSystem.B.dylib", EntryPoint = "fclonefileat", StringMarshalling = StringMarshalling.Utf8)]
+    private static partial int CloneFileAt(Microsoft.Win32.SafeHandles.SafeFileHandle source, int directory, string destination, uint flags);
+
     [LibraryImport(Library, EntryPoint = "kg_core_parse_vsc")]
     private static partial int ParseVsc(byte* data, nuint length, byte** output, nuint* size);
     [LibraryImport(Library, EntryPoint = "kg_core_parse_vsb")]
@@ -108,13 +114,22 @@ internal static unsafe partial class RustEngineBridge
         byte* output = null; nuint length = 0;
         int rc = kind switch
         {
-            0 => ChartLoadLimits.Unlimited ? ParseVscUnlimited(data,inputLength,&output,&length) : ParseVsc(data,inputLength,&output,&length),
+            0 => ParseVscPreferred(data,inputLength,&output,&length),
             1 => ChartLoadLimits.Unlimited ? ParseVsbUnlimited(data,inputLength,&output,&length) : ParseVsb(data,inputLength,&output,&length),
             2 => ChartLoadLimits.Unlimited ? ParseVsmUnlimited(data,inputLength,&output,&length) : ParseVsm(data,inputLength,&output,&length),
             _ => throw new ArgumentOutOfRangeException(nameof(kind))
         };
         return Receive(rc, output, length);
     }
+    private static int ParseVscPreferred(byte* data, nuint length, byte** output, nuint* size)
+    {
+        try { return ParseVscCompact(data, length, ChartLoadLimits.Unlimited ? (byte)1 : (byte)0, output, size); }
+        catch (EntryPointNotFoundException)
+        {
+            return ChartLoadLimits.Unlimited ? ParseVscUnlimited(data, length, output, size) : ParseVsc(data, length, output, size);
+        }
+    }
+
     private static void Report(Exception e, string area)
     {
         // A missing library or old bridge only gets one report, no per-frame log storms.
@@ -145,6 +160,17 @@ internal static unsafe partial class RustEngineBridge
         // locks are advisory: mapping a user file there could SIGBUS if another
         // application truncates it. Map a private bounded snapshot instead.
         if (OperatingSystem.IsWindows()) return CallFileParser(stream, kind, normalizeVsm: kind == 2);
+        if (OperatingSystem.IsMacOS())
+        {
+            string? directory = null;
+            try
+            {
+                using var clone = TryCloneInput(stream, out directory);
+                if (clone != null && clone.Length == length)
+                    return CallFileParser(clone, kind, normalizeVsm: kind == 2);
+            }
+            finally { if (directory != null) Directory.Delete(directory); }
+        }
         using var snapshot = CreateInputTemporary();
         byte[] buffer = new byte[64 * 1024];
         long remaining = length;
@@ -158,6 +184,34 @@ internal static unsafe partial class RustEngineBridge
         snapshot.Flush();
         snapshot.Position = 0;
         return CallFileParser(snapshot, kind, normalizeVsm: kind == 2);
+    }
+
+    // APFS clones isolate subsequent writes/truncation without writing the entire
+    // source to temporary storage. Other volumes retain the bounded-copy fallback.
+    internal static FileStream? TryCloneInput(FileStream source, out string? directory)
+    {
+        directory = null;
+        if (!OperatingSystem.IsMacOS()) return null;
+        string folder = Path.Combine(Path.GetTempPath(), "kg-chart-clone-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        string destination = Path.Combine(folder, "input");
+        bool transferred = false;
+        try
+        {
+            // AT_FDCWD; destination is absolute. The source descriptor stays owned
+            // by the caller and the SafeHandle marshaller pins its lifetime.
+            try { if (CloneFileAt(source.SafeFileHandle, -2, destination, 0) != 0) return null; }
+            catch (EntryPointNotFoundException) { return null; }
+            File.SetUnixFileMode(destination, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            var clone = new FileStream(destination, FileMode.Open, FileAccess.Read, FileShare.Read,
+                64 * 1024, FileOptions.DeleteOnClose | FileOptions.SequentialScan);
+            directory = folder; transferred = true;
+            return clone;
+        }
+        finally
+        {
+            if (!transferred) { File.Delete(destination); Directory.Delete(folder); }
+        }
     }
     private static void ValidateInputLength(long length, int kind)
     {
@@ -444,10 +498,75 @@ internal static unsafe partial class RustEngineBridge
     }
 
     // KGS2 adds non-fatal source diagnostics; KGS1 remains accepted for older native libraries.
-    private static Chart DecodeChart(Stream stream, string title, string? sourcePath = null)
+    private static Chart DecodeChart(Stream stream, string title, string? sourcePath = null, bool nested = false)
     {
-        using var reader = new BinaryReader(stream, Encoding.UTF8, false);
+        using var reader = new BinaryReader(stream, Encoding.UTF8, nested);
         string wireVersion = Encoding.ASCII.GetString(reader.ReadBytes(4));
+        if (wireVersion == "KGR2" && !nested)
+        {
+            var records = DecodeChart(stream, title, sourcePath, nested: true);
+            var patterns = records.Notes.ToArray();
+            int count = ReadCount(reader, int.MaxValue), groups = ReadCount(reader, int.MaxValue);
+            if ((long)groups * 12 != stream.Length - stream.Position ||
+                !ChartLoadLimits.Unlimited && (long)count * 4 > MaxPacketBytes)
+                throw new InvalidDataException("Invalid repeated VSC packet size.");
+            records.Notes.Clear();
+            records.Notes.EnsureCapacity(count);
+            CollectionsMarshal.SetCount(records.Notes, count);
+            var destination = CollectionsMarshal.AsSpan(records.Notes);
+            int written = 0;
+            double previous = double.NegativeInfinity;
+            for (int g = 0; g < groups; g++)
+            {
+                int start = ReadCount(reader, patterns.Length), length = ReadCount(reader, patterns.Length),
+                    repeats = ReadCount(reader, int.MaxValue);
+                int expanded = checked(length * repeats);
+                if (length == 0 || repeats == 0 || (long)start + length > patterns.Length || expanded > count - written)
+                    throw new InvalidDataException("Invalid repeated VSC group.");
+                double time = patterns[start].Time;
+                if (time < previous) throw new InvalidDataException("Unsorted repeated VSC groups.");
+                for (int i = start; i < start + length; i++)
+                    if (patterns[i].Time != time) throw new InvalidDataException("Repeated VSC group crosses timestamps.");
+                var target = destination.Slice(written, expanded);
+                if (length == 1) target.Fill(patterns[start]);
+                else
+                {
+                    patterns.AsSpan(start, length).CopyTo(target);
+                    // Exponential copies preserve the complete equal-time pattern.
+                    // No per-occurrence binary reads, boxing or list growth.
+                    for (int filled = length; filled < expanded;)
+                    {
+                        int copy = Math.Min(filled, expanded - filled);
+                        target[..copy].CopyTo(target[filled..]);
+                        filled += copy;
+                    }
+                }
+                written += expanded; previous = time;
+            }
+            if (written != count) throw new InvalidDataException("Repeated VSC count mismatch.");
+            return records;
+        }
+        if (wireVersion == "KGR1" && !nested)
+        {
+            var records = DecodeChart(stream, title, sourcePath, nested: true);
+            var unique = records.Notes.ToArray();
+            int count = ReadCount(reader, int.MaxValue);
+            if (count != (stream.Length - stream.Position) / 4 || (stream.Length - stream.Position) % 4 != 0)
+                throw new InvalidDataException("Invalid compact VSC reference count.");
+            records.Notes.Clear();
+            records.Notes.EnsureCapacity(count);
+            double previous = double.NegativeInfinity;
+            for (int i = 0; i < count; i++)
+            {
+                uint id = reader.ReadUInt32();
+                if (id >= unique.Length) throw new InvalidDataException("Invalid compact VSC record ID.");
+                var note = unique[id];
+                if (note.Time < previous) throw new InvalidDataException("Unsorted compact VSC references.");
+                records.Notes.Add(note);
+                previous = note.Time;
+            }
+            return records;
+        }
         if (wireVersion is not ("KGS1" or "KGS2"))
             throw new InvalidDataException("RustBridge chart wire version mismatch.");
         var chart = new Chart { Title=title, VscDialect=reader.ReadByte()!=0 ? VscDialect.Csm340 : VscDialect.Legacy,
@@ -522,7 +641,7 @@ internal static unsafe partial class RustEngineBridge
                 chart.Diagnostics.Add(new(sourcePath!, line, message));
             }
         }
-        if(stream.Position!=stream.Length) throw new InvalidDataException("Trailing bytes in Rust chart packet.");
+        if(!nested && stream.Position!=stream.Length) throw new InvalidDataException("Trailing bytes in Rust chart packet.");
         return chart;
     }
     private static int ReadCount(BinaryReader r,int limit)

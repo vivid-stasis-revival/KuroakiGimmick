@@ -28,13 +28,13 @@ internal static class Bench
         {
             if (args.Length == 0 || args[0] is "-h" or "--help")
             {
-                Console.WriteLine("LargeChartBench <interval|vsm-editor|editor-session|vsm-load|vsc-load|generate-vsm|generate-vsc> "
+                Console.WriteLine("LargeChartBench <interval|vsm-editor|editor-session|vsm-load|vsc-load|vsc-session|generate-vsm|generate-vsc> "
                     + "[--count 10000] [--operations 1000] [--row-bytes 0] [--input file] [--fixture file] "
                     + "[--engine off|auto|verify|required] [--unlimited] [--label name] [--json file]");
                 return 0;
             }
             string kind = args[0];
-            if (kind is not ("interval" or "vsm-editor" or "editor-session" or "vsm-load" or "vsc-load" or "generate-vsm" or "generate-vsc"))
+            if (kind is not ("interval" or "vsm-editor" or "editor-session" or "vsm-load" or "vsc-load" or "vsc-session" or "generate-vsm" or "generate-vsc"))
                 throw new ArgumentException("Unknown benchmark case: " + kind);
             var options = new Dictionary<string, string>(StringComparer.Ordinal);
             bool unlimited = false;
@@ -59,13 +59,13 @@ internal static class Bench
             var overrideMethod = typeof(ChartLoadLimits).GetMethod("Override", BindingFlags.Static | BindingFlags.NonPublic)
                 ?? throw new MissingMethodException("This repository does not expose the benchmark load-limit scope.");
             using var scope = (IDisposable)overrideMethod.Invoke(null, [unlimited])!;
-            if (kind == "editor-session") ConfigureSessionDefaults(unlimited);
+            if (kind is "editor-session" or "vsc-session") ConfigureSessionDefaults(unlimited);
             Warmup();
             string? input = options.GetValueOrDefault("--input");
             if (input != null && options.ContainsKey("--fixture")) throw new ArgumentException("Use --input or --fixture, not both.");
             if (kind != "interval" && input == null)
             {
-                bool vsc = kind is "vsc-load" or "generate-vsc";
+                bool vsc = kind is "vsc-load" or "vsc-session" or "generate-vsc";
                 generated = options.GetValueOrDefault("--fixture") ?? Path.Combine(Path.GetTempPath(), "kg-large-chart-" + Guid.NewGuid().ToString("N") + (vsc ? ".vsc" : ".vsm"));
                 if (kind.StartsWith("generate-", StringComparison.Ordinal) && !options.ContainsKey("--fixture"))
                     throw new ArgumentException("Generation-only cases require --fixture so the output location is explicit.");
@@ -159,16 +159,25 @@ internal static class Bench
                     GC.KeepAlive(editor); GC.KeepAlive(session);
                     break;
                 }
+                case "vsc-session":
                 case "vsc-load":
                 {
                     var chart = Measure("load", () => VscReader.Load(input!));
+                    if (kind == "vsc-session")
+                    {
+                        var bpm = Measure("bpm", () => new BpmMap(chart, 120, 0));
+                        var index = Measure("note-index", () => new NoteIndex(chart.Notes, bpm));
+                        var score = Measure("score", () => new ScoreState(chart, bpm));
+                        matched = score.NoteCount;
+                        GC.KeepAlive(index); GC.KeepAlive(score);
+                    }
                     records = chart.Notes.Count; diagnostics = chart.Diagnostics.Count;
                     var hash = new StableHash();
                     hash.Add((int)chart.VscDialect);
                     foreach (var note in chart.Notes)
                     {
                         hash.Add(note.Time); hash.Add(note.End); hash.Add(note.Type); hash.Add(note.Lane);
-                        foreach (var pair in note.Extra.OrderBy(pair => pair.Key))
+                        if (note.Extra.Count > 0) foreach (var pair in note.Extra.OrderBy(pair => pair.Key))
                         { hash.Add(pair.Key); hash.Add(Convert.ToString(pair.Value, CultureInfo.InvariantCulture) ?? ""); }
                         if (note.ModExtra != null)
                             foreach (var pair in note.ModExtra.OrderBy(pair => pair.Key, StringComparer.Ordinal))

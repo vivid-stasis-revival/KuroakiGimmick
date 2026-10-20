@@ -37,6 +37,22 @@ public sealed partial class SceneRenderer : IDisposable
     int RenderHeight => scene.Texture.Height;
     /// <summary>最终呈现像素宽度；fish 在放大后的输出上求值，源画面仍遵循工程的像素分辨率。</summary>
     public int PresentationWidth { get; set; } = 1920;
+    bool interactivePreview;
+    int previewLayers = ViewerSettings.DefaultStackLayers;
+    /// <summary>Only the interactive viewer opts into bounded stacked-note detail; export defaults to full detail.</summary>
+    public PreviewScope Preview(bool stackLimit = true, int layers = ViewerSettings.DefaultStackLayers) => new(this, stackLimit, layers);
+    public readonly struct PreviewScope : IDisposable
+    {
+        readonly SceneRenderer renderer;
+        readonly bool previous;
+        readonly int previousLayers;
+        internal PreviewScope(SceneRenderer renderer, bool stackLimit, int layers)
+        {
+            this.renderer = renderer; previous = renderer.interactivePreview; renderer.interactivePreview = stackLimit;
+            previousLayers = renderer.previewLayers; renderer.previewLayers = ViewerSettings.ValidStackLayers(layers);
+        }
+        public void Dispose() { renderer.interactivePreview = previous; renderer.previewLayers = previousLayers; }
+    }
     internal CancellationToken ExportCancellation { get; set; }
     CustomImages? loadedImages;
     /// <summary>按路径缓存的图片纹理；textureLru 记录淘汰顺序，failedTextures 记录只报一次的失败路径，textureBytes 计量 128 MiB 预算。装载与淘汰见 SceneRenderer.Resources.cs。</summary>

@@ -15,7 +15,11 @@ public sealed class NoteIndex
 {
     public readonly record struct Item(Note Note, double Beat, double EndBeat);
     readonly IntervalIndex<Item> index;
+    readonly IntervalIndex<Item>? previewIndex;
+    readonly ushort[]? previewOrdinals;
     internal NoteRuntimeData[] Runtime { get; }
+    internal NoteRuntimeData[]? PreviewRuntime { get; }
+    public bool HasDensePreview => previewIndex != null;
     public int Count => index.Entries.Count;
     public NoteIndex(IReadOnlyList<Note> source, BpmMap? map = null)
     {
@@ -30,6 +34,19 @@ public sealed class NoteIndex
             items[next++] = new(new(n, map?.Beat(n.Time) ?? double.NaN, map?.Beat(Math.Max(n.Time, n.End)) ?? double.NaN), n.Time, n.End, i);
         }
         index = new(items, owned: true);
+        var preview = DensePreview.Reduce(index.Entries, static e => e.Start,
+            static e => (e.Value.Note.Type, e.Value.Note.Lane, e.End));
+        if (preview != null)
+        {
+            previewIndex = new(preview.Items, owned: true);
+            previewOrdinals = preview.Ordinals;
+            PreviewRuntime = new NoteRuntimeData[preview.Items.Length];
+            for (int i = 0; i < preview.Items.Length; i++)
+            {
+                var n = preview.Items[i].Value.Note;
+                PreviewRuntime[i] = new(n.Time, n.End, unchecked((uint)(n.Type is 1 or 7 or 8 ? n.Lane + 4 : n.Lane)));
+            }
+        }
         Runtime = new NoteRuntimeData[count];
         for (int i = 0; i < Runtime.Length; i++)
         {
@@ -45,6 +62,32 @@ public sealed class NoteIndex
         return left == null ? right : right == null || beat - left.Value <= right.Value - beat ? left : right;
     }
     public IntervalIndex<Item>.Query Visible(double earliestEnd, double latestStart) => index.Overlap(earliestEnd, latestStart);
+    public PreviewQuery PreviewVisible(double earliestEnd, double latestStart,
+        int layers = ViewerSettings.DefaultStackLayers, bool enabled = true)
+        => new((enabled ? previewIndex ?? index : index).Overlap(earliestEnd, latestStart),
+            enabled ? previewOrdinals : null, ViewerSettings.ValidStackLayers(layers));
+    public readonly struct PreviewQuery(IntervalIndex<Item>.Query query, ushort[]? ordinals, int layers)
+        : IEnumerable<IntervalIndex<Item>.Entry>
+    {
+        public PreviewEnumerator GetEnumerator() => new(query.GetEnumerator(), ordinals, layers);
+        IEnumerator<IntervalIndex<Item>.Entry> IEnumerable<IntervalIndex<Item>.Entry>.GetEnumerator() => GetEnumerator();
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+    public struct PreviewEnumerator(IntervalIndex<Item>.Enumerator source, ushort[]? ordinals, int layers)
+        : IEnumerator<IntervalIndex<Item>.Entry>
+    {
+        public IntervalIndex<Item>.Entry Current => source.Current;
+        public int CurrentIndex => source.CurrentIndex;
+        object IEnumerator.Current => Current;
+        public bool MoveNext()
+        {
+            while (source.MoveNext())
+                if (ordinals == null || ordinals[source.CurrentIndex] < layers) return true;
+            return false;
+        }
+        public void Dispose() { }
+        public void Reset() => throw new NotSupportedException();
+    }
     public Query Candidates(double earliestEnd, double latestStart) => new(Visible(earliestEnd, latestStart));
     public readonly struct Query(IntervalIndex<Item>.Query query) : IEnumerable<Note>
     {

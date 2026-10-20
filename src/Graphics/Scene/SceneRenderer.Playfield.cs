@@ -289,7 +289,8 @@ public sealed partial class SceneRenderer
             {
                 PerformanceStats.Add(PerformanceStats.Counter.Candidates, count);
                 bool evaluated = useRust && validLanes && RustNoteBridge.TryEvaluateIndexed(motionParams,
-                    session.NoteIndex.Runtime, rustCandidateIndices, rustLaneInputs, scrollTime, rustMotionOutputs, count);
+                    interactivePreview ? session.NoteIndex.PreviewRuntime ?? session.NoteIndex.Runtime : session.NoteIndex.Runtime,
+                    rustCandidateIndices, rustLaneInputs, scrollTime, rustMotionOutputs, count);
                 if (useRust && !evaluated)
                 {
                     using var prepare = PerformanceStats.Measure(PerformanceStats.Stage.Candidates);
@@ -324,7 +325,7 @@ public sealed partial class SceneRenderer
                 }
             }
             int chunk = 0; bool validLanes = true;
-            var candidates = session.NoteIndex.Visible(visualTime, latestStart).GetEnumerator();
+            var candidates = session.NoteIndex.PreviewVisible(visualTime, latestStart, previewLayers, interactivePreview).GetEnumerator();
             bool available = true;
             while (available)
             {

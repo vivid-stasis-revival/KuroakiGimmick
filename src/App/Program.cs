@@ -72,7 +72,7 @@ internal static class Program
             if (args.Contains("--chart-size-test")) return ChartSizeChecks.Run();
             if (args.Contains("--large-chart-test"))
             {
-                IntervalIndexChecks.Run(); VsmLookupChecks.Run(); EditorSnapshotChecks.Run(); LargeChartLoadingChecks.Run();
+                IntervalIndexChecks.Run(); VsmLookupChecks.Run(); EditorSnapshotChecks.Run(); LargeChartLoadingChecks.Run(); DensePreviewChecks.Run();
                 return 0;
             }
             if (args.Contains("--mpf-test"))
