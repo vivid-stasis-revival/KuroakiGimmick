@@ -968,5 +968,8 @@
   "Off by default. Use the original single-window interface.": "默认关闭，使用原来的单窗口界面。",
   "Disabling closes tool windows and keeps your custom layout for later.": "关闭后收起工具窗口，并保留自定义布局供下次启用。",
   "RESTORE DEFAULT LAYOUT": "一键还原默认布局",
-  "RESTORE HIDDEN PANELS": "恢复隐藏面板"
+  "RESTORE HIDDEN PANELS": "恢复隐藏面板",
+  "Video": "视频",
+  "16–1024 layers. +/- 64; Shift +/- 16. Preview only.": "16–1024 层。每次增减 64；按住 Shift 增减 16。仅影响预览。",
+  "Limit repeated layers in previews. Scores and full-detail exports are unchanged.": "限制预览中的重复叠层，计分和完整精度导出保持不变。"
 }

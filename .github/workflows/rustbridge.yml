@@ -66,6 +66,9 @@ jobs:
         run: dotnet run -c Release --no-build -- --rust-timeline-test
         env:
           KG_RUST_ENGINE: verify
+      - name: Large-chart source, index and editor regressions
+        shell: bash
+        run: dotnet run -c Release --no-build -- --large-chart-test
       - name: CGMK 1.14 MPF deterministic scripting regressions
         shell: bash
         run: dotnet run -c Release --no-build -- --mpf-test
@@ -91,5 +94,7 @@ jobs:
             bin/Release/net8.0/osx-arm64/publish/KuroakiGimmick --rust-engine-test
           DYLD_LIBRARY_PATH="$PWD/bin/Release/net8.0/osx-arm64/publish" KG_RUST_ENGINE=verify \
             bin/Release/net8.0/osx-arm64/publish/KuroakiGimmick --rust-timeline-test
+          DYLD_LIBRARY_PATH="$PWD/bin/Release/net8.0/osx-arm64/publish" \
+            bin/Release/net8.0/osx-arm64/publish/KuroakiGimmick --large-chart-test
           DYLD_LIBRARY_PATH="$PWD/bin/Release/net8.0/osx-arm64/publish" KG_RUST_AUDIO_REQUIRED=1 \
             bin/Release/net8.0/osx-arm64/publish/KuroakiGimmick --rust-audio-test

@@ -1,0 +1,127 @@
+{
+  "mode": "layers",
+  "loadMs": 11785.7922,
+  "records": 83307555,
+  "playable": 81456276,
+  "judgements": 81456276,
+  "noteReduction": true,
+  "hitReduction": true,
+  "measurements": [
+    {
+      "time": 0.8,
+      "layerLimit": 16,
+      "candidates": 128,
+      "recordedMs": 189.9521,
+      "completedMs": 205.6692,
+      "checksum": "00F678B517116D94D938185EB8A84C9F234F2E13068632B53E4CC74320A3D89E"
+    },
+    {
+      "time": 0.8,
+      "layerLimit": 1024,
+      "candidates": 8192,
+      "recordedMs": 14.3065,
+      "completedMs": 26.6305,
+      "checksum": "A6E5B6B2BCCD699022360C83F7DBCFFC4FC36B597784DE272DB691F4AC064F3C"
+    },
+    {
+      "time": 0.8,
+      "layerLimit": 256,
+      "candidates": 2048,
+      "recordedMs": 5.9665,
+      "completedMs": 8.1409,
+      "checksum": "A6E5B6B2BCCD699022360C83F7DBCFFC4FC36B597784DE272DB691F4AC064F3C"
+    },
+    {
+      "time": 0.8,
+      "layerLimit": 16,
+      "candidates": 128,
+      "recordedMs": 0.7856,
+      "completedMs": 2.5793,
+      "checksum": "00F678B517116D94D938185EB8A84C9F234F2E13068632B53E4CC74320A3D89E"
+    }
+  ],
+  "profile": {
+    "sampleWindow": 4096,
+    "stages": {
+      "Scene": {
+        "count": 4,
+        "meanMs": 52.022099999999995,
+        "p50Ms": 5.9568,
+        "p95Ms": 187.0562,
+        "p99Ms": 187.0562,
+        "maxMs": 187.0562
+      },
+      "Candidates": {
+        "count": 6,
+        "meanMs": 0.6764999999999999,
+        "p50Ms": 0.2955,
+        "p95Ms": 2.6692,
+        "p99Ms": 2.6692,
+        "maxMs": 2.6692
+      },
+      "Rust": {
+        "count": 5,
+        "meanMs": 0.07252,
+        "p50Ms": 0.0839,
+        "p95Ms": 0.1484,
+        "p99Ms": 0.1484,
+        "maxMs": 0.1484
+      },
+      "Geometry": {
+        "count": 5,
+        "meanMs": 2.2496,
+        "p50Ms": 1.427,
+        "p95Ms": 7.4391,
+        "p99Ms": 7.4391,
+        "maxMs": 7.4391
+      },
+      "GpuRecord": {
+        "count": 4,
+        "meanMs": 1.3572250000000001,
+        "p50Ms": 0.2057,
+        "p95Ms": 4.8191,
+        "p99Ms": 4.8191,
+        "maxMs": 4.8191
+      },
+      "GpuUpload": {
+        "count": 4,
+        "meanMs": 0.48997499999999994,
+        "p50Ms": 0.2326,
+        "p95Ms": 1.0268,
+        "p99Ms": 1.0268,
+        "maxMs": 1.0268
+      },
+      "GpuSubmit": {
+        "count": 4,
+        "meanMs": 0.05535000000000001,
+        "p50Ms": 0.0103,
+        "p95Ms": 0.169,
+        "p99Ms": 0.169,
+        "maxMs": 0.169
+      },
+      "GpuWait": {
+        "count": 18,
+        "meanMs": 1.1339055555555557,
+        "p50Ms": 0.0307,
+        "p95Ms": 10.96,
+        "p99Ms": 10.96,
+        "maxMs": 10.96
+      }
+    },
+    "counters": {
+      "TimelineNotes": 0,
+      "Candidates": 10496,
+      "VisibleNotes": 10496,
+      "DrawCalls": 312,
+      "Batches": 484,
+      "UploadBytes": 7138560,
+      "AudioUnderruns": 0,
+      "Readbacks": 0,
+      "EncodedFrames": 0,
+      "AllocatedBytes": 0,
+      "GcCollections": 0,
+      "GcPauseMicroseconds": 0
+    },
+    "workingSet": 5980192768
+  }
+}

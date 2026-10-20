@@ -292,3 +292,51 @@ pub unsafe extern "C" fn kg_core_build_bpm_unlimited(changes:*const BpmChange,co
     offset_ms:f64,fixed:f64,has_fixed:u32,output:*mut *mut u8,size:*mut usize)->i32 {
     crate::load_limits::with_unlimited(|| kg_core_build_bpm(changes,count,base,offset_ms,fixed,has_fixed,output,size))
 }
+
+/// Compact VSC packet: KGR1 + unsorted unique KGS2 records + stable occurrence IDs.
+#[no_mangle]
+pub unsafe extern "C" fn kg_core_parse_vsc_compact(data:*const u8,len:usize,unlimited:u8,output:*mut *mut u8,size:*mut usize)->i32 {
+    let work = || run_packet(data,len,output,size,MAX_INPUT,|bytes| {
+        let s=std::str::from_utf8(bytes).map_err(|e|format!("Invalid VSC UTF-8: {e}"))?;
+        if let Some((chart, groups, total)) = chart::parse_periodic_vsc(s) {
+            // Keep the same expanded occurrence budget as KGR1 in limited mode.
+            if !crate::load_limits::unlimited() && total.saturating_mul(4) > MAX_PACKET {
+                return Err("Rust parse output exceeds 512 MiB".into());
+            }
+            let mut packet = b"KGR2".to_vec();
+            packet.extend_from_slice(&encode_chart(&chart, true)?);
+            u32_(&mut packet, total)?;
+            u32_(&mut packet, groups.len())?;
+            for (start, count, repeat) in groups {
+                u32_(&mut packet, start)?; u32_(&mut packet, count)?; u32_(&mut packet, repeat)?;
+            }
+            return Ok(packet);
+        }
+        // Unique charts do not benefit from an occurrence table. Bound the probe
+        // and retain the ordinary packet when repetition is too low to pay for it.
+        let mut seen = std::collections::HashSet::new();
+        let mut sampled = 0usize;
+        let mut repeats = 0usize;
+        for raw in s.trim_start_matches('\u{feff}').lines().take(4096) {
+            let row = raw.trim();
+            if row.is_empty() || row.starts_with('#') || row.starts_with("//") { continue; }
+            sampled += 1;
+            if row.len() <= 1024 && !seen.insert(row) { repeats += 1; }
+        }
+        if repeats * 8 <= sampled {
+            return encode_chart(&chart::parse_vsc(s,String::new())?,true);
+        }
+        let (chart, references)=chart::parse_vsc_records(s,String::new(),true)?;
+        let records=encode_chart(&chart,true)?;
+        let length=8usize.checked_add(records.len()).and_then(|n| n.checked_add(references.len().checked_mul(4)?))
+            .ok_or("compact packet overflow")?;
+        if !crate::load_limits::unlimited() && length>MAX_PACKET {return Err("Rust parse output exceeds 512 MiB".into());}
+        let mut packet=Vec::with_capacity(length);
+        packet.extend_from_slice(b"KGR1");
+        packet.extend_from_slice(&records);
+        u32_(&mut packet,references.len())?;
+        for index in references {packet.extend_from_slice(&index.to_le_bytes());}
+        Ok(packet)
+    });
+    if unlimited != 0 {crate::load_limits::with_unlimited(work)} else {work()}
+}

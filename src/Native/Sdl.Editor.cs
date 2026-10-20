@@ -14,6 +14,7 @@ public static partial class Sdl
     public const uint WindowCloseRequested = 0x210;
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] public static extern uint SDL_GetWindowID(nint window);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] public static extern ushort SDL_GetModState();
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] public static extern void SDL_SetModState(ushort modstate);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool SDL_StartTextInput(nint window);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.I1)] public static extern bool SDL_StopTextInput(nint window);
     /// <summary>返回的是 SDL 自己分配的 UTF-8 缓冲，读完必须交给 SDL_free；不要用 Marshal.FreeHGlobal。</summary>

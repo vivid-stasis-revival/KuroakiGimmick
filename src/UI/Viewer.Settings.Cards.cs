@@ -1,5 +1,6 @@
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Graphics;
+using KuroakiGimmick.Native;
 
 namespace KuroakiGimmick.UI;
 
@@ -107,7 +108,7 @@ public sealed partial class Viewer
 
     void DrawSettingsDisplay(Rect r)
     {
-        SettingsCard(r, "Display");
+        SettingsCard(r, "Video");
         var p = Current.Project;
         float sx = r.X + 14, y = r.Y + 45;
         float cx = r.X + MathF.Min(145, r.W * .30f);
@@ -120,6 +121,22 @@ public sealed partial class Viewer
             if (Button($"{size} x {size * 9 / 16}", new(cx + (i % 3) * (bw + 6), y + (i / 3) * 34, bw, 29),
                 active: p.RenderWidth == size, key: "settings-resolution:" + size))
                 p.RenderWidth = size;
+        }
+        if (r.H >= 180)
+        {
+            y = r.Y + 122;
+            Text("STACK LIMIT", sx, y + 7, 13, white);
+            if (Button(L.Get(preferences.StackLimit ? "ON" : "OFF"), new(cx, y, 74, 30),
+                active: preferences.StackLimit, key: "settings-stack-limit"))
+            { preferences.StackLimit = !preferences.StackLimit; SaveSettings(); }
+            int layers = preferences.StackLimitLayers, step = (Sdl.SDL_GetModState() & 3) != 0 ? 16 : 64;
+            float controlsX = cx + 84;
+            if (Button("-", new(controlsX, y, 32, 30), enabled: layers > ViewerSettings.MinStackLayers, key: "settings-stack-minus"))
+            { preferences.StackLimitLayers = layers - step; SaveSettings(); }
+            Text(preferences.StackLimitLayers.ToString(), controlsX + 43, y + 7, 13, white, true);
+            if (Button("+", new(controlsX + 96, y, 32, 30), enabled: layers < ViewerSettings.MaxStackLayers, key: "settings-stack-plus"))
+            { preferences.StackLimitLayers = layers + step; SaveSettings(); }
+            SettingsHint("16–1024 layers. +/- 64; Shift +/- 16. Preview only.", sx, y + 42, r.W - 28);
         }
     }
 

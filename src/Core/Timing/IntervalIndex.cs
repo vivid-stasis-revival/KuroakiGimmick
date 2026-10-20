@@ -7,7 +7,7 @@ public sealed class IntervalIndex<T>
 {
     public readonly record struct Entry(T Value, double Start, double End, int Order);
     readonly Entry[] entries;
-    readonly double[] maxEnd, minStart;
+    readonly double[] maxEnd;
     readonly int leaf;
     Dictionary<int, int>? orderPositions;
     public IReadOnlyList<Entry> Entries => entries;
@@ -20,11 +20,17 @@ public sealed class IntervalIndex<T>
         if (!sorted) Array.Sort(entries, static (a, b) => { int c = a.Start.CompareTo(b.Start); return c != 0 ? c : a.Order.CompareTo(b.Order); });
         leaf = 1;
         while (leaf < entries.Length) leaf = checked(leaf * 2);
-        maxEnd = new double[checked(leaf * 2)];
-        minStart = new double[maxEnd.Length];
-        Array.Fill(maxEnd, double.NegativeInfinity); Array.Fill(minStart, double.PositiveInfinity);
-        for (int i = 0; i < entries.Length; i++) { maxEnd[leaf + i] = Math.Max(entries[i].Start, entries[i].End); minStart[leaf + i] = entries[i].Start; }
-        for (int i = leaf - 1; i > 0; i--) { maxEnd[i] = Math.Max(maxEnd[i * 2], maxEnd[i * 2 + 1]); minStart[i] = minStart[i * 2]; }
+        // Leaves already live in entries. Only internal subtree maxima need storage;
+        // sorted starts let an ordered query stop at its first start beyond the window.
+        // This uses one leaf-sized array instead of two 2*leaf-sized arrays.
+        maxEnd = new double[leaf];
+        for (int i = leaf - 1; i > 0; i--) maxEnd[i] = Math.Max(EndAt(i * 2), EndAt(i * 2 + 1));
+    }
+    double EndAt(int node)
+    {
+        if (node < leaf) return maxEnd[node];
+        int i = node - leaf;
+        return i < entries.Length ? Math.Max(entries[i].Start, entries[i].End) : double.NegativeInfinity;
     }
     /// <summary>Editor-only incremental replacement when start ordering is unchanged. Returns false without mutation if a full rebuild is needed. Never call concurrently with queries.</summary>
     public bool TryUpdate(IReadOnlyList<Entry> replacement)
@@ -38,8 +44,8 @@ public sealed class IntervalIndex<T>
             int i = orderPositions[e.Order];
             if (EqualityComparer<Entry>.Default.Equals(entries[i], e)) continue;
             entries[i] = e;
-            int node = leaf + i; maxEnd[node] = Math.Max(e.Start, e.End);
-            while ((node /= 2) > 0) maxEnd[node] = Math.Max(maxEnd[node * 2], maxEnd[node * 2 + 1]);
+            int node = leaf + i;
+            while ((node /= 2) > 0) maxEnd[node] = Math.Max(EndAt(node * 2), EndAt(node * 2 + 1));
         }
         return true;
     }
@@ -69,11 +75,19 @@ public sealed class IntervalIndex<T>
         {
             while (node != 0)
             {
-                if (index.maxEnd[node] < start || index.minStart[node] > end) { NextSubtree(); continue; }
-                if (node < index.leaf) { node *= 2; continue; }
+                if (node < index.leaf)
+                {
+                    if (index.maxEnd[node] < start) { NextSubtree(); continue; }
+                    node *= 2; continue;
+                }
                 int i = node - index.leaf;
+                // Traversal is in start order. No later interval can overlap once
+                // this boundary is crossed, even when an earlier Hold spans it.
+                if (i >= index.entries.Length || index.entries[i].Start > end) { node = 0; break; }
                 NextSubtree();
-                if (i < index.entries.Length) { Current = index.entries[i]; CurrentIndex = i; return true; }
+                var entry = index.entries[i];
+                if (Math.Max(entry.Start, entry.End) < start) continue;
+                Current = entry; CurrentIndex = i; return true;
             }
             return false;
         }

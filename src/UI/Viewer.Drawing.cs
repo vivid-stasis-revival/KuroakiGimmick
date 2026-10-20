@@ -52,19 +52,23 @@ public sealed partial class Viewer
         if (delta > 0)
         {
             // 指数平滑的帧率读数，单帧上限 240，仅用于面板显示。
-            measuredFps = measuredFps * .95 + Math.Min(240, 1 / delta) * .05;
+            double retention = Math.Exp(-delta / .35);
+            measuredFps = measuredFps * retention + Math.Min(240, 1 / delta) * (1 - retention);
         }
         BeginUiMotion();
         workspaceGeometry = WorkspaceGeometry.Create(w, h, editorMode && editor != null, LayoutOptions);
         var time = transport.Position;
         Renderer.PresentationWidth = pw;
         // 本帧全部 GPU 工作从这里开始，只在窗口线程执行：先渲染场景，再把 UI 画到离屏 uiTarget。
-        Renderer.RenderPresentation(Current, transport.PresentationPosition, notes, effects);
-        prGridSoloRendered = false;
-        if (editorMode && prGridSolo && TryPrGridTarget(out int proxyTarget) && SceneRenderer.CanInspectProxy(Current))
+        using (Renderer.Preview(preferences.StackLimit, preferences.StackLimitLayers))
         {
-            Renderer.RenderProxyInspection(Current, time, proxyTarget, notes, effects);
-            prGridSoloRendered = true; prGridSoloTarget = proxyTarget;
+            Renderer.RenderPresentation(Current, transport.PresentationPosition, notes, effects);
+            prGridSoloRendered = false;
+            if (editorMode && prGridSolo && TryPrGridTarget(out int proxyTarget) && SceneRenderer.CanInspectProxy(Current))
+            {
+                Renderer.RenderProxyInspection(Current, time, proxyTarget, notes, effects);
+                prGridSoloRendered = true; prGridSoloTarget = proxyTarget;
+            }
         }
         // 信息卡片有自己的离屏目标，必须在 UI 合成开始之前画完，中途不再切换渲染目标。
         RenderInfoCard();
@@ -230,7 +234,9 @@ public sealed partial class Viewer
         Label(L.Get("02 / PREVIEW"), cx, dy + 102);
         Text(Current.IsEmpty ? L.Get("Open a chart or song folder") : Current.Title, cx, dy + 126, 22, white, max: cw - 10);
         Text(Current.NativeGimmick.Data?.DisplayName ?? L.Get("CORE PROFILE"), cx, dy + 158, 10, soft, true);
-        Text(L.Format($"{Renderer.Final.Texture.Width} x {Renderer.Final.Texture.Height} / NEAREST"), cx + cw - 205, dy + 158, 10, muted, true);
+        bool stackLimit = preferences.StackLimit && (Current.NoteIndex.HasDensePreview || Current.Score.HasDensePreview);
+        Text(L.Format($"{Renderer.Final.Texture.Width} x {Renderer.Final.Texture.Height} / NEAREST")
+            + (stackLimit ? $" / STACK LIMIT {preferences.StackLimitLayers}" : ""), cx + cw - (stackLimit ? 315 : 205), dy + 158, 10, muted, true);
         float previewY = area.Y + 83, previewH = Math.Max(1, area.H - 85);
         var frame = new Rect(cx, previewY, cw, previewH);
         previewFrame = frame;

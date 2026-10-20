@@ -89,7 +89,7 @@ public sealed partial class Viewer
             (string Key, string Name)[] entries =
             [
                 ("general", "General"), ("audio", "Audio & Sync"),
-                ("display", "Display"), ("editor", "Editor"), ("vsui", "VS UI"),
+                ("display", "Video"), ("editor", "Editor"), ("vsui", "VS UI"),
                 ("performance", "Performance"), ("export", "Export"), ("workspace", "Workspace")
             ];
             for (int i = 0; i < entries.Length; i++)
@@ -127,7 +127,7 @@ public sealed partial class Viewer
                 switch (settingsSection)
                 {
                     case "audio": DrawSettingsAudio(focus); break;
-                    case "display": DrawSettingsDisplay(new(x, y, w, 135)); DrawSettingsWorkflow(new(x, y + 148, w, 135)); break;
+                    case "display": DrawSettingsDisplay(new(x, y, w, 190)); DrawSettingsWorkflow(new(x, y + 202, w, 135)); break;
                     case "editor": DrawSettingsEditor(focus); break;
                     case "vsui": DrawSettingsVsUi(focus); break;
                     case "performance": DrawSettingsPerformance(focus, compact: focus.H < 430); break;
@@ -151,6 +151,8 @@ public sealed partial class Viewer
                 preferences.AlwaysFollow = false;
                 preferences.OverwriteExports = false;
                 preferences.VideoRenderWorkers = ExportOptions.MaxRenderWorkers;
+                preferences.StackLimit = true;
+                preferences.StackLimitLayers = ViewerSettings.DefaultStackLayers;
                 preferences.PutImageGimmickIntoAssetsFolder = false;
                 preferences.UiTheme = "Nekomiya";
                 preferences.CardWidth = new ViewerSettings().CardWidth;

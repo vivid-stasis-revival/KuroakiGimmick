@@ -14,6 +14,11 @@ public sealed class ScoreState
     const double MineWindow = .035, HoldTailGrace = 150;
     const int MaxHoldParts = 100_000, CheckpointLimit = 4096;
     readonly Hit[] hits;
+    readonly Hit[]? previewHits;
+    readonly Hold[]? previewHolds;
+    readonly ushort[]? previewHitOrdinals, previewHoldOrdinals;
+    readonly double[]? previewHoldMaxEnd;
+    public bool HasDensePreview => previewHits != null || previewHolds != null;
     readonly Hold[] holds;
     readonly Run[] runs;
     readonly double[] runMaxEnd;
@@ -54,6 +59,9 @@ public sealed class ScoreState
     ScoreState(ScoreState source)
     {
         hits = source.hits; holds = source.holds; runs = source.runs;
+        previewHits = source.previewHits;
+        previewHitOrdinals = source.previewHitOrdinals; previewHoldOrdinals = source.previewHoldOrdinals;
+        previewHolds = source.previewHolds; previewHoldMaxEnd = source.previewHoldMaxEnd;
         runMaxEnd = source.runMaxEnd; runCounts = source.runCounts; holdMaxEnd = source.holdMaxEnd;
         accRate = source.accRate; accStep = source.accStep; NoteCount = source.NoteCount; NoteValue = source.NoteValue;
         checkpoints.AddRange(source.checkpoints);
@@ -62,21 +70,26 @@ public sealed class ScoreState
 
     public ScoreState(Chart chart, BpmMap bpm)
     {
-        var explicitHits = new List<Hit>();
+        int hitCount = 0;
+        foreach (var note in chart.Notes)
+            hitCount = checked(hitCount + (note.Type == 2 ? 2 : note.Type is 0 or 1 or 6 or 7 or 8 ? 1 : 0));
+        hits = new Hit[hitCount];
+        int hitIndex = 0;
+        void AddHit(Hit hit) => hits[hitIndex++] = hit;
         var holdStreams = new List<Hold>();
         var groups = new Dictionary<(double Start, double Period, int Count), long>();
         foreach (var n in chart.Notes)
         {
             switch (n.Type)
             {
-                case 0: explicitHits.Add(new(n.Time, n.Lane, HitKind.Note, 0)); break;
-                case 1 or 8: explicitHits.Add(new(n.Time, 4 + n.Lane, HitKind.Wide, 0)); break;
-                case 6 or 7: explicitHits.Add(new(n.Time + MineWindow, n.Lane + (n.Type == 7 ? 4 : 0), HitKind.Mine, 0)); break;
+                case 0: AddHit(new(n.Time, n.Lane, HitKind.Note, 0)); break;
+                case 1 or 8: AddHit(new(n.Time, 4 + n.Lane, HitKind.Wide, 0)); break;
+                case 6 or 7: AddHit(new(n.Time + MineWindow, n.Lane + (n.Type == 7 ? 4 : 0), HitKind.Mine, 0)); break;
                 case 2:
                     double period = 60000 / bpm.BpmAtBeat(bpm.Beat(n.Time));
                     int parts = (int)Math.Min(MaxHoldParts, Math.Floor(Math.Max(0, (n.End - n.Time) * 1000 - HoldTailGrace) / period));
-                    explicitHits.Add(new(n.Time, n.Lane, HitKind.Note, 0));
-                    explicitHits.Add(new(n.End, n.Lane, HitKind.Note, (n.Time - n.End) * 1000));
+                    AddHit(new(n.Time, n.Lane, HitKind.Note, 0));
+                    AddHit(new(n.End, n.Lane, HitKind.Note, (n.Time - n.End) * 1000));
                     if (parts > 0)
                     {
                         holdStreams.Add(new(n.Time, period, parts, n.Lane));
@@ -86,11 +99,23 @@ public sealed class ScoreState
                     break;
             }
         }
-        explicitHits.Sort((a, b) => a.Time.CompareTo(b.Time));
-        hits = explicitHits.ToArray();
+        bool hitsSorted = true;
+        for (int i = 1; i < hits.Length; i++)
+            if (hits[i - 1].Time > hits[i].Time) { hitsSorted = false; break; }
+        if (!hitsSorted) Array.Sort(hits, (a, b) => a.Time.CompareTo(b.Time));
+        var hitPreview = DensePreview.Reduce(hits, static h => h.Time, static h => (h.Lane, h.Kind, h.Lead));
+        previewHits = hitPreview?.Items; previewHitOrdinals = hitPreview?.Ordinals;
         holds = holdStreams.OrderBy(h => h.At(0)).ToArray();
         holdMaxEnd = new double[Math.Max(1, holds.Length * 4)];
-        if (holds.Length > 0) BuildHolds(1, 0, holds.Length);
+        if (holds.Length > 0) BuildHolds(holds, holdMaxEnd, 1, 0, holds.Length);
+        var holdPreview = DensePreview.Reduce(holds, static h => h.At(0),
+            static h => (h.Start, h.PeriodMs, h.Count, h.Lane), denseOwner: previewHits != null);
+        previewHolds = holdPreview?.Items; previewHoldOrdinals = holdPreview?.Ordinals;
+        if (previewHolds != null)
+        {
+            previewHoldMaxEnd = new double[Math.Max(1, previewHolds.Length * 4)];
+            if (previewHolds.Length > 0) BuildHolds(previewHolds, previewHoldMaxEnd, 1, 0, previewHolds.Length);
+        }
         runs = groups.Select(g => new Run(g.Key.Start, g.Key.Period, g.Key.Count, g.Value)).OrderBy(r => r.At(0)).ToArray();
         runMaxEnd = new double[Math.Max(1, runs.Length * 4)];
         runCounts = new long[runMaxEnd.Length];
@@ -102,11 +127,11 @@ public sealed class ScoreState
         BuildCheckpoints();
     }
 
-    double BuildHolds(int node, int lo, int hi)
+    static double BuildHolds(Hold[] source, double[] maxEnd, int node, int lo, int hi)
     {
-        if (hi - lo == 1) return holdMaxEnd[node] = holds[lo].End;
+        if (hi - lo == 1) return maxEnd[node] = source[lo].End;
         int mid = lo + (hi - lo) / 2;
-        return holdMaxEnd[node] = Math.Max(BuildHolds(node * 2, lo, mid), BuildHolds(node * 2 + 1, mid, hi));
+        return maxEnd[node] = Math.Max(BuildHolds(source, maxEnd, node * 2, lo, mid), BuildHolds(source, maxEnd, node * 2 + 1, mid, hi));
     }
     void BuildRuns(int node, int lo, int hi)
     {
@@ -283,28 +308,38 @@ public sealed class ScoreState
     }
 
     /// <summary>Only materialize effects in the requested lifetime window. Returned hits are chronological.</summary>
-    public IEnumerable<Hit> HitsBetween(double from, double to, bool includeHoldTicks = true)
+    public IEnumerable<Hit> HitsBetween(double from, double to, bool includeHoldTicks = true, bool preview = false,
+        int layers = ViewerSettings.DefaultStackLayers)
     {
+        layers = ViewerSettings.ValidStackLayers(layers);
+        var visibleHits = preview ? previewHits ?? hits : hits;
+        var hitOrdinals = preview ? previewHitOrdinals : null;
+        var visibleHolds = preview ? previewHolds ?? holds : holds;
+        var visibleHoldMaxEnd = preview ? previewHoldMaxEnd ?? holdMaxEnd : holdMaxEnd;
         var queue = new PriorityQueue<(int Hold, int Index), double>();
-        if (includeHoldTicks) AddHolds(1, 0, holds.Length);
-        int explicitIndex = SortedSearch.LowerBound(hits, from, h => h.Time);
-        while ((explicitIndex < hits.Length && hits[explicitIndex].Time <= to) || queue.Count > 0)
+        if (includeHoldTicks) AddHolds(1, 0, visibleHolds.Length);
+        int explicitIndex = SortedSearch.LowerBound(visibleHits, from, h => h.Time);
+        while ((explicitIndex < visibleHits.Length && visibleHits[explicitIndex].Time <= to) || queue.Count > 0)
         {
-            if (explicitIndex < hits.Length && hits[explicitIndex].Time <= to &&
-                (!queue.TryPeek(out _, out double next) || hits[explicitIndex].Time <= next))
-            { yield return hits[explicitIndex++]; continue; }
+            while (explicitIndex < visibleHits.Length && hitOrdinals != null && hitOrdinals[explicitIndex] >= layers)
+                explicitIndex++;
+            if ((explicitIndex >= visibleHits.Length || visibleHits[explicitIndex].Time > to) && queue.Count == 0) break;
+            if (explicitIndex < visibleHits.Length && visibleHits[explicitIndex].Time <= to &&
+                (!queue.TryPeek(out _, out double next) || visibleHits[explicitIndex].Time <= next))
+            { yield return visibleHits[explicitIndex++]; continue; }
             var cursor = queue.Dequeue();
-            var hold = holds[cursor.Hold];
+            var hold = visibleHolds[cursor.Hold];
             yield return new(hold.At(cursor.Index), hold.Lane, HitKind.HoldTick, -(cursor.Index + 1) * hold.PeriodMs);
             int i = cursor.Index + 1;
             if (i < hold.Count && hold.At(i) <= to) queue.Enqueue((cursor.Hold, i), hold.At(i));
         }
         void AddHolds(int node, int lo, int hi)
         {
-            if (lo == hi || holdMaxEnd[node] < from || holds[lo].At(0) > to) return;
+            if (lo == hi || visibleHoldMaxEnd[node] < from || visibleHolds[lo].At(0) > to) return;
             if (hi - lo == 1)
             {
-                var hold = holds[lo];
+                if (preview && previewHoldOrdinals != null && previewHoldOrdinals[lo] >= layers) return;
+                var hold = visibleHolds[lo];
                 int i = new Run(hold.Start, hold.PeriodMs, hold.Count, 1).Bound(from, false);
                 if (i < hold.Count && hold.At(i) <= to) queue.Enqueue((lo, i), hold.At(i));
                 return;

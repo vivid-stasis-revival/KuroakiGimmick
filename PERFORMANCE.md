@@ -1,5 +1,7 @@
 # Kuroaki/Gimmick 18.0 性能重构实施与实测报告
 
+最新专项报告：[2026-10-19 大谱面加载、内存与批量编辑基准](docs/LARGE_CHART_PERFORMANCE.md)，含可复现脚本、原始结果和 1.10 GB 合成输入的测试边界。
+
 本地基线为 `ee223188620763d15e70ae9c3aded0faa87ee6d8`（v0.1.5 / 18.0），开始时工作区干净。已直接修改 C# / Rust、构建并测试；没有提交、推送或创建 Release。旧代码通过 `git archive` 导出到工作区外进行比较，没有重置当前仓库。完整 Scene 基线也重新构建了基线版本 Rust 库。
 
 实测环境：macOS 15.7、Apple M4 Pro、SDL_GPU Metal、.NET 8.0.22，Release JIT；另验证 osx-arm64 NativeAOT 发布和启动。GPU 压力基准为 640×360，完整场景逻辑坐标仍是 320×180。使用相同本地资产。原始输出和测试源码保留在本地 `tests/Performance` 工作区，现已从 Git 跟踪移除。复现脚本 [performance-check.sh](scripts/performance-check.sh) 需要该本地工作区；公开 CI 使用 Rust 单元测试及应用内置自测。

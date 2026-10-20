@@ -17,10 +17,8 @@ public static class VsmReader
         }
         // The Rust parser is only used when it can preserve the C# representation.
         // Native errors, unsupported syntax or diagnostics return to the original code.
-        if (ChartLoadLimits.Unlimited && new FileInfo(path).Length > Array.MaxLength)
-        { ReplaceModsLines(c, File.ReadLines(path), path); return; }
-        if (RustEngineBridge.TryApplyVsm(c, File.ReadAllText(path), path)) return;
-        ReplaceModsLines(c, File.ReadLines(path), path);
+        if (RustEngineBridge.TryApplyVsmFile(c, path)) return;
+        ReplaceModsOriginal(c, path);
     }
 
     /// <summary>编辑器预览直接消费内存中的修订文本；不写临时源文件覆盖原文件，也不另建一套解析器。</summary>
@@ -30,8 +28,14 @@ public static class VsmReader
         ReplaceModsTextOriginal(c, text, source);
     }
 
-    internal static void ReplaceModsTextOriginal(Chart c, string text, string source) =>
-        ReplaceModsLines(c, text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n'), source);
+    internal static void ReplaceModsOriginal(Chart c, string path) =>
+        ReplaceModsLines(c, File.ReadLines(path), path);
+
+    internal static void ReplaceModsTextOriginal(Chart c, string text, string source)
+    {
+        using var reader = new StringReader(text);
+        ReplaceModsLines(c, SourceLines.Read(reader).Select(line => line.Text), source);
+    }
 
     static void ReplaceModsLines(Chart c, IEnumerable<string> lines, string path)
     {
