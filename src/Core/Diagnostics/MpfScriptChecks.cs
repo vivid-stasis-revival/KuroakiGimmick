@@ -132,8 +132,7 @@ internal static class MpfScriptChecks
                 """);
             var riskChart = Chart();
             _ = NewTimeline(riskChart);
-            Check(riskChart.Diagnostics.Any(d => d.Error && d.Message.Contains("not simulate", StringComparison.Ordinal)),
-                "high-risk gameplay mutation refused");
+            Check(!riskChart.Diagnostics.Any(d => d.Error), "high-risk judgment changes use shared offline state");
 
             Console.WriteLine("PASS CGMK 1.14 MPF: " + count + " checks");
             return 0;

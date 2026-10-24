@@ -251,7 +251,10 @@ internal sealed class MpfScriptLanguage
             "add_judge_cnt", "get_judge_cnt", "get_combo", "get_max_combo", "set_judge_timing",
             "reset_judge_timing", "register_mod", "set_mod_val", "set_mod_val_at", "get_mod_val",
             "tween_mod_val", "tween_mod_val_at", "call_callback_mod", "call_callback_mod_at",
-            "write_log", "short_msg", "ease"
+            "write_log", "short_msg", "ease", "get_score", "get_score_ex",
+            "input_lane_check_pressed", "input_lane_check_released", "input_lane_check",
+            "input_keyboard_check_key", "input_check_mouse", "mouse_wheel_up", "mouse_wheel_down", "get_mouse_pos",
+            "get_game_var_global", "get_game_var_instance"
         };
         int pos, loopDepth, parseDepth;
         Token Current => tokens[Math.Min(pos, tokens.Count - 1)];
@@ -415,6 +418,8 @@ internal sealed class MpfScriptLanguage
                     if ((name is "add_judge_cnt" or "set_judge_timing" or "reset_judge_timing")
                         && risk is not ("HIGH_RISK" or "CRITICAL_RISK"))
                         throw Error("PermissionError: function '" + name + "' needs a higher RISK_LEVEL.");
+                    if (name is "get_game_var_global" or "get_game_var_instance" && risk == "SAFE")
+                        throw Error("PermissionError: function '" + name + "' needs RISK or higher RISK_LEVEL.");
                     var args = new List<Expr>();
                     if (!Is(")")) { do { args.Add(Expression()); } while (Match(",")); }
                     Require(")"); result = new Call(name, args);

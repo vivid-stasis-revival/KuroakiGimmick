@@ -77,7 +77,7 @@ internal static class Program
             }
             if (args.Contains("--mpf-test"))
             {
-                MpfScriptChecks.Run(); MpfLanguageChecks.Run(); MpfRuntimeChecks.Run();
+                MpfScriptChecks.Run(); MpfLanguageChecks.Run(); MpfRuntimeChecks.Run(); Cgmk1141Checks.Run();
                 MpfSourceChecks.Run(); return MpfSourceEditorChecks.Run();
             }
             if (args.Contains("--render-workers-default-test")) return RenderWorkerDefaultsChecks.Run();

@@ -9,7 +9,7 @@ namespace KuroakiGimmick.Graphics;
 // 由 manifest 驱动的音符皮肤。旧的高分辨率 vsnotes 包、紧凑的 UTMT 运行期 dump，
 // 以及精确分轨的 v2 原始源 dump，在提交 GPU 之前都会归一到同一套
 // GameMaker 局部坐标的绘制矩形。
-public sealed class NoteSkin : IDisposable
+public sealed partial class NoteSkin : IDisposable
 {
     readonly Canvas canvas;
     Dictionary<string, Texture> textures = new(StringComparer.Ordinal);
@@ -44,6 +44,7 @@ public sealed class NoteSkin : IDisposable
         var (loaded, regions) = NoteTextureAtlas.Load(canvas.Gpu, next);
         // 全部加载成功之后才整体换掉字段，最后再释放旧纹理。顺序反过来会在加载失败时
         // 留下一个既没有旧皮肤也没有新皮肤的对象。
+        DisposeGreenleftSources();
         var old = textures;
         canvas.Flush();
         textures = loaded;
@@ -192,6 +193,8 @@ public sealed class NoteSkin : IDisposable
     int Skin(int skin) => skin > 0 && skin < profile.SkinNames.Count ? skin : 0;
     SkinFrame? CachedNote(int type, int lane, int skin)
     {
+        if (greenleftActive && (type is 0 or 6 && lane is 0 or 1 || type is 1 or 7 or 8 && lane == 0))
+            return type is 6 or 7 ? null : greenleftFrames[type == 0 ? 0 : type == 1 ? 2 : 3];
         if (type is not (0 or 1 or 6 or 7 or 8)) return null;
         if (lane >= 0 && lane < (type is 1 or 7 or 8 ? 3 : 4)) return noteFrames[Skin(skin) * 36 + type * 4 + lane];
         // Compatibility for API callers with unusual chip lanes; bumper's previous argument validation is retained.
@@ -199,7 +202,9 @@ public sealed class NoteSkin : IDisposable
             7 => profile.BumperMine(lane, skin), _ => profile.JudgeBumper(lane, skin) };
         return f == null ? null : new(f, textures[f.File], OriginalFrameUv(f));
     }
-    SkinFrame? CachedHold(SkinFrame?[] frames, int lane, int skin) => frames[Skin(skin) * 4 + Math.Clamp(lane, 0, 3)];
+    SkinFrame? CachedHold(SkinFrame?[] frames, int lane, int skin) => greenleftActive && lane is 0 or 1
+        ? greenleftFrames[ReferenceEquals(frames, holdBodies) ? 1 : 0]
+        : frames[Skin(skin) * 4 + Math.Clamp(lane, 0, 3)];
     void Draw(SkinFrame? draw, float x, float y, double alpha, float rotation)
     {
         if (draw == null || alpha <= 0)
@@ -240,6 +245,7 @@ public sealed class NoteSkin : IDisposable
 
     public void Dispose()
     {
+        DisposeGreenleftSources(); greenleftStraight?.Dispose();
         foreach (var texture in textures.Values.Distinct())
         {
             texture.Dispose();

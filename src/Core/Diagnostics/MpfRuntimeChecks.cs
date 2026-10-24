@@ -32,6 +32,66 @@ internal static class MpfRuntimeChecks
         }
         try
         {
+            var global = Load("::Main::\nset_mod_val(\"cover1\", .7);", c => c.ObjectName = "obj_base_gimmick");
+            Near(global.Time.Get("cover1", 1), .7, "1.14.1 scripts run on base object");
+            Check(!global.Chart.Diagnostics.Any(d => d.Error), "base object script has no object restriction");
+            var scoring = Load("""
+                #RISK_LEVEL=HIGH_RISK
+                ::Init::
+                add_judge_cnt(0, 4);
+                add_judge_cnt(1, 2, 1);
+                add_judge_cnt(1, -1);
+                add_judge_cnt(2, 1);
+                add_judge_cnt(3, 1, 1);
+                add_judge_cnt(4, 1);
+                add_judge_cnt(4, -1);
+                set_mod_val("count", get_judge_cnt(1));
+                set_mod_val("combo", get_combo());
+                set_mod_val("maxcombo", get_max_combo());
+                set_mod_val("score", get_score(0));
+                set_mod_val("minus", get_score(1));
+                set_mod_val("ex", get_score_ex());
+                set_mod_val("early", get_game_var_global("earlynotes"));
+                set_mod_val("late", get_game_var_global("latenotes"));
+                set_mod_val("pace", get_game_var_instance("cc", "pace_total"));
+                set_judge_timing(2, 123);
+                var timings = get_game_var_instance("cc", "timings");
+                set_mod_val("timing", timings[2]);
+                reset_judge_timing();
+                ::Main::
+                """, c => c.Notes.Add(new(1, 0, 0, 1, Note.EmptyExtra)));
+            Check(!scoring.Chart.Diagnostics.Any(d => d.Error), "all new judgment and score calls execute");
+            Near(scoring.Time.Get("count", 1), 1, "early and late totals allow negative deltas");
+            Near(scoring.Time.Get("combo", 1), 1, "subtracting a miss restores combo by its delta");
+            Near(scoring.Time.Get("maxcombo", 1), 6, "max combo remains a high-water mark");
+            Near(scoring.Time.Get("score", 1), 6290000, "all judgment tiers contribute weighted score");
+            Near(scoring.Time.Get("minus", 1), 230000, "minus score uses lost weights");
+            Near(scoring.Time.Get("ex", 1), 15, "EX score weights");
+            Near(scoring.Time.Get("early", 1), 3, "early counts exclude misses");
+            Near(scoring.Time.Get("late", 1), 0, "late count includes negative correction");
+            Near(scoring.Time.Get("pace", 1), 625, "pace total follows weighted accuracy");
+            Near(scoring.Time.Get("timing", 1), 123, "judgment window stored in shared state");
+            Near(scoring.Time.Get("score", .1), scoring.Time.Get("score", 1), "score output is seek independent");
+            var inputs = Load("""
+                ::Main::
+                var mouse = get_mouse_pos();
+                set_mod_val("cover1", input_lane_check(0) + input_lane_check_pressed(1) + input_lane_check_released(6)
+                    + input_keyboard_check_key(2,83) + input_check_mouse(0,0) + mouse_wheel_up() + mouse_wheel_down() + mouse[0] + mouse[1]);
+                """);
+            Check(!inputs.Chart.Diagnostics.Any(d => d.Error), "new input whitelist parses and evaluates");
+            Near(inputs.Time.Get("cover1", 1), 0, "offline input baseline is idle");
+            Check(inputs.Chart.Diagnostics.Count(d => d.Message.Contains("idle offline snapshot")) == 1, "input baseline disclosed once");
+
+            var skins = Load("::Main::", c =>
+            {
+                c.Mods.Add(new(0,0,"linear",.5,.5,"chorus_greenleft_overlay",-1,0));
+                c.Mods.Add(new(1,0,"linear",0,0,"changeskin",-1,1));
+                c.Mods.Add(new(2,0,"linear",.6,.6,"chorus_greenleft_overlay",-1,2));
+            }, files: dir => File.WriteAllText(Path.Combine(dir,"..","cgmk_config.json"), "{\"ENABLE_SKIN_CHANGE\":true}"));
+            var skinState = new PartialSkinBlendState(skins.Time);
+            Check(skinState.Sample(.5).Active && !skinState.Sample(1.5).Active && skinState.Sample(2.5).Active,
+                "changeskin clears lane overlay until its quantized alpha changes");
+
             var direct = Load("::Main::\nset_mod_val(\"cover1\", 0.9);", c =>
                 c.Mods.Add(new(0, 4, "linear", 0, 1, "cover1", -1, 0)));
             Near(direct.Time.Get("cover1", 1), .25, "native active tween follows direct MPF write");

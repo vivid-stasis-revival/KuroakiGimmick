@@ -77,6 +77,7 @@ public sealed partial class Timeline
     public Timeline(Chart c, ViewerProject project, double duration, GameFxProfile? fx = null, NativeGimmickProfile? native = null)
     {
         chart = c;
+        CustomSkinChangeEnabled = IsCustomGimmick && SongFiles.Config(project, "ENABLE_SKIN_CHANGE", false);
         Scroll = project.ScrollSpeed;
         Native = native;
         Difficulty = SongFiles.Difficulty(project.Chart ?? project.Gimmick ?? "").ToUpperInvariant();
@@ -101,6 +102,7 @@ public sealed partial class Timeline
             // 拍 → 秒：起点查 BPM map，时长按事件起点所在分段的 BPM 折算。
             // 与原版一致，跨变速点的 tween 不重新积分，整段沿用起点的 BPM。
             double start = Bpm.Time(e.Beat), span = e.Duration * 60 / Bpm.BpmAtBeat(e.Beat);
+            if (RegisterCustom1141(e, start)) continue;
             if(Native?.Data?.Signals.TryGetValue(e.Name,out var route)==true)
             {
                 if(route.MinimumExclusive is { } minimum && e.To<=minimum)continue;
@@ -434,6 +436,7 @@ public sealed partial class Timeline
     /// <summary>该 mod 在任何事件之前的初值：全局轨道优先用对象定义的默认值，其余走基础协议表。</summary>
     double Initial(string name, int proxy)
     {
+        if (proxy == -1 && IsCustomGimmick && name is "scfw_star_col" or "scfw_burst_col") return 16777215;
         // Both Base and Custom proxies default to pra=0. Custom Create attempts to
         // set all existing proxies to 1, but proxyCount is still zero at that point:
         // cc_Create calls loadMods *after* Create, and loadMods instantiates the

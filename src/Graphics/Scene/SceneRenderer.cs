@@ -135,7 +135,8 @@ public sealed partial class SceneRenderer : IDisposable
         // Evaluate every native timeline track in one batch, before the first draw.
         // C# remains authoritative for aliases, callbacks, frame bindings and fades.
         session.Timeline.PrepareFrame(time);
-        int width = ViewerSettings.ValidWidth(session.Project.RenderWidth), height = width * 9 / 16;
+        noteSkin.PrepareGreenleft(session, time);
+        int width = session.Timeline.CustomResolutionAt(time, ViewerSettings.ValidWidth(session.Project.RenderWidth)), height = width * 9 / 16;
         if (RenderWidth != width)
         {
             canvas.Flush();
@@ -201,23 +202,34 @@ public sealed partial class SceneRenderer : IDisposable
         if (session.NativeGimmick.Data?.Sequence?.SlashesBeforeJacket == true) nativeSequence.Slashes(session, time);
         DrawParticles(session, time);
         nativeGimmick.DrawComponents(GimmickComponentStage.BackParticles,session,time,scene,gameUi);
-        if (!nativeGimmick.DrawConfiguredJacket(session,time)) DrawJacket(session, time);
+        if (session.Jackets.Glow && !nativeGimmick.DrawConfiguredJacket(session,time)) DrawJacket(session, time);
         nativeGimmick.DrawComponents(GimmickComponentStage.AfterJacket,session,time,scene,gameUi);
         if (session.NativeGimmick.Data?.BurstAfterJacket == true)
         {
             DrawParticles(session, time, burstsOnly: true);
         }
-        if (effects && session.DistortBgEnabled)
+        if (effects && session.DistortBgEnabled && session.Jackets.Glow)
         {
             customEffects.RenderBackground(scene, session, time);
         }
         canvas.Begin(scene, RenderWidth, RenderHeight, 320, 180);
         double previousPriority = double.NegativeInfinity;
+        bool lateJacketPending = !session.Jackets.Glow;
+        void DrawLateJacket()
+        {
+            DrawImages(session, time, previousPriority, -490);
+            DrawJacket(session, time);
+            if (effects && session.DistortBgEnabled) customEffects.RenderBackground(scene, session, time);
+            canvas.Begin(scene, RenderWidth, RenderHeight, 320, 180);
+            previousPriority = -490;
+            lateJacketPending = false;
+        }
         // 背景 FX 层按深度反号成图片优先级，并夹在 -301 之内；相邻两次 DrawImages 的区间首尾相接，
         // 不能留空隙也不能重叠，否则同一批图片会漏画或画两遍。
         foreach (var layer in session.Fx.Layers.Where(l => l.Depth >= 0 && l.Name is "Effect_1" or "glow").OrderByDescending(l => l.Depth))
         {
             double priority = Math.Min(-301, -layer.Depth);
+            if (lateJacketPending && priority > -490) DrawLateJacket();
             DrawImages(session, time, previousPriority, priority);
             if (effects)
             {
@@ -225,6 +237,7 @@ public sealed partial class SceneRenderer : IDisposable
             }
             previousPriority = priority;
         }
+        if (lateJacketPending) DrawLateJacket();
         nativeGimmick.DrawComponents(GimmickComponentStage.FrontParticles,session,time,scene,gameUi);
         DrawImages(session, time, previousPriority, -301);
         checker.Draw(session, time, 1, scene, RenderWidth, RenderHeight);
@@ -242,6 +255,7 @@ public sealed partial class SceneRenderer : IDisposable
         DrawSlashes(session, time);
         DrawLoreleiSlashes(session, time);
         DrawImages(session, time, -255, -250);
+        customGimmicks.DrawFireworks(scene, session, time);
         customGimmicks.DrawDf(session, time);
         nativeGimmick.DrawComponents(GimmickComponentStage.NeutralSlashes,session,time,scene,gameUi);
         DrawImages(session, time, -250, -200);

@@ -3,7 +3,7 @@ using KuroakiGimmick.Core;
 namespace KuroakiGimmick.Graphics;
 
 /// <summary>Custom 对象的 star / cover / DF / sides 精灵。纹理按精灵名缓存，失败的名字只报一次诊断，不每帧重试。</summary>
-public sealed class CustomGimmickRenderer : IDisposable
+public sealed partial class CustomGimmickRenderer : IDisposable
 {
     readonly Canvas canvas;
     readonly Dictionary<string, Texture> textures = [];
@@ -30,7 +30,19 @@ public sealed class CustomGimmickRenderer : IDisposable
         if (failed.Contains(key)) return null;
         try
         {
-            string file = nativeFile ?? ResourceFiles.ContainedFile(Path.Combine(Paths.Assets, "CustomGimmicks"), name + ".png");
+            string root = Path.Combine(Paths.Assets, "CustomGimmicks");
+            string relative = name + ".png";
+            if (nativeFile == null && name.StartsWith("sp_sc_firework_", StringComparison.Ordinal)
+                && !File.Exists(Path.Combine(root, relative)))
+            {
+                int separator = name.LastIndexOf('_');
+                if (int.TryParse(name[(separator + 1)..], out int frame))
+                {
+                    root = Path.Combine(Paths.Assets, "Gimmicks", "obj_starcrashers_gimmick", "sprites");
+                    relative = name[..separator] + "/" + frame.ToString("D4") + ".png";
+                }
+            }
+            string file = nativeFile ?? ResourceFiles.ContainedFile(root, relative);
             new ImageResourceBudget().Check(file); canvas.Flush();
             texture = Texture.Load(canvas.Gpu, file); textures.Add(key, texture); return texture;
         }
@@ -81,7 +93,7 @@ public sealed class CustomGimmickRenderer : IDisposable
             if (alpha > 0 && Image(session, sprite) is { } image) canvas.Quad(image, new(0, 0, 320, 180), Color.Hex(0).Alpha(alpha));
         }
     }
-    public void Dispose() { foreach (var texture in textures.Values) texture.Dispose(); textures.Clear(); }
+    public void Dispose() { fireworkMask?.Dispose(); fireworkCutout?.Dispose(); fireworkComposite?.Dispose(); foreach (var texture in textures.Values) texture.Dispose(); textures.Clear(); }
 
     /// <summary>InitMisc callbacks ignore their values; the latest surviving blip draws an opaque GUI black field.</summary>
     public void DrawEndBlip(Session session,double time)

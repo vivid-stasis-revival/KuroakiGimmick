@@ -1,10 +1,8 @@
 //! Independent, std-only chart core. Units: seconds internally; VSC/VSB note timestamps: ms.
 //! Reference: uploaded KuroakiGimmick Core/Parsing/VscReader.cs and VsbReader.cs.
-use std::{collections::{BTreeMap, HashMap}, fs, path::Path};
+use std::collections::{BTreeMap, HashMap};
 
 pub type Result<T> = std::result::Result<T, String>;
-const MAX_CHART: u64 = 128 * 1024 * 1024;
-const MAX_VSM: u64 = 64 * 1024 * 1024;
 const MAX_MODS: usize = 1_000_000;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -31,7 +29,6 @@ pub struct ModEvent {
 pub struct PerFrame { pub start: f64, pub end: f64, pub function: String }
 #[derive(Debug, Clone)]
 pub struct Chart {
-    pub title: String,
     pub notes: Vec<Note>,
     pub mods: Vec<ModEvent>,
     pub per_frame: Vec<PerFrame>,
@@ -47,7 +44,7 @@ pub struct Chart {
 }
 impl Default for Chart {
     fn default() -> Self {
-        Self { title:String::new(), notes:Vec::new(), mods:Vec::new(),
+        Self { notes:Vec::new(), mods:Vec::new(),
             per_frame:Vec::new(), object_name:"obj_base_gimmick".to_string(),
             proxies:1, proxies_declared:false, metadata:BTreeMap::new(), metadata_order:Vec::new(),
             csm_340:false, warnings:Vec::new(), diagnostics:Vec::new() }
@@ -55,8 +52,6 @@ impl Default for Chart {
 }
 impl Chart {
     pub fn stable_sort(&mut self) { self.notes.sort_by(|a,b| a.time.partial_cmp(&b.time).unwrap_or(std::cmp::Ordering::Equal)); }
-    pub fn duration(&self) -> f64 { self.notes.iter().map(|n| n.end.max(n.time)).fold(0.0, f64::max) }
-    pub fn playable_count(&self) -> usize { self.notes.iter().filter(|n| !matches!(n.kind, 3|4|5)).count() }
 }
 fn number(s: &str) -> Result<f64> {
     let n = s.trim().parse::<f64>().map_err(|_| format!("invalid number: '{s}'"))?;
@@ -70,30 +65,16 @@ fn check_note(kind: u8, lane: u8, time: f64, end: f64) -> Result<()> {
     if end < time { return Err("hold ends before start".into()); }
     Ok(())
 }
-fn read_limited(path: &Path, limit: u64) -> Result<Vec<u8>> {
-    let size = fs::metadata(path).map_err(|e| format!("{}: {e}",path.display()))?.len();
-    if !crate::load_limits::unlimited() && size > limit { return Err(format!("file exceeds {} MiB limit",limit / (1024 * 1024))); }
-    fs::read(path).map_err(|e| format!("{}: {e}",path.display()))
-}
-pub fn load(path: &Path) -> Result<Chart> {
-    let bytes = read_limited(path, MAX_CHART)?;
-    let title = path.file_stem().and_then(|s|s.to_str()).unwrap_or("chart").to_string();
-    match path.extension().and_then(|s|s.to_str()).unwrap_or("").to_ascii_lowercase().as_str() {
-        "vsc" => parse_vsc(std::str::from_utf8(&bytes).map_err(|e|format!("VSC is not UTF-8: {e}"))?, title),
-        "vsb" => parse_vsb(&bytes, title),
-        _ => Err("expected .vsc or .vsb file (use --vsm for separate gimmicks)".into()),
-    }
-}
-pub fn parse_vsc(s: &str, title: String) -> Result<Chart> {
-    let (mut chart, _) = parse_vsc_records(s, title, false)?;
+pub fn parse_vsc(s: &str) -> Result<Chart> {
+    let (mut chart, _) = parse_vsc_records(s, false)?;
     chart.stable_sort();
     Ok(chart)
 }
 
 // Cache only short, diagnostic-free source rows. References retain every occurrence
 // and stable source order; this is representation sharing, never note removal.
-pub fn parse_vsc_records(s: &str, title: String, compact: bool) -> Result<(Chart, Vec<u32>)> {
-    let mut chart = Chart { title, ..Chart::default() };
+pub fn parse_vsc_records(s: &str, compact: bool) -> Result<(Chart, Vec<u32>)> {
+    let mut chart = Chart::default();
     let mut references = Vec::new();
     let mut cache: HashMap<&str, u32> = HashMap::new();
     for (i, raw) in s.trim_start_matches('\u{feff}').lines().enumerate() {
@@ -211,8 +192,8 @@ pub fn parse_periodic_vsc(s: &str) -> Option<(Chart, Vec<(usize, usize, usize)>,
     if period * 2 > sample.len() || bytes[period - 1] != b'\n' ||
         bytes[period..] != bytes[..bytes.len() - period] { return None; }
     let repeats = bytes.len() / period;
-    let mut chart = parse_vsc(&s[..period], String::new()).ok()?;
-    let tail = parse_vsc(&s[repeats * period..], String::new()).ok()?;
+    let mut chart = parse_vsc(&s[..period]).ok()?;
+    let tail = parse_vsc(&s[repeats * period..]).ok()?;
     // Diagnostics require their original line numbers for every occurrence.
     // Let the normal reader handle these and any malformed trailing row.
     if chart.notes.is_empty() || !chart.warnings.is_empty() || !chart.diagnostics.is_empty() ||
@@ -261,11 +242,11 @@ fn half_to_f64(bits:u16)->f64 {
     let mant = (bits&0x3ff) as f64;
     sign * if exp==0 { mant * 2f64.powi(-24) } else if exp==31 {if mant==0.0 {f64::INFINITY} else {f64::NAN}} else {(1024.0+mant)*2f64.powi(exp-25)}
 }
-pub fn parse_vsb(bytes:&[u8],title:String)->Result<Chart>{
+pub fn parse_vsb(bytes:&[u8])->Result<Chart>{
     let mut r=Reader {bytes,pos:0};
     if bytes.len()<5 || &bytes[..5]!=b"VSC\x01\x00" {return Err("expected VSC version 1 header: 56 53 43 01 00".into());}
     r.pos=5;
-    let mut c=Chart {title,..Chart::default()};
+    let mut c=Chart::default();
     let mut done=false;
     while !done {
         let tag=r.byte()?;
@@ -343,11 +324,6 @@ pub fn parse_vsb(bytes:&[u8],title:String)->Result<Chart>{
     c.stable_sort();Ok(c)
 }
 
-pub fn load_vsm(path: &Path, c:&mut Chart)->Result<()> {
-    let bytes=read_limited(path,MAX_VSM)?;
-    let text=std::str::from_utf8(&bytes).map_err(|e|format!("VSM UTF-8: {e}"))?;
-    parse_vsm(text,c)
-}
 #[derive(Debug, Clone, Copy)]
 struct BeatRange { start: f64, step: f64, count: usize }
 impl BeatRange {
@@ -636,7 +612,7 @@ mod unbounded_note_tests {
     fn vsc_more_than_two_million_notes() {
         const COUNT: usize = 2_000_001;
         let input = "0,0,0\n".repeat(COUNT);
-        let chart = parse_vsc(&input, "stress".to_string()).unwrap();
+        let chart = parse_vsc(&input).unwrap();
         assert_eq!(chart.notes.len(), COUNT);
     }
 }
@@ -648,8 +624,8 @@ mod compact_vsc_tests {
     fn compact_references_preserve_order_metadata_and_diagnostics() {
         let block = "200,0,2\n100,0,1\n100,0,3\n100,2,0,500,k:undefined|x:a:b\n100,3,0,b:180|v:1\n0,0,0,,\n";
         let text = block.repeat(100);
-        let original = parse_vsc(&text, String::new()).unwrap();
-        let (compact, ids) = parse_vsc_records(&text, String::new(), true).unwrap();
+        let original = parse_vsc(&text).unwrap();
+        let (compact, ids) = parse_vsc_records(&text, true).unwrap();
         let restored: Vec<_> = ids.iter().map(|&id| compact.notes[id as usize].clone()).collect();
         assert_eq!(original.notes, restored);
         assert_eq!(original.diagnostics, compact.diagnostics);
@@ -662,7 +638,7 @@ mod compact_vsc_tests {
         let block = "200,0,2\n100,0,1\n100,2,0,500,k:undefined|x:雪:b\n100,3,0,b:180\n-10,0,0,,\n# comment\n";
         for tail in ["", "200,0,2\n100,0,1\n", "200,0,2"] {
             let text = block.repeat(5000) + tail;
-            let original = parse_vsc(&text, String::new()).unwrap();
+            let original = parse_vsc(&text).unwrap();
             let (chart, groups, total) = parse_periodic_vsc(&text).expect("period not detected");
             let mut restored = Vec::new();
             for (start, count, repeats) in groups {

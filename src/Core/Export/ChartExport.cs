@@ -230,7 +230,7 @@ public static class ChartExport
                         + mpfSources.Difficulty + "). If this is not an installed native function, playback requires its cmpf script.");
             }
             if (includedMpf > 0)
-                warnings.Add("CGMK 1.14 MPF scripts are included under cmpf/. Install the matching Custom Gimmicks mod to run them in the game.");
+                warnings.Add("CGMK 1.14.1 MPF scripts are included under cmpf/. Install the matching Custom Gimmicks mod to run them in the game.");
             if (sourceChart.Mods.Any(e => e.Name == EpisodeScript.ModName) && EpisodeScript.Find(input.Project, sourceChart) is { } story)
                 Dependency(story);
             var project = input.Project.Copy();

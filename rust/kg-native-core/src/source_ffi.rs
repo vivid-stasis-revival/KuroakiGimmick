@@ -115,14 +115,14 @@ where F: FnOnce(&[u8])->Result<Vec<u8>,String> {
 pub unsafe extern "C" fn kg_core_parse_vsc(data:*const u8,len:usize,output:*mut *mut u8,size:*mut usize)->i32 {
     run_packet(data,len,output,size,MAX_INPUT,|bytes| {
         let s=std::str::from_utf8(bytes).map_err(|e|format!("Invalid VSC UTF-8: {e}"))?;
-        encode_chart(&chart::parse_vsc(s,"native".to_string())?,true)
+        encode_chart(&chart::parse_vsc(s)?,true)
     })
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn kg_core_parse_vsb(data:*const u8,len:usize,output:*mut *mut u8,size:*mut usize)->i32 {
     run_packet(data,len,output,size,MAX_INPUT,|bytes| {
-        encode_chart(&chart::parse_vsb(bytes,"native".to_string())?,true)
+        encode_chart(&chart::parse_vsb(bytes)?,true)
     })
 }
 
@@ -194,7 +194,7 @@ mod tests {
     use super::*;
     #[test]
     fn wire_roundtrip_shape() {
-        let c=chart::parse_vsc("1000,0,1\n1200,2,2,1700\n1800,3,0,b:190\n", "test".into()).unwrap();
+        let c=chart::parse_vsc("1000,0,1\n1200,2,2,1700\n1800,3,0,b:190\n").unwrap();
         let b=encode_chart(&c,true).unwrap();
         assert_eq!(&b[..4],b"KGS2");
         assert_eq!(c.notes.len(),3);
@@ -203,7 +203,7 @@ mod tests {
     #[test]
     fn vsc_ignored_timing_anchors_are_informational() {
         let input = "0,3,0,b:150|v:12|s:8\n1000,0,1\n2000,3,0,b:180|v:undefined|s:4\n";
-        let c = chart::parse_vsc(input, "fixture".to_string()).unwrap();
+        let c = chart::parse_vsc(input).unwrap();
         assert!(c.warnings.is_empty(), "valid v/s must not force fallback");
         assert_eq!(c.notes.len(), 3);
         assert_eq!(c.diagnostics, vec![
@@ -218,14 +218,14 @@ mod tests {
     }
     #[test]
     fn malformed_vsc_still_falls_back_to_csharp_diagnostics() {
-        let c = chart::parse_vsc("0,3,0,b:150|v:5\nbad,row\n", "fixture".into()).unwrap();
+        let c = chart::parse_vsc("0,3,0,b:150|v:5\nbad,row\n").unwrap();
         assert!(!c.warnings.is_empty());
         assert!(encode_chart(&c, true).is_err());
     }
 
     #[test]
     fn vsc_csm340_modextra_and_stable_order() {
-        let c=chart::parse_vsc("1000,0,1,,flag:yes\n1000,1,0,,extra:undefined\n", "test".into()).unwrap();
+        let c=chart::parse_vsc("1000,0,1,,flag:yes\n1000,1,0,,extra:undefined\n").unwrap();
         assert_eq!(c.notes.len(),2);
         assert_eq!(c.notes[0].kind,0);
         assert!(c.csm_340);
@@ -259,7 +259,7 @@ mod tests {
     #[test]
     fn binary_vsb_fixture() {
         let bytes=include_bytes!("../tests/fixtures/demo.vsb");
-        let c=chart::parse_vsb(bytes,"fixture".into()).unwrap();
+        let c=chart::parse_vsb(bytes).unwrap();
         assert!(!c.notes.is_empty());
     }
     #[test]
@@ -324,9 +324,9 @@ pub unsafe extern "C" fn kg_core_parse_vsc_compact(data:*const u8,len:usize,unli
             if row.len() <= 1024 && !seen.insert(row) { repeats += 1; }
         }
         if repeats * 8 <= sampled {
-            return encode_chart(&chart::parse_vsc(s,String::new())?,true);
+            return encode_chart(&chart::parse_vsc(s)?,true);
         }
-        let (chart, references)=chart::parse_vsc_records(s,String::new(),true)?;
+        let (chart, references)=chart::parse_vsc_records(s,true)?;
         let records=encode_chart(&chart,true)?;
         let length=8usize.checked_add(records.len()).and_then(|n| n.checked_add(references.len().checked_mul(4)?))
             .ok_or("compact packet overflow")?;

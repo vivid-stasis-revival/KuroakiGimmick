@@ -23,6 +23,7 @@ public sealed class JacketAssets
     public string Mode { get; private set; } = "normal";
     public string? DefaultPath { get; private set; }
     public bool CustomLayout { get; private set; }
+    public bool Glow { get; private set; } = true;
     /// <summary>CSM 3.4.0 horizontal square-frame jacket strip metadata for the song's default jacket.</summary>
     public bool Animated { get; private set; }
     public int AnimatedFrames { get; private set; } = 1;
@@ -36,7 +37,8 @@ public sealed class JacketAssets
     {
         var result = new JacketAssets
         {
-            CustomLayout = chart.ObjectName == "obj_custom_gimmick"
+            CustomLayout = chart.ObjectName == "obj_custom_gimmick",
+            Glow = chart.ObjectName != "obj_custom_gimmick" || SongFiles.Config(project, "JACKET_GLOW", false)
         };
         if (native?.Data?.DisableJacketMultiply == true)
         {

@@ -13,9 +13,30 @@ public sealed class PartialSkinBlendState
     {
         int cachedAlpha = 0;
         State current = states[0];
+        int skinEvent = 0;
+        var skinChanges = timeline.CustomSkinChangeEnabled
+            && timeline.Tracks.TryGetValue(("changeskin", -1), out var changes) ? changes : null;
         for (int tick = 0; tick <= Math.Ceiling(Math.Min(3600, timeline.End) * 60); tick++)
         {
             double time = tick / 60.0, value = timeline.Get("chorus_greenleft_overlay", time);
+            if (timeline.IsCustomGimmick)
+            {
+                // changeskin replaces every lane table even if its ID is unchanged.
+                // The overlay only reasserts itself when its quantized mark changes.
+                while (skinChanges != null && skinEvent < skinChanges.Count && skinChanges[skinEvent].Time <= time)
+                {
+                    skinEvent++;
+                    if (current.Active) states.Add(current = new(time, 0, false, false));
+                }
+                value = double.IsFinite(value) ? Math.Clamp(value, 0, 1) : 0;
+                int mark = (int)Math.Round(value * 255, MidpointRounding.ToEven);
+                if (mark != cachedAlpha)
+                {
+                    cachedAlpha = mark;
+                    states.Add(current = new(time, value, mark > 0, mark >= 255));
+                }
+                continue;
+            }
             if (!double.IsFinite(value) || value <= 0) continue;
             if (value >= 1)
             {

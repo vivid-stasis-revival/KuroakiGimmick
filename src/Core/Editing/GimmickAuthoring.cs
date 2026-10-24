@@ -20,6 +20,14 @@ internal static class GimmickAuthoring
             Category = "Lorelei / DF", Summary = "生成一对蓝色侧条，从屏幕外侧向内减速移动并淡出；原生 First Breath 中此项没有绘制回调。" },
         new() { Id = "compat.lr_sides_rev_red", Kind = "mod", Name = "lr_sides_rev_red", Scope = "custom",
             Category = "Lorelei / DF", Summary = "生成一对红色侧条，从屏幕外侧向内减速移动并淡出。" },
+        new() { Id = "cgmk.sc_firework", Kind = "mod", Name = "sc_firework", Scope = "custom",
+            Category = "CGMK 1.14.1", Summary = "发射烟花：value1 为上升拍数（_ = 1，最小 0），跨 BPM 变化积分；value2 为爆炸 Y（_ = 随机 20–90）；duration 忽略。" },
+        new() { Id = "cgmk.sc_firework_color", Kind = "mod", Name = "sc_firework_color", Scope = "custom",
+            Category = "CGMK 1.14.1", Summary = "value1 设置飞行星星颜色，value2 设置爆炸颜色，使用 RGB 整数；_ 保留原色。已爆炸粒子保留出生颜色。" },
+        new() { Id = "cgmk.set_resolution", Kind = "mod", Name = "set_resolution", Scope = "custom",
+            Category = "CGMK 1.14.1", Summary = "value2 四舍五入并限制为 1–8；_ 或 1 恢复默认分辨率，其余为 320×180 的倍率。开销为倍率平方。" },
+        new() { Id = "cgmk.chorus_greenleft_overlay", Kind = "mod", Name = "chorus_greenleft_overlay", Scope = "custom",
+            Category = "CGMK 1.14.1", Summary = "左两条 chip 轨和左 bumper 的 Allison 皮肤覆盖，0–1；归零恢复当前皮肤。" },
         new() { Id = "compat.df_countdown", Kind = "mod", Name = "df_countdown", Scope = "global",
             Category = "Lorelei / DF", Summary = "大于 0 时以两位小数替换顶部连击读数，显示 COUNTDOWN，并将判定精灵下移以避让标题；用 duration 和 value1/value2 编排倒计时。" }
     ];

@@ -3,11 +3,11 @@ using System.Globalization;
 namespace KuroakiGimmick.Core;
 
 /// <summary>
-/// Deterministic, bounded Custom Gimmicks 1.14 MPF preview. Programs run on the
+/// Deterministic, bounded Custom Gimmicks 1.14.1 MPF preview. Programs run on the
 /// fixed 60 Hz preview clock into immutable sample tracks; seeking, snapshots,
 /// parallel export and Rust base-track evaluation cannot advance script state.
-/// Read-only score queries use an explicit zero-state offline baseline; gameplay
-/// mutation and original-engine callbacks are NOT simulated.
+/// Score and input queries use an explicit offline baseline. Script judgment
+/// changes share one state; they do not represent live player input or autoplay.
 /// </summary>
 internal sealed class MpfScriptTimeline
 {
@@ -24,7 +24,7 @@ internal sealed class MpfScriptTimeline
         internal bool Initialized;
         internal bool Dead;
         internal int DebugMessages;
-        internal bool ReadOnlyStateNotice;
+        internal bool OfflineStateNotice;
     }
     sealed class ActiveRange(FrameEvent range, Script script)
     {
@@ -35,6 +35,8 @@ internal sealed class MpfScriptTimeline
 
     Timeline timeline;
     readonly Chart chart;
+    readonly MpfPreviewGameState game;
+    bool inputNotice;
     readonly Dictionary<string, Script> scripts = new(StringComparer.Ordinal);
     readonly Dictionary<(string Name, int Proxy), List<Write>> writes = [];
     readonly PriorityQueue<DeferredSet, (double Beat, int Order)> pendingSets = new();
@@ -50,6 +52,7 @@ internal sealed class MpfScriptTimeline
     {
         this.timeline = timeline;
         this.chart = chart;
+        game = new(new ScoreState(chart, timeline.Bpm).NoteValue);
     }
 
     Random random = new(0);
@@ -152,13 +155,13 @@ internal sealed class MpfScriptTimeline
         }
         if (completed != null) foreach (int order in completed) activeTweens.Remove(order);
     }
-    void WarnReadOnlyState(Script script)
+    void WarnOfflineState(Script script)
     {
-        if (script.ReadOnlyStateNotice) return;
-        script.ReadOnlyStateNotice = true;
+        if (script.OfflineStateNotice) return;
+        script.OfflineStateNotice = true;
         chart.Diagnostics.Add(new(script.Path, 0,
-            "MPF " + script.Name + ": get_judge_cnt/get_combo/get_max_combo use zeroed offline preview counters; "
-            + "live player input, misses and real AC/FC state are NOT simulated."));
+            "MPF " + script.Name + ": zeroed offline preview counters are shared and updated by script judgment calls; "
+            + "live player input, autoplay hits and real AC/FC state are NOT simulated."));
     }
 
     object? Invoke(Script script, string function, object?[] a)
@@ -260,31 +263,88 @@ internal sealed class MpfScriptTimeline
                 if (script.DebugMessages++ < 8)
                     chart.Diagnostics.Add(new(script.Path, 0, "MPF " + function + ": " + Format(a[0])));
                 return 0d;
-            // Preview has no judgement/replay input. Permit read-only queries to
-            // evaluate with an explicitly disclosed zero-state baseline, so
-            // legitimate AC/FC visual effects still render for inspection.
-            // Never claim that this is the actual player's score.
             case "get_judge_cnt":
             {
                 Count(function, a, 1, 1);
-                double kind = Num(a[0]);
-                if (Math.Truncate(kind) != kind || kind is < 0 or > 4)
-                    throw new InvalidDataException("IndexError: judgment type must be 0..4.");
-                WarnReadOnlyState(script);
-                return 0d;
+                int kind = JudgeKind(a[0]); WarnOfflineState(script);
+                return game.Judge(kind);
             }
-            case "get_combo":
-            case "get_max_combo":
-                Count(function, a, 0, 0);
-                WarnReadOnlyState(script);
-                return 0d;
-            // No live player, mutable score or GameMaker instance callbacks:
-            // rejecting writes/callbacks is safer than inventing game state.
-            case "add_judge_cnt": case "set_judge_timing": case "reset_judge_timing":
+            case "get_combo": case "get_max_combo": case "get_score_ex":
+                Count(function, a, 0, 0); WarnOfflineState(script);
+                return function == "get_combo" ? game.Combo : function == "get_max_combo" ? game.MaxCombo : game.ExScore;
+            case "get_score":
+                Count(function, a, 1, 1); WarnOfflineState(script);
+                return Num(a[0]) != 0 ? game.MinusScore : game.Score;
+            case "add_judge_cnt":
+            {
+                Count(function, a, 2, 3); int kind = JudgeKind(a[0]); double count = Num(a[1]);
+                if (count != Math.Floor(count)) throw new InvalidDataException("ValueError: judge count must be an integer.");
+                bool early = a.Length > 2 && Num(a[2]) != 0;
+                WarnOfflineState(script); game.Add(kind, count, early); return 0d;
+            }
+            case "set_judge_timing":
+                Count(function, a, 2, 2); game.Timings[JudgeKind(a[0])] = Num(a[1]); WarnOfflineState(script); return 0d;
+            case "reset_judge_timing":
+                Count(function, a, 0, 0); game.ResetTimings(); WarnOfflineState(script); return 0d;
+            case "input_lane_check_pressed": case "input_lane_check_released": case "input_lane_check":
+                Count(function, a, 1, 1); InputIndex(a[0], 6); return OfflineInput(script, false);
+            case "input_keyboard_check_key":
+                Count(function, a, 2, 2); InputIndex(a[0], 2); InputIndex(a[1], 255); return OfflineInput(script, false);
+            case "input_check_mouse":
+                Count(function, a, 2, 2); InputIndex(a[0], 2); InputIndex(a[1], 3); return OfflineInput(script, false);
+            case "mouse_wheel_up": case "mouse_wheel_down": case "get_mouse_pos":
+                Count(function, a, 0, 0); return OfflineInput(script, function == "get_mouse_pos");
+            case "get_game_var_global":
+                Count(function, a, 1, 1); WarnOfflineState(script); return game.Global(Name(a[0]));
+            case "get_game_var_instance":
+            {
+                Count(function, a, 2, 3);
+                string instance = Name(a[0]), variable = Name(a[1]);
+                if (instance != "cc" || a.Length > 2 && Num(a[2]) != 0)
+                    throw new NotSupportedException("MPF offline preview has no instance '" + instance + "'.");
+                if (variable.StartsWith("mod_", StringComparison.Ordinal)) return ValueAt(variable[4..], -1, currentTime);
+                WarnOfflineState(script);
+                return variable switch
+                {
+                    "currentbeataccurate" => currentBeat, "currentms" => currentTime*1000,
+                    "pace_total" => game.AccuracySum, "pace_amount" => game.Count,
+                    "sdisp_accscore" => game.Score, "sdisp_exscore" => game.ExScore,
+                    "timings" => CopyTimings(script),
+                    _ => throw new NotSupportedException("MPF offline preview has no cc variable '"+variable+"'.")
+                };
+            }
             case "call_callback_mod": case "call_callback_mod_at":
                 throw new NotSupportedException(function + " requires original-game live state/callbacks; this MPF preview does not simulate it.");
             default: throw new InvalidDataException("NameError: unknown MPF function '" + function + "'.");
         }
+    }
+
+    static int JudgeKind(object? value)
+    {
+        double kind = Num(value);
+        if (Math.Truncate(kind) != kind || kind is < 0 or > 4)
+            throw new InvalidDataException("IndexError: judgment type must be 0..4.");
+        return (int)kind;
+    }
+    static void InputIndex(object? value, int max)
+    {
+        double n = Num(value);
+        if (n != Math.Truncate(n) || n < 0 || n > max)
+            throw new InvalidDataException("IndexError: input argument out of range.");
+    }
+    object OfflineInput(Script script, bool mouse)
+    {
+        if (!inputNotice)
+        {
+            inputNotice = true;
+            chart.Diagnostics.Add(new(script.Path, 0, "MPF input uses an idle offline snapshot: no held/pressed/released keys, no wheel, mouse at (0,0). Live player input is not recorded."));
+        }
+        if (!mouse) return 0d;
+        script.Context.Allocate(2); return new List<object?> { 0d, 0d };
+    }
+    List<object?> CopyTimings(Script script)
+    {
+        script.Context.Allocate(5); return game.Timings.Select(x => (object?)x).ToList();
     }
 
     void Execute(Script script, string section)
@@ -324,15 +384,10 @@ internal sealed class MpfScriptTimeline
         var files = sourceFiles.Files;
         if (!chart.PerFrame.Any(frame => files.ContainsKey(frame.Function))) return null;
         var runtime = new MpfScriptTimeline(timeline, chart);
-        if (chart.ObjectName != "obj_custom_gimmick")
-        {
-            chart.Diagnostics.Add(new(dir, 0, "Custom Gimmicks 1.14 MPF requires !obj:obj_custom_gimmick.", true));
-            return null;
-        }
         var ranges = new List<ActiveRange>();
         foreach (var source in chart.PerFrame)
         {
-            // obj_custom_gimmick only installs external closures when funcs has no native entry.
+            // CGMK 1.14.1 installs external closures on every object, preserving native names.
             if (timeline.Native?.Data?.PerFrameBindings.ContainsKey(source.Function) == true
                 || NativeFunctionTimeline.Supports(timeline.Native?.Data, source.Function)) continue;
             if (!files.TryGetValue(source.Function, out string? file)) continue;
@@ -349,7 +404,7 @@ internal sealed class MpfScriptTimeline
                     runtime.scripts.Add(source.Function, script);
                     if (lang.RiskLevel is "HIGH_RISK" or "CRITICAL_RISK")
                         chart.Diagnostics.Add(new(file, 0, "MPF declares " + lang.RiskLevel
-                            + "; judgment mutation cannot be simulated in K/G and such calls are rejected."));
+                            + "; judgment changes affect only the shared offline script state, not real player results."));
                 }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidDataException or FormatException)
                 {

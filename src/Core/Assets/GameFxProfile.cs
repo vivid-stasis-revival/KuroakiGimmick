@@ -428,13 +428,13 @@ public sealed class GameFxProfile
                                 parameters.Add(key, v.Clone());
                             }
                         }
-                        // InitDistortBG 在深度 700 的 LBG 上创建这个滤镜。
+                        // CGMK 1.14.1: LBG is behind glow only when JACKET_GLOW is enabled.
                         // 保留内嵌定义里的真实默认值；谱面的 scale/amount 在绘制时才覆盖。
                         var entry = AppJson.SerializeToElement(new Layer
                         {
                             Name = "LBG",
                             Filter = "_filter_heathaze",
-                            Depth = 700,
+                            Depth = SongFiles.Config(project, "JACKET_GLOW", false) ? 700 : 490,
                             Parameters = parameters
                         });
                         AddLayer(entry, definitions);

@@ -75,6 +75,8 @@ internal static class SwitchShaderPack
             (Canvas.VertexSource, true), (SceneRenderer.ProxyProjectionVertexSource, true),
             (Canvas.NoteInstanceVertexSource, true), (Canvas.NoteInstanceFragmentSource, false),
             (SceneRenderer.ProxyGuideVertexSource, true), (SceneRenderer.ProxyGuideFragmentSource, false),
+            (CustomGimmickRenderer.FireworkCutoutSource, false), (CustomGimmickRenderer.FireworkCompositeSource, false),
+            (NoteSkin.GreenleftStraightSource, false),
             (Canvas.BasicFragmentSource, false), (SceneRenderer.CompositeFragmentSource, false),
             (CustomEffects.CombineFragmentSource, false), (CustomEffects.PosterizeFragmentSource, false)
         };
