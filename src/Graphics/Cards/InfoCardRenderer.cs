@@ -24,6 +24,7 @@ public sealed class InfoCardRenderer : IDisposable
     static readonly Color[] PatternColors = [Bg2, Stripe0, Stripe1, Bg3, Stripe2];
 
     Target? target;
+    Target? panelPattern;
     Texture? jacket;
     string? jacketPath;
 
@@ -56,6 +57,9 @@ public sealed class InfoCardRenderer : IDisposable
             canvas.Flush();
             target.Resize(width, height);
         }
+        // The reference Python draws the pattern at 226x92 and scales it with NEAREST.
+        // Do not rasterize its diagonals directly at card/export resolution.
+        EnsurePanelPattern(canvas);
         canvas.Begin(target, width, height, BaseWidth, BaseHeight, Bg0);
         // 安静的网格底纹，避免大片纯色看起来像没画完。
         for (int x = 0; x < BaseWidth; x += 32) canvas.Fill(new(x, 0, 1, BaseHeight), Bg2);
@@ -147,29 +151,44 @@ public sealed class InfoCardRenderer : IDisposable
     }
 
     /// <summary>
-    /// 统计面板底纹：斜条纹加零散色块，照搬原版那张像素图的构成。坐标都在 226x92 的面板空间里，
-    /// 由 <see cref="Panel"/> 换算到卡面。
+    /// Build the stat backdrop once on its native 226x92 pixel grid, then sample it
+    /// with NEAREST on the card. Drawing these polygons directly at 3x/4K resolution
+    /// produces smooth diagonal stripes instead of the reference's pixel stair-steps.
     /// </summary>
-    void DrawPanelPattern(Canvas canvas)
+    void EnsurePanelPattern(Canvas canvas)
     {
-        canvas.Fill(Panel(0, 0, PanelW, PanelH), Bg1);
-        // 斜条纹是从面板左外侧起画的，必须裁到面板内：原版是画进一张 226x92 的图里，天然裁掉了外溢部分。
-        canvas.Clip(Panel(0, 0, PanelW, PanelH));
+        if (panelPattern != null) return;
+        // Target defaults to a nearest-neighbour sampler. Its physical and logical
+        // dimensions must match so each polygon is rasterized to one source pixel.
+        panelPattern = new Target(canvas.Gpu, (int)PanelW, (int)PanelH);
+        canvas.Begin(panelPattern, (int)PanelW, (int)PanelH, PanelW, PanelH, Bg1);
+        // Render-target bounds provide the same clipping as PIL's 226x92 canvas.
         for (int k = -(int)PanelH; k < PanelW + 24; k += 20)
         {
-            var c = PatternColors[(int)(((k / 20) % PatternColors.Length + PatternColors.Length) % PatternColors.Length)];
-            // 平行四边形：上边 (k, k+10)，下边右移 26。
-            canvas.Polygon(canvas.White, Point(k, 0), Point(k + 10, 0), Point(k + 36, PanelH), Point(k + 26, PanelH), c);
+            // Python's k // 20 floors negative values; C# integer division truncates.
+            int stripe = (int)Math.Floor(k / 20.0);
+            var c = PatternColors[(stripe % PatternColors.Length + PatternColors.Length) % PatternColors.Length];
+            // Canvas.Polygon expects TL, TR, BL, BR, not polygon-outline order.
+            canvas.Polygon(canvas.White,
+                new Vector2(k, 0), new Vector2(k + 10, 0),
+                new Vector2(k + 26, PanelH), new Vector2(k + 36, PanelH), c);
         }
         for (int y = 2; y < PanelH - 2; y += 8)
         {
             for (int x = 4 + (y / 8) % 3 * 7; x < PanelW - 3; x += 27)
             {
                 var c = PatternColors[(x + y) % PatternColors.Length];
-                canvas.Fill(Panel(x, y, Math.Min(PanelW - 1, x + 5) - x, Math.Min(PanelH - 1, y + 3) - y), c);
+                canvas.Fill(new Rect(x, y, Math.Min(PanelW - 1, x + 5) - x,
+                    Math.Min(PanelH - 1, y + 3) - y), c);
             }
         }
-        canvas.Clip(null);
+        // Queue the finished low-res pass before the full card samples this target.
+        canvas.Flush();
+    }
+
+    void DrawPanelPattern(Canvas canvas)
+    {
+        canvas.Quad(panelPattern!.Texture, Panel(0, 0, PanelW, PanelH), Color.White);
     }
 
     static Rect Panel(float x, float y, float w, float h) =>
@@ -239,7 +258,9 @@ public sealed class InfoCardRenderer : IDisposable
     {
         jacket?.Dispose();
         target?.Dispose();
+        panelPattern?.Dispose();
         jacket = null;
         target = null;
+        panelPattern = null;
     }
 }
