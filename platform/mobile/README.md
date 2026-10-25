@@ -10,9 +10,9 @@ Android 使用 SDL 主循环；iOS 把绘制交给 UIKit 的逐帧回调。
 
 - Android 安装 `KuroakiGimmick-Android-arm64-r1.apk`。CI 使用仓库配置的 Android 签名 Secrets。
 - iOS 对 `KuroakiGimmick-iOS-arm64-r1-unsigned.ipa` 自行签名并侧载。
-- 优先把歌曲目录整体压成 ZIP。Android 通过 OPEN 的系统选择器导入；iOS 先通过“文件”App 复制 ZIP 到本应用目录，再用 OPEN 的应用目录浏览器选择。ZIP 内保留谱面、`info.json`、OGG、图片和工程的相对目录。
-- Android 也可以在系统选择器中选歌曲文件夹，或同时选择多个关联文件。iOS 可以把整个歌曲文件夹复制到本应用 `Songs` 下，进入该文件夹后选“Open this folder”。单选谱面不会自动取得它旁边未选中的音频/图片。
-- Android 导入复制到应用目录，不会改写原始文件；iOS 浏览已经复制进来的应用文件。每次 ZIP 导入建立独立歌曲目录。
+- 优先把歌曲目录整体压成 ZIP。Android 和 iOS 均通过 OPEN 的系统文件选择器导入。ZIP 内保留谱面、`info.json`、OGG、图片和工程的相对目录。
+- 两平台均可以通过 OPEN FOLDER 选择歌曲文件夹，或通过 OPEN 同时选择多个关联文件。单选谱面不会自动取得它旁边未选中的音频/图片。
+- 两平台均将选中的文件复制到应用目录，不改写原始文件；同批关联文件保留文件名，同名冲突会提示，不会覆盖。每次 ZIP 导入建立独立歌曲目录。
 - 保存对话框输入文件名，结果写入应用的 `Exports`。
 - iOS：文件 App → 我的 iPhone/iPad → Kuroaki/Gimmick，可访问 `Songs`、`Imports`、`Exports`、`UserData`。
 - Android：系统文件选择器侧栏 → Kuroaki/Gimmick，可复制或分享导出文件、日志；应用目录通过只读 DocumentsProvider 暴露。

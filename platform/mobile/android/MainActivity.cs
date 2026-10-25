@@ -16,6 +16,7 @@ public sealed class MainActivity : Org.Libsdl.App.SDLActivity
     const int PickRequest = 711;
     Action<string[]>? completion;
     bool importingAssets;
+    bool pickingFolder;
     string root = "", assetsRoot = "";
     protected override string[] GetLibraries() => ["SDL3"];
     protected override void OnCreate(Bundle? savedInstanceState)
@@ -109,13 +110,16 @@ public sealed class MainActivity : Org.Libsdl.App.SDLActivity
                 return;
             }
             completion = done;
+            pickingFolder = folder;
             var intent = new Intent(folder ? Intent.ActionOpenDocumentTree : Intent.ActionOpenDocument);
             if (!folder)
             {
                 intent.SetType("*/*");
                 intent.AddCategory(Intent.CategoryOpenable!);
-                intent.PutExtra(Intent.ExtraAllowMultiple, true);
+                intent.PutExtra(Intent.ExtraAllowMultiple, !importingAssets);
             }
+            intent.AddFlags(ActivityFlags.GrantReadUriPermission | ActivityFlags.GrantPersistableUriPermission);
+            if (folder) intent.AddFlags(ActivityFlags.GrantPrefixUriPermission);
             try { StartActivityForResult(intent, PickRequest); }
             catch (Exception ex) { Android.Util.Log.Error("Kuroaki", ex.ToString()); completion = null; done([]); }
         });
@@ -133,25 +137,72 @@ public sealed class MainActivity : Org.Libsdl.App.SDLActivity
             for (int i = 0; i < data.ClipData.ItemCount; i++)
                 if (data.ClipData.GetItemAt(i)?.Uri is { } uri) uris.Add(uri);
         }
-        else if (data.Data != null) uris.Add(data.Data);
-        Task.Run(() =>
+        if (data.Data != null && !uris.Any(uri => uri.ToString() == data.Data.ToString())) uris.Add(data.Data);
+        bool assets = importingAssets;
+        bool folder = pickingFolder;
+        var acquired = new List<Android.Net.Uri>();
+        var existingGrants = ContentResolver!.PersistedUriPermissions?
+            .Where(grant => grant.IsReadPermission).Select(grant => grant.Uri?.ToString()).ToHashSet() ?? [];
+        // Keep every returned grant alive while a cloud provider supplies the batch.
+        // Some providers only support temporary grants; those are still usable now.
+        foreach (var uri in uris)
         {
+            if ((data.Flags & ActivityFlags.GrantPersistableUriPermission) == 0) continue;
+            if ((data.Flags & ActivityFlags.GrantReadUriPermission) == 0) continue;
             try
             {
-                string batch = Path.Combine(root, "Imports", Guid.NewGuid().ToString("N"));
-                Directory.CreateDirectory(batch);
-                callback(uris.Select(uri => { string path = CopyDocument(uri, batch); return importingAssets ? path : MobilePlatform.ExpandImport(path); }).ToArray());
+                ContentResolver!.TakePersistableUriPermission(uri, ActivityFlags.GrantReadUriPermission);
+                if (!existingGrants.Contains(uri.ToString())) acquired.Add(uri);
             }
-            catch (Exception ex) { Android.Util.Log.Error("Kuroaki", ex.ToString()); callback([]); }
+            catch (Java.Lang.SecurityException ex) { Android.Util.Log.Warn("Kuroaki", ex.ToString()); }
+        }
+        Task.Run(() =>
+        {
+            var paths = new List<string>();
+            var errors = new List<string>();
+            string batch = Path.Combine(root, "Imports", Guid.NewGuid().ToString("N"));
+            try
+            {
+                Directory.CreateDirectory(batch);
+                // Copy the complete selection before loading charts with relative dependencies.
+                foreach (var uri in uris.DistinctBy(uri => uri.ToString()))
+                {
+                    try { paths.Add(CopyDocument(uri, batch, folder)); }
+                    catch (Exception ex)
+                    {
+                        Android.Util.Log.Error("Kuroaki", ex.ToString());
+                        errors.Add(ex.Message);
+                    }
+                }
+                for (int i = paths.Count - 1; i >= 0; i--)
+                {
+                    try { if (!assets) paths[i] = MobilePlatform.ExpandImport(paths[i]); }
+                    catch (Exception ex) { errors.Add(ex.Message); paths.RemoveAt(i); }
+                }
+            }
+            catch (Exception ex) { errors.Add(ex.Message); }
+            // Local copies no longer need provider grants. Do not exhaust Android's grant quota.
+            foreach (var uri in acquired)
+            {
+                try { ContentResolver!.ReleasePersistableUriPermission(uri, ActivityFlags.GrantReadUriPermission); }
+                catch (Java.Lang.SecurityException ex) { Android.Util.Log.Warn("Kuroaki", ex.ToString()); }
+            }
+            if (errors.Count > 0)
+                RunOnUiThread(() => new AlertDialog.Builder(this)!.SetTitle("Some files could not be imported")!
+                    .SetMessage(string.Join("\n", errors) + "\nSelect the song folder to include all referenced files.")!
+                    .SetPositiveButton("OK", (_, _) => { })!.Show());
+            callback(paths.ToArray());
         });
     }
-    string CopyDocument(Android.Net.Uri uri, string parent)
+
+    string CopyDocument(Android.Net.Uri uri, string parent, bool folder)
     {
-        if (DocumentsContract.IsTreeUri(uri))
+        if (folder)
         {
             string id = DocumentsContract.GetTreeDocumentId(uri)!;
             string directory = Path.Combine(parent, "Song");
-            CopyTree(uri, id, directory);
+            try { CopyTree(uri, id, directory); }
+            catch { if (Directory.Exists(directory)) Directory.Delete(directory, true); throw; }
             MobilePlatform.InstallShaders(directory);
             return directory;
         }
@@ -159,9 +210,15 @@ public sealed class MainActivity : Org.Libsdl.App.SDLActivity
         using (var cursor = ContentResolver!.Query(uri, [IOpenableColumns.DisplayName], null, null, null))
             if (cursor?.MoveToFirst() == true) name = Path.GetFileName(cursor.GetString(0) ?? name);
         string target = Path.Combine(parent, SafeName(name));
+        if (File.Exists(target) || Directory.Exists(target))
+            throw new IOException("Duplicate document name: " + name + ". Import the containing folders separately.");
         using var input = ContentResolver!.OpenInputStream(uri) ?? throw new IOException("Cannot read the selected document.");
-        using var output = File.Create(target);
-        input.CopyTo(output);
+        try
+        {
+            using var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write);
+            input.CopyTo(output);
+        }
+        catch { File.Delete(target); throw; }
         return target;
     }
     void CopyTree(Android.Net.Uri tree, string id, string target)
@@ -170,15 +227,17 @@ public sealed class MainActivity : Org.Libsdl.App.SDLActivity
         var children = DocumentsContract.BuildChildDocumentsUriUsingTree(tree, id)!;
         using var cursor = ContentResolver!.Query(children,
             [DocumentsContract.Document.ColumnDocumentId, DocumentsContract.Document.ColumnDisplayName, DocumentsContract.Document.ColumnMimeType], null, null, null);
-        while (cursor?.MoveToNext() == true)
+        if (cursor == null) throw new IOException("Cannot list the selected folder.");
+        while (cursor.MoveToNext())
         {
             string childId = cursor.GetString(0)!, name = SafeName(cursor.GetString(1)!);
             string path = Path.Combine(target, name);
             if (cursor.GetString(2) == DocumentsContract.Document.MimeTypeDir) CopyTree(tree, childId, path);
             else
             {
-                using var input = ContentResolver.OpenInputStream(DocumentsContract.BuildDocumentUriUsingTree(tree, childId)!)!;
-                using var output = File.Create(path);
+                using var input = ContentResolver.OpenInputStream(DocumentsContract.BuildDocumentUriUsingTree(tree, childId)!)
+                    ?? throw new IOException("Cannot read document: " + name);
+                using var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
                 input.CopyTo(output);
             }
         }

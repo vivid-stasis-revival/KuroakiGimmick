@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using Foundation;
 using UIKit;
+using UniformTypeIdentifiers;
 using KuroakiGimmick.Native;
 
 namespace KuroakiGimmick.Mobile;
@@ -14,6 +15,8 @@ internal static class IosEntry
     static extern int SDL_RunApp(int argc, nint argv, MainFunction main, nint reserved);
     static UITextField? nameInput;
     static UIWindow? dialogWindow;
+    static UIDocumentPickerViewController? documentPicker;
+    static bool importingAssets;
     static Host? host;
     static KuroakiGimmick.UI.Viewer? viewer;
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
@@ -39,14 +42,24 @@ internal static class IosEntry
             MobilePlatform.Configure(root, bundled, Pick);
             MobilePlatform.StartFrameLoop = StartFrames;
             string installed = MobileAssetPack.Ready(bundled) ? bundled : Path.Combine(root, "Assets");
-            // SDL's native message box attaches to the active UIKit scene even
-            // before Host exists, and pumps the run loop while Files copies assets.
             while (!MobileAssetPack.Ready(installed))
             {
-                Console.Error.WriteLine("Waiting for iOS resource pack: " + installed);
-                Sdl.Require(Sdl.SDL_ShowSimpleMessageBox(0x40, "Install resource pack / 安装素材包",
-                    "Copy your iOS resource pack's Assets folder (including MobileShaders) in Files to On My iPad/iPhone → Kuroaki/Gimmick. Then tap OK to check again.\n\n" +
-                    "请在“文件”App 中，将 iOS 素材包的 Assets 文件夹（包含 MobileShaders）复制到“我的 iPad/iPhone → Kuroaki/Gimmick”，再点“好”重新检查。", 0));
+                bool finished = false;
+                string[] selected = [];
+                importingAssets = true;
+                Pick(false, null, false, values => { selected = values; Volatile.Write(ref finished, true); });
+                // SDL_RunApp is on UIKit's main thread. Keep the scene and picker responsive
+                // before the editor's frame callback has been installed.
+                while (!Volatile.Read(ref finished))
+                    NSRunLoop.Current.RunUntil(NSDate.FromTimeIntervalSinceNow(0.02));
+                importingAssets = false;
+                if (selected.Length == 0) return 0;
+                try { installed = MobileAssetPack.Install(selected[0], root); }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine(ex);
+                    Sdl.SDL_ShowSimpleMessageBox(0x10, "Resource pack import failed", ex.Message, 0);
+                }
             }
             MobilePlatform.Configure(root, installed, Pick);
             MobilePlatform.InstallShaders(installed);
@@ -82,6 +95,15 @@ internal static class IosEntry
     {
         nint pointer = host == null ? 0 : Sdl.SDL_GetPointerProperty(Sdl.SDL_GetWindowProperties(host.Window), "SDL.window.uikit.window", 0);
         var scene = pointer == 0 ? null : ObjCRuntime.Runtime.GetNSObject<UIWindow>(pointer)?.WindowScene;
+        scene ??= UIApplication.SharedApplication.ConnectedScenes.OfType<UIWindowScene>()
+            .FirstOrDefault(s => s.ActivationState == UISceneActivationState.ForegroundActive);
+        var activeWindow = pointer == 0 ? scene?.Windows.FirstOrDefault(w => w.IsKeyWindow)
+            : ObjCRuntime.Runtime.GetNSObject<UIWindow>(pointer);
+        if (activeWindow?.RootViewController is { } existing)
+        {
+            while (existing.PresentedViewController is { } presented) existing = presented;
+            return existing;
+        }
         dialogWindow = scene == null ? new UIWindow(UIScreen.MainScreen.Bounds) : new UIWindow(scene);
         dialogWindow.Frame = scene?.CoordinateSpace.Bounds ?? UIScreen.MainScreen.Bounds;
         var controller = new UIViewController();
@@ -93,13 +115,13 @@ internal static class IosEntry
     }
     static void CloseDialogWindow()
     {
-        UIApplication.SharedApplication.BeginInvokeOnMainThread(() =>
-        {
-            if (dialogWindow != null) { dialogWindow.Hidden = true; dialogWindow.Dispose(); dialogWindow = null; }
-            nint pointer = host == null ? 0 : Sdl.SDL_GetPointerProperty(Sdl.SDL_GetWindowProperties(host.Window), "SDL.window.uikit.window", 0);
-            if (pointer != 0) ObjCRuntime.Runtime.GetNSObject<UIWindow>(pointer)?.MakeKeyAndVisible();
-        });
+        // All callers run on UIKit's main thread; close before invoking a completion
+        // that may immediately create another picker (startup retry).
+        if (dialogWindow != null) { dialogWindow.Hidden = true; dialogWindow.Dispose(); dialogWindow = null; }
+        nint pointer = host == null ? 0 : Sdl.SDL_GetPointerProperty(Sdl.SDL_GetWindowProperties(host.Window), "SDL.window.uikit.window", 0);
+        if (pointer != 0) ObjCRuntime.Runtime.GetNSObject<UIWindow>(pointer)?.MakeKeyAndVisible();
     }
+
     static void Pick(bool save, string? suggested, bool folder, Action<string[]> completion)
     {
         UIApplication.SharedApplication.BeginInvokeOnMainThread(() =>
@@ -119,45 +141,104 @@ internal static class IosEntry
                 presenter.BeginInvokeOnMainThread(() => presenter.PresentViewController(alert, true, null));
                 return;
             }
-            ShowFiles(presenter, MobilePlatform.Root, folder, completion);
+            bool assets = importingAssets;
+            var picker = new UIDocumentPickerViewController(
+                new[] { folder ? UTTypes.Folder : assets ? UTTypes.Zip : UTTypes.Item }, asCopy: false)
+            {
+                AllowsMultipleSelection = !folder && !assets,
+                ModalPresentationStyle = UIModalPresentationStyle.FullScreen
+            };
+            documentPicker = picker; // Keep the managed event bridge alive until dismissal.
+            int completed = 0;
+            void Finish(string[] values, string? error = null)
+            {
+                if (Interlocked.Exchange(ref completed, 1) != 0) return;
+                UIApplication.SharedApplication.BeginInvokeOnMainThread(() =>
+                {
+                    picker.DismissViewController(false, () =>
+                    {
+                        CloseDialogWindow();
+                        documentPicker = null;
+                        picker.Dispose();
+                        if (error != null) Sdl.SDL_ShowSimpleMessageBox(0x10, "File import failed", error, host?.Window ?? 0);
+                        completion(values);
+                    });
+                });
+            }
+            picker.WasCancelled += (_, _) => Finish([]);
+            picker.DidPickDocumentAtUrls += (_, e) =>
+            {
+                var urls = e.Urls;
+                Task.Run(() =>
+                {
+                    var paths = new List<string>();
+                    try
+                    {
+                        string batch = Path.Combine(MobilePlatform.Root, "Imports", Guid.NewGuid().ToString("N"));
+                        Directory.CreateDirectory(batch);
+                        foreach (var url in urls) paths.Add(CopySelection(url, batch));
+                        if (!assets)
+                            for (int i = 0; i < paths.Count; i++)
+                            {
+                                if (Directory.Exists(paths[i])) MobilePlatform.InstallShaders(paths[i]);
+                                paths[i] = MobilePlatform.ExpandImport(paths[i]);
+                            }
+                        Finish(paths.ToArray());
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine(ex);
+                        Finish([], ex.Message);
+                    }
+                });
+            };
+            presenter.BeginInvokeOnMainThread(() => presenter.PresentViewController(picker, true, null));
         });
     }
-    static void ShowFiles(UIViewController presenter, string directory, bool folder, Action<string[]> completion)
+    static string CopySelection(NSUrl url, string batch)
     {
-        var alert = UIAlertController.Create("Open file / song folder",
-            "Copy songs or ZIPs with Files → On My iPhone/iPad → Kuroaki/Gimmick.\n" + Path.GetRelativePath(MobilePlatform.Root, directory), UIAlertControllerStyle.Alert);
-        alert.AddAction(UIAlertAction.Create("Cancel", UIAlertActionStyle.Cancel, _ => { CloseDialogWindow(); completion([]); }));
-        if (directory != MobilePlatform.Root)
+        bool scoped = url.StartAccessingSecurityScopedResource();
+        try
         {
-            alert.AddAction(UIAlertAction.Create("↑ Parent folder", UIAlertActionStyle.Default, _ =>
-                presenter.BeginInvokeOnMainThread(() => ShowFiles(presenter, Path.GetDirectoryName(directory)!, folder, completion))));
-            alert.AddAction(UIAlertAction.Create("Open this folder", UIAlertActionStyle.Default, _ => FinishSelection(directory, completion)));
-        }
-        foreach (string entry in Directory.EnumerateDirectories(directory).Order(StringComparer.OrdinalIgnoreCase))
-        {
-            string path = entry;
-            alert.AddAction(UIAlertAction.Create("[Folder] " + Path.GetFileName(path), UIAlertActionStyle.Default, _ =>
-                presenter.BeginInvokeOnMainThread(() => ShowFiles(presenter, path, folder, completion))));
-        }
-        if (!folder)
-            foreach (string entry in Directory.EnumerateFiles(directory).Order(StringComparer.OrdinalIgnoreCase))
+            using var coordinator = new NSFileCoordinator();
+            string? result = null;
+            Exception? failure = null;
+            coordinator.CoordinateRead(url, NSFileCoordinatorReadingOptions.WithoutChanges, out var error, readable =>
             {
-                string path = entry;
-                alert.AddAction(UIAlertAction.Create(Path.GetFileName(path), UIAlertActionStyle.Default, _ => FinishSelection(path, completion)));
-            }
-        presenter.BeginInvokeOnMainThread(() => presenter.PresentViewController(alert, true, null));
+                try
+                {
+                    string source = readable.Path ?? throw new IOException("The selected document has no file path.");
+                    string name = Path.GetFileName(source.TrimEnd('/'));
+                    if (string.IsNullOrEmpty(name) || name is "." or "..") throw new IOException("Invalid document name.");
+                    string target = Path.Combine(batch, name);
+                    if (File.Exists(target) || Directory.Exists(target)) throw new IOException("Duplicate document name: " + name);
+                    try { CopyLocal(source, target); }
+                    catch
+                    {
+                        if (Directory.Exists(target)) Directory.Delete(target, true);
+                        else if (File.Exists(target)) File.Delete(target);
+                        throw;
+                    }
+                    result = target;
+                }
+                catch (Exception ex) { failure = ex; }
+            });
+            if (failure != null) throw failure;
+            if (error != null) throw new IOException(error.LocalizedDescription);
+            return result ?? throw new IOException("Cannot read the selected document.");
+        }
+        finally { if (scoped) url.StopAccessingSecurityScopedResource(); }
     }
-    static void FinishSelection(string path, Action<string[]> completion)
+    static void CopyLocal(string source, string target)
     {
-        CloseDialogWindow();
-        Task.Run(() =>
+        if ((File.GetAttributes(source) & FileAttributes.ReparsePoint) != 0)
+            throw new IOException("Symbolic links cannot be imported: " + Path.GetFileName(source));
+        if (Directory.Exists(source))
         {
-            try
-            {
-                if (Directory.Exists(path)) MobilePlatform.InstallShaders(path);
-                completion([MobilePlatform.ExpandImport(path)]);
-            }
-            catch (Exception ex) { Console.Error.WriteLine(ex); completion([]); }
-        });
+            Directory.CreateDirectory(target);
+            foreach (string child in Directory.EnumerateFileSystemEntries(source))
+                CopyLocal(child, Path.Combine(target, Path.GetFileName(child)));
+        }
+        else File.Copy(source, target);
     }
 }
