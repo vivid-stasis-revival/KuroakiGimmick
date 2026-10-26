@@ -104,11 +104,15 @@ public sealed partial class Viewer
     {
         float previewX = dockPreview.X + PreviewHorizontalPadding, previewW = Math.Max(1, dockPreview.W - 2 * PreviewHorizontalPadding),
             previewH = Math.Max(1, dockPreview.H - 66), previewTop = dockPreview.Y;
-        Label(textCanvas ? L.Get("TEXT CANVAS / LOCAL") : imageCanvas ? L.Get("IMAGE CANVAS / LOCAL COORDINATES") : L.Get("PREVIEW / SAME RENDERER"), previewX, previewTop + 5);
-        if (EButton(L.Get("IMAGE CANVAS"), new(previewX + previewW - 342, previewTop - 2, 130, 25), active: imageCanvas, enabled: Current.Images.Items.Count > 0))
+        // The dock clips to its body: keep the entire toolbar inside that boundary.
+        float toolbarScale = Math.Min(1, previewW / 342), toolbarX = previewX + previewW - 342 * toolbarScale;
+        float titleWidth = Math.Max(0, toolbarX - previewX - 12);
+        if (titleWidth > 0)
+            Text(textCanvas ? L.Get("TEXT CANVAS / LOCAL") : imageCanvas ? L.Get("IMAGE CANVAS / LOCAL COORDINATES") : L.Get("PREVIEW / SAME RENDERER"), previewX, previewTop + 8, 11, muted, true, titleWidth);
+        if (EButton(L.Get("IMAGE CANVAS"), new(toolbarX, previewTop + 2, 130 * toolbarScale, 25), active: imageCanvas, enabled: Current.Images.Items.Count > 0))
         { imageCanvas = !imageCanvas; textCanvas = false; if (imageCanvas) desktopPreview = false; }
-        if (EButton(desktopPreview ? L.Get("DESKTOP") : L.Get("SCENE"), new(previewX + previewW - 204, previewTop - 2, 94, 25), active: desktopPreview, key: "editor-desktop")) { if (textCanvas || imageCanvas) desktopPreview = false; else desktopPreview = !desktopPreview; imageCanvas = textCanvas = false; }
-        if (EButton(nativeWindows != null ? L.Get("LIVE: ON") : L.Get("LIVE: OFF"), new(previewX + previewW - 104, previewTop - 2, 104, 25), active: nativeWindows != null, key: "editor-live")) ToggleNativeWindows();
+        if (EButton(desktopPreview ? L.Get("DESKTOP") : L.Get("SCENE"), new(toolbarX + 138 * toolbarScale, previewTop + 2, 94 * toolbarScale, 25), active: desktopPreview, key: "editor-desktop")) { if (textCanvas || imageCanvas) desktopPreview = false; else desktopPreview = !desktopPreview; imageCanvas = textCanvas = false; }
+        if (EButton(nativeWindows != null ? L.Get("LIVE: ON") : L.Get("LIVE: OFF"), new(toolbarX + 238 * toolbarScale, previewTop + 2, 104 * toolbarScale, 25), active: nativeWindows != null, key: "editor-live")) ToggleNativeWindows();
         var frame = new Rect(previewX, previewTop + 31, previewW, previewH);
         previewFrame = frame; previewImage = Canvas.PreviewRect(frame, pw / (float)w, ph / (float)h, false);
         Canvas.Fill(frame, Color.Hex(0x030205)); Canvas.Border(frame, line);
