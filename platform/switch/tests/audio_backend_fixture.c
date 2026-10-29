@@ -1,4 +1,4 @@
-/* Host fault injection for the actual SDL Switch playback callbacks. MIT. */
+/* Host fault injection for the actual SDL Switch playback callbacks. SPDX-License-Identifier: MPL-2.0 */
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>

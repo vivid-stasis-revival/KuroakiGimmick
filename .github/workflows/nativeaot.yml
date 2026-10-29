@@ -188,7 +188,7 @@ jobs:
         run: |
           set -euo pipefail
           output='artifacts/${{ matrix.rid }}'
-          cp README.md CHANGELOG.md THIRD_PARTY_NOTICES.md "$output/"
+          cp LICENSE README.md CHANGELOG.md THIRD_PARTY_NOTICES.md "$output/"
           cp docs/EXTERNAL_ASSETS.md "$output/INSTALL-ASSETS.md"
           cp -R ThirdParty "$output/"
           test ! -d "$output/docs"

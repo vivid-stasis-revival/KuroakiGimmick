@@ -1,4 +1,4 @@
-/* Native allocator diagnostics: preserve System.Native allocation semantics. MIT. */
+/* Native allocator diagnostics: preserve System.Native allocation semantics. SPDX-License-Identifier: MPL-2.0 */
 #include <stdint.h>
 #include <stddef.h>
 #include <errno.h>

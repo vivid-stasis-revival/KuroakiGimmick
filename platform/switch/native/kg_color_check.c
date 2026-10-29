@@ -1,4 +1,4 @@
-/* Inspect managed RGBA values before GPU upload. MIT. */
+/* Inspect managed RGBA values before GPU upload. SPDX-License-Identifier: MPL-2.0 */
 #include <stdint.h>
 #include <mono/metadata/assembly.h>
 #include <mono/metadata/class.h>

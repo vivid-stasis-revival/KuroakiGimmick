@@ -1,4 +1,4 @@
-/* Asset-free SDL3/Horizon audio output probe. MIT. */
+/* Asset-free SDL3/Horizon audio output probe. SPDX-License-Identifier: MPL-2.0 */
 #define SDL_MAIN_HANDLED
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>

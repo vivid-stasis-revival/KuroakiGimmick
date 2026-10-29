@@ -1,4 +1,4 @@
-/* Read-only startup log tail, without Mono, SDL, Mesa or AOT. MIT. */
+/* Read-only startup log tail, without Mono, SDL, Mesa or AOT. SPDX-License-Identifier: MPL-2.0 */
 #include <switch.h>
 #include <arpa/inet.h>
 #include <stdio.h>

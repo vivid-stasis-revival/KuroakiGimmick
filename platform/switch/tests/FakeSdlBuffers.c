@@ -1,4 +1,4 @@
-/* Fault injection for managed buffer growth, without a GPU. MIT. */
+/* Fault injection for managed buffer growth, without a GPU. SPDX-License-Identifier: MPL-2.0 */
 #include <stdint.h>
 #include <stdbool.h>
 typedef struct { uint32_t usage, size, props; } BufferInfo;

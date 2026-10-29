@@ -38,7 +38,7 @@ foreach ($Cpu in $Architectures) {
         # Other loose .dll/.deps.json/.runtimeconfig.json still indicate a broken package.
         $LooseBuildFiles = @(Get-ChildItem -LiteralPath $Package -File | Where-Object { $_.Extension -in @('.dll','.json','.pdb') -and $_.Name -ne 'kg_native_core.dll' })
         if ($LooseBuildFiles.Count -gt 0) { throw "Single-file output leaked build files: $($LooseBuildFiles.Name -join ', ')" }
-        foreach ($Item in @('README.md','CHANGELOG.md','THIRD_PARTY_NOTICES.md','ThirdParty')) {
+        foreach ($Item in @('LICENSE','README.md','CHANGELOG.md','THIRD_PARTY_NOTICES.md','ThirdParty')) {
             Copy-Item -LiteralPath (Join-Path $ProjectRoot $Item) -Destination $Package -Recurse
         }
         if ($env:KUROAKI_FFMPEG) {

@@ -157,6 +157,7 @@ def main():
     (args.output / "BUILD-INFO.json").write_text(json.dumps({"port": "Mobile experimental r1", "sdl": SDL_VERSION,
         "artifacts": artifacts, "external_assets": args.external_assets, "physical_device_tested": False}, indent=2) + "\n")
     shutil.copytree(ROOT / "ThirdParty", args.output / "ThirdParty")
+    shutil.copy2(ROOT / "LICENSE", args.output / "LICENSE")
     shutil.copy2(ROOT / "THIRD_PARTY_NOTICES.md", args.output / "THIRD_PARTY_NOTICES.md")
     shutil.copy2(ROOT / "platform/mobile/README.md", args.output / "README.md")
     shutil.copy2(ROOT / "platform/mobile/VALIDATION.md", args.output / "VALIDATION.md")

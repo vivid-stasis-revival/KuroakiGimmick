@@ -1,4 +1,4 @@
-/* Read-only SD path probe, without Mono/SDL. MIT. */
+/* Read-only SD path probe, without Mono/SDL. SPDX-License-Identifier: MPL-2.0 */
 #include <switch.h>
 #include <arpa/inet.h>
 #include <stdio.h>
