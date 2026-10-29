@@ -254,7 +254,7 @@ zh-CN
 
 ## 许可与来源
 
-K/G 沿用仓库原有许可。新增 native bridge 标注 MIT；现有 K/G 修改沿用原项目的适用条件；
+K/G 源码及项目自有 native bridge 采用 [WTFPL](../../LICENSE)；
 SDL3-Switch 补丁标明为 altered source，依 SDL zlib 许可，原有文件声明保留。
 mono-nx 和 Mesa 沿用其仓库许可。这里没有向 SDL 上游提交任何代码或 PR。
 

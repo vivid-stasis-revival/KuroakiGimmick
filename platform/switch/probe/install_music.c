@@ -1,4 +1,4 @@
-/* Copy the user's supplied missing music into the K/G song folder. MIT. */
+/* Copy the user's supplied missing music into the K/G song folder. SPDX-License-Identifier: WTFPL */
 #include <switch.h>
 #include <arpa/inet.h>
 #include <stdio.h>

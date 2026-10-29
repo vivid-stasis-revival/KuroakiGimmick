@@ -1,4 +1,4 @@
-/* Asset-free SDL3 GPU + Mesa VI WSI probe. MIT. */
+/* Asset-free SDL3 GPU + Mesa VI WSI probe. SPDX-License-Identifier: WTFPL */
 #define SDL_MAIN_HANDLED
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>

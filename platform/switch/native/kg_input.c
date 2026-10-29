@@ -1,4 +1,4 @@
-/* Controller-to-SDL3 bridge and literal path input. MIT. */
+/* Controller-to-SDL3 bridge and literal path input. SPDX-License-Identifier: WTFPL */
 #include <switch.h>
 #include <SDL3/SDL.h>
 #include <math.h>

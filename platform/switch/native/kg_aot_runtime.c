@@ -1,4 +1,4 @@
-/* Exact Full AOT metadata cache; user data and interpreter runtime are preserved. MIT. */
+/* Exact Full AOT metadata cache; user data and interpreter runtime are preserved. SPDX-License-Identifier: WTFPL */
 #ifdef KG_SWITCH_AOT
 #include <switch.h>
 #include <stdio.h>

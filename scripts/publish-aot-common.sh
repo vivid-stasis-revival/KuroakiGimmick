@@ -128,7 +128,7 @@ PLIST
         Assets/Documentation/vsm-reference.json; do
         [ -f "${package}/${asset}" ] || { echo "发布结果缺少资源：${asset}" >&2; return 1; }
     done
-    for item in README.md CHANGELOG.md THIRD_PARTY_NOTICES.md; do cp "${KG_AOT_ROOT}/${item}" "${package}/${item}"; done
+    for item in LICENSE README.md CHANGELOG.md THIRD_PARTY_NOTICES.md; do cp "${KG_AOT_ROOT}/${item}" "${package}/${item}"; done
     cp -R "${KG_AOT_ROOT}/ThirdParty" "${package}/ThirdParty"
     if [ -n "${KUROAKI_FFMPEG:-}" ]; then
         [ -f "${KUROAKI_FFMPEG}" ] || { echo 'KUROAKI_FFMPEG 文件不存在。' >&2; return 1; }

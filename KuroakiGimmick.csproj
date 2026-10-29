@@ -21,6 +21,7 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
+    <PackageLicenseExpression>WTFPL</PackageLicenseExpression>
     <Version>0.1.5</Version>
     <BuildNumber>18.3.2</BuildNumber>
     <BuildSerial>1832</BuildSerial>

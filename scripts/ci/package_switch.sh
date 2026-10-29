@@ -13,7 +13,7 @@ cp -R "$forge/sd" artifacts/switch
 mkdir -p artifacts/switch/switch/KuroakiGimmick/Assets
 cp "$forge/BUILD-INFO.json" "$forge/aot-manifest.json" artifacts/switch/
 cp docs/EXTERNAL_ASSETS.md artifacts/switch/INSTALL-ASSETS.md
-cp THIRD_PARTY_NOTICES.md artifacts/switch/
+cp LICENSE THIRD_PARTY_NOTICES.md artifacts/switch/
 cp -R ThirdParty artifacts/switch/
 mkdir -p artifacts/switch/ThirdParty/NroForge
 cp "$source/LICENSE" "$source/THIRD_PARTY_NOTICES.md" artifacts/switch/ThirdParty/NroForge/

@@ -867,7 +867,7 @@ KuroakiGimmick **不会执行任意 GML**，也不完整模拟 GameMaker。
 
 KuroakiGimmick 与《vivid/stasis》开发团队不存在官方隶属、合作或背书关系。
 
-项目源码的使用、修改与再分发应以仓库实际提供的项目级许可或权利人授权为准；第三方组件、字体和游戏内容仍遵循各自的许可证与版权要求。
+项目源码采用 **WTFPL（Version 2）**，完整协议见 [LICENSE](LICENSE)。第三方组件、字体和游戏内容仍遵循各自的许可证与版权要求，详见 [第三方声明](THIRD_PARTY_NOTICES.md)。
 
 仓库公开不等于所有依赖素材都可以随意再分发。
 

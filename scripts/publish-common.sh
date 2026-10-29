@@ -91,7 +91,7 @@ PLIST
     for reference_asset in vsm-reference.json; do
         [ -f "${package}/Assets/Documentation/${reference_asset}" ] || { echo "发布结果缺少语法手册：${reference_asset}" >&2; return 1; }
     done
-    for item in README.md CHANGELOG.md THIRD_PARTY_NOTICES.md; do cp "${KG_ROOT}/${item}" "${package}/${item}"; done
+    for item in LICENSE README.md CHANGELOG.md THIRD_PARTY_NOTICES.md; do cp "${KG_ROOT}/${item}" "${package}/${item}"; done
     cp -R "${KG_ROOT}/ThirdParty" "${package}/ThirdParty"
     # FFmpeg is optional for preview, required for video export. If explicitly
     # supplied, the caller must provide a binary for the TARGET architecture.

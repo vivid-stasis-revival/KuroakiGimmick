@@ -1,4 +1,4 @@
-/* K/G-specific mono-nx interpreter entry point. MIT. */
+/* K/G-specific mono-nx interpreter entry point. SPDX-License-Identifier: WTFPL */
 #include "core.h"
 #include <sys/stat.h>
 #include <stdlib.h>

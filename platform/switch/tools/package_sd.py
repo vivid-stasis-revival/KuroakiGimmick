@@ -38,6 +38,7 @@ shutil.copytree(a.assets, app / 'Assets', ignore=shutil.ignore_patterns('.DS_Sto
 shutil.copytree(a.shaders, app / 'Assets/SwitchShaders', dirs_exist_ok=True)
 repo = pathlib.Path(__file__).resolve().parents[3]
 shutil.copytree(repo / 'ThirdParty', app / 'ThirdParty')
+shutil.copy2(repo / 'LICENSE', app / 'LICENSE')
 shutil.copy2(repo / 'THIRD_PARTY_NOTICES.md', app / 'THIRD_PARTY_NOTICES.md')
 for folder in ['UserData', 'Exports', 'Temp', 'Songs']: (app / folder).mkdir()
 for folder in ['lib_net9.0', 'framework_net9.0', 'etc']:
