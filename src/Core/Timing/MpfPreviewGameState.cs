@@ -38,6 +38,9 @@ internal sealed class MpfPreviewGameState(double noteValue)
         "currentcombo" => Combo, "maxcombo" => MaxCombo,
         "currentscore" => Score, "minusscore" => MinusScore, "gamescore" => ExScore,
         "notevalue" => noteValue,
+        // Explicit offline settings, independent of the viewer's autoplay HUD or host input.
+        "op_autoplay" => 0d,
+        "gamefps" => 60d,
         _ => throw new NotSupportedException("MPF offline preview has no global game variable '"+name+"'.")
     };
 }

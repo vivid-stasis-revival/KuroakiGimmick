@@ -23,7 +23,7 @@ public static class CustomCompatibility
         if (name is "df_sideline" or "df_sideline2" or "df_sideline_alpha" or "df_whitebg" or "df_grid_alpha" or "df_grid_top" or "df_grid_bottom"
             && !SongFiles.Config(project, "ENABLE_DF_GRID_AND_SIDELINE")) return "ENABLE_DF_GRID_AND_SIDELINE is false; these drawing controls are not registered.";
         if (Stars.Contains(name) && !SongFiles.Config(project, "ENABLE_STARPARTICLE", false)) return "ENABLE_STARPARTICLE is false; original Custom Gimmick does not register star controls.";
-        if (name is "playspeed" or "jumpto_beat" or "jumpto_s" && !SongFiles.Config(project, "ENABLE_MUSIC_CONTROL")) return "ENABLE_MUSIC_CONTROL is false; original music-control callback does nothing.";
+        if (ModCatalog.MusicControlName(name) is "playspeed" or "jumpto_beat" or "jumpto_s" && !SongFiles.Config(project, "ENABLE_MUSIC_CONTROL")) return "ENABLE_MUSIC_CONTROL is false; original music-control callback does nothing.";
         return null;
     }
 }

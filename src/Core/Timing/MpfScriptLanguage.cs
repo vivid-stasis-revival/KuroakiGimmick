@@ -185,7 +185,8 @@ internal sealed class MpfScriptLanguage
         internal Func<string, object?[], object?> Function { get; set; } = (_, _) => 0d;
         internal int MaxLoop = 65536;
         internal int Steps;
-        internal long TotalSteps;
+        long remainingSteps = 5_000_000;
+        int budgetTick = -1;
         internal int ExpressionDepth;
         long allocated;
         // Cumulative per script/session, including refreshes. Charge before allocating.
@@ -197,8 +198,17 @@ internal sealed class MpfScriptLanguage
         }
         internal void Budget()
         {
-            if (++Steps > 100_000 || ++TotalSteps > 5_000_000)
+            if (++Steps > 100_000 || --remainingSteps < 0)
                 throw new InvalidDataException("MaxLoopReached: MPF preview execution budget exceeded.");
+        }
+        // A lifetime instruction cap kills otherwise bounded Main programs on long songs.
+        // Refill only as simulation time advances, never on Init/Finish or range refresh.
+        // The capped reserve still bounds bursts and overlapping ranges in the same tick.
+        internal void AdvanceTick(int tick)
+        {
+            if (tick <= budgetTick) return;
+            remainingSteps = Math.Min(5_000_000, remainingSteps + (long)(tick - budgetTick) * 1_000);
+            budgetTick = tick;
         }
         internal void Reset()
         {

@@ -7,7 +7,7 @@ namespace KuroakiGimmick.Core;
 /// <summary>
 /// VSP 图层/图像定义与姿态求值。图片资源和 mod 轨道分开加载；层优先级保留作者值，不强制所有图片进入同一轨道。
 /// </summary>
-// Custom Gimmicks v1.12.7：.vsp 图像声明 + 具名 .vsm 轨道。
+// Custom Gimmicks v1.14.1：.vsp 图像声明 + 具名 .vsm 轨道。
 public sealed class CustomImages
 {
     public record Asset(string Path, int Width, int Height);
@@ -16,7 +16,7 @@ public sealed class CustomImages
     public string? Path { get; private set; }
     public List<Item> Items { get; } = [];
     public Dictionary<string, Asset> Files { get; } = new(StringComparer.Ordinal);
-    static readonly HashSet<string> Kinds = new("imgx imgy imgxtime imgytime imgrot imgscalex imgscaley imgscaleytime imgskewx imgskewy imgcolrgb imgalp imgidx".Split(' '));
+    static readonly HashSet<string> Kinds = new("imgx imgy imgxb imgyb imgxtime imgytime imgrot imgscalex imgscaley imgscaleytime imgskewx imgskewy imgcolrgb imgalp imgidx".Split(' '));
     public static bool TryMod(string name, out string kind, out string id)
     {
         int split = name.IndexOf('_');
@@ -222,11 +222,6 @@ public sealed class CustomImages
         var sorted = result.Items.OrderBy(x => x.LayerPriority).ThenBy(x => order[x.Layer]).ThenBy(x => x.Priority).ThenBy(x => x.Order).ToArray();
         result.Items.Clear();
         result.Items.AddRange(sorted);
-        if (chart.Mods.Any(e => TryMod(e.Name, out var k, out _) && k == "imgscaleytime"))
-        {
-            chart.Diagnostics.Add(new("images", 0,
-                "imgscaleytime follows v1.12.7 code: posEnd - posO / height (including its original precedence)."));
-        }
         if (new[]
         {
             "GLOBAL.vsv",
@@ -239,23 +234,14 @@ public sealed class CustomImages
     }
 
     public record Pose(Matrix3x2 Matrix, int Frame, uint Rgb, double Alpha);
-    // 状态按层、按帧重置，对应原版绘制循环中作用域局限于循环体的时间变量。
     /// <summary>
     /// 按已排序的层顺序产出每张图的当前姿态（320×180 逻辑空间）。alpha ≤ 0 或矩阵出现非有限分量的图直接跳过，不绘制。
     /// 变换次序固定为缩放 → 斜切 → 旋转 → 平移，与原版绘制顺序一致，不能为了合并矩阵改写。
     /// </summary>
     public IEnumerable<(Item Image, Pose Pose)> At(Timeline timeline, double time, IReadOnlyDictionary<string, double>? valueOverrides = null)
     {
-        string layer = "";
-        double xt = 0, yt = 0, ys = 1;
         foreach (var item in Items)
         {
-            if (layer != item.Layer)
-            {
-                layer = item.Layer;
-                xt = yt = 0;
-                ys = 1;
-            }
             double M(string kind) => valueOverrides != null && valueOverrides.TryGetValue(kind + "_" + item.Id, out double value)
                 ? value : timeline.Get(kind + "_" + item.Id, time);
             double alpha = M("imgalp");
@@ -263,7 +249,9 @@ public sealed class CustomImages
             {
                 continue;
             }
-            // 573613 表示该项未设置：命中时沿用本层已累积的偏移/缩放，不重新按音符运动求值。
+            // 1.14.1 的 o_csm_sprite_drawer.Draw 每张图独立初始化。
+            // 未设置的时间项不能继承前一张图的滚动偏移或缩放。
+            double xt = 0, yt = 0, ys = 1;
             if (M("imgxtime") != 573613)
             {
                 xt = NoteX(timeline, time, item.Lane, M("imgxtime"));
@@ -274,12 +262,12 @@ public sealed class CustomImages
             }
             if (M("imgscaleytime") != 573613)
             {
-                ys = NoteY(timeline, time, item.Lane, M("imgscaleytime")) - NoteY(timeline, time, item.Lane, 0) / item.Height;
+                ys = (NoteY(timeline, time, item.Lane, M("imgscaleytime")) - NoteY(timeline, time, item.Lane, 0)) / item.Height;
             }
             var matrix = Matrix3x2.CreateScale((float)(item.Width * M("imgscalex")),
                 (float)(item.Height * M("imgscaley") * ys)) * new Matrix3x2(1, (float) M("imgskewy"), (float) M("imgskewx"), 1, 0,
-                0) * Matrix3x2.CreateRotation((float)(M("imgrot") * Math.PI / 180)) * Matrix3x2.CreateTranslation((float)(M("imgx") + xt),
-                (float)(M("imgy") + yt));
+                0) * Matrix3x2.CreateRotation((float)(M("imgrot") * Math.PI / 180)) * Matrix3x2.CreateTranslation((float)(M("imgx") + M("imgxb") + xt),
+                (float)(M("imgy") + M("imgyb") + yt));
             double frame = Math.Max(0, Math.Round(M("imgidx"), MidpointRounding.AwayFromZero)) % item.Frames;
             if (!float.IsFinite(matrix.M11) || !float.IsFinite(matrix.M22) || !float.IsFinite(matrix.M31) || !float.IsFinite(matrix.M32))
             {

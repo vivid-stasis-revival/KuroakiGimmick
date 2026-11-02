@@ -15,22 +15,25 @@ public sealed class ChartPlaybackMap
     public ChartPlaybackMap(Chart chart, BpmMap bpm, bool enabled)
     {
         double rate = 1;
+        var musicEvents = enabled ? chart.Mods
+            .Where(e => ModCatalog.MusicControlName(e.Name) is "playspeed" or "jumpto_beat" or "jumpto_s")
+            .Select(e => e with { Name = ModCatalog.MusicControlName(e.Name) })
+            .OrderBy(e => e.Beat).ThenBy(e => e.Order).ToArray() : [];
         // 按拍、再按声明顺序取事件：同一拍上的多条控制必须保持作者顺序，乘法不可交换到别的结果。
         // 事件的拍在此处经 BPM map 换算成秒，之后整条链路都用秒。
-        if (enabled)
-            foreach (var e in chart.Mods.Where(e => e.Name is "playspeed" or "jumpto_beat" or "jumpto_s").OrderBy(e => e.Beat).ThenBy(e => e.Order))
+        foreach (var e in musicEvents)
+        {
+            double at = bpm.Time(e.Beat);
+            if (e.Name == "playspeed") controls.Add(new(at, Math.Round(e.To * 100, MidpointRounding.ToEven) / 100, null));
+            else
             {
-                double at = bpm.Time(e.Beat);
-                if (e.Name == "playspeed") controls.Add(new(at, Math.Round(e.To * 100, MidpointRounding.ToEven) / 100, null));
-                else
-                {
-                    // jumpto_beat 的目标是拍，jumpto_s 的目标按 From 区分秒或毫秒；无效目标记诊断并跳过该回调，不静默夹取。
-                    double target = e.Name == "jumpto_beat" ? bpm.Time(e.To) : e.To / (e.From > 0 ? 1 : 1000);
-                    if (!double.IsFinite(target) || target < 0) chart.Diagnostics.Add(new("music-control", e.SourceLine, "Jump target must be a finite non-negative song time; callback skipped.", true));
-                    else controls.Add(new(at, 1, target));
-                }
+                // jumpto_beat 的目标是拍，jumpto_s 的目标按 From 区分秒或毫秒；无效目标记诊断并跳过该回调，不静默夹取。
+                double target = e.Name == "jumpto_beat" ? bpm.Time(e.To) : e.To / (e.From > 0 ? 1 : 1000);
+                if (!double.IsFinite(target) || target < 0) chart.Diagnostics.Add(new("music-control", e.SourceLine, "Jump target must be a finite non-negative song time; callback skipped.", true));
+                else controls.Add(new(at, 1, target));
             }
-        var events = enabled ? chart.Mods.Where(e => e.Name == "playspeed").OrderBy(e => e.Beat).ThenBy(e => e.Order).ToArray() : [];
+        }
+        var events = musicEvents.Where(e => e.Name == "playspeed").ToArray();
         double Apply(ModEvent e)
         {
             double next = rate * (Math.Round(e.To * 100, MidpointRounding.ToEven) / 100);

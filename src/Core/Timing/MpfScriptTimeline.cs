@@ -303,10 +303,18 @@ internal sealed class MpfScriptTimeline
                 if (instance != "cc" || a.Length > 2 && Num(a[2]) != 0)
                     throw new NotSupportedException("MPF offline preview has no instance '" + instance + "'.");
                 if (variable.StartsWith("mod_", StringComparison.Ordinal)) return ValueAt(variable[4..], -1, currentTime);
+                // These are chart state, not judgment counters. Native callbacks execute
+                // after MPF, so a speed change becomes visible on the following tick.
+                switch (variable)
+                {
+                    case "song_speed": return timeline.MusicPlayback.RateAt((currentTick - 1) / 60.0);
+                    case "currentbeataccurate": return currentBeat;
+                    case "currentms": return currentTime * 1000;
+                    case "cpos": return currentTime;
+                }
                 WarnOfflineState(script);
                 return variable switch
                 {
-                    "currentbeataccurate" => currentBeat, "currentms" => currentTime*1000,
                     "pace_total" => game.AccuracySum, "pace_amount" => game.Count,
                     "sdisp_accscore" => game.Score, "sdisp_exscore" => game.ExScore,
                     "timings" => CopyTimings(script),
@@ -351,7 +359,11 @@ internal sealed class MpfScriptTimeline
     {
         if (script.Dead) return;
         phase = section;
-        try { script.Language.Run(script.Context, section); }
+        try
+        {
+            script.Context.AdvanceTick(currentTick);
+            script.Language.Run(script.Context, section);
+        }
         catch (Exception ex) when (ex is InvalidDataException or DivideByZeroException or NotSupportedException or ArgumentException or OverflowException)
         {
             chart.Diagnostics.Add(new(script.Path, 0, "MPF " + script.Name + " / " + section + ": " + ex.Message, true));

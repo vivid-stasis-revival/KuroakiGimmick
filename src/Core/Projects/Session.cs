@@ -222,7 +222,7 @@ public sealed partial class Session
         // 时长取音频优先；无音频时取谱面、时间轴尾部和最后一条文本 cue 之后的富余，三者取最大，避免演出被提前截断。
         Duration = Audio?.Duration ?? Math.Max(Math.Max(Chart.Duration, Timeline.End + .5),
             Texts.Tracks.SelectMany(t => t.Cues).Select(c => Timeline.Bpm.Time(c.Beat) + 4).DefaultIfEmpty(0).Max());
-        Playback = new(Chart, Timeline.Bpm, SongFiles.Config(p, "ENABLE_MUSIC_CONTROL"));
+        Playback = Timeline.MusicPlayback;
         Stars = new(Timeline, Chart, Duration,
             NativeGimmick.HasBehavior("lane-starfield") || Chart.ObjectName == "obj_custom_gimmick" && SongFiles.Config(p, "ENABLE_STARPARTICLE", false),
             sourceStars: NativeGimmick.HasBehavior("lane-starfield"));

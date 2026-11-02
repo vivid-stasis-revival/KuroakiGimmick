@@ -46,6 +46,34 @@ internal static class Cgmk1141Checks
         Check(game.Score == 552 && Math.Abs(game.MinusScore - 1009946) < 1e-6, "source score formula");
         game.Add(4, 1, true); game.Add(4, -2, false);
         Check(game.Combo == 2 && game.Judge(4) == -1, "signed miss correction");
+        // A scrolling image followed by ordinary text in the same VSP layer used to
+        // drag/stretch that text too (Blast Processing's heartattack1..6).
+        var images = new CustomImages();
+        var asset = new CustomImages.Asset("unused.png", 20, 20);
+        images.Items.Add(new("moving", "main", 1000, 0, 0, asset, 1, 20, 20, 0));
+        images.Items.Add(new("caption", "main", 1000, 0, 1, asset, 1, 20, 20, 0));
+        images.Items.Add(new("zero", "main", 1000, 0, 2, asset, 1, 20, 20, 0));
+        var imageChart = new Chart { ObjectName = "obj_custom_gimmick" };
+        void Set(string name, double value) => imageChart.Mods.Add(new(0, 0, "linear", value, value, name, -1, imageChart.Mods.Count));
+        Set("xoffset", 11);
+        Set("imgxtime_moving", 50); Set("imgytime_moving", 100); Set("imgscaleytime_moving", 200);
+        Set("imgxb_caption", 5); Set("imgyb_caption", -5);
+        Set("imgytime_zero", 0);
+        imageChart.Mods.Add(new(1, 1, "linear", 90, 150, "imgy_caption", -1, imageChart.Mods.Count));
+        var imageTimeline = new Timeline(imageChart, project, 3);
+        var poses = images.At(imageTimeline, 0).ToDictionary(x => x.Image.Id, x => x.Pose.Matrix);
+        Check(poses["moving"].M31 == 171 && poses["moving"].M32 == 204, "time offsets still apply to their own image");
+        Check(poses["moving"].M22 == -60, "time scale divides the entire note-position difference by height");
+        Check(poses["caption"].M31 == 165 && poses["caption"].M32 == 85, "static image has independent offsets plus imgxb/imgyb");
+        Check(poses["caption"].M22 == 20, "static image does not inherit preceding time scale");
+        Check(poses["zero"].M32 == 234, "zero time offset is active, unlike the unset sentinel");
+        Check(images.At(imageTimeline, 1.5).Single(x => x.Image.Id == "caption").Pose.Matrix.M32 == 115,
+            "explicit caption movement remains animated");
+        Check(images.At(imageTimeline, 0).Single(x => x.Image.Id == "caption").Pose.Matrix == poses["caption"],
+            "image transforms are stable on reverse seek");
+        images.Items.Reverse();
+        Check(images.At(imageTimeline, 0).Single(x => x.Image.Id == "caption").Pose.Matrix == poses["caption"],
+            "image transforms do not depend on sibling draw order");
         Console.WriteLine("PASS CGMK 1.14.1: " + count + " checks");
     }
 }

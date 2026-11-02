@@ -82,6 +82,59 @@ internal static class MpfRuntimeChecks
             Near(inputs.Time.Get("cover1", 1), 0, "offline input baseline is idle");
             Check(inputs.Chart.Diagnostics.Count(d => d.Message.Contains("idle offline snapshot")) == 1, "input baseline disclosed once");
 
+            const string clockScript = """
+                #RISK_LEVEL=RISK
+                ::Main::
+                set_mod_val("speed_read", get_game_var_instance("cc", "song_speed", 0));
+                set_mod_val("autoplay_read", get_game_var_global("op_autoplay"));
+                set_mod_val("fps_read", get_game_var_global("gamefps"));
+                set_mod_val("time_read", get_game_var_instance("cc", "cpos"));
+                """;
+            void SpeedChanges(Chart c)
+            {
+                c.Mods.Add(new(1, 0, "linear", 0, .5, "playspeed", -1, 0));
+                c.Mods.Add(new(2, 0, "linear", 0, 3, "playspeed", -1, 1));
+            }
+            var clock = Load(clockScript, SpeedChanges, files: dir =>
+                File.WriteAllText(Path.Combine(dir, "..", "cgmk_config.json"), "{\"ENABLE_MUSIC_CONTROL\":true}"));
+            Check(!clock.Chart.Diagnostics.Any(d => d.Error), "song speed and offline settings are readable");
+            Near(clock.Time.Get("speed_read", .5), 1, "initial song speed");
+            Near(clock.Time.Get("speed_read", 1), 1, "MPF reads speed before same-frame callback");
+            Near(clock.Time.Get("speed_read", 1 + 1.0 / 60), .5, "music callback visible on next tick");
+            Near(clock.Time.Get("speed_read", 3), 1.5, "song speed multiplies successive callbacks");
+            Near(clock.Time.Get("autoplay_read", 3), 0, "offline state does not pretend to play notes");
+            Near(clock.Time.Get("fps_read", 3), 60, "gamefps agrees with simulation clock");
+            Near(clock.Time.Get("time_read", 3), 3, "cpos uses song seconds");
+            var disabledMusic = Load(clockScript, SpeedChanges, files: dir =>
+                File.WriteAllText(Path.Combine(dir, "..", "cgmk_config.json"), "{\"ENABLE_MUSIC_CONTROL\":false}"));
+            Near(disabledMusic.Time.Get("speed_read", 3), 1, "disabled music controls do not alter song speed");
+            var aliasedMusic = Load(clockScript, c =>
+            {
+                SpeedChanges(c);
+                for (int i = 0; i < c.Mods.Count; i++) c.Mods[i] = c.Mods[i] with { Name = "!playspeed" };
+            });
+            Check(!aliasedMusic.Chart.Diagnostics.Any(d => d.Error || d.Message.Contains("Unsupported mod:")),
+                "prefixed playspeed runs without unsupported diagnostics");
+            Near(aliasedMusic.Time.Get("speed_read", 1), 1, "prefixed callback preserves same-frame MPF ordering");
+            Near(aliasedMusic.Time.Get("speed_read", 1.5), .5, "MPF observes prefixed half-speed callback");
+            Near(aliasedMusic.Time.Get("speed_read", 3), 1.5, "MPF observes cumulative prefixed speed changes");
+
+            var longSong = Load("""
+                ::Init::
+                var frames = 0;
+                ::Main::
+                var sum = 0;
+                for (var i = 0; i < 32; i += 1) { sum += i; }
+                frames += 1;
+                set_mod_val("result", sum);
+                ::Finish::
+                set_mod_val("frames", frames);
+                """, c => { c.PerFrame.Clear(); c.PerFrame.Add(new(0, 600, "test")); }, end: 600);
+            Check(!longSong.Chart.Diagnostics.Any(d => d.Error), "ten-minute script exceeds old lifetime budget without false loop error");
+            Near(longSong.Time.Get("frames", 600), 35999, "long script reaches Finish after every active frame");
+            Near(longSong.Time.Get("result", 599), 496, "long script retains correct output at song end");
+            Near(longSong.Time.Get("result", 1), 496, "reverse seek after long simulation is deterministic");
+
             var skins = Load("::Main::", c =>
             {
                 c.Mods.Add(new(0,0,"linear",.5,.5,"chorus_greenleft_overlay",-1,0));

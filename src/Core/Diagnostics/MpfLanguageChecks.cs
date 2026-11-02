@@ -42,6 +42,21 @@ internal static class MpfLanguageChecks
         allocation.Allocate(1_000_000);
         allocation.Reset();
         Reject(() => allocation.Allocate(1), "refresh does not reset allocation budget");
+        var budget = new MpfScriptLanguage.Context();
+        budget.AdvanceTick(0);
+        for (int run = 0; run < 50; run++)
+        {
+            budget.Steps = 0;
+            for (int step = 0; step < 100_000; step++) budget.Budget();
+        }
+        budget.Reset(); budget.Steps = 0; budget.AdvanceTick(0);
+        Reject(() => budget.Budget(), "refresh and repeated ranges cannot refill the same tick");
+        budget.AdvanceTick(1); budget.Steps = 0;
+        budget.Budget();
+        Check(budget.Steps == 1, "advancing the simulation clock replenishes execution budget");
+        var busyFrame = new MpfScriptLanguage.Context();
+        Reject(() => { for (int i = 0; i <= 100_000; i++) busyFrame.Budget(); },
+            "single invocation instruction cap remains enforced");
         var arrays = MpfScriptLanguage.Parse("::Main::\nvar a = [1,2,3];");
         var constrained = new MpfScriptLanguage.Context();
         constrained.Allocate(999_998);

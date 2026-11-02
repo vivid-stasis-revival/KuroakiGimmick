@@ -15,6 +15,8 @@ public static class ModCatalog
         Supported.Add("fx_film");
         foreach(string name in new[]{"fx_twirl","sg_endblip","sg_endblip_destroy","df_sideline2"}) Supported.Add(name);
         Supported.Add("playspeed");
+        Supported.Add("!playspeed");
+        Supported.Add("!jumpto_beat");
         Supported.Add("prtrX");
         Supported.Add("prtrY");
         // 谱面侧 HUD 读数开关；隐藏 combo、判定信息及 combo 命中钻尘。
@@ -84,6 +86,14 @@ public static class ModCatalog
     /// <summary>二进制缓动表：下标就是 VSB 里的缓动编号，同样不能排序或去重。</summary>
     public static readonly string[] BinaryEases = "unknown linear outElastic inExpo outExpo inOutExpo inQuad outQuad inOutQuad inCubic outCubic inOutCubic outBack inSine outSine inOutSine outQuart inOutCirc inCirc outCirc".Split(' ');
     public static readonly HashSet<string> Supported = new(("df_whitebg custom_jacket plaudite_jacket pburstspeed plaudite_pburst prx prxb prxc prxd pry pryb pryc pryd prsx pra przm przmb przmc przx przy prrx prry prrz prrzb prct prcb prcl prcr shxs shxp shxa shys shyp shya shct shft shcb shfb shcl shfl shcr shfr scrollspeed noterot velocity spinradius spiny spinx driven beat wave hom boost_distance boost_time yoffset xoffset notealp scrollind0 scrollind1 scrollind2 scrollind3 scrollind4 scrollind5 scrollind6 uialpha drawuntil holdoverlayalpha particle_alpha particlexpower particleypower slash_anycol set_slash_col col_convertion uhnoise vdistort bloom glitchamp glitchoffset barrelabx barrelaby posx posy fx_glow fx_particleglow fx_underwater fx_posterize fx_posterize_vis " + "gray barrel barrel2 hdistort fish vig abx aby aberamp cover1 cover2 cover3 wflash rainbow noteoverlayalp bgalph fxdist1 fxdist2 parttimer").Split(' '));
+    // K/G compatibility aliases for music control. Keep the source name intact for
+    // editing/export, and do not strip '!' from unrelated or unknown mod names.
+    internal static string MusicControlName(string name) => name switch
+    {
+        "!playspeed" => "playspeed",
+        "!jumpto_beat" => "jumpto_beat",
+        _ => name
+    };
     /// <summary>
     /// 把二进制 mod ID 还原成名字。0..127 查 Globals；129 起按 id-129 查对象扩展表，表位置即编号。
     /// 无法识别时返回 global_N 或 obj:mod_N 占位，保留事件让报告能指出具体编号，不丢弃未知 mod。
@@ -140,7 +150,7 @@ public static class ModCatalog
         {
             // 16777215 是 0xFFFFFF 白色；Base/Custom proxy 的 pra 都默认为 0（Custom Create 的初始化循环执行时 proxyCount 尚为 0）。
             "df_sideline_alpha" => 1,
-            "playspeed" or "starspd_multiplier" or "startrans_alpha" or "starchgcol_alpha" => 1,
+            "playspeed" or "!playspeed" or "starspd_multiplier" or "startrans_alpha" or "starchgcol_alpha" => 1,
             "starchgcol_up_rgb" or "starchgcol_down_rgb" => 16777215,
             "przm" or "przmb" or "przmc" or "przx" or "przy" or "velocity" or "notealp" or "uialpha" or "bgalph" or "holdoverlayalpha" or "noteoverlayalp" => 1,
             "pra" => proxy >= 0 ? 0 : 1,

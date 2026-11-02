@@ -25,8 +25,8 @@ REA archive inspection evidence: `ev_383b41b99f66a966e94318cc7467c5e481b06800980
 
 - The preview clock is fixed at 60 Hz. The game can run at other frame rates. Seeking and parallel rendering reuse immutable samples and do not advance script state.
 - Random state is shared by scripts and seedable, but uses a deterministic offline generator rather than GameMaker's global RNG.
-- Read-only judgment/combo queries return a disclosed zero-state baseline. Judgment mutation and callbacks requiring game instances remain unsupported and report errors.
-- Proxy IDs are checked against the declared count. Script input, recursion, execution, cumulative allocations, scheduled work and output samples are bounded; work after 3600 seconds is reported as outside the preview limit.
+- Judgment/combo queries start from a disclosed zero-state baseline. Script judgment changes update shared offline counters; live input and autoplay hits are not simulated. `op_autoplay` is 0 and `gamefps` is 60. `cc.song_speed` reads the chart's configured music-control speed, with callbacks visible on the following tick; `cpos` and `currentms` expose chart time in seconds and milliseconds. Callbacks requiring original game instances still report errors.
+- Proxy IDs are checked against the declared count. Each script invocation allows at most 100,000 execution steps, with a 5,000,000-step burst reserve replenished by 1,000 steps per advancing preview tick. Range refreshes and multiple calls within one tick do not replenish that reserve, so ordinary long-running scripts no longer hit a fixed lifetime instruction cap. Cumulative allocations, scheduled work and output samples remain bounded; work after 3600 seconds is reported as outside the preview limit.
 - Script errors and discovery failures remain diagnostics. They do not execute arbitrary host code, filesystem functions, or shell commands.
 - Saving an editor working VSM retains the original script directory/difficulty. That directory is serialized relative to the project. Chart Folder exports the selected referenced scripts; VSM-only export does not bundle them.
 

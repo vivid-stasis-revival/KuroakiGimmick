@@ -29,6 +29,7 @@ public sealed partial class Timeline
     public record SourceNoOp(string Name, int Line, double Beat, string Reason);
     public List<SourceNoOp> SourceNoOps { get; } = [];
     public BpmMap Bpm { get; }
+    internal ChartPlaybackMap MusicPlayback { get; }
     public NativeGimmickProfile? Native { get; private set; }
     /// <summary>时间轴末端（秒）：取音频时长与所有 tween、回调尾部占用的较大值，跳转和导出都以它为界。</summary>
     public double End { get; private set; }
@@ -82,6 +83,7 @@ public sealed partial class Timeline
         Native = native;
         Difficulty = SongFiles.Difficulty(project.Chart ?? project.Gimmick ?? "").ToUpperInvariant();
         Bpm = new(c, project.Bpm, native?.Data?.OffsetOverrideMs??project.OffsetMs, native?.Data?.FixedBpm, native?.Data?.BpmOverride);
+        MusicPlayback = new(c, Bpm, SongFiles.Config(project, "ENABLE_MUSIC_CONTROL"));
         End = duration;
         if (native?.Data?.Sequence is { AutomaticTriggers.Count: > 0 } automaticSequence)
             foreach (var window in automaticSequence.StoryWindows.Where(w => automaticSequence.AutomaticTriggers.ContainsKey(w.Trigger)))
