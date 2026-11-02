@@ -23,8 +23,8 @@
 
     <PackageLicenseExpression>WTFPL</PackageLicenseExpression>
     <Version>0.1.5</Version>
-    <BuildNumber>18.3.2</BuildNumber>
-    <BuildSerial>1832</BuildSerial>
+    <BuildNumber>18.4</BuildNumber>
+    <BuildSerial>1840</BuildSerial>
     <AssemblyVersion>0.1.5.0</AssemblyVersion>
     <FileVersion>$(Version).$(BuildSerial)</FileVersion>
     <InformationalVersion Condition="'$(InformationalVersion)' == ''">v$(Version) / $(BuildNumber)</InformationalVersion>

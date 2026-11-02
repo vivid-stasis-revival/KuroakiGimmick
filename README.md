@@ -119,6 +119,8 @@ Android、iOS/iPadOS 和 Nintendo Switch 的适配还处于实验阶段。相关
 
 Nightly 用于提供最近的功能、兼容性改进和 Bug 修复。
 
+18.4：修复 MPF 长时间预览预算误报，补齐歌曲速度等状态读取；修正图片时间偏移与缩放的相互影响，支持 `imgxb`/`imgyb`；接入 `!jumpto_beat`、`!playspeed` 兼容别名，并更新 tips。完整更新见 [CHANGELOG](CHANGELOG.md)。
+
 18.3 接入 Custom Gimmicks 1.14 自定义 MPF，修正脚本时序与补间竞争，保留保存/移动/导出时的脚本关联，并新增 MPF 源码直接编辑、保存和预览更新。
 
 18.3.1：桌面视频导出默认启用最多可用 CPU 逻辑核心数的多线程渲染；桌面 Release ZIP 内置经过 SHA-256 校验的 FFmpeg（含 libx264 + AAC 编码能力），不再要求额外安装 FFmpeg。
