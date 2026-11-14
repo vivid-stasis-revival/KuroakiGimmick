@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace KuroakiGimmick.Core;
 
@@ -158,39 +159,29 @@ public static class SongFiles
         return matches.Length == 1 ? matches[0] : null;
     }
 
-    /// <summary>读取难度专属或共用的 _cgmk_config.json 布尔开关；文件缺失或该键不是布尔值时返回 <paramref name="fallback"/>，不把缺省当作 false。</summary>
-    public static bool Config(ViewerProject p, string name, bool fallback = true)
+    // Unsaved editor settings and explicitly attached configs take precedence over
+    // song-folder discovery. A standalone window document only overrides its own keys.
+    static JsonNode? ConfigValue(ViewerProject p, string name)
     {
+        var config = p.CgmkConfigOverride;
+        if (config == null && p.WindowMotion != null)
+            config = JsonNode.Parse(File.ReadAllText(p.WindowMotion)) as JsonObject
+                ?? throw new InvalidDataException("Expected a cgmk config object.");
+        if (config != null && (config.ContainsKey(name) || config["format"]?.ToString() != "ExtCustomGimmick.WindowMovement"))
+            return config[name];
         string? root = Root(p);
-        if (root == null)
-        {
-            return fallback;
-        }
-        string? path = Existing(root, Difficulty(p.Chart ?? p.Gimmick ?? p.Images!) + "_cgmk_config.json", "cgmk_config.json");
-        if (path == null)
-        {
-            return fallback;
-        }
-        using var doc = JsonDocument.Parse(File.ReadAllText(path));
-        return doc.RootElement.TryGetProperty(name, out var value)
-            && value.ValueKind is JsonValueKind.True or JsonValueKind.False? value.GetBoolean() : fallback;
+        if (root == null) return null;
+        string? path = Existing(root, Difficulty(p.Chart ?? p.Gimmick ?? p.Images ?? p.Jacket!) + "_cgmk_config.json", "cgmk_config.json");
+        return path == null ? null : (JsonNode.Parse(File.ReadAllText(path)) as JsonObject
+            ?? throw new InvalidDataException("Expected a cgmk config object."))[name];
     }
 
-    /// <summary>同上，取字符串项；难度专属配置优先于目录共用的 cgmk_config.json。</summary>
-    public static string ConfigString(ViewerProject p, string name, string fallback)
-    {
-        string? root = Root(p);
-        if (root == null)
-        {
-            return fallback;
-        }
-        string? path = Existing(root, Difficulty(p.Chart ?? p.Gimmick ?? p.Images ?? p.Jacket!) + "_cgmk_config.json", "cgmk_config.json");
-        if (path == null)
-        {
-            return fallback;
-        }
-        using var doc = JsonDocument.Parse(File.ReadAllText(path));
-        return doc.RootElement.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String? value.GetString() ! : fallback;
-    }
+    /// <summary>按编辑快照、显式配置、难度/共用配置的优先级取布尔值；缺失或类型错误时使用默认值。</summary>
+    public static bool Config(ViewerProject p, string name, bool fallback = true) =>
+        ConfigValue(p, name) is JsonValue value && value.TryGetValue<bool>(out bool result) ? result : fallback;
+
+    /// <summary>同上，取字符串项。</summary>
+    public static string ConfigString(ViewerProject p, string name, string fallback) =>
+        ConfigValue(p, name) is JsonValue value && value.TryGetValue<string>(out string? result) ? result : fallback;
 }
 

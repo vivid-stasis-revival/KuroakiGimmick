@@ -13,6 +13,8 @@ public static class CustomCompatibility
     public static string? NoOpReason(string name, Chart chart, ViewerProject project)
     {
         if (chart.ObjectName != "obj_custom_gimmick") return null;
+        if (name == "changeskin" && !SongFiles.Config(project, "ENABLE_SKIN_CHANGE", false))
+            return "ENABLE_SKIN_CHANGE is false; enable skin change in the event inspector to preview and export this callback.";
         if(name=="scorealph")return "Source InitMisc registers and initializes scorealph, but no active score or HUD draw reads it.";
         if(name=="ditortedBG_col")return "Source InitDistortBackground registers ditortedBG_col, but the background handler reads the separate ditortedBG_col_rgb value.";
         if(name=="fx_zoom")return "Source Step writes the misspelled FX parameter 'g_ZoomBlurIntensity ' (trailing space); the exported filter only declares 'g_ZoomBlurIntensity'.";

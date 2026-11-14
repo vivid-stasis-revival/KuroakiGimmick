@@ -8,6 +8,8 @@ internal static class GimmickAuthoring
 {
     static readonly VsmReference.Entry[] extraGimmicks =
     [
+        new() { Id = "cgmk.changeskin", Kind = "mod", Name = "changeskin", Scope = "custom",
+            Category = "CGMK 1.14.2", Summary = "value2 即时切换整套皮肤：0 正常、1 stopmotion、2 extendnova、3 stargazers；添加时自动启用 ENABLE_SKIN_CHANGE，可在事件面板切换，随工程保存和导出。" },
         new() { Id = "frollsy.lr_slash", Kind = "mod", Name = "lr_slash", Scope = "custom",
             Category = "LR Extra Gimmicks", Summary = "竖向斜线：value1 向下取整并限制为 1–64（_ = 1），value2 为 GameMaker 打包颜色（255 = 红色，_ = 当前色）；duration 不影响生成条数。" },
         new() { Id = "frollsy.lr_slash_color", Kind = "mod", Name = "lr_slash_color", Scope = "custom",

@@ -1,4 +1,7 @@
 {
+  "SKIN CHANGE: ON": "SKIN CHANGE: ON",
+  "SKIN CHANGE: OFF": "SKIN CHANGE: OFF",
+  "Toggle skin change": "Toggle skin change",
   "Render threads": "Render threads",
   "Parallel rendering uses more GPU memory. Speed depends on the scene and GPU.": "Parallel rendering uses more GPU memory. Speed depends on the scene and GPU.",
   "Editor": "Editor",

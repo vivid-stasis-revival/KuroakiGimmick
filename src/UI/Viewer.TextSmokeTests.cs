@@ -108,5 +108,6 @@ public sealed partial class Viewer
         SmokeTimelineRows();
         SmokeCut();
         SmokeMpfSourceEditor();
+        SmokeCgmk1142();
     }
 }

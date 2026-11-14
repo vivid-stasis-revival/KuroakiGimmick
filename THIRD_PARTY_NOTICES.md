@@ -30,7 +30,7 @@
 | Shared gameplay sprites | User-supplied export: sp_laneOverlay, sp_holdnote_overlay, pt_diamonddust | Six original PNG files, unchanged; rights remain with their respective creators |
 | Kuroaki artwork | User-provided kuroaki.png.zip | Original artwork retained unchanged; ICNS/ICO are format conversions; image rights remain with its creator |
 | Note skin | User-provided vsnotes.zip, 12 PNG files | Original image rights remain with their respective creators; files unchanged |
-| Custom Gimmicks behavior | User-provided v1.12.7 source and documentation | Reference for VSP/image, VSC, text and custom effect semantics; original patch package is not redistributed here |
+| Custom Gimmicks behavior | User-provided source/documentation and [CGMK 1.14.2 source](https://github.com/vivid-stasis-revival/Custom-Gimmicks-Mod/tree/3f298e9e60ffd3915d434f59a310a9feaebe704a) | Reference for VSP/image, VSC, text, MPF and custom effect semantics; original patch package is not redistributed here |
 
 ASTELLION song audio, background images and sample charts have been removed. Chart decoding and adapted shader logic remain. Rights to third-party shader code and the user-supplied note skin remain with their respective creators. `Samples/ImageGimmicks` contains original procedural demonstration images.
 

@@ -1,4 +1,7 @@
 {
+  "SKIN CHANGE: ON": "皮肤切换：开启",
+  "SKIN CHANGE: OFF": "皮肤切换：关闭",
+  "Toggle skin change": "切换皮肤开关",
   "Render threads": "渲染线程",
   "Parallel rendering uses more GPU memory. Speed depends on the scene and GPU.": "并行渲染会增加显存占用，实际速度取决于演出内容和 GPU。",
   "Editor": "编辑器",

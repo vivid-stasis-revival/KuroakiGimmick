@@ -84,6 +84,7 @@ public sealed partial class Session
             lastMark = now;
         }
         Project = p;
+        p.CgmkConfigOverride = null; // A new session reloads disk or receives a fresh editor snapshot.
         ProjectPath = projectPath;
         p.GameUiFont = string.IsNullOrWhiteSpace(p.GameUiFont) ? ViewerSettings.DefaultFont : ViewerSettings.FontResource(p.GameUiFont);
         if (p.Chart != null && !File.Exists(p.Chart))
@@ -137,6 +138,7 @@ public sealed partial class Session
         Profile("VSC/VSB + VSM parse");
         WindowMotion = editedWindows ?? Windows.WindowMotionConfig.Load(p, Chart);
         if (editedWindows != null) editedWindows.Validate(Chart);
+        p.CgmkConfigOverride = (System.Text.Json.Nodes.JsonObject)WindowMotion.Root.DeepClone();
         // 只载入资源元数据、图片尺寸和 shader 文本并按组件记录错误，此处不创建任何 GPU 纹理。
         NativeGimmick = NativeGimmickProfile.Load(p, Chart);
         Images = CustomImages.Load(p, Chart, editedVsp, imageResourceRoot);

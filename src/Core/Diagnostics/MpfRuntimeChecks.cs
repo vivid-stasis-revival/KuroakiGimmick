@@ -53,9 +53,9 @@ internal static class MpfRuntimeChecks
                 set_mod_val("ex", get_score_ex());
                 set_mod_val("early", get_game_var_global("earlynotes"));
                 set_mod_val("late", get_game_var_global("latenotes"));
-                set_mod_val("pace", get_game_var_instance("cc", "pace_total"));
+                set_mod_val("pace", get_game_var_instance("cc", "pace_total", 0));
                 set_judge_timing(2, 123);
-                var timings = get_game_var_instance("cc", "timings");
+                var timings = get_game_var_instance("cc", "timings", 0);
                 set_mod_val("timing", timings[2]);
                 reset_judge_timing();
                 ::Main::
@@ -88,7 +88,7 @@ internal static class MpfRuntimeChecks
                 set_mod_val("speed_read", get_game_var_instance("cc", "song_speed", 0));
                 set_mod_val("autoplay_read", get_game_var_global("op_autoplay"));
                 set_mod_val("fps_read", get_game_var_global("gamefps"));
-                set_mod_val("time_read", get_game_var_instance("cc", "cpos"));
+                set_mod_val("time_read", get_game_var_instance("cc", "cpos", 0));
                 """;
             void SpeedChanges(Chart c)
             {

@@ -3,7 +3,7 @@ using System.Globalization;
 namespace KuroakiGimmick.Core;
 
 /// <summary>
-/// Deterministic, bounded Custom Gimmicks 1.14.1 MPF preview. Programs run on the
+/// Deterministic, bounded Custom Gimmicks 1.14.2 MPF preview. Programs run on the
 /// fixed 60 Hz preview clock into immutable sample tracks; seeking, snapshots,
 /// parallel export and Rust base-track evaluation cannot advance script state.
 /// Score and input queries use an explicit offline baseline. Script judgment
@@ -168,6 +168,10 @@ internal sealed class MpfScriptTimeline
     {
         static List<object?> ArrayArg(object?[] a, int i) =>
             a[i] as List<object?> ?? throw new InvalidDataException("TypeError: array argument required.");
+        static Dictionary<string, object?> StructArg(object? value) =>
+            value as Dictionary<string, object?> ?? throw new InvalidDataException("TypeError: struct argument required.");
+        static string FieldName(object? value) =>
+            value as string ?? throw new InvalidDataException("TypeError: struct field name must be a string.");
         static string Format(object? arg) =>
             arg is double number ? number.ToString("G", CultureInfo.InvariantCulture) : arg?.ToString() ?? "undefined";
         switch (function)
@@ -200,7 +204,7 @@ internal sealed class MpfScriptTimeline
             {
                 Count(function,a,2,2); var array = ArrayArg(a,0);
                 if (array.Count >= 100_000) throw new InvalidDataException("IndexError: array exceeds 100000 elements.");
-                script.Context.Allocate(1); array.Add(a[1]); return array;
+                script.Context.Allocate(1); array.Add(a[1]); return null; // 1.14.2: undefined, with in-place mutation.
             }
             case "array_insert":
             {
@@ -224,6 +228,25 @@ internal sealed class MpfScriptTimeline
                     ? n1.CompareTo(n2) * (ascending ? 1 : -1)
                     : string.Compare(Format(x), Format(y), StringComparison.Ordinal) * (ascending ? 1 : -1));
                 return array;
+            }
+            case "struct_create":
+                Count(function,a,0,0); script.Context.Allocate(1);
+                return new Dictionary<string, object?>(StringComparer.Ordinal);
+            case "struct_get":
+                Count(function,a,2,2); return StructArg(a[0]).GetValueOrDefault(FieldName(a[1]));
+            case "struct_exists":
+                Count(function,a,2,2); return StructArg(a[0]).ContainsKey(FieldName(a[1])) ? 1d : 0d;
+            case "struct_set":
+            {
+                Count(function,a,3,3); var fields = StructArg(a[0]); string key = FieldName(a[1]);
+                if (!fields.ContainsKey(key)) script.Context.Allocate(checked(key.Length + 1));
+                fields[key] = a[2]; return null;
+            }
+            case "struct_get_names":
+            {
+                Count(function,a,1,1); var fields = StructArg(a[0]);
+                script.Context.Allocate(fields.Count);
+                return fields.Keys.Cast<object?>().ToList();
             }
             case "random": Count(function,a,1,1); WarnRandom(); return random.NextDouble() * Num(a[0]);
             case "irandom":
@@ -298,9 +321,9 @@ internal sealed class MpfScriptTimeline
                 Count(function, a, 1, 1); WarnOfflineState(script); return game.Global(Name(a[0]));
             case "get_game_var_instance":
             {
-                Count(function, a, 2, 3);
+                Count(function, a, 3, 3);
                 string instance = Name(a[0]), variable = Name(a[1]);
-                if (instance != "cc" || a.Length > 2 && Num(a[2]) != 0)
+                if (instance != "cc" || Num(a[2]) != 0)
                     throw new NotSupportedException("MPF offline preview has no instance '" + instance + "'.");
                 if (variable.StartsWith("mod_", StringComparison.Ordinal)) return ValueAt(variable[4..], -1, currentTime);
                 // These are chart state, not judgment counters. Native callbacks execute

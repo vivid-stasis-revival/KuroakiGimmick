@@ -409,6 +409,12 @@ public sealed partial class Viewer
             }
             // 谱面内剧情的触发点自己不带时长信息，真正演什么写在 story.json 里，所以额外列出来。
             if (c.Name.Equals(EpisodeScript.ModName, StringComparison.OrdinalIgnoreCase)) DrawEpisodeRows(c, Row);
+            if (c.Name == "changeskin")
+            {
+                bool skinEnabled = Flag(editor.Windows.Root, "ENABLE_SKIN_CHANGE", SongFiles.Config(editor.Project, "ENABLE_SKIN_CHANGE", false));
+                Row(L.Get(skinEnabled ? "SKIN CHANGE: ON" : "SKIN CHANGE: OFF"), () =>
+                    editor.Change(L.Get("Toggle skin change"), () => editor.Windows.Root["ENABLE_SKIN_CHANGE"] = !skinEnabled));
+            }
             Text(L.Format($"SOURCE LINE {editor.Vsm.SourceLine(id)} / NOW {Current.Timeline.Get(c.Name, time, c.Proxy):0.####}"), r.X, r.Y + r.H - 22, 10, soft, true, r.W);
         }
         else if (selectedWindowEvent >= 0 && selectedWindowEvent < (editor.Windows.Events?.Count ?? 0) && editor.Windows.Events![selectedWindowEvent] is JsonObject ev)

@@ -1,6 +1,17 @@
-# Custom Gimmicks 1.14 MPF compatibility
+# Custom Gimmicks 1.14.2 MPF compatibility
 
 The implementation builds on PR #52 (`925ce55`) and was checked against the user-supplied packages and extracted game code. GameMaker itself was not executed: source-order conclusions below are static evidence, while the regression checks execute K/G's interpreter.
+
+The current update targets upstream [CGMK 1.14.2, commit `3f298e9e60ffd3915d434f59a310a9feaebe704a`](https://github.com/vivid-stasis-revival/Custom-Gimmicks-Mod/commit/3f298e9e60ffd3915d434f59a310a9feaebe704a), checked on 2026-11-14 against its parent 1.14.1 (`0391f24`).
+
+## 1.14.2 changes
+
+- `struct_create`, `struct_get`, `struct_set`, `struct_exists` and `struct_get_names` are SAFE whitelist functions. Structures and nested arrays retain reference identity; keys are case-sensitive strings. Missing fields and `struct_set` return `undefined`. Field access uses functions; struct literals, dot access and struct operators are not supported. New structures, field storage and name arrays share the existing cumulative allocation budget. Name enumeration order is not a portable contract.
+- `array_push` mutates its array and returns `undefined`; keep `array_push(a, value);`, not `a = array_push(a, value);`. The 1.14.2 author document still claims the array is returned, contradicting the changelog and [executable whitelist](https://github.com/vivid-stasis-revival/Custom-Gimmicks-Mod/blob/3f298e9e60ffd3915d434f59a310a9feaebe704a/codes/gml_GlobalScript_mpf_white_list_funcs.gml). K/G follows the code. `array_insert` and `array_sort` still return the original array.
+- `get_game_var_instance(instance, variable, index)` requires all three arguments. Offline instance support remains limited to the documented `cc` state at index 0.
+- Every rebuilt timeline already creates fresh script environments and rediscovers files, including newly added `.vsmpf` files. `REFRESH_ON_EACH_RUN=false` retains variables between ranges within one simulation, but never between rebuilt sessions. Reload the chart or use Save MPF and Preview to rebuild; seeking/loop playback samples the same immutable timeline, and no filesystem watcher is introduced.
+- The upstream legacy subtitle fix reads `textcolhex` and converts authored RGB to GameMaker's packed color. K/G now uses that RGB value directly, without the removed `col_convertion` switch. The deleted `InitMisc` registration of `sides` was a duplicate: the callback in `InitSides` remains active.
+- Authoring a new `changeskin` also enables `ENABLE_SKIN_CHANGE` in the same undo transaction. The event inspector can enable or disable existing events. In-memory editor configuration and the explicit saved companion take priority over discovered song configs; missing or disabled switches remain inactive on unedited imports. VSM + config and Chart Folder exports preserve the switch.
 
 ## Source identity
 
@@ -33,3 +44,5 @@ REA archive inspection evidence: `ev_383b41b99f66a966e94318cc7467c5e481b06800980
 ## Verification
 
 `dotnet run -c Release -- --mpf-test` runs the synthetic language, timeline, resource discovery, save/reopen/move and export regressions. The tests use temporary fixtures and no private assets. The 14 complete scripts in the supplied CGMK author documentation were also exercised through `Session --inspect` locally; this validates K/G loading and execution, not a visual comparison against the original game.
+
+The 1.14.2 checks cover struct aliasing/nesting/cycles, missing fields, void returns, argument/type errors, allocation bounds, session resets, script discovery/reload, and skin-change authoring/undo/save/export. With local assets, `--smoke-text-ui` also exercises both skin-event insertion paths and the inspector switch through SDL, then reads GPU pixels for red and blue subtitles in both legacy and extended text formats.

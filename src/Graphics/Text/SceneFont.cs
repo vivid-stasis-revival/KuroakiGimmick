@@ -153,12 +153,8 @@ public sealed class SceneFont : IDisposable
             int alignH = legacy ? 1 : Mod3(M("textalignh")), alignV = legacy ? 0 : Mod3(M("textalignv"));
             float top = alignV == 1 ? -height / 2 : alignV == 2 ? -height : 0;
             uint rgb = (uint) Math.Clamp(M(legacy ? "textcolhex" : "textcolrgb"), 0, 16777215);
-            // 旧工程的 textcolhex 按 GameMaker 的 BGR 书写，col_convertion 为 0 表示还没转换过，
-            // 这里交换 R 与 B。删掉这个分支会让所有历史谱面的文字变色。
-            if (legacy && tl.Get("col_convertion", time) == 0)
-            {
-                rgb = ((rgb & 255) << 16) | (rgb & 0xFF00) | ((rgb >> 16) & 255);
-            }
+            // CGMK 1.14.2 applies col_convert(cc.mod_textcolhex): both text formats
+            // accept authored RGB. col_convertion was removed in CGMK 1.12.8.
             var color = Color.Hex(rgb).Alpha(alpha);
 #if KG_SWITCH
             if (Math.Abs(time - lastColorDiagnostic) >= 10)

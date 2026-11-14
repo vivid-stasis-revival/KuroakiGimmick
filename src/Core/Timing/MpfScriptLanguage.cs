@@ -4,7 +4,7 @@ using System.Text;
 namespace KuroakiGimmick.Core;
 
 /// <summary>
-/// Custom Gimmicks 1.14 .vsmpf author-language subset. The parser is intentionally
+/// Custom Gimmicks 1.14.2 .vsmpf author-language subset. The parser is intentionally
 /// closed: no C# scripting, reflection, file access, or arbitrary user functions.
 /// </summary>
 internal sealed class MpfScriptLanguage
@@ -258,6 +258,7 @@ internal sealed class MpfScriptLanguage
             "sin", "cos", "tan", "abs", "floor", "ceil", "min", "max", "clamp",
             "to_str", "str_cat", "array_create", "array_sort", "array_length", "array_push",
             "array_pop", "array_insert", "array_contains", "random", "irandom", "random_set_seed",
+            "struct_create", "struct_get", "struct_set", "struct_exists", "struct_get_names",
             "add_judge_cnt", "get_judge_cnt", "get_combo", "get_max_combo", "set_judge_timing",
             "reset_judge_timing", "register_mod", "set_mod_val", "set_mod_val_at", "get_mod_val",
             "tween_mod_val", "tween_mod_val_at", "call_callback_mod", "call_callback_mod_at",

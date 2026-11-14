@@ -2,6 +2,14 @@
 
 版本以 `KuroakiGimmick.csproj` 为准。16.2 及更早的开发记录可通过 Git 历史查看。
 
+## v0.1.5 / 18.5
+
+- 对齐 Custom Gimmicks 1.14.2（上游 `3f298e9`）：MPF 支持 `struct_create/get/set/exists/get_names`、结构体引用与缺失字段的 `undefined`；`array_push` 原地修改并返回 `undefined`，`get_game_var_instance` 必须填写实例编号。
+- 修复添加 `changeskin` 没有启用 `ENABLE_SKIN_CHANGE`：配置与事件一起撤销/重做；事件面板可开关已有谱面的换肤。预览读取未保存配置，保存重开优先使用工程指定的 CGMK 配置，VSM + config 和 Chart Folder 导出保留开关。
+- 旧式字幕 `textcolhex` 按 1.14.2 使用 RGB，不再受已移除的 `col_convertion` 影响。补充脚本重建重置、文件重载及换肤保存/导出回归。
+- Release 构建、202 项 MPF/CGMK 专项检查及 SDL/Metal 界面与字幕像素检查通过；未进行游戏本体实测。旧全量回归中的备份路径断言在未修改的 18.4 源码上同样失败。
+- 应用版本为 `v0.1.5 / 18.5`，构建序号 `1850`，同步桌面及移动端版本信息。
+
 ## v0.1.5 / 18.4
 
 - 补齐 MPF 的 `song_speed`、`cpos`、`op_autoplay` 和 `gamefps` 读取；执行预算随预览帧推进补充，避免长时间运行误报，同时保留死循环保护。

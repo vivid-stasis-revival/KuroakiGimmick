@@ -6,7 +6,7 @@
 
 在同一条时间轴上编排 gimmick、图片、字幕、场景效果和窗口运动，并在歌曲场景中检查实际表现。
 
-![Version](https://img.shields.io/badge/version-0.1.5_%2F_18.3-94cddd?style=flat-square)
+![Version](https://img.shields.io/badge/version-0.1.5_%2F_18.5-94cddd?style=flat-square)
 ![.NET](https://img.shields.io/badge/.NET-8-b5a3e8?style=flat-square)
 ![Renderer](https://img.shields.io/badge/renderer-SDL3_GPU-94cddd?style=flat-square)
 ![Engine](https://img.shields.io/badge/engine-C%23_%2B_Rust-b5a3e8?style=flat-square)
@@ -72,7 +72,7 @@ KuroakiGimmick 的重点是**演出**，而不只是把 VSM 文本换一种方�
 
 ## 下载与平台支持
 
-当前版本为 **v0.1.5 / Build 18.3**，构建序号为 `1830`。
+当前版本为 **v0.1.5 / Build 18.5**，构建序号为 `1850`。
 
 [前往 GitHub Releases](https://github.com/vivid-stasis-revival/KuroakiGimmick/releases)
 
@@ -103,9 +103,13 @@ Android、iOS/iPadOS 和 Nintendo Switch 的适配还处于实验阶段。相关
 
 编译器对此没有发言权。
 
-### Custom Gimmicks 1.14 自定义 MPF
+### Custom Gimmicks 1.14.2 自定义 MPF
 
 支持读取歌曲目录下的 `cmpf/GLOBAL.<脚本名>.vsmpf` 和 `<难度>.<脚本名>.vsmpf`；同名时难度版本优先。VSM 末尾的 `mpf` 区间会执行脚本的 `::Init::`、`::Main::`、`::Finish::`，支持变量、数组、条件、循环，以及直接/定时 mod 写入和补间。保存工程会保留脚本源目录与难度；Chart Folder 导出包含引用的脚本，单独导出 VSM 不包含脚本文件。
+
+已对齐 CGMK 1.14.2 的结构体函数 `struct_create/get/set/exists/get_names`。数组和结构体使用引用；`array_push(a, value)` 原地修改，返回 `undefined`，不要再把返回值赋给 `a`。`get_game_var_instance("cc", "cpos", 0)` 的实例编号必填。重新加载谱面或保存 MPF 并预览会重新发现脚本文件并重置变量；定位和循环播放复用预计算结果。兼容范围及上游来源见 [MPF 兼容说明](docs/mpf-compatibility.md)。
+
+添加 `changeskin` 会同步启用 CGMK 配置中的 `ENABLE_SKIN_CHANGE`，支持一步撤销/重做，并立即更新预览。已有换肤事件可在事件面板切换此开关；使用 **VSM + cgmk config** 或 **Chart Folder** 导出时会带上配置。
 
 脚本按固定 **60 Hz 预览时钟**预计算，拖动、倒放查看和并行导出复用同一结果。原游戏帧率可能不同，因此依赖“每帧加一”的脚本可能有差异。随机数使用脚本共享的确定性预览序列，不保证与 GameMaker 一致。判定/连击查询返回零值并提示离线基线；修改游戏判定、计分，以及依赖原游戏实例的 `call_callback_mod` 调用尚不模拟，会明确报告错误。脚本的解析深度、循环、累计内存和输出量有预览上限；不会执行任意文件操作或宿主代码。
 
@@ -118,6 +122,8 @@ Android、iOS/iPadOS 和 Nintendo Switch 的适配还处于实验阶段。相关
 正式版本以对应 Release 的构建提交为准。
 
 Nightly 用于提供最近的功能、兼容性改进和 Bug 修复。
+
+18.5：对齐 CGMK 1.14.2 的 MPF 结构体函数与调用规则，修正旧式字幕颜色；修复 `changeskin` 缺少 CGMK 开关，支持即时预览、撤销/重做、保存重开和导出，并在事件面板提供开关。
 
 18.4：修复 MPF 长时间预览预算误报，补齐歌曲速度等状态读取；修正图片时间偏移与缩放的相互影响，支持 `imgxb`/`imgyb`；接入 `!jumpto_beat`、`!playspeed` 兼容别名，并更新 tips。完整更新见 [CHANGELOG](CHANGELOG.md)。
 
@@ -135,6 +141,8 @@ Nightly 用于提供最近的功能、兼容性改进和 Bug 修复。
 
 相关版本：
 
+- [v0.1.5 / 18.5](https://github.com/vivid-stasis-revival/KuroakiGimmick/releases/tag/v0.1.5-18.5)
+- [v0.1.5 / 18.4](https://github.com/vivid-stasis-revival/KuroakiGimmick/releases/tag/v0.1.5-18.4)
 - [v0.1.5 / 18.3](https://github.com/vivid-stasis-revival/KuroakiGimmick/releases/tag/v0.1.5-18.3)
 - [v0.1.5 / 18.2.1](https://github.com/vivid-stasis-revival/KuroakiGimmick/releases/tag/v0.1.5-18.2.1)
 - [全部版本与 Nightly](https://github.com/vivid-stasis-revival/KuroakiGimmick/releases)
@@ -680,7 +688,7 @@ dotnet run -c Release --no-build -- \
 
 ## 构建与发布
 
-当前应用版本为 **v0.1.5 / Build 18.3**。
+当前应用版本为 **v0.1.5 / Build 18.5**。
 
 最终版本号以 [KuroakiGimmick.csproj](KuroakiGimmick.csproj) 为准。
 

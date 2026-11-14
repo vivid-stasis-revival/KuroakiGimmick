@@ -24,6 +24,9 @@ public sealed class ViewerProject
     public bool ImagePathsRelativeToVsp { get; set; }
     /// <summary>显式指定的 ExtCustomGimmick 配置路径；编辑时保留该文件中与本项无关的其他字段。</summary>
     public string? WindowMotion { get; set; }
+    /// <summary>Session-owned CGMK snapshot, including unsaved editor settings. Never serialized into the project.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    internal System.Text.Json.Nodes.JsonObject? CgmkConfigOverride { get; set; }
     public string? Audio { get; set; }
     public string? Jacket { get; set; }
     /// <summary>Custom Songs Mod 3.4.0: jacket is a horizontal square-frame strip when true.</summary>
@@ -97,6 +100,7 @@ public sealed class ViewerProject
     public ViewerProject Copy()
     {
         var copy = (ViewerProject)MemberwiseClone();
+        copy.CgmkConfigOverride = (System.Text.Json.Nodes.JsonObject?)CgmkConfigOverride?.DeepClone();
         copy.GimmickContext = new(GimmickContext);
         copy.EditorMarkers = (EditorMarkers ?? []).ToList();
         copy.EditorTrackOrder = (EditorTrackOrder ?? []).ToList();

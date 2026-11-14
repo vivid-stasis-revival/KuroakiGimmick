@@ -117,9 +117,28 @@ public sealed partial class EditorDocument
     public void Change(string label, Action change)
     {
         var before = Capture(label);
-        try { change(); }
+        bool vsmChanged;
+        try
+        {
+            change();
+            vsmChanged = !before.Lines.SequenceEqual(Vsm.Lines);
+            // Authoring a new changeskin (including paste/source edits) must also
+            // register it in CGMK. Keep the flag and event in the same undo step.
+            if (vsmChanged && !WindowMotionConfig.Flag(Windows.Root, "ENABLE_SKIN_CHANGE"))
+            {
+                // Source edits regenerate IDs even for untouched events. Compare
+                // authored values/counts so unrelated edits retain an explicit off.
+                var previousSkins = before.Lines.Where(line => line.Event?.Name == "changeskin")
+                    .GroupBy(line => line.Event! with { Id = Guid.Empty }).ToDictionary(group => group.Key, group => group.Count());
+                foreach (var skin in Vsm.Clips.Where(clip => clip.Name == "changeskin"))
+                {
+                    var key = skin with { Id = Guid.Empty };
+                    if (previousSkins.GetValueOrDefault(key) == 0) { Windows.Root["ENABLE_SKIN_CHANGE"] = true; break; }
+                    previousSkins[key]--;
+                }
+            }
+        }
         catch { Restore(before); throw; }
-        bool vsmChanged = !before.Lines.SequenceEqual(Vsm.Lines);
         if (!vsmChanged && before.Windows == Windows.Serialize() && before.Markers.SequenceEqual(markers) && before.ImageText == Images.Text && before.TextSources == TextSnapshot() && before.TrackOrder.SequenceEqual(Project.EditorTrackOrder)) return;
         undo.Add(before); if (undo.Count > 64) undo.RemoveAt(0);
         redo.Clear(); if (vsmChanged) VsmRevision++; Revision++;
