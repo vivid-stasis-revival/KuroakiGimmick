@@ -186,7 +186,7 @@ public sealed partial class Viewer : IDisposable
                 {
                     // Keep the shared scene current while the main swapchain is under backpressure.
                     using (Renderer.Preview(preferences.StackLimit, preferences.StackLimitLayers))
-                        Renderer.RenderPresentation(Current, transport.PresentationPosition, notes, effects);
+                        Renderer.RenderInteractivePresentation(Current, transport.PresentationPosition, notes, effects);
                     Canvas.Flush();
                 }
 #if KG_SWITCH

@@ -62,7 +62,7 @@ public sealed partial class Viewer
         // 本帧全部 GPU 工作从这里开始，只在窗口线程执行：先渲染场景，再把 UI 画到离屏 uiTarget。
         using (Renderer.Preview(preferences.StackLimit, preferences.StackLimitLayers))
         {
-            Renderer.RenderPresentation(Current, transport.PresentationPosition, notes, effects);
+            Renderer.RenderInteractivePresentation(Current, transport.PresentationPosition, notes, effects);
             prGridSoloRendered = false;
             if (editorMode && prGridSolo && TryPrGridTarget(out int proxyTarget) && SceneRenderer.CanInspectProxy(Current))
             {

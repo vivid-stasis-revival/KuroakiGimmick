@@ -8,14 +8,15 @@ public sealed partial class SceneRenderer
     readonly SortedDictionary<long,Target> nativeFeedbackCheckpoints=[];
     Session? feedbackOwner;
     long feedbackTick=-1;
-    bool feedbackNotes,feedbackEffects,feedbackValid;
+    bool feedbackNotes,feedbackEffects,feedbackValid,feedbackInteractive;
+    const int InteractiveFeedbackFrameBudget = 4;
     int feedbackWidth;
     int feedbackVisualKey;
 
     bool UsesNativeApplication(Session session)=>session.NativeApplicationProxyEnabled ||
         (session.Chart.ObjectName is "obj_base_gimmick" or "obj_custom_gimmick" && session.Chart.Proxies>0 && session.HasProxyEvents);
 
-    void RenderWithNativeFeedback(Session session,double time,bool notes,bool effects)
+    void RenderWithNativeFeedback(Session session,double time,bool notes,bool effects,bool interactive=false)
     {
         if(!UsesNativeApplication(session) || time<0 || !double.IsFinite(time))
         {feedbackOwner=null;feedbackValid=false;RenderPresentationFrame(session,time,notes,effects,Final);return;}
@@ -24,14 +25,19 @@ public sealed partial class SceneRenderer
         int visualKey=HashCode.Combine(p.GameUiEnabled,p.GameUiScore,p.GameUiExScore,p.GameUiCombo,p.GameUiJudgement,
             p.GameUiHoldEffects,p.GameUiFont,HashCode.Combine(p.VisualDelayMs,p.NoteAlignment,p.ScrollSpeed,inspectionProxy??-1,PresentationWidth));
         visualKey=HashCode.Combine(visualKey,interactivePreview && (session.NoteIndex.HasDensePreview || session.Score.HasDensePreview) ? previewLayers : 0);
-        if(!ReferenceEquals(feedbackOwner,session)||notes!=feedbackNotes||effects!=feedbackEffects||width!=feedbackWidth||visualKey!=feedbackVisualKey)
+        if(!ReferenceEquals(feedbackOwner,session)||notes!=feedbackNotes||effects!=feedbackEffects||width!=feedbackWidth||visualKey!=feedbackVisualKey||interactive!=feedbackInteractive)
         {
-            canvas.Flush();ClearNativeFeedback();feedbackOwner=session;feedbackNotes=notes;feedbackEffects=effects;feedbackWidth=width;feedbackVisualKey=visualKey;
+            canvas.Flush();ClearNativeFeedback();feedbackOwner=session;feedbackNotes=notes;feedbackEffects=effects;feedbackWidth=width;feedbackVisualKey=visualKey;feedbackInteractive=interactive;
         }
         long target=(long)Math.Floor(time*60+1e-8);
         if(feedbackValid && target==feedbackTick)return;
         double Hom(long tick)=>session.Timeline.Get("hom",session.Interludes?.SongAt(tick/60.0)??tick/60.0);
-        if(!feedbackValid || target<feedbackTick)
+        // A mouse drag can seek thousands of logic ticks each UI frame. Rebuild
+        // only a short, consecutive tail on a large jump or rewind. Interactive
+        // history is never reused by an exact render or saved as a checkpoint.
+        if(interactive)
+            (feedbackTick,feedbackValid)=PlanInteractiveFeedback(target,feedbackTick,feedbackValid,Hom);
+        else if(!feedbackValid || target<feedbackTick)
         {
             long start=target;
             // A zero-hom source frame severs all older feedback. Search scalar
@@ -49,12 +55,12 @@ public sealed partial class SceneRenderer
         }
         // Forward gaps with zero hom can also start directly at the requested
         // frame; normal sequential playback otherwise advances one logic tick.
-        if(Hom(target)==0) {feedbackTick=target-1;feedbackValid=false;}
+        if(!interactive && Hom(target)==0) {feedbackTick=target-1;feedbackValid=false;}
         for(long tick=feedbackTick+1;tick<=target;tick++)
         {
             RenderPresentationFrame(session,tick/60.0,notes,effects,Final);
             feedbackTick=tick;feedbackValid=true;
-            if(tick%300==0 && nativeHistory!=null && !nativeFeedbackCheckpoints.ContainsKey(tick))
+            if(!interactive && tick%300==0 && nativeHistory!=null && !nativeFeedbackCheckpoints.ContainsKey(tick))
             {
                 var copy=new Target(canvas.Gpu,320,180);
                 canvas.Pass(copy,nativeHistory.Texture,canvas.Basic);
@@ -63,6 +69,22 @@ public sealed partial class SceneRenderer
                 {var first=nativeFeedbackCheckpoints.First();first.Value.Dispose();nativeFeedbackCheckpoints.Remove(first.Key);}
             }
         }
+    }
+
+    internal static (long PreviousTick, bool KeepHistory) PlanInteractiveFeedback(
+        long target, long previousTick, bool keepHistory, Func<long,double> hom)
+    {
+        long first=Math.Max(0,target-InteractiveFeedbackFrameBudget+1);
+        if(!keepHistory || target<previousTick || previousTick<first-1)
+        {
+            previousTick=first-1;
+            keepHistory=false;
+        }
+        // A zero-HOM tick makes earlier frames irrelevant, even in the
+        // bounded tail. Use the most recent reset frame where possible.
+        for(long tick=target;tick>previousTick;tick--)
+            if(hom(tick)==0)return (tick-1,false);
+        return (previousTick,keepHistory);
     }
 
     Target BeginNativeProxySurface(Session session,double time)
