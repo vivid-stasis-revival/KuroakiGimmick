@@ -121,6 +121,11 @@ public sealed partial class SceneRenderer : IDisposable
     public void RenderPresentation(Session session,double time,bool notes=true,bool effects=true)=>
         RenderWithNativeFeedback(session,session.ScenePresentationTime(time),notes,effects);
 
+    // Window preview may approximate HOM after a seek; all existing render/export
+    // entry points retain exact feedback reconstruction.
+    internal void RenderInteractivePresentation(Session session, double time, bool notes, bool effects) =>
+        RenderWithNativeFeedback(session, session.ScenePresentationTime(time), notes, effects, interactive: true);
+
     NativeInterludeState? nativeInterludeState;
     void RenderPresentationFrame(Session session,double time,bool notes,bool effects,Target output)
     {
