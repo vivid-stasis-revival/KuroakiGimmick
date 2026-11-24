@@ -9,6 +9,8 @@ namespace KuroakiGimmick.Core;
 /// </summary>
 public static class Ffmpeg
 {
+    /// <summary>查找导出或解码所使用的 FFmpeg 可执行程序。</summary>
+    /// <returns>选定的 FFmpeg 路径或供系统查找的可执行文件名。</returns>
     public static string Find()
     {
         var configured = Environment.GetEnvironmentVariable("KUROAKI_FFMPEG") ?? Environment.GetEnvironmentVariable("SCARLET_FFMPEG");

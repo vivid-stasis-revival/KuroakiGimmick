@@ -1,3 +1,5 @@
+// 使用同一编辑接口读取独立或内联的窗口动作 JSON。
+
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -9,15 +11,23 @@ namespace KuroakiGimmick.Core.Windows;
 /// </summary>
 public sealed class WindowMotionConfig
 {
+    /// <summary>内联 CGMK 配置中存放窗口动作数组的键。</summary>
     public const string EventsKey = "ECG_WINDOW_MOVEMENT_EVENTS";
+    /// <summary>内联 CGMK 配置中声明窗口数量的键。</summary>
     public const string CountKey = "ECG_WINDOW_MOVEMENT_WINDOW_COUNT";
+    /// <summary>内联 CGMK 配置中存放窗口外观的键。</summary>
     public const string SettingsKey = "ECG_WINDOW_MOVEMENT_SETTINGS";
+    /// <summary>proxy 与窗口绑定数组的配置键。</summary>
     public const string BindingsKey = "ECG_PROXY_WINDOW_BINDINGS";
+    /// <summary>保留来源字段并用于编辑的 JSON 根对象。</summary>
     public JsonObject Root { get; }
+    /// <summary>配置的来源路径，直接构造时可省略。</summary>
     public string? Path { get; }
     /// <summary>是否为独立的 WindowMovement 文档。独立与内嵌两种形态的事件键名不同，读写前必须先判这一项。</summary>
     public bool Standalone => Root["format"]?.ToString() == "ExtCustomGimmick.WindowMovement";
+    /// <summary>依据独立文件或内联格式选择动作数组，缺失时为 null。</summary>
     public JsonArray? Events => Root[Standalone ? "events" : EventsKey] as JsonArray;
+    /// <summary>可选的 proxy 窗口绑定数组。</summary>
     public JsonArray? Bindings => Root[BindingsKey] as JsonArray;
     /// <summary>有事件或有 proxy 绑定才算有内容。其余 cgmk 选项不计入——它们不属于窗口运动。</summary>
     public bool HasContent => (Events?.Count ?? 0) > 0 || (Bindings?.Count ?? 0) > 0;
@@ -34,24 +44,41 @@ public sealed class WindowMotionConfig
         }
     }
 
-    public WindowMotionConfig(JsonObject root, string? path = null) { Root = root; Path = path; }
+    /// <summary>在给定 JSON 对象上建立窗口动作配置视图。</summary>
+    /// <param name="root">保留全部来源字段的 JSON 对象。</param>
+    /// <param name="path">可选的来源文件路径。</param>
+    public WindowMotionConfig(JsonObject root, string? path = null)
+    {
+        Root = root;
+        Path = path;
+    }
     /// <summary>把独立的 WindowMovement 文档转写成内嵌 cgmk 形式；事件深拷贝后才移除独立格式标记，原对象不受影响。</summary>
+    /// <returns>用于内联游戏配置的窗口动作对象。</returns>
     public WindowMotionConfig AsInlineGameConfig()
     {
         var copy = Copy();
         if (!copy.Standalone) return copy;
         copy.Root[EventsKey] = copy.Events?.DeepClone() ?? new JsonArray();
         copy.Root[CountKey] = copy.Count;
-        copy.Root.Remove("format"); copy.Root.Remove("events"); copy.Root.Remove("windowCount");
+        copy.Root.Remove("format");
+        copy.Root.Remove("events");
+        copy.Root.Remove("windowCount");
         return copy;
     }
     /// <summary>整份 DOM 深拷贝，路径一并带上。编辑前必须先 Copy，否则会改到 Session 正在使用的那一份。</summary>
+    /// <returns>深复制根 JSON 后得到的独立配置。</returns>
     public WindowMotionConfig Copy() => new((JsonObject)Root.DeepClone(), Path);
     /// <summary>按工程统一的 JSON 选项序列化，未知字段随之原样写回。</summary>
+    /// <returns>包含当前根对象全部字段的 JSON 文本。</returns>
     public string Serialize() => Root.ToJsonString(ViewerProject.Json);
     /// <summary>没有配置时的空对象。它是合法可用的，不是 null 占位——上层不需要到处判空。</summary>
+    /// <returns>具有空 JSON 根的配置。</returns>
     public static WindowMotionConfig Empty() => new(new JsonObject());
     /// <summary>32 MiB 上限先于 JSON 解析生效，避免误选的大文件把整个 DOM 读进内存。</summary>
+    /// <param name="text">待解析的 JSON 文本。</param>
+    /// <param name="path">可选的来源路径。</param>
+    /// <returns>保留原始根对象的配置。</returns>
+    /// <exception cref="InvalidDataException">文本超过 32 MiB 或根值不是配置对象。</exception>
     public static WindowMotionConfig Parse(string text, string? path = null)
     {
         if (text.Length > 32 * 1024 * 1024) throw new InvalidDataException("Window config exceeds 32 MiB.");
@@ -59,6 +86,8 @@ public sealed class WindowMotionConfig
     }
 
     /// <summary>显式指定的路径优先，其次才按难度名和目录共用名在歌曲目录里查找；查找顺序固定，不依赖文件系统枚举顺序。</summary>
+    /// <param name="project">当前工程的路径与呈现配置。</param>
+    /// <returns>显式指定或发现的配置路径，没有候选时为 null。</returns>
     public static string? Discover(ViewerProject project)
     {
         if (project.WindowMotion != null) return project.WindowMotion;
@@ -69,6 +98,9 @@ public sealed class WindowMotionConfig
     }
 
     /// <summary>外置文件存在但损坏时记为错误诊断并退回空配置，不悄悄改用另一份配置冒充成功。</summary>
+    /// <param name="project">当前工程的路径与呈现配置。</param>
+    /// <param name="chart">提供音符、演出事件及诊断的谱面。</param>
+    /// <returns>当前工程的窗口动作及校验结果。</returns>
     public static WindowMotionConfig Load(ViewerProject project, Chart chart)
     {
         string? path = Discover(project);
@@ -84,7 +116,8 @@ public sealed class WindowMotionConfig
                 var linked = Parse(File.ReadAllText(legacy), legacy);
                 if (linked.Events != null)
                 {
-                    config.Root[EventsKey] = linked.Events.DeepClone(); config.Root[CountKey] = linked.Count;
+                    config.Root[EventsKey] = linked.Events.DeepClone();
+                    config.Root[CountKey] = linked.Count;
                     chart.Diagnostics.Add(new(path, 0, "WindowMovement FILE resolved; edited copies store inline ECG events."));
                 }
             }
@@ -102,6 +135,7 @@ public sealed class WindowMotionConfig
     /// 只写诊断，不修改也不删除任何事件：无法预览的 op 与 preset 照样保留在 DOM 里，供原样另存。
     /// 只有"非对象事件""时间非有限""超过 64 个窗口"标为错误，会让 strict 模式返回非零退出码。
     /// </summary>
+    /// <param name="chart">提供音符、演出事件及诊断的谱面。</param>
     public void Validate(Chart chart)
     {
         if ((Bindings?.Count ?? 0) > 0)
@@ -111,7 +145,11 @@ public sealed class WindowMotionConfig
         if (Count > 64) chart.Diagnostics.Add(new(Path ?? "windows", 0, "This preview supports at most 64 addressed windows; source configuration is retained.", true));
         foreach (var pair in (Events ?? new JsonArray()).Select((e, i) => (e, i)))
         {
-            if (pair.e is not JsonObject e) { chart.Diagnostics.Add(new("windows", pair.i + 1, "Window event is not an object.", true)); continue; }
+            if (pair.e is not JsonObject e)
+            {
+                chart.Diagnostics.Add(new("windows", pair.i + 1, "Window event is not an object.", true));
+                continue;
+            }
             string op = Text(e, "op");
             if (!Operations.Contains(op)) chart.Diagnostics.Add(new("windows", pair.i + 1, $"Window operation '{op}' is preserved but not previewed."));
             double t = Number(e, "t");
@@ -122,6 +160,7 @@ public sealed class WindowMotionConfig
     }
 
     /// <summary>取事件数组，缺失或类型不对时就地补一个空数组。键名随独立/内嵌形态而变，别写死。</summary>
+    /// <returns>存在的或新建立的动作数组。</returns>
     public JsonArray EnsureEvents()
     {
         string key = Standalone ? "events" : EventsKey;
@@ -129,60 +168,122 @@ public sealed class WindowMotionConfig
         return (JsonArray)Root[key]!;
     }
     /// <summary>只增不减：已有的窗口数比请求值大时保持原值，避免缩减计数把既有事件挤出寻址范围。</summary>
+    /// <param name="count">需要容纳的窗口数量。</param>
+    /// <exception cref="FormatException">窗口数量不在 1 至 64 之间。</exception>
     public void EnsureCount(int count)
     {
         if (count is < 1 or > 64) throw new FormatException("Window count must be 1..64.");
         Root[Standalone ? "windowCount" : CountKey] = Math.Max(count, Count);
     }
 
+    /// <summary>编辑器和校验支持的动作名。</summary>
     public static readonly string[] Operations = ["NewWindowDance", "WindowResize", "HideWindow", "ReorderWindows", "SetWindowContent"];
+    /// <summary>窗口移动支持的轨迹预设名。</summary>
     public static readonly string[] Presets = ["Move", "Sway", "Wrap", "Ellipse", "ShakePer"];
+    /// <summary>窗口动画支持的缓动名称集合。</summary>
     public static readonly string[] Eases = ["Linear", "InSine", "OutSine", "InOutSine", "InQuad", "OutQuad", "InOutQuad",
         "InCubic", "OutCubic", "InOutCubic", "InQuart", "OutQuart", "InOutQuart", "InExpo", "OutExpo", "InOutExpo", "OutBack", "OutBounce", "OutElastic"];
+    /// <summary>读取指定 JSON 属性的文本表示，缺失时使用回退值。</summary>
+    /// <param name="o">要查询的 JSON 对象。</param>
+    /// <param name="name">属性名。</param>
+    /// <param name="fallback">缺少该配置项时使用的回退值。</param>
+    /// <returns>属性的文本形式或回退值。</returns>
     public static string Text(JsonObject o, string name, string fallback = "") => o[name]?.ToString() ?? fallback;
     /// <summary>数值一律按 InvariantCulture 解析，配置文件的含义不随系统区域设置改变；解析不出就退回 fallback，不抛错。</summary>
+    /// <param name="o">要查询的 JSON 对象。</param>
+    /// <param name="name">属性名。</param>
+    /// <param name="fallback">缺少该配置项时使用的回退值。</param>
+    /// <returns>读取的数值或回退值。</returns>
     public static double Number(JsonObject o, string name, double fallback = 0) =>
         o[name] is JsonValue v && double.TryParse(v.ToString(), System.Globalization.NumberStyles.Float,
             System.Globalization.CultureInfo.InvariantCulture, out double n) ? n : fallback;
     /// <summary>取整用 Floor 且非有限值退回 <paramref name="fallback"/>，避免 NaN 强转为未定义的整数。</summary>
+    /// <param name="o">要查询的 JSON 对象。</param>
+    /// <param name="name">属性名。</param>
+    /// <param name="fallback">回退整数。</param>
+    /// <returns>读取的整数或回退值。</returns>
     public static int Integer(JsonObject o, string name, int fallback = 0)
     {
         double n = Number(o, name, fallback);
         return double.IsFinite(n) && n >= int.MinValue && n <= int.MaxValue ? (int)Math.Floor(n) : fallback;
     }
     /// <summary>只认真正的 JSON 布尔值，字符串 "true" 不算；宽松解析会让写错类型的配置悄悄生效。</summary>
+    /// <param name="o">要查询的 JSON 对象。</param>
+    /// <param name="name">属性名。</param>
+    /// <param name="fallback">缺少该配置项时使用的回退值。</param>
+    /// <returns>读取的开关或回退值。</returns>
     public static bool Flag(JsonObject o, string name, bool fallback = false) =>
         o[name] is JsonValue v && v.TryGetValue<bool>(out bool b) ? b : fallback;
     /// <summary>事件时长（秒）：NewWindowDance 用 easeDur，其余 op 用 dur，两个字段不可互换。</summary>
+    /// <param name="e">窗口动作对象。</param>
+    /// <returns>该动作的持续时间，单位为秒。</returns>
     public static double Duration(JsonObject e) => Text(e, "op") == "NewWindowDance" ? Number(e, "easeDur") : Number(e, "dur");
 
     /// <summary>给定的 GML 运行时会无条件访问全部字段，因此连被禁用的轴也要写出来，缺字段会让原版直接报错。</summary>
+    /// <param name="op">动作类型键。</param>
+    /// <param name="seconds">动作的起始秒数。</param>
+    /// <param name="duration">持续秒数。</param>
+    /// <param name="window">目标窗口索引。</param>
+    /// <returns>包含相应时间和默认参数的新动作对象。</returns>
+    /// <exception cref="FormatException">动作名不在支持的操作集合中。</exception>
     public static JsonObject NewEvent(string op, double seconds, double duration, int window)
     {
         var e = new JsonObject { ["op"] = op, ["t"] = seconds, ["w"] = window, ["overlap"] = -1 };
         switch (op)
         {
             case "NewWindowDance":
-                e["preset"] = "Move"; e["same"] = "Reset"; e["x"] = .5; e["y"] = .5;
-                e["ux"] = true; e["uy"] = true; e["angle"] = 0; e["uangle"] = true;
-                e["ax"] = 0; e["ay"] = 0; e["uax"] = true; e["uay"] = true;
-                e["speed"] = 0; e["freq"] = 0; e["period"] = .25; e["subEase"] = "Linear";
-                e["easeType"] = "InOut"; e["reference"] = "Center"; e["easeDur"] = duration; e["ease"] = "OutSine";
+                e["preset"] = "Move";
+                e["same"] = "Reset";
+                e["x"] = .5;
+                e["y"] = .5;
+                e["ux"] = true;
+                e["uy"] = true;
+                e["angle"] = 0;
+                e["uangle"] = true;
+                e["ax"] = 0;
+                e["ay"] = 0;
+                e["uax"] = true;
+                e["uay"] = true;
+                e["speed"] = 0;
+                e["freq"] = 0;
+                e["period"] = .25;
+                e["subEase"] = "Linear";
+                e["easeType"] = "InOut";
+                e["reference"] = "Center";
+                e["easeDur"] = duration;
+                e["ease"] = "OutSine";
                 break;
             case "WindowResize":
-                e["sx"] = 1; e["sy"] = 1; e["usx"] = true; e["usy"] = true;
-                e["px"] = .5; e["py"] = .5; e["upx"] = true; e["upy"] = true;
-                e["pivotMode"] = "Default"; e["anchor"] = "None"; e["dur"] = duration; e["ease"] = "OutSine";
+                e["sx"] = 1;
+                e["sy"] = 1;
+                e["usx"] = true;
+                e["usy"] = true;
+                e["px"] = .5;
+                e["py"] = .5;
+                e["upx"] = true;
+                e["upy"] = true;
+                e["pivotMode"] = "Default";
+                e["anchor"] = "None";
+                e["dur"] = duration;
+                e["ease"] = "OutSine";
                 break;
-            case "HideWindow": e["show"] = true; break;
-            case "SetWindowContent": e["room"] = 0; break;
-            case "ReorderWindows": e["order"] = new JsonArray(JsonValue.Create(0)); break;
+            case "HideWindow":
+                e["show"] = true;
+                break;
+            case "SetWindowContent":
+                e["room"] = 0;
+                break;
+            case "ReorderWindows":
+                e["order"] = new JsonArray(JsonValue.Create(0));
+                break;
             default: throw new FormatException("Unknown window operation.");
         }
         return e;
     }
 
     /// <summary>下标越界或缺少 settings 时给出占位标题和默认边框，绝不抛错——样式缺失不该阻断窗口预览。</summary>
+    /// <param name="index">窗口索引。</param>
+    /// <returns>该窗口的标题及边框开关。</returns>
     public (string Title, bool Border) Style(int index)
     {
         var windows = (Root[SettingsKey] as JsonObject)?["windows"] as JsonArray;

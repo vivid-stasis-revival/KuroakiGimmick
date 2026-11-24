@@ -1,3 +1,5 @@
+// 加载编辑器手册的数据及页面内容。
+
 using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;

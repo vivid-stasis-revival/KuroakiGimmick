@@ -4,7 +4,7 @@ global using IncrementalHash = KuroakiGimmick.Native.SwitchIncrementalHash;
 
 namespace KuroakiGimmick.Native;
 
-// mono-nx has no OpenSSL. Asset identity still needs SHA-256 compatible with desktop exports.
+// mono-nx 缺少 OpenSSL，素材摘要仍须与桌面导出的 SHA-256 一致。
 internal static class SwitchSha256
 {
     public static byte[] HashData(byte[] data)

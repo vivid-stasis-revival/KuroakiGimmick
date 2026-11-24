@@ -4,13 +4,19 @@ namespace KuroakiGimmick.Core;
 
 internal static unsafe partial class RustEngineBridge
 {
-    /// <summary>Exercise a >2 GiB native address range without allocating a multi-gigabyte managed array.</summary>
+    /// <summary>验证超过 2 GiB 的原生地址区间，不分配同等规模的托管数组。</summary>
     internal static void PacketSizeChecks()
     {
         static void Reject(Action action, string expected)
         {
-            try { action(); }
-            catch (InvalidDataException e) when (e.Message.Contains(expected, StringComparison.Ordinal)) { return; }
+            try
+            {
+                action();
+            }
+            catch (InvalidDataException e) when (e.Message.Contains(expected, StringComparison.Ordinal))
+            {
+                return;
+            }
             throw new InvalidOperationException("Native packet validation did not reject: " + expected);
         }
         using (ChartLoadLimits.Override(false))
@@ -24,14 +30,16 @@ internal static unsafe partial class RustEngineBridge
         string path = Path.Combine(Path.GetTempPath(), "kg-native-packet-" + Guid.NewGuid().ToString("N"));
         try
         {
-            // A sparse file reserves address space, not 2 GiB of physical memory or chart objects.
+            // 用稀疏文件预留地址空间，避免分配 2 GiB 实体内存或谱面对象。
             using (var file = File.Create(path))
             {
                 file.SetLength(largeLength);
                 using var writer = new BinaryWriter(file);
-                writer.Write("KGS2"u8); writer.Write(new byte[3]); // version + flags
-                for (int i = 0; i < 6; i++) writer.Write(0u); // empty object name and record lists
-                file.Position = largeLength - 1; writer.Write((byte)0x5a);
+                writer.Write("KGS2"u8);
+                writer.Write(new byte[3]); // version + flags
+                for (int i = 0; i < 6; i++) writer.Write(0u); // 对象名及各记录列表均为空。
+                file.Position = largeLength - 1;
+                writer.Write((byte)0x5a);
             }
             using var mapped = MemoryMappedFile.CreateFromFile(path, FileMode.Open, null, 0, MemoryMappedFileAccess.Read);
             using var view = mapped.CreateViewAccessor(0, largeLength, MemoryMappedFileAccess.Read);
@@ -43,12 +51,18 @@ internal static unsafe partial class RustEngineBridge
                 stream.Position = largeLength - 1;
                 if (stream.ReadByte() != 0x5a) throw new InvalidOperationException("Native stream cannot read beyond 2 GiB.");
                 stream.Position = 0;
-                // The real chart decoder must reach structural validation, not an array allocation/cap.
+                // 真实解码器应到达结构校验阶段，不能先因托管数组分配或长度上限中断。
                 Reject(() => DecodeChart(stream, "packet-size"), "Trailing bytes");
             }
-            finally { view.SafeMemoryMappedViewHandle.ReleasePointer(); }
+            finally
+            {
+                view.SafeMemoryMappedViewHandle.ReleasePointer();
+            }
         }
-        finally { File.Delete(path); }
+        finally
+        {
+            File.Delete(path);
+        }
         Console.WriteLine("PASS native packet stream: >2 GiB address/seek/decode, limited budget, structural validation.");
 #endif
     }

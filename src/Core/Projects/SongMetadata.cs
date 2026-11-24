@@ -3,12 +3,20 @@ namespace KuroakiGimmick.Core;
 /// <summary>
 /// 读取供 HUD 显示的歌曲元数据。显示文字不参与对象加载器选择。
 /// </summary>
+/// <param name="Name">歌曲名称。</param>
+/// <param name="Artist">曲师署名。</param>
+/// <param name="Difficulty">难度名称。</param>
+/// <param name="Level">等级文字。</param>
+/// <param name="DifficultyFrame">难度标识使用的精灵帧。</param>
 public sealed record SongMetadata(string Name, string Artist, string Difficulty, string Level, int DifficultyFrame)
 {
     /// <summary>
     /// 读取 info.json/song.json 的显示文字；命令行给出的 --song-* 覆盖文件内容。
     /// 元数据缺失或损坏只记诊断、不抛错，HUD 退回谱面标题与 "?" 等级。
     /// </summary>
+    /// <param name="p">当前工程的路径与呈现配置。</param>
+    /// <param name="chart">提供音符、演出事件及诊断的谱面。</param>
+    /// <returns>当前工程和谱面对应的歌曲显示信息。</returns>
     public static SongMetadata Load(ViewerProject p, Chart chart)
     {
         string basis = p.Chart ?? p.Gimmick ?? p.Images ?? "", difficulty = SongInfo.Normalize(SongFiles.Difficulty(basis));

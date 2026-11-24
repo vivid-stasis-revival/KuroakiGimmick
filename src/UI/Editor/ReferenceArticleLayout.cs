@@ -1,3 +1,5 @@
+// 将参考文章中的段落、代码与表格排版为界面内容。
+
 using System.Globalization;
 using System.Text;
 using KuroakiGimmick.Core.Documentation;
@@ -31,7 +33,8 @@ internal static class ReferenceArticleLayout
     {
         float width = Math.Max(80, availableWidth);
         float top = 0;
-        var items = new List<Item>(); var anchors = new List<Anchor>();
+        var items = new List<Item>();
+        var anchors = new List<Anchor>();
         ReferenceInlineLayout.Line[] Wrap(string text, float w, float size = BodySize, bool bold = false) =>
             ReferenceInlineLayout.Wrap(text, Math.Max(1, w), size, bold, measure);
         void RichItem(string kind, float height, ReferenceInlineLayout.Line[][] lines, float[] widths, string link = "", string anchor = "") =>
@@ -51,7 +54,7 @@ internal static class ReferenceArticleLayout
             }
             else if (block.Kind == "code")
             {
-                // Only presentation wraps; the Copy button always receives the exact code.
+                // 换行仅用于排版，复制按钮仍取完整原始代码。
                 var lines = CodeLines(block.Text, width - 32, text => measure(text, 16, false, true));
                 float height = 40 + Math.Max(1, lines.Length) * 26 + 14;
                 items.Add(new("code", top, height, [lines], [width], block.Text, Anchor: block.Language ?? ""));
@@ -84,13 +87,15 @@ internal static class ReferenceArticleLayout
                             lines.AddRange(ReferenceInlineLayout.Wrap(spans, width - 24, 15, false, measure));
                         }
                         float height = Math.Max(1, lines.Count) * 25 + 20;
-                        RichItem("table-row", height, [lines.ToArray()], [width], link); top += height;
+                        RichItem("table-row", height, [lines.ToArray()], [width], link);
+                        top += height;
                     }
                     else
                     {
                         var lines = Enumerable.Range(0, count).Select(i => Wrap(i < cells.Length ? cells[i] : "", widths[i] - 24, 15, header)).ToArray();
                         float height = Math.Max(1, lines.Max(row => row.Length)) * 25 + 20;
-                        RichItem(header ? "table-header" : "table-row", height, lines, widths, link); top += height;
+                        RichItem(header ? "table-header" : "table-row", height, lines, widths, link);
+                        top += height;
                     }
                 }
                 Row(block.Columns, true, "");
@@ -123,7 +128,10 @@ internal static class ReferenceArticleLayout
             {
                 string element = elements.GetTextElement();
                 if (buffer.Length > 0 && measure(buffer.ToString() + element) > Math.Max(1, width))
-                { result.Add(buffer.ToString()); buffer.Clear(); }
+                {
+                    result.Add(buffer.ToString());
+                    buffer.Clear();
+                }
                 buffer.Append(element);
             }
             result.Add(buffer.ToString());

@@ -1,3 +1,5 @@
+// 处理标签拖动时的目标定位、重排和停靠。
+
 using System.Numerics;
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Graphics;
@@ -29,12 +31,17 @@ public sealed partial class Viewer
                 editDrag != null || ImageGestureActive || resizingLayout != 0 || prGridHudDragging ||
                 !TryDockHeader(window, e.X, e.Y, out string? panelId)) return false;
             dockDrag = new(workspaceManager.Current, panelId!, new(e.X, e.Y));
-            dockDragSource = window; dockDragMode = workspaceManager.Mode; dockDragPanel = panelId;
+            dockDragSource = window;
+            dockDragMode = workspaceManager.Mode;
+            dockDragPanel = panelId;
             dockDragPointer = new(e.X, e.Y);
             return false; // 单点误触处理
         }
         if (e.Type == 0x300 && e.Scan == 41 || e.Type == 0x20F)
-        { CancelDockDrag(); return true; }
+        {
+            CancelDockDrag();
+            return true;
+        }
         if (e.Type == 0x400)
         {
             UpdateDockDragTarget(e, window);
@@ -65,7 +72,9 @@ public sealed partial class Viewer
 
     void CancelDockDrag()
     {
-        dockDrag?.Cancel(); dockDrag = null; dockDragPanel = null;
+        dockDrag?.Cancel();
+        dockDrag = null;
+        dockDragPanel = null;
         dockDropRoot = null;
         if (dockMouseCaptured) Sdl.SDL_CaptureMouse(false);
         dockMouseCaptured = false;
@@ -83,9 +92,12 @@ public sealed partial class Viewer
         var layout = dockDragMode == WorkspaceMode.Editor ? workspaceManager.Editor : workspaceManager.Viewer;
         WorkspaceWindowManager.Window? targetWindow = null;
         Vector2 targetPoint = default;
-        // Prefer the event's own window when capture is not redirecting events.
+        // 未通过捕获重定向事件时，优先使用事件自身的窗口。
         if (eventWindow.Id != dockDragSource.Id && eventWindow.Shown)
-        { targetWindow = eventWindow; targetPoint = new(e.X, e.Y); }
+        {
+            targetWindow = eventWindow;
+            targetPoint = new(e.X, e.Y);
+        }
         else
         {
             Sdl.SDL_GetGlobalMouseState(out float globalX, out float globalY);
@@ -102,12 +114,15 @@ public sealed partial class Viewer
                     targetPoint = PanelContext.FromNative(globalX - x, globalY - y, viewport);
                     break;
                 }
-            // Wayland may not expose global coordinates. The source window still has useful local
-            // coordinates, and the menu remains the cross-window fallback.
+            // Wayland 可能不提供全局指针位置，源窗口仍可使用局部坐标，跨窗操作可回退到菜单。
             if (targetWindow == null && eventWindow.Id == dockDragSource.Id)
-            { targetWindow = eventWindow; targetPoint = new(e.X, e.Y); }
+            {
+                targetWindow = eventWindow;
+                targetPoint = new(e.X, e.Y);
+            }
         }
-        var rects = new List<DockPanelRect>(); var splitters = new List<DockSplitterRect>();
+        var rects = new List<DockPanelRect>();
+        var splitters = new List<DockSplitterRect>();
         string? root = targetWindow == null ? null : RootFor(targetWindow);
         if (targetWindow != null && root != null)
         {
@@ -118,7 +133,8 @@ public sealed partial class Viewer
             layout.Solve(root, area, rects, splitters);
         }
         dockDrag.Update(root, targetPoint, rects);
-        dockDropRoot = root; dockDropPoint = targetPoint;
+        dockDropRoot = root;
+        dockDropPoint = targetPoint;
         dockDragPointer = eventWindow.Id == dockDragSource.Id ? new(e.X, e.Y) : targetPoint;
     }
 
@@ -137,7 +153,8 @@ public sealed partial class Viewer
         Rect area = targetWindow.Main
             ? new(24, 91, viewport.Width - 48, viewport.Height - (dockDragMode == WorkspaceMode.Editor ? 152 : 159))
             : new(0, 0, viewport.Width, viewport.Height);
-        var panels = new List<DockPanelRect>(); var splitters = new List<DockSplitterRect>();
+        var panels = new List<DockPanelRect>();
+        var splitters = new List<DockSplitterRect>();
         layout.Solve(dockDropRoot, area, panels, splitters);
         Rect rect = panels.FirstOrDefault(p => p.Panel == dockDragPanel).Rect;
         if (rect.W <= 0 || dockDropPoint.Y < rect.Y || dockDropPoint.Y >= rect.Y + 32 ||
@@ -166,18 +183,23 @@ public sealed partial class Viewer
         Rect area = window.Main
             ? new(24, 91, viewport.Width - 48, viewport.Height - (editorMode ? 152 : 159))
             : new(0, 0, viewport.Width, viewport.Height);
-        var panels = new List<DockPanelRect>(); var splitters = new List<DockSplitterRect>();
+        var panels = new List<DockPanelRect>();
+        var splitters = new List<DockSplitterRect>();
         layout.Solve(root, area, panels, splitters);
         foreach (var group in panels.GroupBy(p => p.Rect))
         {
-            var tabs = group.ToArray(); Rect rect = group.Key;
+            var tabs = group.ToArray();
+            Rect rect = group.Key;
             if (window.Main && editorMode && OriginalSourceGroup(tabs))
             {
                 rect = PanelRegistry.MainContent("tools", rect);
                 float sourceTabWidth = (rect.W - 12) / 3;
                 for (int index = 0; index < tabs.Length; index++)
                     if (new Rect(rect.X + index * (sourceTabWidth + 6), rect.Y + 5, sourceTabWidth, 27).Contains(x, y))
-                    { panelId = tabs[index].Panel; return true; }
+                    {
+                        panelId = tabs[index].Panel;
+                        return true;
+                    }
                 continue;
             }
             if (window.Main && !editorMode && OriginalViewerRightGroup(tabs))
@@ -185,11 +207,20 @@ public sealed partial class Viewer
                 rect = PanelRegistry.MainContent("inspector", rect);
                 float half = (rect.W - 10) / 2;
                 if (new Rect(rect.X, rect.Y + 37, half, 31).Contains(x, y))
-                { panelId = "inspector"; return true; }
+                {
+                    panelId = "inspector";
+                    return true;
+                }
                 if (new Rect(rect.X + half + 10, rect.Y + 37, half, 31).Contains(x, y))
-                { panelId = "diagnostics"; return true; }
+                {
+                    panelId = "diagnostics";
+                    return true;
+                }
                 if (!diagnostics && new Rect(rect.X, rect.Y + 418, rect.W, 20).Contains(x, y))
-                { panelId = "export"; return true; }
+                {
+                    panelId = "export";
+                    return true;
+                }
                 continue;
             }
             if (window.Main && tabs.Length == 1)
@@ -203,7 +234,11 @@ public sealed partial class Viewer
                     "preview" => new(rect.X + PreviewHorizontalPadding, rect.Y + 3, 155, 24),
                     _ => new(rect.X, rect.Y + 3, Math.Min(rect.W, 155), 22)
                 };
-                if (header.Contains(x, y)) { panelId = id; return true; }
+                if (header.Contains(x, y))
+                {
+                    panelId = id;
+                    return true;
+                }
                 continue;
             }
             bool canMove = !window.Main && layout.Roots.Count > 2;
@@ -211,7 +246,10 @@ public sealed partial class Viewer
             float tabWidth = Math.Max(40, Math.Min(160, (rect.W - 8 - reserve) / tabs.Length));
             for (int index = 0; index < tabs.Length; index++)
                 if (new Rect(rect.X + 4 + index * tabWidth, rect.Y + 3, tabWidth - 4, 24).Contains(x, y))
-                { panelId = tabs[index].Panel; return true; }
+                {
+                    panelId = tabs[index].Panel;
+                    return true;
+                }
         }
         return false;
     }
@@ -221,7 +259,8 @@ public sealed partial class Viewer
         if (dockDrag is not { Dragging: true } || dockDragMode != workspaceManager.Mode) return;
         if (dockDrag.Target is { } target && target.Window == root)
         {
-            Canvas.Fill(target.Preview, soft.Alpha(.22)); Canvas.Border(target.Preview, red);
+            Canvas.Fill(target.Preview, soft.Alpha(.22));
+            Canvas.Border(target.Preview, red);
             var panelRect = panels.FirstOrDefault(p => p.Panel == target.Panel).Rect;
             if (panelRect.W > 0 && panelRect.H > 0)
             {
@@ -243,7 +282,8 @@ public sealed partial class Viewer
         if (dockDragSource != null && root == RootFor(dockDragSource) && dockDragPanel != null)
         {
             var ghost = new Rect(dockDragPointer.X + 12, dockDragPointer.Y + 12, 128, 26);
-            Canvas.Fill(ghost, panel.Alpha(.72)); Canvas.Border(ghost, soft);
+            Canvas.Fill(ghost, panel.Alpha(.72));
+            Canvas.Border(ghost, soft);
             Text(dockDragPanel.ToUpperInvariant(), ghost.X + 8, ghost.Y + 7, 10, white, true, 112);
         }
     }

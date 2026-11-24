@@ -4,7 +4,7 @@ using KuroakiGimmick.Core.Documentation;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>Wrap styled text using the same bold/monospaced metrics used to draw each run.</summary>
+/// <summary>使用各文本段实际绘制时的粗体和等宽字形度量进行换行。</summary>
 internal static class ReferenceInlineLayout
 {
     internal sealed record Run(string Text, ReferenceMarkdown.Style Style, float X, float Width)
@@ -24,8 +24,16 @@ internal static class ReferenceInlineLayout
         {
             string element = elements.GetTextElement();
             bool part = element.Length == 1 && (char.IsAsciiLetterOrDigit(element[0]) || element[0] is '_' or '.' or '/' or '-' or '\\');
-            if (part) { word.Append(element); continue; }
-            if (word.Length > 0) { yield return word.ToString(); word.Clear(); }
+            if (part)
+            {
+                word.Append(element);
+                continue;
+            }
+            if (word.Length > 0)
+            {
+                yield return word.ToString();
+                word.Clear();
+            }
             yield return element;
         }
         if (word.Length > 0) yield return word.ToString();
@@ -38,8 +46,15 @@ internal static class ReferenceInlineLayout
         Func<string, float, bool, bool, float> measure)
     {
         width = Math.Max(1, width);
-        var lines = new List<Line>(); var runs = new List<Run>(); float x = 0;
-        void NewLine() { lines.Add(new(runs.ToArray(), x)); runs.Clear(); x = 0; }
+        var lines = new List<Line>();
+        var runs = new List<Run>();
+        float x = 0;
+        void NewLine()
+        {
+            lines.Add(new(runs.ToArray(), x));
+            runs.Clear();
+            x = 0;
+        }
         float Extra(ReferenceMarkdown.Style style) => runs.Count > 0 && runs[^1].Style == style ? 0 :
             (style.HasFlag(ReferenceMarkdown.Style.Code) ? 4 : 0) + (style.HasFlag(ReferenceMarkdown.Style.Emphasis) ? 3 : 0);
         float Measure(string text, ReferenceMarkdown.Style style) =>
@@ -49,7 +64,8 @@ internal static class ReferenceInlineLayout
             float advance = Measure(value, style), extra = Extra(style);
             if (runs.Count > 0 && runs[^1].Style == style)
             {
-                var old = runs[^1]; runs[^1] = old with { Text = old.Text + value, Width = old.Width + advance };
+                var old = runs[^1];
+                runs[^1] = old with { Text = old.Text + value, Width = old.Width + advance };
             }
             else runs.Add(new(value, style, x, advance + extra));
             x += advance + extra;
@@ -59,13 +75,24 @@ internal static class ReferenceInlineLayout
             var style = span.Style | (bold ? ReferenceMarkdown.Style.Bold : ReferenceMarkdown.Style.Plain);
             foreach (string token in Tokens(span.Text))
             {
-                if (token == "\n") { NewLine(); continue; }
+                if (token == "\n")
+                {
+                    NewLine();
+                    continue;
+                }
                 bool space = string.IsNullOrWhiteSpace(token);
                 if (space && x == 0) continue;
                 if (x > 0 && x + Measure(token, style) + Extra(style) > width)
-                { NewLine(); if (space) continue; }
-                if (Measure(token, style) + Extra(style) <= width) { Add(token, style); continue; }
-                // Very long identifiers/code spans break only at grapheme boundaries.
+                {
+                    NewLine();
+                    if (space) continue;
+                }
+                if (Measure(token, style) + Extra(style) <= width)
+                {
+                    Add(token, style);
+                    continue;
+                }
+                // 超长标识符与行内代码只在字素边界换行。
                 var elements = StringInfo.GetTextElementEnumerator(token);
                 while (elements.MoveNext())
                 {

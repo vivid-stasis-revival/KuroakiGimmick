@@ -1,13 +1,10 @@
+// 重建 obj_starcrashers_mask.Draw_0 与 behindmask_instances 的动态部分，依赖 Starcrashers_KG_RuntimePatch 的通用遮罩与房间层支持。此处只画存活的 o_sc_* 实例，静态 MaskLayers 由房间层绘制。
+
 using System;
 using KuroakiGimmick.Core;
 
 namespace KuroakiGimmick.Graphics;
 
-/// <summary>
-/// The dynamic part of obj_starcrashers_mask.Draw_0 and behindmask_instances.
-/// Requires the generic mask/room-layer patch from Starcrashers_KG_RuntimePatch.
-/// No duplicate static MaskLayers draws; this contributes only live o_sc_* instances.
-/// </summary>
 public sealed partial class NativeGimmickRenderer
 {
     private Session? starcrashOwner;
@@ -22,15 +19,18 @@ public sealed partial class NativeGimmickRenderer
         if (ReferenceEquals(starcrashOwner, session)) return starcrashData;
         starcrashOwner = session;
         starcrashCheckerRevision = -1;
-        // Bake once per Session: the editor's seek and video export read the same timeline.
+        // 每个 Session 只烘焙一次，编辑器跳转和视频导出共用同一时间轴。
         starcrashData = new MaskedStarFieldState(session);
         return starcrashData;
     }
 
-    /// <summary>Called after native room backgrounds and before the static+dynamic mask multiply.</summary>
+    /// <summary>在原版房间背景之后、静态与动态遮罩相乘之前绘制。</summary>
+    /// <param name="scene">要绘制到的场景目标。</param>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void DrawMaskedStarFieldBehindMask(Target scene, Session session, double time)
     {
-        // GameMaker Step events update at 60Hz even when preview renders at 120/144Hz.
+        // 即使预览以 120 或 144 Hz 渲染，GameMaker 的 Step 仍按 60 Hz 更新。
         time = Math.Floor(Math.Max(0, time) * 60 + 1e-8) / 60.0;
         Prepare(session);
         var data = Starcrashers(session);
@@ -67,20 +67,17 @@ public sealed partial class NativeGimmickRenderer
             {
                 double eased = MaskedStarFieldState.OutExpo(age);
                 double width = 161 * eased, height = 91 * eased;
-                // Create_0: line 4 -> 0, image_index round(line+1). Ends by instance_destroy.
+                // Create_0 将 line 从 4 降到 0，按 round(line+1) 选帧，最终销毁实例。
                 int frame = Math.Clamp((int)Math.Round(1 + 4 * (1 - eased), MidpointRounding.ToEven), 0, spec.Frames.Count - 1);
                 if (Image(name, frame) is { } image)
-                    canvas.Quad(image, new((float)(160-width), (float)(90-height),
-                        (float)(width*2), (float)(height*2)), Color.White);
+                    canvas.Quad(image, new((float)(160 - width), (float)(90 - height),
+                        (float)(width * 2), (float)(height * 2)), Color.White);
             }
         }
         canvas.Flush();
     }
 
-    /// <summary>
-    /// Called by DrawMask after static white mask sprites, before its gpu bm_dest_color/bm_zero composite.
-    /// Note: fireworks and fragments invert the already drawn mask using GameMaker's exact blend factors.
-    /// </summary>
+    /// <summary>DrawMask 在静态白色遮罩精灵之后、bm_dest_color/bm_zero 合成之前调用。烟花与碎片按原版混合因子反转已绘制的遮罩。</summary>
     private void DrawMaskedStarFieldMaskObjects(Session session, double time)
     {
         time = Math.Floor(Math.Max(0, time) * 60 + 1e-8) / 60.0;
@@ -105,7 +102,7 @@ public sealed partial class NativeGimmickRenderer
                     MaskedStarFieldState.StarAlpha(star, time), rotation: (float)angle);
                 if (star.Intro)
                 {
-                    // o_sc_star_intro.Create_0: overlayfxscale linear 1.5 -> 1 over 500 ms.
+                    // o_sc_star_intro.Create_0 在 500 毫秒内将 overlayfxscale 从 1.5 线性缩放到 1。
                     double scale = 1.5 - .5 * Math.Clamp(age / .5, 0, 1);
                     StarcrashersSprite(session, "sp_sc_firework_star", 0, (float)x, (float)y,
                         MaskedStarFieldState.StarAlpha(star, time) * .5, rotation: (float)angle, scaleX: (float)scale, scaleY: (float)scale);
@@ -122,7 +119,7 @@ public sealed partial class NativeGimmickRenderer
             float w = (float)(12 * Math.Pow(1 - age, 2)); // EaseOutQuad: 12 -> 0
             if (w > 0) canvas.Line((float)slash.TopX, -10, (float)slash.BottomX, 190, w, Color.White);
         }
-        // obj_starcrashers_mask.Draw_0 uses bm_inv_dest_color / bm_inv_src_color for firework objects.
+        // obj_starcrashers_mask.Draw_0 以 bm_inv_dest_color 和 bm_inv_src_color 混合烟花。
         canvas.Blend(BlendFactor.InverseDestinationColor, BlendFactor.InverseSourceColor);
         if (current!.Sprites.TryGetValue("sp_sc_firework_star", out var fireworkSpec))
         {
@@ -151,12 +148,12 @@ public sealed partial class NativeGimmickRenderer
                 if (fragment.Birth > nowTick) break;
                 double age = time - fragment.Birth / 60.0;
                 if (age < 0 || time * 60 >= fragment.Death) continue;
-                double t = age; // freshly spawned fragments initially draw at the firework endpoint
+                double t = age; // 刚生成的碎片首次绘制在烟花爆裂点。
                 double dist = MaskedStarFieldState.FragmentDistance(t, fragment.Speed);
                 double x = fragment.X + Math.Cos(fragment.Direction) * dist;
                 double y = fragment.Y - Math.Sin(fragment.Direction) * dist + MaskedStarFieldState.FragmentGravity(t);
                 if (Image("sp_sc_firework_particle", fragment.Frame) is { } image)
-                    canvas.Quad(image, new((float)(x-fragmentSpec.OriginX), (float)(y-fragmentSpec.OriginY),
+                    canvas.Quad(image, new((float)(x - fragmentSpec.OriginX), (float)(y - fragmentSpec.OriginY),
                         fragmentSpec.Width, fragmentSpec.Height), Color.White);
             }
         }

@@ -1,3 +1,5 @@
+// 管理房间滤镜、背景和后处理链所用的 shader 与中间目标。
+
 using KuroakiGimmick.Core;
 
 namespace KuroakiGimmick.Graphics;
@@ -9,7 +11,7 @@ public sealed class CustomEffects : IDisposable
 {
     internal const string PosterizeFragmentSource = "#version 330 core\nin vec2 v_vTexcoord;uniform sampler2D gm_BaseTexture;uniform float levels;out vec4 fragColor;void main(){vec4 c=texture(gm_BaseTexture,v_vTexcoord);float n=max(2.,levels);fragColor=vec4(floor(c.rgb*n)/n,c.a);}";
 
-    // GameMaker bm_max uses (src_alpha, inv_src_colour) with ADD, not a MAX equation.
+    // GameMaker 的 bm_max 按 (src_alpha, inv_src_colour) 执行 ADD 混合。
     // https://manual.gamemaker.io/monthly/en/GameMaker_Language/GML_Reference/Drawing/GPU_Control/gpu_set_blendmode.htm
     internal const string CombineFragmentSource = "#version 330 core\nin vec2 v_vTexcoord;uniform sampler2D gm_BaseTexture,blurred;uniform float intensity;out vec4 fragColor;void main(){vec3 dst=texture(gm_BaseTexture,v_vTexcoord).rgb;vec4 src=texture(blurred,v_vTexcoord);src.rgb*=intensity;fragColor=vec4(src.rgb*src.a+dst*(1.-src.rgb),1);}";
 
@@ -25,6 +27,8 @@ public sealed class CustomEffects : IDisposable
     readonly Target fxA, fxB, bgA, bgB;
     readonly Dictionary<string, Texture> roomTextures = [];
     GameFxProfile? loadedProfile;
+    /// <summary>为画布初始化演出 shader 及中间渲染目标。</summary>
+    /// <param name="canvas">提交绘制命令的画布。</param>
     public CustomEffects(Canvas canvas)
     {
         this.canvas = canvas;
@@ -57,7 +61,7 @@ public sealed class CustomEffects : IDisposable
         byte[] pixels = new byte[256 * 256 * 4];
         for (int i = 0; i < pixels.Length; i++)
         {
-            pixels[i] = i % 4 == 3 ? (byte) 255 : (byte)(Timeline.Hash((uint) i + 371) * 255);
+            pixels[i] = i % 4 == 3 ? (byte)255 : (byte)(Timeline.Hash((uint)i + 371) * 255);
         }
         string noisePath = Path.Combine(Paths.Assets, "GameFX", "sp_noise2.png");
         noise = File.Exists(noisePath) ? Texture.Load(gpu, noisePath, repeat: true) : new(gpu, 256, 256, pixels, repeat: true);
@@ -76,6 +80,8 @@ public sealed class CustomEffects : IDisposable
     }
 
     /// <summary>先 Flush 再整批缩放所有中间目标；漏掉其中一个会让后面的 pass 读到尺寸不符的纹理。</summary>
+    /// <param name="width">目标宽度。</param>
+    /// <param name="height">目标高度。</param>
     public void Resize(int width, int height)
     {
         canvas.Flush();
@@ -123,9 +129,18 @@ public sealed class CustomEffects : IDisposable
         return texture;
     }
 
-    static Color Rgba(double[] c) => new((float) c[0], (float) c[1], (float) c[2], (float) c[3]);
+    static Color Rgba(double[] c) => new((float)c[0], (float)c[1], (float)c[2], (float)c[3]);
+    /// <summary>将指定原版效果层应用到场景目标。</summary>
+    /// <param name="output">接收绘制结果的目标。</param>
+    /// <param name="input">作为输入画面的纹理。</param>
+    /// <param name="layer">要应用的房间效果层。</param>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void RenderNativeLayer(Target output, Texture input, GameFxProfile.Layer layer, Session session, double time)
-    { Prepare(session); RunLayer(output, input, layer, session, time); }
+    {
+        Prepare(session);
+        RunLayer(output, input, layer, session, time);
+    }
     /// <summary>
     /// 把一个房间图层跑成一遍 pass：_filter_* 名字决定 shader，同时补齐 GameMaker 的 gm_p* 配套 uniform。
     /// 未知的 filter 直接抛错，不用别的滤镜顶替。
@@ -240,8 +255,8 @@ public sealed class CustomEffects : IDisposable
                 var offset = layer.Vector("g_DistortOffset", 2);
                 s.Vec2("g_DistortOffset", offset[0], offset[1]);
                 s.Float("g_DistortRadius", layer.Number("g_DistortRadius"));
-                s.Float("g_DistortAngle", custom && session.NonBaseFxEnabled && layer.Name=="FX_twirl"?M("fx_twirl"):
-                    layer.ParameterMods.TryGetValue("g_DistortAngle", out var twirlMod)?M(twirlMod):layer.Number("g_DistortAngle"));
+                s.Float("g_DistortAngle", custom && session.NonBaseFxEnabled && layer.Name == "FX_twirl" ? M("fx_twirl") :
+                    layer.ParameterMods.TryGetValue("g_DistortAngle", out var twirlMod) ? M(twirlMod) : layer.Number("g_DistortAngle"));
             }
             if (layer.Filter == "_filter_posterise")
             {
@@ -252,7 +267,7 @@ public sealed class CustomEffects : IDisposable
                 s.Float("g_Intensity", layer.Name == "FX_contrast" ? 1 - M("fx_contrast") : layer.Name == "FX_red"
                     && custom ? M("fx_red_intensity") : layer.Number("g_Intensity"));
                 s.Vec4("g_TintCol", layer.Name == "FX_red" && (custom
-                    || session.NativeGimmick.Data?.UseRecolorTint == true) ? Color.Hsv((float) M("curcolor") / 255,
+                    || session.NativeGimmick.Data?.UseRecolorTint == true) ? Color.Hsv((float)M("curcolor") / 255,
                     1) : Rgba(layer.Vector("g_TintCol", 4)));
             }
             if (layer.Filter == "_filter_hue")
@@ -276,6 +291,10 @@ public sealed class CustomEffects : IDisposable
         });
     }
 
+    /// <summary>渲染配置中的背景与效果层。</summary>
+    /// <param name="scene">要绘制到的场景目标。</param>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void RenderBackground(Target scene, Session session, double time)
     {
         Prepare(session);
@@ -317,7 +336,7 @@ public sealed class CustomEffects : IDisposable
             canvas.Pass(output, input, canvas.Basic);
             return;
         }
-        int count = (int) layer.Number("g_GlowQuality");
+        int count = (int)layer.Number("g_GlowQuality");
         double mult = Math.Pow(layer.Number("g_GlowRadius"), 1.0 / count), radius = mult;
         double tint = Math.Floor(Math.Clamp(intensity, 0, 1) * 255) / 255;
         Texture previous = input, accumulated = input;
@@ -340,12 +359,17 @@ public sealed class CustomEffects : IDisposable
             accumulated = acc.Texture;
             previous = blurred.Texture;
             // 半径逐遍取反号，与原版一致；去掉负号会让辉光偏向一侧。
-            radius *= - mult;
+            radius *= -mult;
         }
         canvas.Pass(output, accumulated, canvas.Basic);
     }
 
     // 背景类效果插在 profile 声明的深度处，位于棋盘格、游玩轨道、音符和 HUD 之前。
+    /// <summary>绘制位于玩法区域后面的背景内容。</summary>
+    /// <param name="scene">要绘制到的场景目标。</param>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <param name="name">背景名称。</param>
     public void RenderBackdrop(Target scene, Session session, double time, string name)
     {
         Prepare(session);
@@ -359,7 +383,7 @@ public sealed class CustomEffects : IDisposable
                 continue;
             }
             // 背景链同样 ping-pong：输出取当前输入之外的那一块，绝不能读写同一张纹理。
-            var target = input == bgA.Texture? bgB : bgA;
+            var target = input == bgA.Texture ? bgB : bgA;
             if (layer.Filter == "_effect_glow")
             {
                 RunGlow(target, input, layer, session.Timeline.Get("fx_particleglow", time));
@@ -380,6 +404,11 @@ public sealed class CustomEffects : IDisposable
     /// 公共后处理链。房间 profile 没提供对应图层时，才用内置的 underwater/posterize/FX_red/FX_hue 兜底。
     /// finalPass 非空时由调用方接管最后一遍，本方法不再绘制 main。
     /// </summary>
+    /// <param name="output">接收绘制结果的目标。</param>
+    /// <param name="input">作为输入画面的纹理。</param>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <param name="finalPass">是否为最终合成阶段。</param>
     public void Render(Target output, Texture input, Session session, double time, Action<Target, Texture>? finalPass = null)
     {
         Prepare(session);
@@ -419,7 +448,7 @@ public sealed class CustomEffects : IDisposable
         }
         // ping-pong 的核心：输出永远取当前输入之外的那一块。Canvas.Pass 不允许一遍里同时读写同一张纹理，
         // 把 fxA/fxB 并成一个目标就会踩这条禁令。
-        Target Next() => input == fxA.Texture? fxB : fxA;
+        Target Next() => input == fxA.Texture ? fxB : fxA;
         bool tintDrawn = false;
         // 染色插在深度 < -2400 的图层之前；整条链没有图层触发时，结尾再强制补一次，保证只画一遍。
         void Tint()
@@ -434,7 +463,7 @@ public sealed class CustomEffects : IDisposable
             {
                 s.Float("gm_pPreMultiplyAlpha", 0);
                 s.Float("g_Intensity", M("fx_colorise_intensity"));
-                s.Vec4("g_TintCol", Color.Hex((uint) Math.Clamp(M("fx_colorise_col_rgb"), 0, 16777215)).Alpha(M("fx_colorise_col_alpha")));
+                s.Vec4("g_TintCol", Color.Hex((uint)Math.Clamp(M("fx_colorise_col_rgb"), 0, 16777215)).Alpha(M("fx_colorise_col_alpha")));
             });
             input = target.Texture;
         }
@@ -477,7 +506,7 @@ public sealed class CustomEffects : IDisposable
                 {
                     s.Float("gm_pPreMultiplyAlpha", 0);
                     s.Float("g_Intensity", M("fx_red_intensity"));
-                    s.Vec4("g_TintCol", Color.Hsv((float) M("curcolor") / 255, 1));
+                    s.Vec4("g_TintCol", Color.Hsv((float)M("curcolor") / 255, 1));
                 });
                 input = target.Texture;
             }
@@ -529,7 +558,7 @@ public sealed class CustomEffects : IDisposable
             s.Vec2("move", M("posx"), M("posy"));
             for (int i = 1; i <= 4; i++)
             {
-                s.Vec4("twist" + i, new((float) M("twx" + i), (float) M("twy" + i), (float)(M("twa" + i) * .6), (float) M("twr" + i)));
+                s.Vec4("twist" + i, new((float)M("twx" + i), (float)M("twy" + i), (float)(M("twa" + i) * .6), (float)M("twr" + i)));
             }
             s.Vec3("sinm", M("sina"), M("sinp"), M("sino"));
             // 源码 Draw_74 就是把 cosm.y 绑到 sinp，而不是没被用到的 cosp 字段。看着像笔误，但不是，别“修”。
@@ -538,6 +567,7 @@ public sealed class CustomEffects : IDisposable
         });
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
         main.Dispose();

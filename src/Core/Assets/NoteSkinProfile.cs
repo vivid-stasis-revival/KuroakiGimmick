@@ -1,3 +1,5 @@
+// 从皮肤清单建立轨道到音符帧的映射，校验尺寸与必需键。
+
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -9,14 +11,20 @@ namespace KuroakiGimmick.Core;
 public sealed class NoteSkinProfile
 {
     readonly Dictionary<string, NoteSkinFrame> frames;
+    /// <summary>当前皮肤包的根目录。</summary>
     public string Root { get; }
+    /// <summary>当前包的清单格式标识。</summary>
     public string Format { get; }
+    /// <summary>该包是否提供按轨道区分的精确帧。</summary>
     public bool ExactLaneFrames { get; }
+    /// <summary>加载及校验过程中收集的提示。</summary>
     public IReadOnlyList<string> Warnings { get; }
+    /// <summary>包中可供纹理加载器遍历的所有帧。</summary>
     public IEnumerable<NoteSkinFrame> Frames => frames.Values;
     /// <summary>本包提供的皮肤名，下标就是 changeskin 的取值；只有一套时它就是 ["normal"]。</summary>
     public IReadOnlyList<string> SkinNames { get; }
-    public string Description => (ExactLaneFrames? $"{Format} / exact lanes" : Format) + (SkinNames.Count > 1
+    /// <summary>用于界面或诊断的格式与皮肤概况。</summary>
+    public string Description => (ExactLaneFrames ? $"{Format} / exact lanes" : Format) + (SkinNames.Count > 1
         ? " / skins: " + String.Join(", ", SkinNames)
         : "");
     NoteSkinProfile(string root, string format, bool exactLaneFrames, Dictionary<string, NoteSkinFrame> frames, List<string> warnings,
@@ -31,20 +39,55 @@ public sealed class NoteSkinProfile
         Validate();
     }
 
+    /// <summary>根据轨道左右侧和皮肤索引选择普通音符帧。</summary>
+    /// <param name="lane">音符的轨道编号。</param>
+    /// <param name="skin">皮肤在 changeskin 表中的索引。</param>
+    /// <returns>目标皮肤的帧；该皮肤省略此槽位时可为 null。</returns>
     public NoteSkinFrame? Chip(int lane, int skin = 0) => Find(lane < 2 ? "chip_L" : "chip_R", skin);
+    /// <summary>根据轨道左右侧和皮肤索引选择地雷帧。</summary>
+    /// <param name="lane">音符的轨道编号。</param>
+    /// <param name="skin">皮肤在 changeskin 表中的索引。</param>
+    /// <returns>目标皮肤的帧；该皮肤省略此槽位时可为 null。</returns>
     public NoteSkinFrame? ChipMine(int lane, int skin = 0) => Find(lane < 2 ? "chip_mine_L" : "chip_mine_R", skin);
+    /// <summary>按轨道左右侧选择长条头部帧。</summary>
+    /// <param name="lane">音符的轨道编号。</param>
+    /// <param name="skin">皮肤在 changeskin 表中的索引。</param>
+    /// <returns>目标皮肤的帧；该皮肤省略此槽位时可为 null。</returns>
     public NoteSkinFrame? HoldHead(int lane, int skin = 0) => Find(lane < 2 ? "hold_head_L" : "hold_head_R", skin);
+    /// <summary>按轨道左右侧选择长条主体帧。</summary>
+    /// <param name="lane">音符的轨道编号。</param>
+    /// <param name="skin">皮肤在 changeskin 表中的索引。</param>
+    /// <returns>目标皮肤的帧；该皮肤省略此槽位时可为 null。</returns>
     public NoteSkinFrame? HoldBody(int lane, int skin = 0) => Find(lane < 2 ? "hold_body_L" : "hold_body_R", skin);
     /// <summary>
     /// 长条尾帽。正常皮肤和 extendnova 的尾帽画的就是 chip 帧，原表里没有独立精灵，导出的包里也就没有
     /// hold_end 这个键；更早的单套 dump 则是一个都没有。取不到时退回头帧，和原版一致。
     /// 四套皮肤里没有任何一套把尾帽写成 sp_empty，所以这个退路不会掩盖"故意不画"的情况。
     /// </summary>
+    /// <param name="lane">音符的轨道编号。</param>
+    /// <param name="skin">皮肤在 changeskin 表中的索引。</param>
+    /// <returns>长条尾帧或对应的回退帧。</returns>
     public NoteSkinFrame? HoldEnd(int lane, int skin = 0)
         => frames.GetValueOrDefault(Scoped(lane < 2 ? "hold_end_L" : "hold_end_R", Resolve(skin))) ?? HoldHead(lane, skin);
+    /// <summary>按侧别和皮肤索引选择撞块帧。</summary>
+    /// <param name="lane">音符的轨道编号。</param>
+    /// <param name="skin">皮肤在 changeskin 表中的索引。</param>
+    /// <returns>目标皮肤的帧；该皮肤省略此槽位时可为 null。</returns>
     public NoteSkinFrame? Bumper(int lane, int skin = 0) => Find("bumper_" + Side(lane), skin);
+    /// <summary>按侧别和皮肤索引选择撞块地雷帧。</summary>
+    /// <param name="lane">音符的轨道编号。</param>
+    /// <param name="skin">皮肤在 changeskin 表中的索引。</param>
+    /// <returns>目标皮肤的帧；该皮肤省略此槽位时可为 null。</returns>
     public NoteSkinFrame? BumperMine(int lane, int skin = 0) => Find("bumper_mine_" + Side(lane), skin);
+    /// <summary>按侧别和皮肤索引选择撞块判定帧。</summary>
+    /// <param name="lane">音符的轨道编号。</param>
+    /// <param name="skin">皮肤在 changeskin 表中的索引。</param>
+    /// <returns>目标皮肤的帧；该皮肤省略此槽位时可为 null。</returns>
     public NoteSkinFrame? JudgeBumper(int lane, int skin = 0) => Find("judge_bumper_" + Side(lane), skin);
+    /// <summary>按完整键取得已注册的皮肤帧。</summary>
+    /// <param name="key">完整皮肤帧键。</param>
+    /// <returns>已注册的帧描述。</returns>
+    /// <exception cref="InvalidDataException">皮肤帧表中不存在指定键。</exception>
     public NoteSkinFrame Get(string key) => frames.TryGetValue(key,
         out var frame) ? frame : throw new InvalidDataException("Note skin mapping is missing " + key + ".");
 
@@ -111,6 +154,10 @@ public sealed class NoteSkinProfile
     /// 按候选目录依次尝试并返回第一个可用皮肤。全部失败时汇总各自的失败原因抛出，
     /// 不退回内置替代图形 —— 音符尺寸错了比没有音符更难发现。
     /// </summary>
+    /// <param name="assetsRoot">应用素材的根目录。</param>
+    /// <returns>第一个通过校验的皮肤包。</returns>
+    /// <exception cref="InvalidDataException">候选皮肤均未通过加载与校验。</exception>
+    /// <exception cref="DirectoryNotFoundException">未找到皮肤清单目录。</exception>
     public static NoteSkinProfile Load(string assetsRoot)
     {
         // 完整的 v2 导出若被复制到 Assets/NoteSkinFull 则优先采用，因为只有它能保留
@@ -159,13 +206,16 @@ public sealed class NoteSkinProfile
         throw new DirectoryNotFoundException("No note skin manifest found. Expected Assets/Notes/manifest.json or a v2 NoteSkinFull/NotesExact dump.");
     }
 
+    /// <summary>从指定目录解析并校验音符皮肤包。</summary>
+    /// <param name="root">皮肤包的根目录。</param>
+    /// <returns>从该目录加载的皮肤配置。</returns>
     public static NoteSkinProfile LoadDirectory(string root)
     {
         root = Path.GetFullPath(root);
         string manifestPath = Path.Combine(root, "manifest.json");
         using var doc = JsonDocument.Parse(File.ReadAllText(manifestPath));
         var json = doc.RootElement;
-        string format = json.TryGetProperty("format", out var fmt) && fmt.ValueKind == JsonValueKind.String? fmt.GetString() ! : "legacy-vsnotes";
+        string format = json.TryGetProperty("format", out var fmt) && fmt.ValueKind == JsonValueKind.String ? fmt.GetString()! : "legacy-vsnotes";
         return format switch
         {
             "vividstasis-default-notes-v1" => LoadCompactV1(root, json),
@@ -213,7 +263,7 @@ public sealed class NoteSkinProfile
             // 这里原样使用整帧。当前的普通/判定 bumper 是 107×7、原点 (53,3)；
             // 两侧的 L/M/R 标记与 draw_sprite_ext 中完全一致地保留可见。
             var frame = Frame(Path.Combine(root, file), Path.GetFileNameWithoutExtension(file), g.W, g.H, -g.OX, -g.OY, source, sourceFrame,
-                (int) g.W, (int) g.H);
+                (int)g.W, (int)g.H);
             AssignCompact(files, Path.GetFileNameWithoutExtension(file), frame);
         }
         // v1 有意合并了第二个 chip / hold-head 帧。保留这一兼容行为，
@@ -395,7 +445,7 @@ public sealed class NoteSkinProfile
             int index = Integer(row, "index", -1);
             if (index >= 0)
             {
-                names[index] = row.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String? n.GetString() ! : index.ToString();
+                names[index] = row.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString()! : index.ToString();
             }
         }
         // 下标必须从 0 起连续：中间缺一套的话，后面那些的编号就对不上 changeskin 的取值了，
@@ -440,22 +490,22 @@ public sealed class NoteSkinProfile
 
     static NoteSkinFrame Frame(string file, string key, float w, float h, float x, float y, string? source, int sourceFrame, int? physicalW,
         int? physicalH, float uvX = 0, float uvY = 0, float uvW = 1, float uvH = 1) => new()
-    {
-        Key = key,
-        File = Path.GetFullPath(file),
-        Width = w,
-        Height = h,
-        LocalX = x,
-        LocalY = y,
-        SourceSprite = source,
-        SourceFrame = sourceFrame,
-        ExpectedTextureWidth = physicalW,
-        ExpectedTextureHeight = physicalH,
-        UvX = uvX,
-        UvY = uvY,
-        UvW = uvW,
-        UvH = uvH
-    };
+        {
+            Key = key,
+            File = Path.GetFullPath(file),
+            Width = w,
+            Height = h,
+            LocalX = x,
+            LocalY = y,
+            SourceSprite = source,
+            SourceFrame = sourceFrame,
+            ExpectedTextureWidth = physicalW,
+            ExpectedTextureHeight = physicalH,
+            UvX = uvX,
+            UvY = uvY,
+            UvW = uvW,
+            UvH = uvH
+        };
     static NoteSkinFrame Clone(NoteSkinFrame f, string key) => new()
     {
         Key = key,
@@ -515,17 +565,20 @@ public sealed class NoteSkinProfile
                 continue;
             }
             int frame = Integer(row, "frame", 0);
-            result[s.GetString() ! +"#" + frame] = (Number(t, "x"), Number(t, "y"), Number(t, "width"), Number(t, "height"));
+            result[s.GetString()! + "#" + frame] = (Number(t, "x"), Number(t, "y"), Number(t, "width"), Number(t, "height"));
         }
         return result;
     }
 
+    /// <summary>产生指定素材目录的皮肤资源诊断 JSON。</summary>
+    /// <param name="assetsRoot">应用素材的根目录。</param>
+    /// <returns>包含皮肤发现与校验信息的 JSON 对象。</returns>
     public static JsonObject Report(string assetsRoot)
     {
         try
         {
             var p = Load(assetsRoot);
-            var b = p.Bumper(0) !;
+            var b = p.Bumper(0)!;
             return new JsonObject
             {
                 ["format"] = p.Format,
@@ -556,7 +609,7 @@ public sealed class NoteSkinProfile
         }
     }
 
-    static(float, float) Pair(JsonElement value, float a, float b)
+    static (float, float) Pair(JsonElement value, float a, float b)
     {
         if (value.ValueKind != JsonValueKind.Array)
         {
@@ -567,7 +620,7 @@ public sealed class NoteSkinProfile
     }
 
     static string Text(JsonElement o, string name) => o.TryGetProperty(name, out var v)
-        && v.ValueKind == JsonValueKind.String? v.GetString() ! : throw new InvalidDataException("Missing string " + name + ".");
+        && v.ValueKind == JsonValueKind.String ? v.GetString()! : throw new InvalidDataException("Missing string " + name + ".");
     static float Number(JsonElement o, string name) => o.TryGetProperty(name, out var v)
         && v.TryGetSingle(out float n) ? n : throw new InvalidDataException("Missing number " + name + ".");
     static int Integer(JsonElement o, string name, int fallback) => o.TryGetProperty(name, out var v) && v.TryGetInt32(out int n) ? n : fallback;

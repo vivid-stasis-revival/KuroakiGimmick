@@ -1,11 +1,10 @@
+// 场景合成协调器。对象背景、资源图层、轨道、固定 HUD 与后处理按显式边界组织；预览和视频导出共用此入口。
+
 using System.Numerics;
 using KuroakiGimmick.Core;
 
 namespace KuroakiGimmick.Graphics;
 
-/// <summary>
-/// 场景合成协调器。对象背景、资源图层、轨道、固定 HUD 与后处理按显式边界组织；预览和视频导出共用此入口。
-/// </summary>
 public sealed partial class SceneRenderer
 {
     /// <summary>
@@ -34,8 +33,8 @@ public sealed partial class SceneRenderer
             {
                 continue;
             }
-            var offset = p.Burst && !p.FollowPower? Vector2.Zero : now - timeline.ParticleOffset(p.Time);
-            float x = p.X + p.Vx * (float) age * 60 + offset.X, y = p.Y + p.Vy * (float) age * 60 + offset.Y;
+            var offset = p.Burst && !p.FollowPower ? Vector2.Zero : now - timeline.ParticleOffset(p.Time);
+            float x = p.X + p.Vx * (float)age * 60 + offset.X, y = p.Y + p.Vy * (float)age * 60 + offset.Y;
             if (x < -50 || x > 370 || y < -50 || y > 230)
             {
                 continue;
@@ -43,7 +42,7 @@ public sealed partial class SceneRenderer
             // pt_diamonddust 是 9×9、四帧、原点 (4,4) 的精灵。
             // 保留其透明中心与逐帧菱形描边，不用实心方块近似。
             canvas.Quad(dustTextures[p.Frame], new(x - 4, y - 4, 9, 9), Color.Hsv(p.Hue,
-                p.Saturation).Alpha((p.Burst? 1 : alpha) * (1 - age / p.Life)));
+                p.Saturation).Alpha((p.Burst ? 1 : alpha) * (1 - age / p.Life)));
         }
     }
 

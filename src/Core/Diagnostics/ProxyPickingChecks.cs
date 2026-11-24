@@ -3,7 +3,7 @@ using KuroakiGimmick.Graphics;
 
 namespace KuroakiGimmick.Core;
 
-/// <summary>Window-free checks of the same picker and input policy used by the editor.</summary>
+/// <summary>无需创建窗口，直接验证编辑器共用的拾取逻辑与输入规则。</summary>
 internal static class ProxyPickingChecks
 {
     internal static int Run()
@@ -12,7 +12,10 @@ internal static class ProxyPickingChecks
         {
             int checks = 0;
             void Check(bool condition, string reason)
-            { checks++; if (!condition) throw new InvalidOperationException(reason); }
+            {
+                checks++;
+                if (!condition) throw new InvalidOperationException(reason);
+            }
             string M(string name, double value, int proxy = 0) => $"0,0,linear,{value},{value},{name},{proxy}\n";
             Timeline Map(string mods, bool custom = true)
             {
@@ -42,7 +45,8 @@ internal static class ProxyPickingChecks
             foreach (string mods in new[] { M("prrz", 27) + M("prsx", .3) + M("prsy", -.2) + M("przm", .8),
                 M("prtrX", .003) + M("prtrY", .004), M("prcl", 208) + M("prcr", 113) + M("przx", -1) })
             {
-                var timeline = Map(active + mods); var geometry = ProxyGeometry.Sample(timeline, 0, 0, true);
+                var timeline = Map(active + mods);
+                var geometry = ProxyGeometry.Sample(timeline, 0, 0, true);
                 Check(geometry.TryProject(new(170, 120), out var point), "Visible source point failed projection");
                 Check(ProxyScenePicking.Pick(timeline, 0, true, 3, point) == 0, "Transformed or reversed crop missed");
             }
@@ -62,7 +66,9 @@ internal static class ProxyPickingChecks
             CheckInputPriority();
             void CheckInputPriority()
             {
-                var pass = ProxyScenePicking.Intent.Pass; var reserve = ProxyScenePicking.Intent.Reserve; var pick = ProxyScenePicking.Intent.Pick;
+                var pass = ProxyScenePicking.Intent.Pass;
+                var reserve = ProxyScenePicking.Intent.Reserve;
+                var pick = ProxyScenePicking.Intent.Pick;
                 Check(ProxyScenePicking.Resolve(false, false, 2, false) == pass, "Disabled grid stole double-click");
                 Check(ProxyScenePicking.Resolve(false, true, 2, true) == pass, "Disabled grid stole Shift double-click");
                 Check(ProxyScenePicking.Resolve(true, false, 1, false) == pass, "Single click selected proxy");
@@ -75,6 +81,10 @@ internal static class ProxyPickingChecks
             Console.WriteLine($"PASS proxy picking core: {checks} checks covering input priority, transforms, masks, layering, solo and frame time (no SDL window)");
             return 0;
         }
-        catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(ex);
+            return 1;
+        }
     }
 }

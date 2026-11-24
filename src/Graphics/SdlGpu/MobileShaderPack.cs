@@ -45,8 +45,12 @@ internal static class MobileShaderPack
 #if KG_MOBILE || KG_SWITCH
         throw new PlatformNotSupportedException("Bake mobile shaders with the desktop build.");
 #else
-        var format = platform switch { "android" => GpuShaderFormat.SpirV, "ios" => GpuShaderFormat.Msl,
-            _ => throw new ArgumentException("Shader platform must be android or ios.") };
+        var format = platform switch
+        {
+            "android" => GpuShaderFormat.SpirV,
+            "ios" => GpuShaderFormat.Msl,
+            _ => throw new ArgumentException("Shader platform must be android or ios.")
+        };
         Directory.CreateDirectory(directory);
         var sources = new HashSet<(string Source, bool Vertex)>
         {
@@ -72,15 +76,30 @@ internal static class MobileShaderPack
             {
                 var compiled = ShaderCompiler.Compile(source, vertex, format);
                 using var w = new BinaryWriter(File.Create(Path.Combine(directory, SwitchShaderPack.Key(source, vertex) + ".kgms")), Encoding.UTF8);
-                w.Write(Magic); w.Write(Version); w.Write((uint)format); w.Write(vertex); w.Write(source); w.Write(compiled.Entry);
+                w.Write(Magic);
+                w.Write(Version);
+                w.Write((uint)format);
+                w.Write(vertex);
+                w.Write(source);
+                w.Write(compiled.Entry);
                 w.Write(compiled.Uniforms.Length);
-                foreach (var u in compiled.Uniforms) { w.Write(u.Name); w.Write(u.Type); w.Write(u.Offset); }
+                foreach (var u in compiled.Uniforms)
+                {
+                    w.Write(u.Name);
+                    w.Write(u.Type);
+                    w.Write(u.Offset);
+                }
                 w.Write(compiled.Samplers.Length);
                 foreach (var sampler in compiled.Samplers) w.Write(sampler);
-                w.Write(compiled.NativeSource); w.Write(compiled.Code.Length); w.Write(compiled.Code);
+                w.Write(compiled.NativeSource);
+                w.Write(compiled.Code.Length);
+                w.Write(compiled.Code);
             }
         }
-        finally { ShaderCompiler.TargetIosMsl = false; }
+        finally
+        {
+            ShaderCompiler.TargetIosMsl = false;
+        }
         Console.WriteLine($"Baked {sources.Count} {platform} shaders to {Path.GetFullPath(directory)}");
 #endif
     }

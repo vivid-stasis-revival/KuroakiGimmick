@@ -7,23 +7,33 @@ namespace KuroakiGimmick.Core.Editing;
 public static class ImageObjectModel
 {
     /// <summary>这条事件是否作用于给定图片实例。名字形如 <c>imgx_&lt;id&gt;</c>，前缀是属性，后缀是实例 ID。</summary>
+    /// <param name="c">VSM 中的来源事件。</param>
+    /// <param name="id">目标图片 ID。</param>
+    /// <returns>事件引用该图片时为 true。</returns>
     public static bool ForImage(VsmDocument.Clip c, string id) => CustomImages.TryMod(c.Name, out _, out var target) && target == id;
     /// <summary>
     /// 取值是否为可直接编辑的固定数值。"_" 表示沿用当前值，573613 是引擎里“取运行时当前值”的哨兵值——
     /// 两者都要在运行时才知道结果，对它们做加减或改写等于凭空篡改作者的意图。
     /// </summary>
+    /// <param name="value">源端点文本。</param>
+    /// <returns>是可直接编辑的固定数值时为 true。</returns>
     public static bool Fixed(string value) => value != "_" && double.TryParse(value, System.Globalization.NumberStyles.Float,
         System.Globalization.CultureInfo.InvariantCulture, out double n) && double.IsFinite(n) && n != 573613;
     /// <summary>
     /// 一条事件“简单”到可以被生成式改写的全部条件：不属于任何 proxy（Proxy == -1）、没有 repeat、duration 非负、
     /// 缓动是已知名字、属性能映射到某个基本通道、首尾值都是固定数值。少一条就必须走原始事件编辑器。
     /// </summary>
+    /// <param name="c">VSM 中的来源事件。</param>
+    /// <returns>属于可直接编辑的基本事件时为 true。</returns>
     public static bool Simple(VsmDocument.Clip c) => c.Proxy == -1 && c.RepeatEnd == null && c.Duration >= 0 && Easings.IsKnown(c.Ease) &&
         CustomImages.TryMod(c.Name, out string kind, out _) && ImageEditPose.Channel(kind) != ImageChannels.None && Fixed(c.From) && Fixed(c.To);
     /// <summary>
     /// 把某张图片的事件按 (拍, duration, 缓动, proxy) 四元组聚成动画组，供 UI 以“一段动画”为单位展示与操作。
     /// 排序用拍号加源行号，因此同拍的组仍按源文件的书写顺序排列。
     /// </summary>
+    /// <param name="document">保留源行和事件的 VSM 文档。</param>
+    /// <param name="id">目标图片 ID。</param>
+    /// <returns>按拍数和源行顺序组织的图片动作组。</returns>
     public static ImageMotionGroup[] Groups(VsmDocument document, string id)
     {
         var source = document.Clips.Where(c => ForImage(c, id)).ToArray();
@@ -48,6 +58,9 @@ public static class ImageObjectModel
     /// 图片“出场”的那一拍：优先取除透明度以外最早的姿态事件，其次取任意最早事件，都没有则为 0。
     /// 排除 imgalp_ 是因为淡入常常单独写在更早的位置，拿它当初始拍会把摆位写到画面还没出现的时候。
     /// </summary>
+    /// <param name="document">保留源行和事件的 VSM 文档。</param>
+    /// <param name="id">目标图片 ID。</param>
+    /// <returns>初始姿态拍数，无事件时为 0。</returns>
     public static double InitialBeat(VsmDocument document, string id)
     {
         var rows = document.Clips.Where(c => ForImage(c, id) && c.Proxy == -1).ToArray();
@@ -59,6 +72,10 @@ public static class ImageObjectModel
     /// 返回禁止直接操作变换的原因，空字符串表示可以。UI 拿它来决定是给手柄还是只让改原始事件。
     /// 两种排除情况都不是保守起见，而是画布上算出来的矩形与实际画面根本对不上。
     /// </summary>
+    /// <param name="document">保留源行和事件的 VSM 文档。</param>
+    /// <param name="item">目标图片的 VSP 条目。</param>
+    /// <param name="all">同一文档中的全部图片。</param>
+    /// <returns>限制直接编辑的原因，允许时为空字符串。</returns>
     public static string DirectEditIssue(VsmDocument document, CustomImages.Item item, IEnumerable<CustomImages.Item> all)
     {
         var layerIds = all.Where(i => i.Layer == item.Layer).Select(i => i.Id).ToHashSet(StringComparer.Ordinal);

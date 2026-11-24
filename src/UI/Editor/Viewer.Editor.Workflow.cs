@@ -1,3 +1,6 @@
+// 工作流覆盖层：ADD GIMMICK 与 EXPORT。二者都是阻塞覆盖层，显示期间下面的工作区不接受输入。
+// 准备与写出都在线程池上跑并可取消，输入分支里不做慢速文件 IO。
+
 using System.Globalization;
 using System.Text.RegularExpressions;
 using KuroakiGimmick.Core;
@@ -8,16 +11,16 @@ using KuroakiGimmick.Native;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// 工作流覆盖层：ADD GIMMICK 与 EXPORT。二者都是阻塞覆盖层，显示期间下面的工作区不接受输入。
-/// 准备与写出都在线程池上跑并可取消，输入分支里不做慢速文件 IO。
-/// </summary>
 public sealed partial class Viewer
 {
     const string AddSearchKey = "workflow:add-search";
     Rect addSearchRect;
     string addShownQuery = "";
-    void SetAddQuery(string value) { addQuery = value; addListScroll = 0; }
+    void SetAddQuery(string value)
+    {
+        addQuery = value;
+        addListScroll = 0;
+    }
     void OpenAddSearch()
     {
         if (preferences.ModalValueEditor || addQuery.Length > InlineMax || addQuery.Contains('\n'))
@@ -49,9 +52,19 @@ public sealed partial class Viewer
     {
         if (editor == null || editDrag != null) return;
         double beat = Current.Timeline.Bpm.Beat(transport.Position);
-        transport.SetPlaying(false); selectedNoteTime = null; selectedClip = null; selectedWindowEvent = -1;
-        try { activeMarker = editor.Mark(beat); }
-        catch (FormatException ex) { message = ex.Message; return; }
+        transport.SetPlaying(false);
+        selectedNoteTime = null;
+        selectedClip = null;
+        selectedWindowEvent = -1;
+        try
+        {
+            activeMarker = editor.Mark(beat);
+        }
+        catch (FormatException ex)
+        {
+            message = ex.Message;
+            return;
+        }
         message = L.Format($"Marker at beat {beat:0.######}. New gimmicks use this target until CLEAR TARGET.");
     }
     /// <summary>把新建的轨道滚动到可见区并把播放头移到该拍（换算成秒）。图片 mod 走图片轨道的专用定位路径。</summary>
@@ -59,9 +72,15 @@ public sealed partial class Viewer
     {
         EnsureImageModel();
         if (CustomImages.TryMod(name, out _, out var imageId) && declaredImageIds.Contains(imageId))
-        { FocusImageTrack(imageId, beat); transport.SetPlaying(false); transport.Seek(Current.Timeline.Bpm.Time(beat)); return; }
-        layoutRevision = -1; RebuildEditTracks();
-        // Expanded groups precede their children; prefer the exact row so adding there keeps it in view.
+        {
+            FocusImageTrack(imageId, beat);
+            transport.SetPlaying(false);
+            transport.Seek(Current.Timeline.Bpm.Time(beat));
+            return;
+        }
+        layoutRevision = -1;
+        RebuildEditTracks();
+        // 展开分组在子项之前；新增事件时优先匹配精确行，使该行留在视口中。
         var selected = selectedClip is Guid id ? EditorFindClip(id) : null;
         int lane = selected?.TrackKey == $"{proxy}:{name}" ? clipRowLanes.GetValueOrDefault(selected.Id) : 0;
         int index = editTracks.FindIndex(t => !t.Window && !t.GimmickGroup && t.Target == proxy && t.Property == name && t.Lane == lane);
@@ -70,12 +89,17 @@ public sealed partial class Viewer
         if (index >= 0 && (index < trackScroll || index >= trackScroll + rows)) trackScroll = Math.Max(0, index - rows / 2);
         motion.Snap("timeline-track-scroll", trackScroll);
         beatStart = Math.Max(-64, beat - 2);
-        transport.SetPlaying(false); transport.Seek(Current.Timeline.Bpm.Time(beat));
+        transport.SetPlaying(false);
+        transport.Seek(Current.Timeline.Bpm.Time(beat));
     }
     /// <summary>创作动作的前置条件：必要时顺带进入编辑模式。返回 false 表示没有可编辑文档，调用方应直接放弃。</summary>
     bool EnsureAuthoring()
     {
-        if (Busy || Current.IsEmpty) { message = L.Get("Open a chart before adding or exporting."); return false; }
+        if (Busy || Current.IsEmpty)
+        {
+            message = L.Get("Open a chart before adding or exporting.");
+            return false;
+        }
         if (editor == null) OpenEditor();
         return editor != null;
     }
@@ -83,27 +107,43 @@ public sealed partial class Viewer
     {
         if (!EnsureAuthoring()) return;
         double beat = at ?? InsertionBeat;
-        CloseReference(); referenceAlpha = 0; motion.Snap("docs", 0);
-        help = settings = false; workflow = displayedWorkflow = "add"; workflowError = "";
-        addBeat = beat; addDuration = 1; addFrom = "_"; addTo = "1"; addEase = "linear";
-        addQuery = ""; addListScroll = 0; addSwitchObject = false;
+        CloseReference();
+        referenceAlpha = 0;
+        motion.Snap("docs", 0);
+        help = settings = false;
+        workflow = displayedWorkflow = "add";
+        workflowError = "";
+        addBeat = beat;
+        addDuration = 1;
+        addFrom = "_";
+        addTo = "1";
+        addEase = "linear";
+        addQuery = "";
+        addListScroll = 0;
+        addSwitchObject = false;
         addTemplate = entry ?? GimmickAuthoring.Entry(customMod);
         addName = entry?.Name ?? customMod;
         addProxy = GimmickAuthoring.SuggestedProxy(addTemplate, newProxy, EditableProxyCount);
         SetExtraGimmickDefaults();
-        transport.SetPlaying(false); held = click = editorScrub = false;
+        transport.SetPlaying(false);
+        held = click = editorScrub = false;
         motion.Snap("workflow", 0);
     }
     void PickGimmick(VsmReference.Entry entry)
     {
-        addTemplate = entry; addName = entry.Name; addSwitchObject = false; workflowError = "";
+        addTemplate = entry;
+        addName = entry.Name;
+        addSwitchObject = false;
+        workflowError = "";
         addProxy = GimmickAuthoring.SuggestedProxy(entry, newProxy, EditableProxyCount);
         SetExtraGimmickDefaults();
     }
     void SetExtraGimmickDefaults()
     {
         if (addName is not ("lr_slash" or "lr_slash_color")) return;
-        addDuration = 0; addEase = "linear"; addFrom = "_";
+        addDuration = 0;
+        addEase = "linear";
+        addFrom = "_";
         addTo = addName == "lr_slash" ? "_" : "16777215";
         addProxy = -1;
     }
@@ -127,25 +167,39 @@ public sealed partial class Viewer
                 EnsureProxyInitiallyVisible(clip.Proxy, clip.Name);
                 editor.Vsm.Add(clip);
             });
-            selectedClip = clip.Id; selectedWindowEvent = -1; inspectorScroll = 0;
-            customMod = clip.Name; newProxy = clip.Proxy; workflow = ""; click = false;
+            selectedClip = clip.Id;
+            selectedWindowEvent = -1;
+            inspectorScroll = 0;
+            customMod = clip.Name;
+            newProxy = clip.Proxy;
+            workflow = "";
+            click = false;
             FocusAddedTrack(clip.Name, clip.Proxy, clip.Beat);
             message = L.Format($"Added {clip.Name} at beat {clip.Beat:0.######}.");
         }
-        catch (Exception ex) { workflowError = ex.Message; }
+        catch (Exception ex)
+        {
+            workflowError = ex.Message;
+        }
     }
     void OpenChartExport()
     {
         if (!EnsureAuthoring()) return;
-        transport.SetPlaying(false); help = settings = false;
-        workflow = displayedWorkflow = "export"; workflowError = ""; chartExportPlan = null;
-        held = click = editorScrub = false; motion.Snap("workflow", 0);
+        transport.SetPlaying(false);
+        help = settings = false;
+        workflow = displayedWorkflow = "export";
+        workflowError = "";
+        chartExportPlan = null;
+        held = click = editorScrub = false;
+        motion.Snap("workflow", 0);
     }
     /// <summary>选好导出类型后在后台线程准备导出计划（要扫文件、算体积），窗口线程只负责发起和显示结果。</summary>
     void ChooseChartExport(ChartExportKind kind)
     {
         if (editor == null || ChartExportBusy || dialogOpen) return;
-        exportKind = kind; chartExportPlan = null; workflowError = "";
+        exportKind = kind;
+        chartExportPlan = null;
+        workflowError = "";
         try
         {
             var input = ChartExportInput.Capture(editor, Current);
@@ -162,7 +216,8 @@ public sealed partial class Viewer
             Dialog(true, location, paths =>
             {
                 RememberExportDestination(kind.ToString(), paths[0]);
-                chartExportCancellation?.Dispose(); chartExportCancellation = new();
+                chartExportCancellation?.Dispose();
+                chartExportCancellation = new();
                 var token = chartExportCancellation.Token;
                 bool overwrite = preferences.OverwriteExports;
                 bool putImagesInAssets = preferences.PutImageGimmickIntoAssetsFolder;
@@ -170,14 +225,18 @@ public sealed partial class Viewer
                 message = L.Get("Preparing export...");
             });
         }
-        catch (Exception ex) { workflowError = ex.Message; }
+        catch (Exception ex)
+        {
+            workflowError = ex.Message;
+        }
     }
     /// <summary>后台写出导出计划。进度文本经 actions 队列回到窗口线程再赋值给 message，不在工作线程上直接改 UI 状态。</summary>
     void WriteChartExport()
     {
         if (chartExportPlan == null || ChartExportBusy) return;
         var plan = chartExportPlan;
-        chartExportCancellation?.Dispose(); chartExportCancellation = new();
+        chartExportCancellation?.Dispose();
+        chartExportCancellation = new();
         var token = chartExportCancellation.Token;
         chartExportWrite = Task.Run(() => ChartExport.Write(plan, token,
             text => actions.Enqueue(() => message = text)), token);
@@ -188,9 +247,19 @@ public sealed partial class Viewer
         if (activeMarker != null && editor?.Markers.All(m => m.Id != activeMarker) != false) activeMarker = null;
         if (chartExportPrepare is { IsCompleted: true })
         {
-            try { chartExportPlan = chartExportPrepare.GetAwaiter().GetResult(); message = L.Get("Export ready. Review the destination before writing."); }
-            catch (OperationCanceledException) { message = L.Get("Export cancelled."); }
-            catch (Exception ex) { workflowError = ex.Message; }
+            try
+            {
+                chartExportPlan = chartExportPrepare.GetAwaiter().GetResult();
+                message = L.Get("Export ready. Review the destination before writing.");
+            }
+            catch (OperationCanceledException)
+            {
+                message = L.Get("Export cancelled.");
+            }
+            catch (Exception ex)
+            {
+                workflowError = ex.Message;
+            }
             chartExportPrepare = null;
         }
         if (chartExportWrite is { IsCompleted: true })
@@ -201,8 +270,14 @@ public sealed partial class Viewer
                 message = L.Get("Export complete: ") + chartExportPlan?.Destination;
                 workflow = "";
             }
-            catch (OperationCanceledException) { workflowError = L.Get("Export cancelled. No incomplete folder was published."); }
-            catch (Exception ex) { workflowError = ex.Message; }
+            catch (OperationCanceledException)
+            {
+                workflowError = L.Get("Export cancelled. No incomplete folder was published.");
+            }
+            catch (Exception ex)
+            {
+                workflowError = ex.Message;
+            }
             chartExportWrite = null;
         }
     }
@@ -213,18 +288,30 @@ public sealed partial class Viewer
         if (workflow == "source") return HandleSourceInput(e);
 #if !KG_MOBILE && !KG_SWITCH
         if (workflow == "chart-size-warning" && e.Type == 0x403)
-        { chartSizeWarningScroll -= (int)Math.Round(e.WheelY * 3); return true; }
+        {
+            chartSizeWarningScroll -= (int)Math.Round(e.WheelY * 3);
+            return true;
+        }
 #endif
-        if (valueAlpha > .001f) { click = held = false; return true; }
+        if (valueAlpha > .001f)
+        {
+            click = held = false;
+            return true;
+        }
         if (inlineField == AddSearchKey && HandleInlineInput(e)) return true;
         if (e.Type is 0x400 or 0x401 or 0x402)
         {
-            mouseX = e.X; mouseY = e.Y;
+            mouseX = e.X;
+            mouseY = e.Y;
             if (workflow.Length > 0 && e.Type == 0x401 && e.Button == 1) click = true;
-            held = false; return true;
+            held = false;
+            return true;
         }
         if (e.Type == 0x403 && workflow == "add" && addListRect.Contains(mouseX, mouseY))
-        { addListScroll = Math.Max(0, addListScroll - (int)Math.Round(e.WheelY)); return true; }
+        {
+            addListScroll = Math.Max(0, addListScroll - (int)Math.Round(e.WheelY));
+            return true;
+        }
         if (e.Type == 0x300 && e.Repeat == 0 && workflow.Length > 0)
         {
             if (e.Scan == 41)
@@ -262,19 +349,34 @@ public sealed partial class Viewer
         if (!WorkflowVisible)
         {
             imageSaveConflict = null;
-            sourceOwner = null; sourceVsm = sourceVsp = null;
+            sourceOwner = null;
+            sourceVsm = sourceVsp = null;
             return;
         }
         using var fade = Canvas.Opacity(workflowAlpha);
-        Canvas.Clip(null); Canvas.Fill(new(0, 0, w, h), Color.Hex(0, .88f));
-        if (displayedWorkflow == "source") { DrawSourceEditor(w, h); return; }
-        if (displayedWorkflow == "save-image-conflict") { DrawImageSaveConflict(w, h); return; }
+        Canvas.Clip(null);
+        Canvas.Fill(new(0, 0, w, h), Color.Hex(0, .88f));
+        if (displayedWorkflow == "source")
+        {
+            DrawSourceEditor(w, h);
+            return;
+        }
+        if (displayedWorkflow == "save-image-conflict")
+        {
+            DrawImageSaveConflict(w, h);
+            return;
+        }
 #if !KG_MOBILE && !KG_SWITCH
-        if (displayedWorkflow == "chart-size-warning") { DrawChartSizeWarning(w, h); return; }
+        if (displayedWorkflow == "chart-size-warning")
+        {
+            DrawChartSizeWarning(w, h);
+            return;
+        }
 #endif
         float width = Math.Min(w - 48, displayedWorkflow == "add" ? 970 : 820), height = Math.Min(h - 48, 690);
         var box = new Rect((w - width) / 2, (h - height) / 2 + (1 - workflowAlpha) * 10, width, height);
-        Canvas.Fill(box, panel); Canvas.Border(box, soft);
+        Canvas.Fill(box, panel);
+        Canvas.Border(box, soft);
         if (displayedWorkflow == "add") DrawAddGimmick(box);
         else DrawChartExport(box);
         if (modalActive || valueAlpha > .001f) return;
@@ -290,7 +392,8 @@ public sealed partial class Viewer
         if (imageSaveConflict is not { } conflict) return;
         float width = Math.Min(600, w - 32);
         var box = new Rect((w - width) / 2, (h - 210) / 2, width, 210);
-        Canvas.Fill(box, panel); Canvas.Border(box, soft);
+        Canvas.Fill(box, panel);
+        Canvas.Border(box, soft);
         Text(L.Get("CONFLICTING IMAGE FILENAMES"), box.X + 20, box.Y + 20, 19, white, max: width - 40);
         Text(conflict.FileName, box.X + 20, box.Y + 55, 14, soft, max: width - 40);
         var lines = EditorHelpLayout.Wrap(L.Get("Force save gives the conflicting images distinct filenames and updates their references."),
@@ -307,7 +410,8 @@ public sealed partial class Viewer
     }
     void DrawAddGimmick(Rect box)
     {
-        inlineFields.Clear(); inlineVisible = false;
+        inlineFields.Clear();
+        inlineVisible = false;
         Text(L.Get("ADD GIMMICK"), box.X + 24, box.Y + 20, 23, white);
         float split = box.X + Math.Min(305, box.W * .34f), x = split + 20, rightWidth = box.X + box.W - 24 - x;
         var searchBox = new Rect(box.X + 24, box.Y + 65, split - box.X - 40, 34);
@@ -316,7 +420,11 @@ public sealed partial class Viewer
         if (inlineField == AddSearchKey) DrawInlineEditor(searchBox);
         else if (WorkflowButton(addQuery.Length == 0 ? L.Get("SEARCH / Ctrl+F") : addQuery, searchBox)) OpenAddSearch();
         string query = inlineField == AddSearchKey ? inlineValue : addQuery;
-        if (query != addShownQuery) { addShownQuery = query; addListScroll = 0; }
+        if (query != addShownQuery)
+        {
+            addShownQuery = query;
+            addListScroll = 0;
+        }
         var results = GimmickAuthoring.Search(query);
         addListRect = new(box.X + 24, box.Y + 110, split - box.X - 40, box.H - 175);
         int visible = Math.Max(1, (int)(addListRect.H / 34));
@@ -329,7 +437,11 @@ public sealed partial class Viewer
         }
         Canvas.Clip(null);
         Text(L.Format($"{results.Length} entries / custom names allowed"), box.X + 24, box.Y + box.H - 42, 12, muted, max: split - box.X - 30);
-        WorkflowField(L.Get("Name"), addName, x, box.Y + 65, rightWidth, value => { addName = value; if (addTemplate?.MatchPattern.Length == 0) addTemplate = null; });
+        WorkflowField(L.Get("Name"), addName, x, box.Y + 65, rightWidth, value =>
+{
+    addName = value;
+    if (addTemplate?.MatchPattern.Length == 0) addTemplate = null;
+});
         WorkflowField(L.Get("Target / -1 global"), addProxy.ToString(CultureInfo.InvariantCulture), x, box.Y + 108, rightWidth,
             value => addProxy = int.Parse(value, CultureInfo.InvariantCulture));
         WorkflowField(L.Get("Beat"), VsmDocument.Ui(addBeat), x, box.Y + 151, rightWidth, value => addBeat = VsmDocument.Number(value));
@@ -338,7 +450,14 @@ public sealed partial class Viewer
         WorkflowField(L.Get("To / _"), addTo, x, box.Y + 280, rightWidth, value => addTo = value);
         WorkflowField(L.Get("Easing"), addEase, x, box.Y + 323, rightWidth, value => addEase = value);
         if (WorkflowButton(L.Get("CUSTOM NAME"), new(x, box.Y + 368, rightWidth, 32)))
-        { addTemplate = null; OpenValue(L.Get("New gimmick identifier"), "", value => { addName = value; addTemplate = null; }); }
+        {
+            addTemplate = null;
+            OpenValue(L.Get("New gimmick identifier"), "", value =>
+            {
+                addName = value;
+                addTemplate = null;
+            });
+        }
         string note = addTemplate?.Summary ?? L.Get("A new track is created for this name. Unknown mods are preserved; preview support is unchanged.");
         var rows = EditorHelpLayout.Wrap(note, rightWidth, s => fonts.Measure(s, 14, unified: true)).Take(2).ToArray();
         for (int i = 0; i < rows.Length; i++) Text(rows[i], x, box.Y + 413 + i * 24, 14, white, unified: true);
@@ -379,7 +498,11 @@ public sealed partial class Viewer
             float wy = y + 87 + (shown + 1) * 22;
             foreach (string warning in plan.Warnings)
                 foreach (string text in EditorHelpLayout.Wrap(warning, box.W - 48, s => fonts.Measure(s, 12)))
-                { if (wy + 19 > box.Y + box.H - 119) break; Text(text, box.X + 24, wy, 12, muted); wy += 19; }
+                {
+                    if (wy + 19 > box.Y + box.H - 119) break;
+                    Text(text, box.X + 24, wy, 12, muted);
+                    wy += 19;
+                }
         }
         else
         {
@@ -393,9 +516,14 @@ public sealed partial class Viewer
         var cancel = new Rect(box.X + box.W * .57f, box.Y + box.H - 49, box.W * .43f - 24, 33);
         if (ChartExportBusy)
         {
-            Canvas.Fill(cancel, Color.Hex(0x384252)); Canvas.Border(cancel, line);
+            Canvas.Fill(cancel, Color.Hex(0x384252));
+            Canvas.Border(cancel, line);
             Text(L.Get("CANCEL EXPORT"), cancel.X + 18, cancel.Y + 10, 12, white);
-            if (click && cancel.Contains(mouseX, mouseY)) { chartExportCancellation?.Cancel(); click = false; }
+            if (click && cancel.Contains(mouseX, mouseY))
+            {
+                chartExportCancellation?.Cancel();
+                click = false;
+            }
         }
         else if (WorkflowButton(L.Get("CLOSE"), cancel)) workflow = "";
     }

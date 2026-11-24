@@ -1,3 +1,5 @@
+// 为 Starcrashers 音符和长条混合不同皮肤。
+
 using System.Numerics;
 using KuroakiGimmick.Core;
 
@@ -51,12 +53,22 @@ public sealed partial class NativeGimmickRenderer
         if (shader != null) canvas.Flush();
     }
 
+    /// <summary>在星场皮肤激活时接管指定轨道的音符，空帧同样视为已处理。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <param name="type">来源音符类型编号。</param>
+    /// <param name="lane">音符的轨道编号。</param>
+    /// <param name="x">逻辑横坐标。</param>
+    /// <param name="y">逻辑纵坐标。</param>
+    /// <param name="alpha">绘制不透明度。</param>
+    /// <param name="rotation">旋转角度。</param>
+    /// <returns>该音符由此皮肤处理时为 true，包括故意留空的帧。</returns>
     public bool DrawMaskedStarFieldNativeNote(Session session, double time, int type, int lane, float x, float y, double alpha, float rotation)
     {
         if (!session.NativeGimmick.HasBehavior("masked-starfield")) return false;
         var state = PartialSkinBlendState.At(session.Timeline, time);
         if (!state.Active || !(type is 0 or 6 && lane is 0 or 1 || type is 1 or 7 or 8 && lane == 0)) return false;
-        if (type is 6 or 7) return true; // source lane_sprites uses sp_empty for these mine slots
+        if (type is 6 or 7) return true; // 来源 lane_sprites 在这些地雷槽使用 sp_empty。
         Prepare(session);
         float angle = ((rotation % 360) + 360) % 360;
         if (type is 1 or 8 && (angle + 90) % 360 >= 180) x++;
@@ -65,6 +77,16 @@ public sealed partial class NativeGimmickRenderer
         return true;
     }
 
+    /// <summary>在星场皮肤激活时接管左侧两轨的长条绘制。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <param name="lane">音符的轨道编号。</param>
+    /// <param name="x">逻辑横坐标。</param>
+    /// <param name="startY">长条起点的逻辑纵坐标。</param>
+    /// <param name="endY">长条终点的逻辑纵坐标。</param>
+    /// <param name="alpha">绘制不透明度。</param>
+    /// <param name="pressed">是否绘制按下状态。</param>
+    /// <returns>已接管该轨长条时为 true。</returns>
     public bool DrawMaskedStarFieldNativeHold(Session session, double time, int lane, float x, float startY, float endY, double alpha, bool pressed)
     {
         if (!session.NativeGimmick.HasBehavior("masked-starfield") || lane is not (0 or 1)) return false;
@@ -73,7 +95,11 @@ public sealed partial class NativeGimmickRenderer
         Prepare(session);
         endY += 6;
         float top = Math.Min(startY, endY), bottom = Math.Max(startY, endY);
-        if (pressed) { top = Math.Min(top, 140); bottom = Math.Min(bottom, 140); }
+        if (pressed)
+        {
+            top = Math.Min(top, 140);
+            bottom = Math.Min(bottom, 140);
+        }
         float visibleTop = Math.Max(-8, top + 4), visibleBottom = Math.Min(188, pressed ? bottom + 4 : bottom - 3);
         if (visibleBottom > visibleTop) StarcrashersMixedSprite(session, state, "hold", x, visibleTop, alpha, scaleY: visibleBottom - visibleTop);
         StarcrashersMixedSprite(session, state, "chip", x, top, alpha);

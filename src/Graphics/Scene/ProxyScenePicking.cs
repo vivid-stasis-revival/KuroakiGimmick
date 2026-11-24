@@ -5,10 +5,12 @@ namespace KuroakiGimmick.Graphics;
 
 internal static class ProxyScenePicking
 {
-    internal enum Intent { Pass, Reserve, Pick }
+    internal enum Intent
+    {
+        Pass, Reserve, Pick
+    }
 
-    // Kept separate from SDL event unions and GPU resources so input priority can be
-    // checked without a display. The caller additionally guards canvases, drags and HUDs.
+    // 拾取独立于 SDL 事件联合体与 GPU 资源，以便无显示环境也能检查输入优先级；画布、拖动及 HUD 由调用方另行判断。
     internal static Intent Resolve(bool gridActive, bool forceProxy, int clicks, bool authorObjectHit)
     {
         if (!gridActive) return Intent.Pass;
@@ -20,7 +22,7 @@ internal static class ProxyScenePicking
     {
         if (!float.IsFinite(logical.X) || !float.IsFinite(logical.Y) || logical.X < 0 || logical.X >= 320 || logical.Y < 0 || logical.Y >= 180)
             return null;
-        // CompositeField paints high IDs first; the lowest matching ID is in front.
+        // CompositeField 先画较大 ID，重叠时最小的匹配 ID 位于最前。
         for (int p = 0; p < count; p++)
         {
             if (onlyProxy is int only && p != only) continue;

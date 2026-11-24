@@ -1,12 +1,15 @@
+// 会话的机器可读兼容报告；用显式 JSON 节点保证 NativeAOT 不依赖匿名类型反射。
+
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace KuroakiGimmick.Core;
 
-/// <summary>会话的机器可读兼容报告；用显式 JSON 节点保证 NativeAOT 不依赖匿名类型反射。</summary>
 public sealed partial class Session
 {
     /// <summary>输出 schema2 报告。time 单位为秒；给出时额外求值该时刻的 FX。</summary>
+    /// <param name="time">报告对应的歌曲秒数。</param>
+    /// <returns>当前会话及采样状态的诊断报告。</returns>
     public string Report(double? time = null)
     {
         var card = SongInfoCard.Build(this);
@@ -90,10 +93,14 @@ public sealed partial class Session
             ["modCount"] = Chart.Mods.Count,
             ["perFrameCount"] = Chart.PerFrame.Count,
             ["duration"] = Duration,
-            ["playbackDuration"] = Interludes!=null ? PresentationDuration : Playback.Duration(0, Duration),
-            ["nativeStoryPauses"] = new JsonArray((Interludes?.Entries.Select(e=>(JsonNode)new JsonObject{
-                ["songTime"]=e.SongTime,["presentationStart"]=e.PresentationStart,["duration"]=e.Duration,
-                ["trigger"]=e.Schedule.Definition.Trigger}).ToArray())??[]),
+            ["playbackDuration"] = Interludes != null ? PresentationDuration : Playback.Duration(0, Duration),
+            ["nativeStoryPauses"] = new JsonArray((Interludes?.Entries.Select(e => (JsonNode)new JsonObject
+            {
+                ["songTime"] = e.SongTime,
+                ["presentationStart"] = e.PresentationStart,
+                ["duration"] = e.Duration,
+                ["trigger"] = e.Schedule.Definition.Trigger
+            }).ToArray()) ?? []),
             ["chartSpeed"] = time.HasValue ? Playback.RateAt(time.Value) : Playback.RateAt(0),
             ["playspeedSegments"] = AppJson.Node(Playback.Segments.ToArray()),
             ["musicControls"] = AppJson.Node(Playback.Controls.ToArray()),
@@ -143,7 +150,7 @@ public sealed partial class Session
                 ["postModes"] = AppJson.Node(NativeGimmick.Data?.PostModes.Keys.ToArray()),
                 ["objectName"] = NativeGimmick.Data?.ObjectName,
                 ["definitionVersion"] = NativeGimmick.Data?.Version,
-                ["components"] = AppJson.Node(NativeGimmick.Data?.Behaviors.Select(component=>component.Type).ToArray()),
+                ["components"] = AppJson.Node(NativeGimmick.Data?.Behaviors.Select(component => component.Type).ToArray()),
                 ["signalRoutes"] = AppJson.Node(NativeGimmick.Data?.Signals.Keys.ToArray()),
                 ["sourceSongId"] = NativeGimmick.SongContext.SongId,
                 ["sourceSongContext"] = NativeGimmick.SongContext.Source,

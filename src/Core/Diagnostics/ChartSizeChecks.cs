@@ -9,10 +9,20 @@ internal static class ChartSizeChecks
         string root = Path.Combine(Path.GetTempPath(), "kg-size-check-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         string? previousEngine = Environment.GetEnvironmentVariable("KG_RUST_ENGINE");
-        void Check(bool ok, string reason) { if (!ok) throw new InvalidOperationException(reason); }
+        void Check(bool ok, string reason)
+        {
+            if (!ok) throw new InvalidOperationException(reason);
+        }
         void Reject(Action action)
         {
-            try { action(); } catch (Exception ex) when (ex is InvalidDataException or FormatException) { return; }
+            try
+            {
+                action();
+            }
+            catch (Exception ex) when (ex is InvalidDataException or FormatException)
+            {
+                return;
+            }
             throw new InvalidOperationException("A limited load was not rejected.");
         }
         try
@@ -21,9 +31,10 @@ internal static class ChartSizeChecks
             Check(!new ViewerSettings().UnlimitedChartSize, "Unlimited loading must default to off.");
             var saved = AppJson.Deserialize<ViewerSettings>(AppJson.Serialize(new ViewerSettings { UnlimitedChartSize = true }, ViewerProject.Json), ViewerProject.Json)!;
             Check(saved.UnlimitedChartSize, "Unlimited setting did not round trip.");
-            string text = Path.Combine(root, "resource.txt"); File.WriteAllText(text, "12345678");
+            string text = Path.Combine(root, "resource.txt");
+            File.WriteAllText(text, "12345678");
             string chart = Path.Combine(root, "large.vsc");
-            // A valid chart just over 128 MiB. Comment padding avoids manufacturing millions of notes or an OOM test.
+            // 生成刚超过 128 MiB 的有效谱面，用注释填充大小，避免制造数百万音符或触发内存耗尽。
             byte[] comment = System.Text.Encoding.ASCII.GetBytes("//" + new string(' ', 65533) + "\n");
             using (var output = File.Create(chart))
             {
@@ -35,7 +46,7 @@ internal static class ChartSizeChecks
                 Environment.SetEnvironmentVariable("KG_RUST_ENGINE", engine);
                 using (ChartLoadLimits.Override(false))
                 {
-                    // Original loader confirms the guard runs before parsing, independently of native fallback diagnostics.
+                    // 用原始加载器独立验证上限在开始解析前生效，排除原生回退诊断的干扰。
                     Reject(() => VscReader.LoadOriginal(chart));
                     Reject(() => VsmBeatRange.Parse("0:1000000:1", double.Parse));
                     Reject(() => ResourceFiles.ReadText(text, 4));
@@ -52,7 +63,7 @@ internal static class ChartSizeChecks
                     Check(ResourceFiles.ReadText(text, 4) == "12345678", "Resource size limit remained active.");
                     Check(AudioData.ValidateSampleCount(AudioData.MaxDecodedBytes / 4 + 1) > 0, "PCM size limit remained active.");
                     Check(VsmDocument.FromText("0:1000000:1,0,linear,0,1,prx,0\n").Clips.Single().RepeatCount == 1_000_001, "Editor still capped repeat count.");
-                    Reject(() => VsmBeatRange.Parse("0:5:0", double.Parse)); // Structural validation remains mandatory.
+                    Reject(() => VsmBeatRange.Parse("0:5:0", double.Parse)); // 放开大小限制后仍须执行结构校验。
                     using (ChartLoadLimits.Override(false)) Check(ChartLoadLimits.Exceeds(129, 128), "Nested scope did not restore protection.");
                     Check(ChartLoadLimits.Unlimited, "Nested scope leaked its policy.");
 #endif
@@ -65,6 +76,10 @@ internal static class ChartSizeChecks
             Console.WriteLine("PASS chart size: default off, persistence, >128 MiB managed/native loads, resource/PCM/event limits, structural validation, scoped policy and re-enable protection");
             return 0;
         }
-        finally { Environment.SetEnvironmentVariable("KG_RUST_ENGINE", previousEngine); Directory.Delete(root, true); }
+        finally
+        {
+            Environment.SetEnvironmentVariable("KG_RUST_ENGINE", previousEngine);
+            Directory.Delete(root, true);
+        }
     }
 }

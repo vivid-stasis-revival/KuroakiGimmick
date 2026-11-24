@@ -1,3 +1,5 @@
+// 读取程序集元数据并比对 AOT 镜像与依赖引用。
+
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using System.Text;
@@ -23,11 +25,15 @@ foreach (string path in Directory.EnumerateFiles(args[0], "*.aotdata.arm64"))
     images++;
     string data = Encoding.Latin1.GetString(File.ReadAllBytes(path));
     var matches = references.Matches(data);
-    if (matches.Count == 0) { Console.Error.WriteLine("No AOT dependency table: " + Path.GetFileName(path)); failures++; }
+    if (matches.Count == 0)
+    {
+        Console.Error.WriteLine("No AOT dependency table: " + Path.GetFileName(path));
+        failures++;
+    }
     foreach (Match match in matches)
     {
         string name = match.Groups[1].Value;
-        // The compiler-only generic-instantiation module has no packaged IL.
+        // 仅供编译器实例化泛型的模块没有随包分发的 IL。
         if (name == "aot-instances" && Path.GetFileName(path) == "aot-instances.aotdata.arm64") continue;
         Guid expected = Guid.Parse(match.Groups[2].Value);
         checkedReferences++;
@@ -38,6 +44,10 @@ foreach (string path in Directory.EnumerateFiles(args[0], "*.aotdata.arm64"))
         }
     }
 }
-if (images == 0) { Console.Error.WriteLine("No ARM64 AOT data found."); return 1; }
+if (images == 0)
+{
+    Console.Error.WriteLine("No ARM64 AOT data found.");
+    return 1;
+}
 Console.WriteLine($"AOT dependency audit: {images} images, {checkedReferences} references, {failures} mismatches.");
 return failures == 0 ? 0 : 1;

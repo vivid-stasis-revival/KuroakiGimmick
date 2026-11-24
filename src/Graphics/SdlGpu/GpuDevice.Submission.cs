@@ -1,3 +1,5 @@
+// SDL_GPU 命令提交：先统一上传，再按目标/清屏边界切换 render pass。
+
 using System.Runtime.InteropServices;
 using KuroakiGimmick.Native;
 using KuroakiGimmick.Core;
@@ -5,7 +7,6 @@ using static KuroakiGimmick.Native.Sdl;
 
 namespace KuroakiGimmick.Graphics;
 
-/// <summary>SDL_GPU 命令提交：先统一上传，再按目标/清屏边界切换 render pass。</summary>
 public sealed unsafe partial class GpuDevice : IDisposable
 {
     /// <summary>仅扩容共享顶点/上传缓冲，最少分配 1 MiB；不逐帧分配或缩容。</summary>
@@ -19,12 +20,21 @@ public sealed unsafe partial class GpuDevice : IDisposable
         uint capacity = checked((uint)Math.Min(grown, uint.MaxValue));
         nint nextVertex = Check(SDL_CreateGPUBuffer(Handle, new GPUBufferCreateInfo { usage = 1, size = capacity }), "Create vertex buffer");
         nint nextUpload;
-        try { nextUpload = Transfer(capacity); }
-        catch { SDL_ReleaseGPUBuffer(Handle, nextVertex); throw; }
-        // This slot's fence completed before growth/reuse; old resources are no longer being read by any command.
+        try
+        {
+            nextUpload = Transfer(capacity);
+        }
+        catch
+        {
+            SDL_ReleaseGPUBuffer(Handle, nextVertex);
+            throw;
+        }
+        // LIFETIME: 槽位的 fence 已完成，此时才可扩容或复用其中的资源。
         if (slot.Vertex != 0) SDL_ReleaseGPUBuffer(Handle, slot.Vertex);
         if (slot.Upload != 0) SDL_ReleaseGPUTransferBuffer(Handle, slot.Upload);
-        slot.Vertex = nextVertex; slot.Upload = nextUpload; slot.Capacity = capacity;
+        slot.Vertex = nextVertex;
+        slot.Upload = nextUpload;
+        slot.Capacity = capacity;
     }
 
     /// <summary>异常退出时丢弃尚未提交的 CPU 批次，避免 Dispose 再提交并掩盖原始异常。</summary>
@@ -85,7 +95,11 @@ public sealed unsafe partial class GpuDevice : IDisposable
     {
         if (mesh == null && !presentation) return SDL_SubmitGPUCommandBuffer(command);
         nint handle = SDL_SubmitGPUCommandBufferAndAcquireFence(command);
-        if (handle == 0) { SDL_WaitForGPUIdle(Handle); return false; } // exceptional path: never reuse an untracked upload
+        if (handle == 0)
+        {
+            SDL_WaitForGPUIdle(Handle);
+            return false;
+        } // 异常路径不再复用无法追踪完成状态的上传资源。
         var fence = new SubmissionFence(handle);
         if (mesh != null) mesh.Fence = fence;
         if (presentation) presentationFences.Enqueue(fence);
@@ -93,9 +107,12 @@ public sealed unsafe partial class GpuDevice : IDisposable
     }
 
     /// <summary>一次 copy pass 上传全部顶点，随后消费批次。即使窗口无交换链纹理，离屏导出仍继续。</summary>
+    /// <param name="present">是否提交呈现。</param>
+    /// <param name="presentWindow">接收呈现的窗口句柄。</param>
     public void Submit(bool present = false, nint presentWindow = 0)
     {
         nint outputWindow = presentWindow == 0 ? window : presentWindow;
+        // 1. 排除已中止或空批次，随后取得本次提交的命令缓冲区。
         if (aborted || batches.Count == 0)
         {
             return;
@@ -110,12 +127,12 @@ public sealed unsafe partial class GpuDevice : IDisposable
         {
             nint swapchain = 0;
             uint swapWidth = 0, swapHeight = 0, swapchainFormat = 0;
+            // 2. 需要呈现时先取得对应窗口的交换链纹理。
             if (present && (!hidden || presentWindow != 0))
             {
                 using (PerformanceStats.Measure(PerformanceStats.Stage.GpuWait))
                 {
-                    // Auxiliary windows must never make the main workspace wait for a minimized or
-                    // compositor-throttled swapchain. SDL returns a null texture when one is unavailable.
+                    // 辅助窗口不能因为最小化或合成器限速而阻塞主工作区；交换链纹理暂不可用时 SDL 返回空句柄。
                     if (presentWindow != 0)
                         Require(SDL_AcquireGPUSwapchainTexture(command, outputWindow, out swapchain, out swapWidth, out swapHeight));
                     else
@@ -129,18 +146,27 @@ public sealed unsafe partial class GpuDevice : IDisposable
                     swapchainFormat = SDL_GetGPUSwapchainTextureFormat(Handle, outputWindow);
                 }
             }
+            // 3. 等待网格槽可复用，再上传本帧的顶点或实例数据。
             if (vertices.Count > 0)
             {
                 using var uploadTiming = PerformanceStats.Measure(PerformanceStats.Stage.GpuUpload);
                 uint size = checked((uint)vertices.Count * 4);
-                mesh = meshSlots[meshCursor]; meshCursor = (meshCursor + 1) % meshSlots.Length;
+                mesh = meshSlots[meshCursor];
+                meshCursor = (meshCursor + 1) % meshSlots.Length;
                 if (mesh.Fence is { } previous)
                 {
                     using var backpressure = PerformanceStats.Measure(PerformanceStats.Stage.GpuWait);
-                    while (!previous.Complete(Handle)) { if (!Offscreen) SDL_PumpEvents(); SDL_Delay(1); }
-                    previous.Release(Handle); mesh.Fence = null;
+                    while (!previous.Complete(Handle))
+                    {
+                        if (!Offscreen) SDL_PumpEvents();
+                        SDL_Delay(1);
+                    }
+                    previous.Release(Handle);
+                    mesh.Fence = null;
                 }
-                EnsureVertices(mesh, size); vertexBuffer = mesh.Vertex; uploadBuffer = mesh.Upload;
+                EnsureVertices(mesh, size);
+                vertexBuffer = mesh.Vertex;
+                uploadBuffer = mesh.Upload;
                 PerformanceStats.Add(PerformanceStats.Counter.UploadBytes, size);
                 nint mapped;
                 using (PerformanceStats.Measure(PerformanceStats.Stage.GpuWait)) mapped = Check(SDL_MapGPUTransferBuffer(Handle, uploadBuffer, false), "Map vertex upload");
@@ -168,6 +194,7 @@ public sealed unsafe partial class GpuDevice : IDisposable
             int boundTextureCount = 0;
 
             var recordTiming = PerformanceStats.Measure(PerformanceStats.Stage.GpuRecord);
+            // 4. 按批次顺序记录渲染 pass、资源绑定与绘制命令。
             foreach (var batch in batches)
             {
                 nint target = batch.Target == 0 ? swapchain : batch.Target;
@@ -254,6 +281,7 @@ public sealed unsafe partial class GpuDevice : IDisposable
                 }
 
                 bool sameUniformShader = ReferenceEquals(uniformShader, shader);
+                // SAFETY: 固定批次中的两个 uniform 快照，仅向 SDL 推送已记录的有效字节。
                 fixed (byte* v = batch.VertexUniforms, f = batch.FragmentUniforms)
                 {
                     if (batch.VertexUniformLength > 0 &&
@@ -279,6 +307,7 @@ public sealed unsafe partial class GpuDevice : IDisposable
                     SameBindings(batch.Textures, batch.TextureCount, boundTextures, boundTextureCount);
                 if (batch.TextureCount > 0 && !sameSamplerState)
                 {
+                    // SAFETY: 在绑定期间固定连续的描述数组，并传递批次记录的有效绑定数。
                     fixed (GPUTextureSamplerBinding* bindings = batch.Textures)
                     {
                         SDL_BindGPUFragmentSamplers(pass, 0, bindings, (uint)batch.TextureCount);

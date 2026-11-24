@@ -24,7 +24,7 @@ internal static class RenderWorkerDefaultsChecks
             if (ViewerSettings.Load(path).VideoRenderWorkers != maximum)
                 throw new InvalidOperationException("Default render worker count was not preserved across save/load.");
 
-            // Do not overwrite a user's prior explicit choice when upgrading the application.
+            // 升级时保留用户已明确保存的线程数选择。
             defaults.VideoRenderWorkers = 1;
             defaults.Persist(path);
             if (ViewerSettings.Load(path).VideoRenderWorkers != 1)

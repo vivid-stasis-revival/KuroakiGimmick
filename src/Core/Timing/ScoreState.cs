@@ -1,15 +1,31 @@
+// 将显式命中与长条节拍流组合，用于任意时刻的计分及命中特效查询。
+
 namespace KuroakiGimmick.Core;
 
-/// <summary>
-/// Autoplay judgements: explicit heads/tails and compact arithmetic hold streams.
-/// Rolling scores use bounded checkpoints, not one pair of doubles per future tick.
-/// All queries remain independent of playback direction.
-/// </summary>
+/// <summary>自动演奏显式保存头尾判定，用等间隔序列表示长条节拍。滚动分数使用有界检查点，支持任意方向查询。</summary>
 public sealed class ScoreState
 {
-    public enum HitKind { Note, Wide, Mine, HoldTick }
+    /// <summary>自动判定与命中特效使用的事件类别。</summary>
+    public enum HitKind
+    {
+        /// <summary>普通音符判定。</summary>
+        Note,
+        /// <summary>宽轨撞块判定。</summary>
+        Wide,
+        /// <summary>地雷判定。</summary>
+        Mine,
+        /// <summary>长条中途节拍判定。</summary>
+        HoldTick
+    }
+    /// <summary>供计分及命中特效查询的自动演奏判定。</summary>
+    /// <param name="Time">命中时刻，单位为秒。</param>
+    /// <param name="Lane">用于判定及绘制的轨道编号。</param>
+    /// <param name="Kind">区分普通音符、撞块、地雷和长条中途判定。</param>
+    /// <param name="Lead">相对于判定时刻的绘制时间差，单位为毫秒；长条节拍使用头部位置。</param>
     public readonly record struct Hit(double Time, int Lane, HitKind Kind, double Lead);
+    /// <summary>自动演奏判定使用的档位。</summary>
     public const int Tier = 0;
+    /// <summary>自动演奏准确分的满分值。自动演奏采用的准确率百分比。</summary>
     public const double MaxScore = 1010000, Accuracy = 100;
     const double MineWindow = .035, HoldTailGrace = 150;
     const int MaxHoldParts = 100_000, CheckpointLimit = 4096;
@@ -18,6 +34,7 @@ public sealed class ScoreState
     readonly Hold[]? previewHolds;
     readonly ushort[]? previewHitOrdinals, previewHoldOrdinals;
     readonly double[]? previewHoldMaxEnd;
+    /// <summary>是否为密集判定或长条建立了单独的预览索引。</summary>
     public bool HasDensePreview => previewHits != null || previewHolds != null;
     readonly Hold[] holds;
     readonly Run[] runs;
@@ -26,10 +43,15 @@ public sealed class ScoreState
     readonly double[] holdMaxEnd;
     readonly List<Checkpoint> checkpoints = [];
     readonly double accRate, accStep;
+    /// <summary>包含长条中途判定在内的总判定数。</summary>
     public long NoteCount { get; }
+    /// <summary>每个判定所占的计分值。</summary>
     public double NoteValue { get; }
+    /// <summary>显式保存的命中记录数，不含算术展开的长条节拍。</summary>
     public int StoredHitCount => hits.Length;
+    /// <summary>通过等间隔序列表示的长条判定流数。</summary>
     public int HoldStreamCount => holds.Length;
+    /// <summary>用于恢复滚动分数的缓存检查点数量。</summary>
     public int RollingCheckpointCount => checkpoints.Count;
 
     readonly record struct Hold(double Start, double PeriodMs, int Count, int Lane)
@@ -37,7 +59,7 @@ public sealed class ScoreState
         public double At(int i) => Start + (i + 1) * PeriodMs / 1000;
         public double End => At(Count - 1);
     }
-    // Start is the source hold head, preserving the original p * perBeat / 1000 arithmetic.
+    // Start 对应长条头部时刻，保留原版 p × perBeat / 1000 的运算顺序。
     readonly record struct Run(double Start, double PeriodMs, int Count, long Weight)
     {
         public double At(int i) => PeriodMs == 0 ? Start : Start + (i + 1) * PeriodMs / 1000;
@@ -58,16 +80,28 @@ public sealed class ScoreState
     readonly record struct Cursor(int Run, int Index);
     ScoreState(ScoreState source)
     {
-        hits = source.hits; holds = source.holds; runs = source.runs;
+        hits = source.hits;
+        holds = source.holds;
+        runs = source.runs;
         previewHits = source.previewHits;
-        previewHitOrdinals = source.previewHitOrdinals; previewHoldOrdinals = source.previewHoldOrdinals;
-        previewHolds = source.previewHolds; previewHoldMaxEnd = source.previewHoldMaxEnd;
-        runMaxEnd = source.runMaxEnd; runCounts = source.runCounts; holdMaxEnd = source.holdMaxEnd;
-        accRate = source.accRate; accStep = source.accStep; NoteCount = source.NoteCount; NoteValue = source.NoteValue;
+        previewHitOrdinals = source.previewHitOrdinals;
+        previewHoldOrdinals = source.previewHoldOrdinals;
+        previewHolds = source.previewHolds;
+        previewHoldMaxEnd = source.previewHoldMaxEnd;
+        runMaxEnd = source.runMaxEnd;
+        runCounts = source.runCounts;
+        holdMaxEnd = source.holdMaxEnd;
+        accRate = source.accRate;
+        accStep = source.accStep;
+        NoteCount = source.NoteCount;
+        NoteValue = source.NoteValue;
         checkpoints.AddRange(source.checkpoints);
     }
     internal ScoreState ForkForRender() => new(this);
 
+    /// <summary>从音符和 BPM 变化构建自动判定与计分索引。</summary>
+    /// <param name="chart">提供音符、演出事件及诊断的谱面。</param>
+    /// <param name="bpm">在歌曲秒数与拍数之间转换的 BPM 映射。</param>
     public ScoreState(Chart chart, BpmMap bpm)
     {
         int hitCount = 0;
@@ -82,9 +116,15 @@ public sealed class ScoreState
         {
             switch (n.Type)
             {
-                case 0: AddHit(new(n.Time, n.Lane, HitKind.Note, 0)); break;
-                case 1 or 8: AddHit(new(n.Time, 4 + n.Lane, HitKind.Wide, 0)); break;
-                case 6 or 7: AddHit(new(n.Time + MineWindow, n.Lane + (n.Type == 7 ? 4 : 0), HitKind.Mine, 0)); break;
+                case 0:
+                    AddHit(new(n.Time, n.Lane, HitKind.Note, 0));
+                    break;
+                case 1 or 8:
+                    AddHit(new(n.Time, 4 + n.Lane, HitKind.Wide, 0));
+                    break;
+                case 6 or 7:
+                    AddHit(new(n.Time + MineWindow, n.Lane + (n.Type == 7 ? 4 : 0), HitKind.Mine, 0));
+                    break;
                 case 2:
                     double period = 60000 / bpm.BpmAtBeat(bpm.Beat(n.Time));
                     int parts = (int)Math.Min(MaxHoldParts, Math.Floor(Math.Max(0, (n.End - n.Time) * 1000 - HoldTailGrace) / period));
@@ -101,16 +141,22 @@ public sealed class ScoreState
         }
         bool hitsSorted = true;
         for (int i = 1; i < hits.Length; i++)
-            if (hits[i - 1].Time > hits[i].Time) { hitsSorted = false; break; }
+            if (hits[i - 1].Time > hits[i].Time)
+            {
+                hitsSorted = false;
+                break;
+            }
         if (!hitsSorted) Array.Sort(hits, (a, b) => a.Time.CompareTo(b.Time));
         var hitPreview = DensePreview.Reduce(hits, static h => h.Time, static h => (h.Lane, h.Kind, h.Lead));
-        previewHits = hitPreview?.Items; previewHitOrdinals = hitPreview?.Ordinals;
+        previewHits = hitPreview?.Items;
+        previewHitOrdinals = hitPreview?.Ordinals;
         holds = holdStreams.OrderBy(h => h.At(0)).ToArray();
         holdMaxEnd = new double[Math.Max(1, holds.Length * 4)];
         if (holds.Length > 0) BuildHolds(holds, holdMaxEnd, 1, 0, holds.Length);
         var holdPreview = DensePreview.Reduce(holds, static h => h.At(0),
             static h => (h.Start, h.PeriodMs, h.Count, h.Lane), denseOwner: previewHits != null);
-        previewHolds = holdPreview?.Items; previewHoldOrdinals = holdPreview?.Ordinals;
+        previewHolds = holdPreview?.Items;
+        previewHoldOrdinals = holdPreview?.Ordinals;
         if (previewHolds != null)
         {
             previewHoldMaxEnd = new double[Math.Max(1, previewHolds.Length * 4)];
@@ -142,10 +188,14 @@ public sealed class ScoreState
             return;
         }
         int mid = lo + (hi - lo) / 2;
-        BuildRuns(node * 2, lo, mid); BuildRuns(node * 2 + 1, mid, hi);
+        BuildRuns(node * 2, lo, mid);
+        BuildRuns(node * 2 + 1, mid, hi);
         runMaxEnd[node] = Math.Max(runMaxEnd[node * 2], runMaxEnd[node * 2 + 1]);
         runCounts[node] = runCounts[node * 2] + runCounts[node * 2 + 1];
     }
+    /// <summary>统计指定秒数及之前已发生的全部判定。</summary>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <returns>截至指定秒数已发生的判定总数。</returns>
     public long Judged(double time) => SortedSearch.UpperBound(hits, time, h => h.Time) + CountAt(1, 0, runs.Length, time);
     long CountAt(int node, int lo, int hi, double time)
     {
@@ -155,11 +205,29 @@ public sealed class ScoreState
         int mid = lo + (hi - lo) / 2;
         return CountAt(node * 2, lo, mid, time) + CountAt(node * 2 + 1, mid, hi, time);
     }
+    /// <summary>返回该时刻自动演奏累计的连击数。</summary>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <returns>截至指定秒数的连击数。</returns>
     public long Combo(double time) => Judged(time);
+    /// <summary>返回已判定数乘以准确分步长的即时值。</summary>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <returns>尚未平滑滚动的即时准确分。</returns>
     public double CurrentScore(double time) => Judged(time) * accStep;
+    /// <summary>返回该时刻累计的 EX 原始分，每个判定计 3 分。</summary>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <returns>每次命中计三分的当前累计值。</returns>
     public long GameScore(double time) => 3 * Judged(time);
+    /// <summary>采样滚动显示的准确分。</summary>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <returns>当前滚动显示的准确分。</returns>
     public double AccScore(double time) => Rolling(time).Acc;
+    /// <summary>采样滚动显示的 EX 分。</summary>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <returns>当前滚动显示的 EX 分。</returns>
     public double ExScore(double time) => Rolling(time).Ex;
+    /// <summary>查找给定时刻及之前最近一次命中的秒数。</summary>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <returns>最近一次命中的秒数，尚无命中时为 null。</returns>
     public double? LastHit(double time)
     {
         int i = SortedSearch.UpperBound(hits, time, h => h.Time);
@@ -197,7 +265,8 @@ public sealed class ScoreState
                 return;
             }
             int mid = lo + (hi - lo) / 2;
-            Add(node * 2, lo, mid); Add(node * 2 + 1, mid, hi);
+            Add(node * 2, lo, mid);
+            Add(node * 2 + 1, mid, hi);
         }
     }
     Checkpoint Advance(Checkpoint state, Run run, int first, int count)
@@ -258,11 +327,7 @@ public sealed class ScoreState
         return state;
     }
 
-    /// <summary>
-    /// Both displays are still below their *current* targets throughout this interval, even if no new hits arrive.
-    /// Therefore every intervening tick can be counted arithmetically without visiting it. Half the proven interval
-    /// leaves a numerical margin and makes dense, overlapping long holds cheap without approximating the scores.
-    /// </summary>
+    /// <summary>两个显示分在整个区间内都低于各自当前目标，即使没有新增判定也成立，因此可以算术累计中途节拍。仅跳过已证明区间的一半以保留数值余量。</summary>
     bool SkipBusy(ref Checkpoint state, double until, double upcoming)
     {
         if (state.Count == 0 || accRate == 0) return false;
@@ -307,7 +372,13 @@ public sealed class ScoreState
              Math.Min(state.Count * 3.0, state.Ex + 60 * (time - state.Time)));
     }
 
-    /// <summary>Only materialize effects in the requested lifetime window. Returned hits are chronological.</summary>
+    /// <summary>仅生成指定生命周期窗口内的命中特效，按时间顺序枚举。</summary>
+    /// <param name="from">查询起点，单位为秒。</param>
+    /// <param name="to">查询终点，单位为秒。</param>
+    /// <param name="includeHoldTicks">是否枚举长条中途节拍。</param>
+    /// <param name="preview">是否采用预览索引。</param>
+    /// <param name="layers">预览允许的重复层数。</param>
+    /// <returns>按时刻排列的命中记录。</returns>
     public IEnumerable<Hit> HitsBetween(double from, double to, bool includeHoldTicks = true, bool preview = false,
         int layers = ViewerSettings.DefaultStackLayers)
     {
@@ -326,7 +397,10 @@ public sealed class ScoreState
             if ((explicitIndex >= visibleHits.Length || visibleHits[explicitIndex].Time > to) && queue.Count == 0) break;
             if (explicitIndex < visibleHits.Length && visibleHits[explicitIndex].Time <= to &&
                 (!queue.TryPeek(out _, out double next) || visibleHits[explicitIndex].Time <= next))
-            { yield return visibleHits[explicitIndex++]; continue; }
+            {
+                yield return visibleHits[explicitIndex++];
+                continue;
+            }
             var cursor = queue.Dequeue();
             var hold = visibleHolds[cursor.Hold];
             yield return new(hold.At(cursor.Index), hold.Lane, HitKind.HoldTick, -(cursor.Index + 1) * hold.PeriodMs);
@@ -345,7 +419,8 @@ public sealed class ScoreState
                 return;
             }
             int mid = lo + (hi - lo) / 2;
-            AddHolds(node * 2, lo, mid); AddHolds(node * 2 + 1, mid, hi);
+            AddHolds(node * 2, lo, mid);
+            AddHolds(node * 2 + 1, mid, hi);
         }
     }
 }

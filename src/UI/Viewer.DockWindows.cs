@@ -1,3 +1,5 @@
+// 管理停靠面板的独立窗口及主窗口位置。
+
 using System.Numerics;
 using System.Runtime.InteropServices;
 using KuroakiGimmick.Core;
@@ -27,7 +29,7 @@ public sealed partial class Viewer
     }
 
     bool drawingMainDockPanel;
-    // Main and native windows use the same groups, headers and body boundaries.
+    // 主窗口与独立窗口共享分组、标题及内容边界。
     void DrawMainDockPanels(int w, int h, int pw, int ph, double time, bool editorWorkspace)
     {
         previewFrame = previewImage = editorSourceRect = editorInspectorRect =
@@ -42,21 +44,23 @@ public sealed partial class Viewer
             Canvas.LimitClip(bounds);
             try
             {
-                // Keep the original main-window chrome. New tab bars are only needed
-                // for user-created mixed groups; detached windows always retain tabs.
+                // 主窗口保留原外观，仅用户创建的混合分组需要新标签栏；独立窗口始终保留标签。
                 if (editorWorkspace && OriginalSourceGroup(tabs))
                 {
                     string? selectedSource = tabs.FirstOrDefault(p => p.Active).Panel;
-                    imageSources = selectedSource == "images"; textSources = selectedSource == "text";
+                    imageSources = selectedSource == "images";
+                    textSources = selectedSource == "text";
                     Rect source = DockingEnabled ? PanelRegistry.MainContent("tools", bounds) : bounds;
-                    inputPanelBounds = source; Canvas.LimitClip(source);
+                    inputPanelBounds = source;
+                    Canvas.LimitClip(source);
                     DrawEditorSources(new(source.X, source.Y + 5, source.W, Math.Max(0, source.H - 13)));
                     continue;
                 }
                 if (!editorWorkspace && OriginalViewerRightGroup(tabs))
                 {
                     Rect right = DockingEnabled ? PanelRegistry.MainContent("inspector", bounds) : bounds;
-                    inputPanelBounds = right; Canvas.LimitClip(right);
+                    inputPanelBounds = right;
+                    Canvas.LimitClip(right);
                     DrawViewerRight(right, h, time);
                     continue;
                 }
@@ -70,7 +74,11 @@ public sealed partial class Viewer
                 if (editorWorkspace) DrawEditorDockPanel(selected, body, w, h, pw, ph, time);
                 else DrawViewerDockPanel(selected, body, w, h, pw, ph, time);
             }
-            finally { Canvas.LimitClip(null); drawingMainDockPanel = false; }
+            finally
+            {
+                Canvas.LimitClip(null);
+                drawingMainDockPanel = false;
+            }
         }
         inputPanelBounds = new(0, 0, w, h);
     }
@@ -116,7 +124,12 @@ public sealed partial class Viewer
             var tabRect = new Rect(bounds.X + 4 + index * tabWidth, bounds.Y + 3,
                 Math.Max(1, tabWidth - 4), 24);
             if (EButton(id.ToUpperInvariant(), tabRect, active: id == selected, key: "dock-tab:" + id))
-            { layout.Activate(id); selected = id; activePanel = id; SaveSettings(); }
+            {
+                layout.Activate(id);
+                selected = id;
+                activePanel = id;
+                SaveSettings();
+            }
         }
         if (canMove && selected != null &&
             EButton("MOVE", new(bounds.X + bounds.W - 178, bounds.Y + 3, 82, 24), key: "dock-move:" + selected))
@@ -137,11 +150,16 @@ public sealed partial class Viewer
     {
         if (moveMenuPanel is not { } panelId) return;
         var targets = layout.Roots.Keys.Where(id => id != currentRoot).Order(StringComparer.Ordinal).ToArray();
-        if (targets.Length == 0) { moveMenuPanel = null; return; }
+        if (targets.Length == 0)
+        {
+            moveMenuPanel = null;
+            return;
+        }
         float x = Math.Max(2, moveMenuAnchor.X + moveMenuAnchor.W - 244);
         float y = moveMenuAnchor.Y + 30;
         var menu = new Rect(x, y, 238, targets.Length * 30 + 8);
-        Canvas.Fill(menu, panel); Canvas.Border(menu, soft);
+        Canvas.Fill(menu, panel);
+        Canvas.Border(menu, soft);
         for (int index = 0; index < targets.Length; index++)
         {
             string target = targets[index];
@@ -149,7 +167,8 @@ public sealed partial class Viewer
             if (EButton(label, new(x + 4, y + 4 + index * 30, 230, 26), key: "dock-target:" + target))
             {
                 layout.Move(panelId, target, layout.ActivePanel(target), DockSide.Center);
-                moveMenuPanel = null; SaveSettings();
+                moveMenuPanel = null;
+                SaveSettings();
             }
         }
     }
@@ -166,7 +185,7 @@ public sealed partial class Viewer
         workspaceWindows.ConfigurePresentation(window, title, ids.Length == 1 && ids[0] == "preview");
     }
 
-    /// <summary>Run on the SDL thread after shared state updates, before presenting any auxiliary UI.</summary>
+    /// <summary>在共享状态更新后、辅助窗口呈现前由 SDL 线程执行。</summary>
     void SyncDockWindows()
     {
         if (!WorkspaceWindowManager.SupportsDetachedWindows) return;
@@ -178,7 +197,8 @@ public sealed partial class Viewer
                     using var scope = BindPointer(oldWindow);
                     if (inlineWindow == oldWindow.Handle) CloseInline();
                     if (modalWindow == oldWindow.Handle) CloseValue();
-                    workspaceWindows.Close(oldWindow); ForgetPointer(oldWindow);
+                    workspaceWindows.Close(oldWindow);
+                    ForgetPointer(oldWindow);
                 }
             dockWindowIds.Clear();
             return;
@@ -186,13 +206,19 @@ public sealed partial class Viewer
         foreach (var (id, identity) in dockWindowIds.ToArray())
         {
             var layout = identity.Mode == WorkspaceMode.Editor ? workspaceManager.Editor : workspaceManager.Viewer;
-            if (!workspaceWindows.TryGet(id, out var window) || window == null) { dockWindowIds.Remove(id); continue; }
+            if (!workspaceWindows.TryGet(id, out var window) || window == null)
+            {
+                dockWindowIds.Remove(id);
+                continue;
+            }
             if (!layout.Roots.TryGetValue(identity.Root, out var root) || root.Node == null)
             {
                 using var scope = BindPointer(window);
                 if (inlineWindow == window.Handle) CloseInline();
                 if (modalWindow == window.Handle) CloseValue();
-                workspaceWindows.Close(window); ForgetPointer(window); dockWindowIds.Remove(id);
+                workspaceWindows.Close(window);
+                ForgetPointer(window);
+                dockWindowIds.Remove(id);
             }
             else if (identity.Mode != workspaceManager.Mode || identity.Mode == WorkspaceMode.Editor && !editorMode)
             {
@@ -209,7 +235,10 @@ public sealed partial class Viewer
             if (root.Id == DockLayout.MainWindow || root.Node == null) continue;
             string key = DockWindowKey(workspaceManager.Mode, root.Id);
             if (workspaceWindows.TryGet(key, out var existing) && existing != null)
-            { ConfigureDockWindow(existing, workspaceManager.Current, root.Id); continue; }
+            {
+                ConfigureDockWindow(existing, workspaceManager.Current, root.Id);
+                continue;
+            }
             var saved = workspaceManager.WindowGeometry(workspaceManager.Mode, root.Id);
             var minimum = workspaceManager.Current.MinimumSize(root.Id);
             int minimumWidth = Math.Max(240, (int)Math.Ceiling(minimum.Width));
@@ -234,7 +263,8 @@ public sealed partial class Viewer
                 using var scope = BindPointer(current);
                 previewFrame = previewImage = editorSourceRect = editorInspectorRect =
                     editorTimelineRect = editorTracksRect = trackLabelGrip = default;
-                var panels = new List<DockPanelRect>(); var splitters = new List<DockSplitterRect>();
+                var panels = new List<DockPanelRect>();
+                var splitters = new List<DockSplitterRect>();
                 var layout = identity.Mode == WorkspaceMode.Editor ? workspaceManager.Editor : workspaceManager.Viewer;
                 layout.Solve(identity.Root,
                     new Rect(0, 0, viewport.Width, viewport.Height), panels, splitters);
@@ -258,7 +288,10 @@ public sealed partial class Viewer
                         else DrawViewerDockPanel(selected, body, viewport.Width, viewport.Height,
                                 viewport.PixelWidth, viewport.PixelHeight, transport.Position);
                     }
-                    finally { Canvas.LimitClip(null); }
+                    finally
+                    {
+                        Canvas.LimitClip(null);
+                    }
                 }
                 DrawDockSplitters(identity.Root, splitters);
                 Canvas.Clip(null);
@@ -291,18 +324,28 @@ public sealed partial class Viewer
             if (workspaceWindows.TryCapture(window, identity.Root) is { } bounds) workspaceManager.RememberWindow(bounds);
             (identity.Mode == WorkspaceMode.Editor ? workspaceManager.Editor : workspaceManager.Viewer)
                 .CloseWindow(identity.Root);
-            workspaceWindows.Close(window); ForgetPointer(window); dockWindowIds.Remove(window.Id);
-            SaveSettings(); return true;
+            workspaceWindows.Close(window);
+            ForgetPointer(window);
+            dockWindowIds.Remove(window.Id);
+            SaveSettings();
+            return true;
         }
         if (identity.Mode != workspaceManager.Mode) return true;
         if ((e.Type is 0x401 or 0x20E) && inlineWindow != 0 && inlineWindow != ActiveUiWindow)
-        { AcceptInline(); if (InlineActive) return true; }
+        {
+            AcceptInline();
+            if (InlineActive) return true;
+        }
         if (e.Type == 0x300 && e.Scan == 41 && moveMenuPanel != null)
-        { moveMenuPanel = null; return true; }
+        {
+            moveMenuPanel = null;
+            return true;
+        }
         if (e.Type == 0x20F)
         {
             held = click = seeking = editorScrub = false;
-            CancelImageGesture(); CancelSceneDirectGesture();
+            CancelImageGesture();
+            CancelSceneDirectGesture();
             Sdl.SDL_CaptureMouse(false);
         }
         e = LogicalInput(e);
@@ -327,8 +370,13 @@ public sealed partial class Viewer
         if (HandleDockDragInput(e, window)) return true;
         if (e.Type is 0x400 or 0x401 or 0x402)
         {
-            mouseX = e.X; mouseY = e.Y;
-            if (e.Type == 0x401 && e.Button == 1) { click = held = true; FocusDockPanel(identity.Root, e.X, e.Y); }
+            mouseX = e.X;
+            mouseY = e.Y;
+            if (e.Type == 0x401 && e.Button == 1)
+            {
+                click = held = true;
+                FocusDockPanel(identity.Root, e.X, e.Y);
+            }
             if (e.Type == 0x402 && e.Button == 1) held = false;
         }
         if (e.Type == 0x403) FocusDockPanel(identity.Root, mouseX, mouseY);
@@ -363,7 +411,8 @@ public sealed partial class Viewer
     void FocusDockPanel(string root, float x, float y)
     {
         var viewport = Viewport();
-        var panels = new List<DockPanelRect>(); var splitters = new List<DockSplitterRect>();
+        var panels = new List<DockPanelRect>();
+        var splitters = new List<DockSplitterRect>();
         Rect area = activeWorkspaceWindow.Main
             ? new(24, 91, viewport.Width - 48, viewport.Height - (editorMode ? 152 : 159))
             : new(0, 0, viewport.Width, viewport.Height);

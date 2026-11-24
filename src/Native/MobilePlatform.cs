@@ -1,3 +1,5 @@
+// 为移动端设置资源目录、生命周期监听、文件选择和导入路径。
+
 #if KG_MOBILE
 using System.IO.Compression;
 using System.Runtime.InteropServices;
@@ -81,7 +83,7 @@ internal static class MobilePlatform
         return true;
     }
 
-    // ZIP song packages preserve relative chart/audio/image paths across both sandboxes.
+    // ZIP 歌曲包在两个移动端沙箱中都可保留谱面、音轨与图片之间的相对路径。
     internal static string ExpandImport(string path)
     {
         if (!Path.GetExtension(path).Equals(".zip", StringComparison.OrdinalIgnoreCase)) return path;
@@ -91,7 +93,7 @@ internal static class MobilePlatform
             using var archive = ZipFile.OpenRead(path);
             if (archive.Entries.Count > 20000 || archive.Entries.Sum(e => e.Length) > 2L * 1024 * 1024 * 1024)
                 throw new InvalidDataException("Song ZIP exceeds the import size limit.");
-            // The framework rejects entries whose destination escapes this directory.
+            // 解压 API 会拒绝目标路径逃出此目录的条目。
             archive.ExtractToDirectory(destination);
             InstallShaders(destination);
             var directories = Directory.GetDirectories(destination);
@@ -112,7 +114,7 @@ internal static class MobilePlatform
             using var reader = new BinaryReader(File.OpenRead(file));
             if (reader.BaseStream.Length < 12 || reader.ReadInt32() != 0x48534D4B || reader.ReadInt32() != 1 || reader.ReadUInt32() != format) continue;
             string target = Path.Combine(Root, "MobileShaders", Path.GetFileName(file));
-            // Existing entries remain until a complete replacement is available.
+            // 只有新副本完整就绪后才替换已有文件。
             string temporary = target + ".tmp";
             File.Copy(file, temporary, true);
             File.Move(temporary, target, true);

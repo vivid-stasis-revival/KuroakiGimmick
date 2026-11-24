@@ -1,12 +1,18 @@
+// 将参考手册中的 Markdown 结构转换为可排版的内容。
+
 using System.Net;
 using System.Text;
 
 namespace KuroakiGimmick.Core.Documentation;
 
-/// <summary>Presentation-only Markdown normalization. Never rewrites source excerpts or code blocks.</summary>
+/// <summary>仅在呈现时规范化 Markdown，源码摘录与代码块保持原样。</summary>
 internal static class ReferenceMarkdown
 {
-    [Flags] internal enum Style { Plain = 0, Bold = 1, Emphasis = 2, Code = 4, Strike = 8 }
+    [Flags]
+    internal enum Style
+    {
+        Plain = 0, Bold = 1, Emphasis = 2, Code = 4, Strike = 8
+    }
     internal sealed record Span(string Text, Style Style);
     const string Escapable = "\\`*_{}[]()<>#+-.!|~";
 
@@ -34,11 +40,19 @@ internal static class ReferenceMarkdown
     {
         for (int i = start; i <= text.Length - delimiter.Length; i++)
         {
-            if (text[i] == '\\') { i++; continue; }
+            if (text[i] == '\\')
+            {
+                i++;
+                continue;
+            }
             if (text[i] == '`')
             {
                 int ticks = Ticks(text, i), end = ClosingTicks(text, i + ticks, ticks);
-                if (end >= 0) { i = end + ticks - 1; continue; }
+                if (end >= 0)
+                {
+                    i = end + ticks - 1;
+                    continue;
+                }
             }
             if (text[i] != delimiter[0]) continue;
             int run = 1;
@@ -53,17 +67,23 @@ internal static class ReferenceMarkdown
     }
     static List<Span> ParseInline(string text, Style inherited, int depth)
     {
-        var result = new List<Span>(); var plain = new StringBuilder();
+        var result = new List<Span>();
+        var plain = new StringBuilder();
         void Flush()
         {
             if (plain.Length == 0) return;
-            result.Add(new(WebUtility.HtmlDecode(plain.ToString()), inherited)); plain.Clear();
+            result.Add(new(WebUtility.HtmlDecode(plain.ToString()), inherited));
+            plain.Clear();
         }
         for (int i = 0; i < text.Length;)
         {
             char c = text[i];
             if (c == '\\' && i + 1 < text.Length && Escapable.Contains(text[i + 1]))
-            { plain.Append(text[i + 1]); i += 2; continue; }
+            {
+                plain.Append(text[i + 1]);
+                i += 2;
+                continue;
+            }
             if (c == '`')
             {
                 int run = Ticks(text, i), end = ClosingTicks(text, i + run, run);
@@ -72,15 +92,23 @@ internal static class ReferenceMarkdown
                     Flush();
                     string code = text[(i + run)..end].Replace('\r', ' ').Replace('\n', ' ');
                     if (code.Length > 1 && code[0] == ' ' && code[^1] == ' ' && code.Any(ch => ch != ' ')) code = code[1..^1];
-                    result.Add(new(code, inherited | Style.Code)); i = end + run; continue;
+                    result.Add(new(code, inherited | Style.Code));
+                    i = end + run;
+                    continue;
                 }
-                plain.Append('`', run); i += run; continue;
+                plain.Append('`', run);
+                i += run;
+                continue;
             }
             if (c == '<')
             {
                 int end = text.IndexOf('>', i + 1);
                 if (end >= 0 && text[(i + 1)..end].Replace(" ", "").TrimEnd('/').Equals("br", StringComparison.OrdinalIgnoreCase))
-                { plain.Append('\n'); i = end + 1; continue; }
+                {
+                    plain.Append('\n');
+                    i = end + 1;
+                    continue;
+                }
             }
             if (depth < 16 && c is '*' or '_' or '~')
             {
@@ -90,33 +118,46 @@ internal static class ReferenceMarkdown
                 bool insideWord = c == '_' && i > 0 && char.IsLetterOrDigit(text[i - 1]);
                 if (run > 0 && !insideWord && i + run < text.Length && !char.IsWhiteSpace(text[i + run]))
                 {
-                    string delimiter = new(c, run); int end = ClosingDelimiter(text, i + run, delimiter);
+                    string delimiter = new(c, run);
+                    int end = ClosingDelimiter(text, i + run, delimiter);
                     if (end >= 0)
                     {
                         Flush();
                         Style added = c == '~' ? Style.Strike : run == 3 ? Style.Bold | Style.Emphasis : run == 2 ? Style.Bold : Style.Emphasis;
                         result.AddRange(ParseInline(text[(i + run)..end], inherited | added, depth + 1));
-                        i = end + run; continue;
+                        i = end + run;
+                        continue;
                     }
                 }
             }
-            plain.Append(c); i++;
+            plain.Append(c);
+            i++;
         }
-        Flush(); return result;
+        Flush();
+        return result;
     }
 
-    /// <summary>Pipes inside code and escaped pipes belong to the cell, including GML's || operator.</summary>
+    /// <summary>行内代码和转义的竖线属于单元格内容，包括 GML 的 || 运算符。</summary>
     internal static string[]? TableCells(string row)
     {
-        string text = row.Trim(); var cells = new List<string>(); var cell = new StringBuilder();
+        string text = row.Trim();
+        var cells = new List<string>();
+        var cell = new StringBuilder();
         bool delimiter = false;
         for (int i = 0; i < text.Length; i++)
         {
             if (text[i] == '\\' && i + 1 < text.Length)
             {
-                // Unescape a table pipe even inside code; preserve other backslashes verbatim.
-                if (text[i + 1] == '|') { cell.Append('|'); i++; continue; }
-                cell.Append(text[i]); cell.Append(text[++i]); continue;
+                // 即使在行内代码中也还原表格分隔符的转义，其余反斜杠原样保留。
+                if (text[i + 1] == '|')
+                {
+                    cell.Append('|');
+                    i++;
+                    continue;
+                }
+                cell.Append(text[i]);
+                cell.Append(text[++i]);
+                continue;
             }
             if (text[i] == '`')
             {
@@ -124,10 +165,16 @@ internal static class ReferenceMarkdown
                 if (end >= 0)
                 {
                     cell.Append(text[i..(end + run)].Replace("\\|", "|", StringComparison.Ordinal));
-                    i = end + run - 1; continue;
+                    i = end + run - 1;
+                    continue;
                 }
             }
-            if (text[i] == '|') { delimiter = true; cells.Add(cell.ToString().Trim()); cell.Clear(); }
+            if (text[i] == '|')
+            {
+                delimiter = true;
+                cells.Add(cell.ToString().Trim());
+                cell.Clear();
+            }
             else cell.Append(text[i]);
         }
         cells.Add(cell.ToString().Trim());
@@ -150,14 +197,20 @@ internal static class ReferenceMarkdown
         var result = new List<VsmReference.Block>();
         for (int i = 0; i < source.Length;)
         {
-            if (source[i].Kind != "paragraph") { result.Add(source[i++]); continue; }
-            var text = new StringBuilder(); string previous = "";
+            if (source[i].Kind != "paragraph")
+            {
+                result.Add(source[i++]);
+                continue;
+            }
+            var text = new StringBuilder();
+            string previous = "";
             while (i < source.Length && source[i].Kind == "paragraph")
             {
                 string current = source[i++].Text;
-                // Generated indexes store each table row in a separate paragraph block.
+                // 生成的索引将每一行表格存放在独立的段落块中。
                 if (text.Length > 0) text.Append(TableCells(previous.Split('\n')[^1]) != null && TableCells(current.Split('\n')[0]) != null ? "\n" : "\n\n");
-                text.Append(current); previous = current;
+                text.Append(current);
+                previous = current;
             }
             result.AddRange(ParseBlocks(text.ToString()));
         }
@@ -170,36 +223,52 @@ internal static class ReferenceMarkdown
         for (int i = 0; i < lines.Length;)
         {
             string line = lines[i].Trim();
-            if (line.Length == 0) { i++; continue; }
+            if (line.Length == 0)
+            {
+                i++;
+                continue;
+            }
             if (line.StartsWith("```", StringComparison.Ordinal) || line.StartsWith("~~~", StringComparison.Ordinal))
             {
-                char marker = line[0]; int count = line.TakeWhile(c => c == marker).Count();
-                string language = line[count..].Trim(); var code = new List<string>(); i++;
+                char marker = line[0];
+                int count = line.TakeWhile(c => c == marker).Count();
+                string language = line[count..].Trim();
+                var code = new List<string>();
+                i++;
                 while (i < lines.Length)
                 {
                     string closing = lines[i].Trim();
-                    if (closing.Length >= count && closing.All(c => c == marker)) { i++; break; }
+                    if (closing.Length >= count && closing.All(c => c == marker))
+                    {
+                        i++;
+                        break;
+                    }
                     code.Add(lines[i++]);
                 }
-                yield return new() { Kind = "code", Text = string.Join("\n", code), Language = language }; continue;
+                yield return new() { Kind = "code", Text = string.Join("\n", code), Language = language };
+                continue;
             }
             var columns = TableCells(line);
             if (columns is { Length: > 0 } && i + 1 < lines.Length && Separator(TableCells(lines[i + 1]), columns.Length))
             {
-                var rows = new List<string[]>(); i += 2;
+                var rows = new List<string[]>();
+                i += 2;
                 while (i < lines.Length && TableCells(lines[i]) is { } cells)
                 {
-                    // Keep excess data in the last cell instead of silently dropping source text.
+                    // 将多出的字段并入最后一个单元格，保留完整源文本。
                     if (cells.Length > columns.Length)
                         cells = cells.Take(columns.Length - 1).Append(string.Join(" | ", cells.Skip(columns.Length - 1))).ToArray();
-                    rows.Add(cells); i++;
+                    rows.Add(cells);
+                    i++;
                 }
-                yield return new() { Kind = "table", Columns = columns, Rows = rows.ToArray() }; continue;
+                yield return new() { Kind = "table", Columns = columns, Rows = rows.ToArray() };
+                continue;
             }
             int hashes = line.TakeWhile(c => c == '#').Count();
             if (hashes is >= 1 and <= 6 && hashes < line.Length && char.IsWhiteSpace(line[hashes]))
             {
-                string title = line[(hashes + 1)..].Trim(); int end = title.Length;
+                string title = line[(hashes + 1)..].Trim();
+                int end = title.Length;
                 while (end > 0 && title[end - 1] == '#') end--;
                 if (end > 0 && char.IsWhiteSpace(title[end - 1])) title = title[..end].TrimEnd();
                 yield return new() { Kind = "heading", Text = title };

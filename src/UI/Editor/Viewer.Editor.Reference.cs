@@ -1,3 +1,6 @@
+// VSM 参考文档阅读器的状态与输入（F1 / VSM DOCS）。阻塞覆盖层：可见期间工作区完全不接受输入。
+// 阅读状态、历史与动画全部是纯 UI 状态，绝不进入编辑文档或游戏时间轴。
+
 using System.Globalization;
 using System.Runtime.InteropServices;
 using KuroakiGimmick.Core.Documentation;
@@ -6,10 +9,6 @@ using KuroakiGimmick.Native;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// VSM 参考文档阅读器的状态与输入（F1 / VSM DOCS）。阻塞覆盖层：可见期间工作区完全不接受输入。
-/// 阅读状态、历史与动画全部是纯 UI 状态，绝不进入编辑文档或游戏时间轴。
-/// </summary>
 public sealed partial class Viewer
 {
     // 本地离线文档阅读器：章节树 / 正文 / 页面大纲。
@@ -66,6 +65,8 @@ public sealed partial class Viewer
             selectedClip is Guid id ? EditorFindClip(id)?.Name : null;
         OpenReference(name == null ? null : VsmReference.Shared.MatchMod(name).FirstOrDefault()?.Entry.Id);
     }
+    /// <summary>为界面检查打开指令参考页。</summary>
+    /// <param name="entryId">要打开的参考条目标识。</param>
     public void OpenReferenceForTest(string? entryId = null) => OpenReference(entryId);
     void CloseReference()
     {
@@ -147,7 +148,8 @@ public sealed partial class Viewer
             motion.Snap("docs-scroll", 0);
             motion.Snap("docs-page", 0);
             referenceLayoutKey = "";
-            referenceOutlineScroll = 0; motion.Snap("docs-toc-scroll", 0);
+            referenceOutlineScroll = 0;
+            motion.Snap("docs-toc-scroll", 0);
         }
         if (entry.ParentId.Length > 0) referenceExpanded.Add(entry.ParentId);
         BuildReferenceNavigation();
@@ -166,7 +168,8 @@ public sealed partial class Viewer
         var from = forward ? referenceForward : referenceBack;
         var to = forward ? referenceBack : referenceForward;
         if (from.Count == 0) return;
-        var visit = from[^1]; from.RemoveAt(from.Count - 1);
+        var visit = from[^1];
+        from.RemoveAt(from.Count - 1);
         to.Add(new(referenceSelected, referenceBodyScroll));
         referenceQuery = "";
         SelectReference(visit.Id, true, false);
@@ -201,16 +204,28 @@ public sealed partial class Viewer
         if (HandleReferenceAddMenu(e)) return true;
         if (e.Type == 0x400)
         {
-            mouseX = e.X; mouseY = e.Y;
+            mouseX = e.X;
+            mouseY = e.Y;
             if (referenceDrag.Length > 0) DragReferenceScrollbar();
         }
         else if (e.Type == 0x401 && e.Button == 1)
         {
-            mouseX = e.X; mouseY = e.Y; held = false; click = true;
-            if (BeginReferenceScrollbarDrag()) { click = false; return true; }
+            mouseX = e.X;
+            mouseY = e.Y;
+            held = false;
+            click = true;
+            if (BeginReferenceScrollbarDrag())
+            {
+                click = false;
+                return true;
+            }
             FocusReferenceSearch(referenceSearchRect.Contains(mouseX, mouseY));
         }
-        else if (e.Type == 0x402 && e.Button == 1) { referenceDrag = ""; held = false; }
+        else if (e.Type == 0x402 && e.Button == 1)
+        {
+            referenceDrag = "";
+            held = false;
+        }
         else if (e.Type == 0x302 && referenceSearchFocus) referenceComposition = Marshal.PtrToStringUTF8(e.TextData) ?? "";
         else if (e.Type == 0x303 && referenceSearchFocus)
         {
@@ -230,13 +245,28 @@ public sealed partial class Viewer
         {
             bool command = (e.Modifiers & 0x0CC0) != 0, alt = (e.Modifiers & 0x0300) != 0;
             if (referenceComposition.Length > 0 && referenceSearchFocus) return true;
-            if (e.Scan is 41 or 58) { if (e.Repeat == 0) CloseReference(); return true; }
+            if (e.Scan is 41 or 58)
+            {
+                if (e.Repeat == 0) CloseReference();
+                return true;
+            }
             if ((command && e.Scan == 9) || (!referenceSearchFocus && e.Scan == 56))
-            { FocusReferenceSearch(true, true); return true; }
-            if (alt && (e.Scan is 79 or 80)) { ReferenceHistory(e.Scan == 79); return true; }
+            {
+                FocusReferenceSearch(true, true);
+                return true;
+            }
+            if (alt && (e.Scan is 79 or 80))
+            {
+                ReferenceHistory(e.Scan == 79);
+                return true;
+            }
             if (referenceSearchFocus)
             {
-                if (command && e.Scan == 4) { referenceSelectAll = true; return true; }
+                if (command && e.Scan == 4)
+                {
+                    referenceSelectAll = true;
+                    return true;
+                }
                 if (command && e.Scan == 25)
                 {
                     nint pointer = Sdl.SDL_GetClipboardText();
@@ -245,7 +275,10 @@ public sealed partial class Viewer
                         string text = Marshal.PtrToStringUTF8(pointer) ?? "";
                         if (text.Length <= 65536) ChangeReferenceQuery((referenceSelectAll ? "" : referenceQuery) + text);
                     }
-                    finally { Sdl.SDL_free(pointer); }
+                    finally
+                    {
+                        Sdl.SDL_free(pointer);
+                    }
                     return true;
                 }
                 if (e.Scan is 42 or 76)
@@ -257,7 +290,8 @@ public sealed partial class Viewer
                 if (e.Scan is 40 or 88)
                 {
                     if (referenceResults.Length > 0) SelectReference(referenceResults[0].Id, true);
-                    FocusReferenceSearch(false); return true;
+                    FocusReferenceSearch(false);
+                    return true;
                 }
             }
             if (e.Scan is 81 or 82)
@@ -288,7 +322,8 @@ public sealed partial class Viewer
             float top = rect.Y + (rect.H - size) * shown / max;
             referenceDrag = name;
             referenceDragOffset = mouseY >= top && mouseY <= top + size ? mouseY - top : size / 2;
-            DragReferenceScrollbar(); return true;
+            DragReferenceScrollbar();
+            return true;
         }
         return false;
     }
@@ -300,7 +335,15 @@ public sealed partial class Viewer
         float max = list ? referenceListMax : referenceBodyMax;
         float size = Math.Clamp(rect.H * rect.H / Math.Max(1, rect.H + max), Math.Min(28, rect.H), rect.H);
         float value = Math.Clamp((mouseY - rect.Y - referenceDragOffset) / Math.Max(1, rect.H - size), 0, 1) * max;
-        if (list) { referenceListScroll = referenceListShown = value; motion.Snap("docs-nav-scroll", value); }
-        else { referenceBodyScroll = referenceBodyShown = value; motion.Snap("docs-scroll", value); }
+        if (list)
+        {
+            referenceListScroll = referenceListShown = value;
+            motion.Snap("docs-nav-scroll", value);
+        }
+        else
+        {
+            referenceBodyScroll = referenceBodyShown = value;
+            motion.Snap("docs-scroll", value);
+        }
     }
 }

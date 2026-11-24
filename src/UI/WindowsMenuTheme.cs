@@ -1,3 +1,5 @@
+// 将当前界面配色应用于 Windows 原生菜单。
+
 using System.Runtime.InteropServices;
 
 namespace KuroakiGimmick.UI;
@@ -16,25 +18,31 @@ internal sealed class WindowsMenuTheme : IDisposable
 
     [UnmanagedFunctionPointer(CallingConvention.Winapi)]
     delegate nint SubclassCallback(nint window, uint message, nuint wParam, nint lParam, nuint id, nuint data);
-    [DllImport("comctl32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)]
+    [DllImport("comctl32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
     static extern bool SetWindowSubclass(nint window, SubclassCallback callback, nuint id, nuint data);
-    [DllImport("comctl32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)]
+    [DllImport("comctl32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
     static extern bool RemoveWindowSubclass(nint window, SubclassCallback callback, nuint id);
     [DllImport("comctl32.dll")] static extern nint DefSubclassProc(nint window, uint message, nuint wParam, nint lParam);
-    [DllImport("user32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)]
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
     static extern bool SetMenuInfo(nint menu, ref MenuInfo info);
     [DllImport("user32.dll")] static extern uint GetDpiForWindow(nint window);
     [DllImport("user32.dll")] static extern nint GetDC(nint window);
     [DllImport("user32.dll")] static extern nint GetWindowDC(nint window);
     [DllImport("user32.dll")] static extern int ReleaseDC(nint window, nint dc);
-    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
     static extern bool GetWindowRect(nint window, out Area area);
-    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
     static extern bool GetMenuItemRect(nint window, nint menu, uint item, out Area area);
-    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
     static extern bool GetMenuBarInfo(nint window, int objectId, int item, ref MenuBarInfo info);
     [DllImport("gdi32.dll")] static extern nint CreateSolidBrush(uint color);
-    [DllImport("gdi32.dll")] [return: MarshalAs(UnmanagedType.Bool)] static extern bool DeleteObject(nint item);
+    [DllImport("gdi32.dll")][return: MarshalAs(UnmanagedType.Bool)] static extern bool DeleteObject(nint item);
     [DllImport("gdi32.dll")] static extern nint GetStockObject(int objectId);
     [DllImport("gdi32.dll")] static extern nint SelectObject(nint dc, nint item);
     [DllImport("gdi32.dll")] static extern int SetBkMode(nint dc, int mode);
@@ -46,28 +54,40 @@ internal sealed class WindowsMenuTheme : IDisposable
     static extern int DrawText(nint dc, string text, int length, ref Area area, uint format);
     [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(nint window, uint attribute, ref int value, int size);
 
-    [StructLayout(LayoutKind.Sequential)] struct Area { public int Left, Top, Right, Bottom; }
-    [StructLayout(LayoutKind.Sequential)] struct Size { public int Width, Height; }
-    [StructLayout(LayoutKind.Sequential)] struct MenuInfo
+    [StructLayout(LayoutKind.Sequential)]
+    struct Area
+    {
+        public int Left, Top, Right, Bottom;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    struct Size
+    {
+        public int Width, Height;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    struct MenuInfo
     {
         public uint Size, Mask, Style, MaxHeight;
         public nint Background;
         public uint ContextHelp;
         public nuint Data;
     }
-    [StructLayout(LayoutKind.Sequential)] struct MenuBarInfo
+    [StructLayout(LayoutKind.Sequential)]
+    struct MenuBarInfo
     {
         public uint Size;
         public Area Bar;
         public nint Menu, MenuWindow;
         public uint Flags;
     }
-    [StructLayout(LayoutKind.Sequential)] struct MeasureItem
+    [StructLayout(LayoutKind.Sequential)]
+    struct MeasureItem
     {
         public uint Type, ControlId, ItemId, Width, Height;
         public nuint Data;
     }
-    [StructLayout(LayoutKind.Sequential)] struct DrawItem
+    [StructLayout(LayoutKind.Sequential)]
+    struct DrawItem
     {
         public uint Type, ControlId, ItemId, Action, State;
         public nint Menu, Dc;
@@ -97,7 +117,9 @@ internal sealed class WindowsMenuTheme : IDisposable
             "kuroaki" => (0x151014u, 0x824153u, 0xFFF6F8u, 0xC7AFB7u, 0xF04461u),
             _ => (0x171E2Bu, 0x344156u, 0xF4F7FCu, 0x8998ACu, 0xFF9CAFu)
         };
-        foreground = Rgb(text); muted = Rgb(dim); accent = Rgb(highlight);
+        foreground = Rgb(text);
+        muted = Rgb(dim);
+        accent = Rgb(highlight);
         backgroundBrush = CreateSolidBrush(Rgb(background));
         hoverBrush = CreateSolidBrush(Rgb(hover));
         if (backgroundBrush == 0 || hoverBrush == 0)
@@ -110,13 +132,19 @@ internal sealed class WindowsMenuTheme : IDisposable
         callback = HandleWindowMessage;
         if (!SetWindowSubclass(window, callback, SubclassId, 0))
         {
-            DeleteObject(backgroundBrush); DeleteObject(hoverBrush);
+            DeleteObject(backgroundBrush);
+            DeleteObject(hoverBrush);
             throw new InvalidOperationException("Could not attach dark menu drawing to the SDL window.");
         }
         // 标题栏与菜单栏分别由 DWM 和 HMENU 绘制；失败时标题栏仍用系统设置，菜单绘制照常工作。
         int dark = 1;
-        try { _ = DwmSetWindowAttribute(window, DwmDarkMode, ref dark, sizeof(int)); }
-        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException) { }
+        try
+        {
+            _ = DwmSetWindowAttribute(window, DwmDarkMode, ref dark, sizeof(int));
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
+        {
+        }
     }
 
     internal void SetRoot(nint root) => rootMenu = root;
@@ -151,7 +179,10 @@ internal sealed class WindowsMenuTheme : IDisposable
             if (message == WmNcPaint) PaintMenuGaps();
             return result;
         }
-        catch { return DefSubclassProc(hwnd, message, wParam, lParam); }
+        catch
+        {
+            return DefSubclassProc(hwnd, message, wParam, lParam);
+        }
     }
 
     int MeasureText(nint dc, string text)
@@ -177,7 +208,10 @@ internal sealed class WindowsMenuTheme : IDisposable
             Marshal.StructureToPtr(item, pointer, false);
             return true;
         }
-        finally { if (dc != 0) ReleaseDC(window, dc); }
+        finally
+        {
+            if (dc != 0) ReleaseDC(window, dc);
+        }
     }
 
     bool Paint(nint pointer)
@@ -223,7 +257,10 @@ internal sealed class WindowsMenuTheme : IDisposable
                 DrawText(item.Dc, "✓", 1, ref check, TextFlags);
             }
         }
-        finally { SelectObject(item.Dc, old); }
+        finally
+        {
+            SelectObject(item.Dc, old);
+        }
         return true;
     }
 
@@ -239,14 +276,27 @@ internal sealed class WindowsMenuTheme : IDisposable
         if (dc == 0) return;
         try
         {
-            var left = new Area { Left = info.Bar.Left - frame.Left, Top = info.Bar.Top - frame.Top,
-                Right = first.Left - frame.Left, Bottom = info.Bar.Bottom - frame.Top };
-            var right = new Area { Left = last.Right - frame.Left, Top = info.Bar.Top - frame.Top,
-                Right = info.Bar.Right - frame.Left, Bottom = info.Bar.Bottom - frame.Top };
+            var left = new Area
+            {
+                Left = info.Bar.Left - frame.Left,
+                Top = info.Bar.Top - frame.Top,
+                Right = first.Left - frame.Left,
+                Bottom = info.Bar.Bottom - frame.Top
+            };
+            var right = new Area
+            {
+                Left = last.Right - frame.Left,
+                Top = info.Bar.Top - frame.Top,
+                Right = info.Bar.Right - frame.Left,
+                Bottom = info.Bar.Bottom - frame.Top
+            };
             if (left.Right > left.Left) FillRect(dc, ref left, backgroundBrush);
             if (right.Right > right.Left) FillRect(dc, ref right, backgroundBrush);
         }
-        finally { ReleaseDC(window, dc); }
+        finally
+        {
+            ReleaseDC(window, dc);
+        }
     }
 
     public void Dispose()

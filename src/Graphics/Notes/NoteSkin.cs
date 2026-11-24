@@ -1,3 +1,5 @@
+// 将音符类型和轨道映射到皮肤帧，并绘制音符及长条。
+
 using System.Numerics;
 using KuroakiGimmick.Core;
 
@@ -18,14 +20,21 @@ public sealed partial class NoteSkin : IDisposable
     sealed record SkinFrame(NoteSkinFrame Frame, Texture Texture, Rect Uv);
     SkinFrame?[] noteFrames = [], holdHeads = [], holdBodies = [], holdEnds = [];
     float cachedRotation = float.NaN, cosine = 1, sine;
+    /// <summary>当前皮肤包的格式和可选皮肤说明。</summary>
     public string Description => profile.Description;
+    /// <summary>加载当前皮肤包时收集的诊断提示。</summary>
     public IReadOnlyList<string> Warnings => profile.Warnings;
+    /// <summary>根据皮肤名查找用于选择资源的索引。</summary>
+    /// <param name="name">皮肤名称。</param>
+    /// <returns>匹配的皮肤索引，未知名称返回 0。</returns>
     public int Index(string name)
     {
         for (int index = 0; index < profile.SkinNames.Count; index++)
             if (profile.SkinNames[index] == name) return index;
         return 0;
     }
+    /// <summary>加载画布绘制音符与长条所用的皮肤资源。</summary>
+    /// <param name="canvas">提交绘制命令的画布。</param>
     public NoteSkin(Canvas canvas)
     {
         this.canvas = canvas;
@@ -57,14 +66,24 @@ public sealed partial class NoteSkin : IDisposable
             return new(frame, loaded[frame.File], new(r.X + frame.UvX * r.W, r.Y + frame.UvY * r.H, frame.UvW * r.W, frame.UvH * r.H));
         }
         noteFrames = new SkinFrame?[next.SkinNames.Count * 36];
-        holdHeads = new SkinFrame?[next.SkinNames.Count * 4]; holdBodies = new SkinFrame?[holdHeads.Length]; holdEnds = new SkinFrame?[holdHeads.Length];
+        holdHeads = new SkinFrame?[next.SkinNames.Count * 4];
+        holdBodies = new SkinFrame?[holdHeads.Length];
+        holdEnds = new SkinFrame?[holdHeads.Length];
         for (int skin = 0; skin < next.SkinNames.Count; skin++)
             for (int lane = 0; lane < 4; lane++)
             {
                 int i = skin * 36 + lane, h = skin * 4 + lane;
-                noteFrames[i] = Wrap(next.Chip(lane, skin)); noteFrames[i + 24] = Wrap(next.ChipMine(lane, skin));
-                if (lane < 3) { noteFrames[i + 4] = Wrap(next.Bumper(lane, skin)); noteFrames[i + 28] = Wrap(next.BumperMine(lane, skin)); noteFrames[i + 32] = Wrap(next.JudgeBumper(lane, skin)); }
-                holdHeads[h] = Wrap(next.HoldHead(lane, skin)); holdBodies[h] = Wrap(next.HoldBody(lane, skin)); holdEnds[h] = Wrap(next.HoldEnd(lane, skin));
+                noteFrames[i] = Wrap(next.Chip(lane, skin));
+                noteFrames[i + 24] = Wrap(next.ChipMine(lane, skin));
+                if (lane < 3)
+                {
+                    noteFrames[i + 4] = Wrap(next.Bumper(lane, skin));
+                    noteFrames[i + 28] = Wrap(next.BumperMine(lane, skin));
+                    noteFrames[i + 32] = Wrap(next.JudgeBumper(lane, skin));
+                }
+                holdHeads[h] = Wrap(next.HoldHead(lane, skin));
+                holdBodies[h] = Wrap(next.HoldBody(lane, skin));
+                holdEnds[h] = Wrap(next.HoldEnd(lane, skin));
             }
         foreach (var texture in old.Values.Distinct())
         {
@@ -81,6 +100,9 @@ public sealed partial class NoteSkin : IDisposable
     /// 音符中心在 320×180 逻辑空间的 x。bumper 的原点比 chip 靠右 11 像素，因为它的包围盒是以
     /// 相邻两条 chip 轨的中缝为中心的。轨道绘制、命中特效与编辑器时间轴共用这一个式子。
     /// </summary>
+    /// <param name="type">来源音符类型编号。</param>
+    /// <param name="lane">音符的轨道编号。</param>
+    /// <returns>该轨道在 320×180 画布中的逻辑横坐标。</returns>
     public static float LaneX(int type, int lane) => (type is 1 or 7 or 8 ? 137 : 126) + 23 * lane;
 
     /// <summary>
@@ -90,6 +112,9 @@ public sealed partial class NoteSkin : IDisposable
     /// 注意这是精灵整帧的范围：bumper 的帧两端还各带一个 L / M / R 字母标记，比它压住的轨道宽。
     /// 要"盖住哪几条轨"请用 <see cref="Lanes"/>，别拿这个去和轨道求交。
     /// </summary>
+    /// <param name="type">来源音符类型编号。</param>
+    /// <param name="lane">音符的轨道编号。</param>
+    /// <returns>音符左右边界，无法映射时为 null。</returns>
     public (float Left, float Right)? Span(int type, int lane)
     {
         if (lane < 0 || lane > (type is 1 or 7 or 8 ? 2 : 3))
@@ -124,6 +149,9 @@ public sealed partial class NoteSkin : IDisposable
     /// 中间那条 45px 才是音符本体，和没有字母的 sp_note_bumper_mine_normal 一样宽（L / R 帧同理，
     /// 45px 本体 + 一侧的 L / R 字母）。按包围盒求交会把 M 判成横跨 0-3，比它实际盖的多一倍。
     /// </summary>
+    /// <param name="type">来源音符类型编号。</param>
+    /// <param name="lane">音符的轨道编号。</param>
+    /// <returns>覆盖的首尾轨道，无法映射时为 null。</returns>
     public (int First, int Last)? Lanes(int type, int lane) => Span(type, lane) == null
         ? null
         : type is 1 or 7 or 8 ? (lane, lane + 1) : (lane, lane);
@@ -133,6 +161,13 @@ public sealed partial class NoteSkin : IDisposable
     /// 其余取值不画，不要顺手补 default 分支去猜。rotation 单位为度。
     /// skin 是 changeskin 选中的皮肤下标，取不到帧就是这套皮肤不画这类音符（例如 stopmotion 没有地雷）。
     /// </summary>
+    /// <param name="type">来源音符类型编号。</param>
+    /// <param name="lane">音符的轨道编号。</param>
+    /// <param name="x">逻辑横坐标。</param>
+    /// <param name="y">逻辑纵坐标。</param>
+    /// <param name="alpha">绘制不透明度。</param>
+    /// <param name="rotation">旋转角度。</param>
+    /// <param name="skin">皮肤在 changeskin 表中的索引。</param>
     public void Note(int type, int lane, float x, float y, double alpha, float rotation, int skin = 0)
     {
         bool bumper = type is 1 or 7 or 8;
@@ -162,6 +197,13 @@ public sealed partial class NoteSkin : IDisposable
     /// 头和尾分别取自皮肤的 hold_head / hold_end：正常皮肤两者都是 chip 帧，
     /// stopmotion 和 stargazers 才有各自独立的首尾精灵。
     /// </summary>
+    /// <param name="lane">音符的轨道编号。</param>
+    /// <param name="x">逻辑横坐标。</param>
+    /// <param name="startY">长条起点的逻辑纵坐标。</param>
+    /// <param name="endY">长条终点的逻辑纵坐标。</param>
+    /// <param name="alpha">绘制不透明度。</param>
+    /// <param name="pressed">是否绘制按下状态。</param>
+    /// <param name="skin">皮肤在 changeskin 表中的索引。</param>
     public void Hold(int lane, float x, float startY, float endY, double alpha, bool pressed = false, int skin = 0)
     {
         // 原版尾帽的锚点比它的音符位置低六像素。
@@ -197,9 +239,15 @@ public sealed partial class NoteSkin : IDisposable
             return type is 6 or 7 ? null : greenleftFrames[type == 0 ? 0 : type == 1 ? 2 : 3];
         if (type is not (0 or 1 or 6 or 7 or 8)) return null;
         if (lane >= 0 && lane < (type is 1 or 7 or 8 ? 3 : 4)) return noteFrames[Skin(skin) * 36 + type * 4 + lane];
-        // Compatibility for API callers with unusual chip lanes; bumper's previous argument validation is retained.
-        var f = type switch { 0 => profile.Chip(lane, skin), 1 => profile.Bumper(lane, skin), 6 => profile.ChipMine(lane, skin),
-            7 => profile.BumperMine(lane, skin), _ => profile.JudgeBumper(lane, skin) };
+        // 保留特殊 chip 轨道的既有调用行为，bumper 仍使用原参数校验。
+        var f = type switch
+        {
+            0 => profile.Chip(lane, skin),
+            1 => profile.Bumper(lane, skin),
+            6 => profile.ChipMine(lane, skin),
+            7 => profile.BumperMine(lane, skin),
+            _ => profile.JudgeBumper(lane, skin)
+        };
         return f == null ? null : new(f, textures[f.File], OriginalFrameUv(f));
     }
     SkinFrame? CachedHold(SkinFrame?[] frames, int lane, int skin) => greenleftActive && lane is 0 or 1
@@ -243,9 +291,11 @@ public sealed partial class NoteSkin : IDisposable
         return new(uv.X + uv.W * x, uv.Y + uv.H * y, uv.W * w, uv.H * h);
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
-        DisposeGreenleftSources(); greenleftStraight?.Dispose();
+        DisposeGreenleftSources();
+        greenleftStraight?.Dispose();
         foreach (var texture in textures.Values.Distinct())
         {
             texture.Dispose();

@@ -5,10 +5,7 @@ using KuroakiGimmick.Core;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// Explicit UI-only translation. Source text is the key; unknown text falls back unchanged.
-/// Never call this on chart identifiers, file paths, subtitles or editable user values.
-/// </summary>
+/// <summary>仅翻译界面文案，以源字符串为键，未知键按原文显示。谱面标识、文件路径、字幕和可编辑数据保持原值。</summary>
 internal static class L
 {
     static readonly IReadOnlyDictionary<string, string> English = ReadCatalog(UiLanguage.English);
@@ -31,7 +28,7 @@ internal static class L
         return English.TryGetValue(source, out string? fallback) ? fallback : source;
     }
 
-    /// <summary>Translate the template before substitution, so names/paths are never translated.</summary>
+    /// <summary>先翻译模板再代入变量，保留名称和路径。</summary>
     public static string Format(FormattableString text) =>
         string.Format(CultureInfo.InvariantCulture, Get(text.Format), text.GetArguments());
 }

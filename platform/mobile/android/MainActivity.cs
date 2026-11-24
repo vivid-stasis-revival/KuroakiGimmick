@@ -1,3 +1,5 @@
+// 在 Android 的 SDLActivity 生命周期中准备素材，并通过系统文件选择器导入文件与目录。
+
 using Android.App;
 using Android.Content;
 using Android.Content.PM;
@@ -7,6 +9,7 @@ using KuroakiGimmick.Native;
 
 namespace KuroakiGimmick.Mobile;
 
+/// <summary>准备 Android 应用资源，协调系统文件选择器，并从 SDLActivity 启动预览。</summary>
 [Activity(Name = "io.github.kuroakigimmick.mobile.MainActivity", Label = "Kuroaki/Gimmick", MainLauncher = true,
     Exported = true, ScreenOrientation = ScreenOrientation.SensorLandscape,
     ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.ScreenLayout |
@@ -18,12 +21,14 @@ public sealed class MainActivity : Org.Libsdl.App.SDLActivity
     bool importingAssets;
     bool pickingFolder;
     string root = "", assetsRoot = "";
+    /// <inheritdoc/>
     protected override string[] GetLibraries() => ["SDL3"];
+    /// <inheritdoc/>
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         root = Path.Combine(FilesDir!.AbsolutePath, "Documents");
         assetsRoot = Path.Combine(FilesDir.AbsolutePath, "BundledAssets");
-        // Version marker is published only after every asset has been copied.
+        // 只有全部资源复制成功后才写入版本标记，下次启动据此决定是否重新复制。
         string marker = Path.Combine(assetsRoot, ".version");
         using var versionReader = new StreamReader(Assets!.Open("mobile-assets.version"));
         string version = versionReader.ReadToEnd();
@@ -35,6 +40,7 @@ public sealed class MainActivity : Org.Libsdl.App.SDLActivity
         }
         base.OnCreate(savedInstanceState);
     }
+    /// <inheritdoc/>
     protected override void Main()
     {
         try
@@ -53,25 +59,48 @@ public sealed class MainActivity : Org.Libsdl.App.SDLActivity
                     var alert = new AlertDialog.Builder(this)!.SetTitle("Install resource pack")!
                         .SetMessage(importMessage)!
                         .SetNegativeButton("Exit", (_, _) => ready.Set())!
-                        .SetPositiveButton("Choose ZIP", (_, _) => { importingAssets = true; Pick(false, null, false, values =>
+                        .SetPositiveButton("Choose ZIP", (_, _) =>
                         {
-                            try
-                            {
-                                if (values.Length > 0) { MobileAssetPack.Install(values[0], root); retry = true; }
-                            }
-                            catch (Exception ex) { importMessage = ex.Message; retry = true; }
-                            finally { importingAssets = false; ready.Set(); }
-                        }); })!.Create()!;
+                            importingAssets = true;
+                            Pick(false, null, false, values =>
+                                                    {
+                                                        try
+                                                        {
+                                                            if (values.Length > 0)
+                                                            {
+                                                                MobileAssetPack.Install(values[0], root);
+                                                                retry = true;
+                                                            }
+                                                        }
+                                                        catch (Exception ex)
+                                                        {
+                                                            importMessage = ex.Message;
+                                                            retry = true;
+                                                        }
+                                                        finally
+                                                        {
+                                                            importingAssets = false;
+                                                            ready.Set();
+                                                        }
+                                                    });
+                        })!.Create()!;
                     alert.CancelEvent += (_, _) => ready.Set();
                     alert.Show();
                 });
                 ready.Wait();
-                if (!retry) { RunOnUiThread(Finish); return; }
+                if (!retry)
+                {
+                    RunOnUiThread(Finish);
+                    return;
+                }
             }
             MobilePlatform.Configure(root, installed, Pick);
             Program.RunMobile(MobilePlatform.LaunchArguments());
         }
-        catch (Exception ex) { Android.Util.Log.Error("Kuroaki", ex.ToString()); }
+        catch (Exception ex)
+        {
+            Android.Util.Log.Error("Kuroaki", ex.ToString());
+        }
     }
     void CopyAssets(string source, string destination)
     {
@@ -102,8 +131,15 @@ public sealed class MainActivity : Org.Libsdl.App.SDLActivity
                     .SetView(input)!.SetNegativeButton("Cancel", (_, _) => done([]))!
                     .SetPositiveButton("Save", (_, _) =>
                     {
-                        try { done([MobilePlatform.SavePath(suggested, input.Text ?? "")]); }
-                        catch (Exception ex) { Android.Util.Log.Error("Kuroaki", ex.ToString()); done([]); }
+                        try
+                        {
+                            done([MobilePlatform.SavePath(suggested, input.Text ?? "")]);
+                        }
+                        catch (Exception ex)
+                        {
+                            Android.Util.Log.Error("Kuroaki", ex.ToString());
+                            done([]);
+                        }
                     })!.Create()!;
                 alert.CancelEvent += (_, _) => done([]);
                 alert.Show();
@@ -120,17 +156,34 @@ public sealed class MainActivity : Org.Libsdl.App.SDLActivity
             }
             intent.AddFlags(ActivityFlags.GrantReadUriPermission | ActivityFlags.GrantPersistableUriPermission);
             if (folder) intent.AddFlags(ActivityFlags.GrantPrefixUriPermission);
-            try { StartActivityForResult(intent, PickRequest); }
-            catch (Exception ex) { Android.Util.Log.Error("Kuroaki", ex.ToString()); completion = null; done([]); }
+            try
+            {
+                StartActivityForResult(intent, PickRequest);
+            }
+            catch (Exception ex)
+            {
+                Android.Util.Log.Error("Kuroaki", ex.ToString());
+                completion = null;
+                done([]);
+            }
         });
     }
+    /// <inheritdoc/>
     protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)
     {
-        if (requestCode != PickRequest) { base.OnActivityResult(requestCode, resultCode, data); return; }
+        if (requestCode != PickRequest)
+        {
+            base.OnActivityResult(requestCode, resultCode, data);
+            return;
+        }
         var callback = completion;
         completion = null;
         if (callback == null) return;
-        if (resultCode != Result.Ok || data == null) { callback([]); return; }
+        if (resultCode != Result.Ok || data == null)
+        {
+            callback([]);
+            return;
+        }
         var uris = new List<Android.Net.Uri>();
         if (data.ClipData != null)
         {
@@ -143,8 +196,7 @@ public sealed class MainActivity : Org.Libsdl.App.SDLActivity
         var acquired = new List<Android.Net.Uri>();
         var existingGrants = ContentResolver!.PersistedUriPermissions?
             .Where(grant => grant.IsReadPermission).Select(grant => grant.Uri?.ToString()).ToHashSet() ?? [];
-        // Keep every returned grant alive while a cloud provider supplies the batch.
-        // Some providers only support temporary grants; those are still usable now.
+        // LIFETIME: 云提供器交付整批文件期间保留所有授权；不支持持久授权的提供器仍可在临时授权有效时读取。
         foreach (var uri in uris)
         {
             if ((data.Flags & ActivityFlags.GrantPersistableUriPermission) == 0) continue;
@@ -154,7 +206,10 @@ public sealed class MainActivity : Org.Libsdl.App.SDLActivity
                 ContentResolver!.TakePersistableUriPermission(uri, ActivityFlags.GrantReadUriPermission);
                 if (!existingGrants.Contains(uri.ToString())) acquired.Add(uri);
             }
-            catch (Java.Lang.SecurityException ex) { Android.Util.Log.Warn("Kuroaki", ex.ToString()); }
+            catch (Java.Lang.SecurityException ex)
+            {
+                Android.Util.Log.Warn("Kuroaki", ex.ToString());
+            }
         }
         Task.Run(() =>
         {
@@ -164,10 +219,13 @@ public sealed class MainActivity : Org.Libsdl.App.SDLActivity
             try
             {
                 Directory.CreateDirectory(batch);
-                // Copy the complete selection before loading charts with relative dependencies.
+                // 先复制整批选择，再解析谱面，以便相对引用可以找到同批资源。
                 foreach (var uri in uris.DistinctBy(uri => uri.ToString()))
                 {
-                    try { paths.Add(CopyDocument(uri, batch, folder)); }
+                    try
+                    {
+                        paths.Add(CopyDocument(uri, batch, folder));
+                    }
                     catch (Exception ex)
                     {
                         Android.Util.Log.Error("Kuroaki", ex.ToString());
@@ -176,21 +234,39 @@ public sealed class MainActivity : Org.Libsdl.App.SDLActivity
                 }
                 for (int i = paths.Count - 1; i >= 0; i--)
                 {
-                    try { if (!assets) paths[i] = MobilePlatform.ExpandImport(paths[i]); }
-                    catch (Exception ex) { errors.Add(ex.Message); paths.RemoveAt(i); }
+                    try
+                    {
+                        if (!assets) paths[i] = MobilePlatform.ExpandImport(paths[i]);
+                    }
+                    catch (Exception ex)
+                    {
+                        errors.Add(ex.Message);
+                        paths.RemoveAt(i);
+                    }
                 }
             }
-            catch (Exception ex) { errors.Add(ex.Message); }
-            // Local copies no longer need provider grants. Do not exhaust Android's grant quota.
+            catch (Exception ex)
+            {
+                errors.Add(ex.Message);
+            }
+            // 本地副本就绪后释放提供器授权，避免占满 Android 的授权配额。
             foreach (var uri in acquired)
             {
-                try { ContentResolver!.ReleasePersistableUriPermission(uri, ActivityFlags.GrantReadUriPermission); }
-                catch (Java.Lang.SecurityException ex) { Android.Util.Log.Warn("Kuroaki", ex.ToString()); }
+                try
+                {
+                    ContentResolver!.ReleasePersistableUriPermission(uri, ActivityFlags.GrantReadUriPermission);
+                }
+                catch (Java.Lang.SecurityException ex)
+                {
+                    Android.Util.Log.Warn("Kuroaki", ex.ToString());
+                }
             }
             if (errors.Count > 0)
                 RunOnUiThread(() => new AlertDialog.Builder(this)!.SetTitle("Some files could not be imported")!
                     .SetMessage(string.Join("\n", errors) + "\nSelect the song folder to include all referenced files.")!
-                    .SetPositiveButton("OK", (_, _) => { })!.Show());
+                    .SetPositiveButton("OK", (_, _) =>
+{
+})!.Show());
             callback(paths.ToArray());
         });
     }
@@ -201,8 +277,15 @@ public sealed class MainActivity : Org.Libsdl.App.SDLActivity
         {
             string id = DocumentsContract.GetTreeDocumentId(uri)!;
             string directory = Path.Combine(parent, "Song");
-            try { CopyTree(uri, id, directory); }
-            catch { if (Directory.Exists(directory)) Directory.Delete(directory, true); throw; }
+            try
+            {
+                CopyTree(uri, id, directory);
+            }
+            catch
+            {
+                if (Directory.Exists(directory)) Directory.Delete(directory, true);
+                throw;
+            }
             MobilePlatform.InstallShaders(directory);
             return directory;
         }
@@ -218,7 +301,11 @@ public sealed class MainActivity : Org.Libsdl.App.SDLActivity
             using var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write);
             input.CopyTo(output);
         }
-        catch { File.Delete(target); throw; }
+        catch
+        {
+            File.Delete(target);
+            throw;
+        }
         return target;
     }
     void CopyTree(Android.Net.Uri tree, string id, string target)

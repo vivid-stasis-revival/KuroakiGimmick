@@ -1,6 +1,6 @@
 namespace KuroakiGimmick.Graphics;
 
-/// <summary>One ordered instance replaces five editor rectangles, preserving layered fill/rim alpha at edges and corners.</summary>
+/// <summary>用一个有序实例替代编辑器的五个矩形，保留边缘和拐角处填充及边框的不透明度叠加。</summary>
 public sealed class TimelineNotePainter : IDisposable
 {
     readonly Canvas canvas;
@@ -33,19 +33,33 @@ public sealed class TimelineNotePainter : IDisposable
             fragColor=vec4(alpha>0.?premul/alpha:vec3(0.),alpha);
         }
         """;
-    public TimelineNotePainter(Canvas canvas) { this.canvas = canvas; shader = new(canvas.Gpu, Vertex, Fragment, instanced: true); }
+    /// <summary>初始化时间轴音符预览所用的绘制资源。</summary>
+    /// <param name="canvas">提交绘制命令的画布。</param>
+    public TimelineNotePainter(Canvas canvas)
+    {
+        this.canvas = canvas;
+        shader = new(canvas.Gpu, Vertex, Fragment, instanced: true);
+    }
     static int Palette(int type, int lane) => type is 6 or 7 ? 5 : type is 1 or 8 ? 2 + lane : lane < 2 ? 0 : 1;
     static (Color Fill, Color Edge) Colors(int palette) => palette switch
     {
-        0 => (Color.Hex(0xCBDAF5), Color.Hex(0xDDE9FF)), 1 => (Color.Hex(0xF5CBDE), Color.Hex(0xFFDDED)),
-        2 => (Color.Hex(0x0818AD), Color.Hex(0x041EFF)), 3 => (Color.Hex(0x81009E), Color.Hex(0xD000FF)),
-        4 => (Color.Hex(0x980819), Color.Hex(0xF20D27)), _ => (Color.Hex(0), Color.Hex(0xEE1C24))
+        0 => (Color.Hex(0xCBDAF5), Color.Hex(0xDDE9FF)),
+        1 => (Color.Hex(0xF5CBDE), Color.Hex(0xFFDDED)),
+        2 => (Color.Hex(0x0818AD), Color.Hex(0x041EFF)),
+        3 => (Color.Hex(0x81009E), Color.Hex(0xD000FF)),
+        4 => (Color.Hex(0x980819), Color.Hex(0xF20D27)),
+        _ => (Color.Hex(0), Color.Hex(0xEE1C24))
     };
+    /// <summary>根据类型、轨道和选中状态在给定矩形内绘制音符。</summary>
+    /// <param name="type">来源音符类型编号。</param>
+    /// <param name="lane">音符的轨道编号。</param>
+    /// <param name="rect">音符占用的绘制矩形。</param>
+    /// <param name="selected">当前项是否被选中。</param>
     public void Draw(int type, int lane, Rect rect, bool selected)
     {
-        var (fill, edge) = Colors(Palette(type, lane)); if (selected) edge = Color.White;
-        // Combining translucent layers changes intermediate RGBA8 rounding. During UI fades,
-        // retain the original five primitives so overlapping notes composite exactly as before.
+        var (fill, edge) = Colors(Palette(type, lane));
+        if (selected) edge = Color.White;
+        // 合并半透明图层会改变中间 RGBA8 的舍入；界面淡化时仍使用原有五个图元，以保留重叠音符的合成结果。
         if (canvas.PresentationOpacity != 1)
         {
             canvas.Fill(rect, fill);
@@ -57,11 +71,14 @@ public sealed class TimelineNotePainter : IDisposable
         }
         if (scaleX != canvas.PixelScaleX || scaleY != canvas.PixelScaleY)
         {
-            canvas.Flush(); scaleX = canvas.PixelScaleX; scaleY = canvas.PixelScaleY;
+            canvas.Flush();
+            scaleX = canvas.PixelScaleX;
+            scaleY = canvas.PixelScaleY;
             shader.Vec2("u_pixelScale", scaleX, scaleY);
         }
         canvas.NoteSprite(canvas.White, rect.X, rect.Y, new(0, 0, rect.W, rect.H), fill,
             new(edge.R, edge.G, edge.B, 0), instanceShader: shader);
     }
+    /// <inheritdoc/>
     public void Dispose() => shader.Dispose();
 }

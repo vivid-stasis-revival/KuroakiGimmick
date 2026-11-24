@@ -8,7 +8,9 @@ namespace KuroakiGimmick.Core;
 /// </summary>
 public sealed class GimmickResourceLocation
 {
+    /// <summary>解析相对路径所用的根，可取 pack、definition 或 shared。</summary>
     public string Scope { get; set; } = "pack";
+    /// <summary>相对于所选根目录的资源路径。</summary>
     public string Path { get; set; } = "";
 }
 

@@ -1,3 +1,5 @@
+// 在系统剪贴板文本与编辑器可粘贴事件、窗口动作之间转换。
+
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -13,18 +15,26 @@ public static class EditorClipboard
 {
     /// <summary>信封标记与版本。读取时版本不符就当作不是本程序的内容，宁可不粘贴也不猜结构。</summary>
     public const string Marker = "kuroaki";
+    /// <summary>识别编辑器剪贴板数据的格式标识。</summary>
     public const string Format = "clipboard/1";
     /// <summary>剪贴板文本上限。超过就拒绝，避免把一份几十兆的粘贴内容整个解析进编辑历史。</summary>
     public const int MaxLength = 1024 * 1024;
     const int MaxItems = 20000;
 
     /// <summary><c>Beat</c> 是这批内容的原始起点，粘贴时整体按插入点平移，组内相对间距原样保留。</summary>
+    /// <param name="Beat">剪贴内容的基准拍。</param>
+    /// <param name="Events">选中的 VSM 事件。</param>
+    /// <param name="Windows">选中的窗口动作 JSON 对象。</param>
     public sealed record Payload(double Beat, VsmDocument.Clip[] Events, JsonObject[] Windows)
     {
+        /// <summary>剪贴内容中的演出事件与窗口动作总数。</summary>
         public int Count => Events.Length + Windows.Length;
     }
 
     /// <summary>写出信封。事件按拍排序，让人肉阅读和 diff 时顺序稳定。</summary>
+    /// <param name="events">选中的 VSM 事件。</param>
+    /// <param name="windows">选中的窗口动作。</param>
+    /// <returns>可写入剪贴板的序列化文本。</returns>
     public static string Write(IEnumerable<VsmDocument.Clip> events, IEnumerable<JsonObject> windows)
     {
         var clips = events.OrderBy(c => c.Beat).ThenBy(c => c.Name, StringComparer.Ordinal).ToArray();
@@ -53,6 +63,8 @@ public static class EditorClipboard
     /// 读取剪贴板文本。优先按信封解析；不是信封时退回当作裸 VSM 事件行，这样从别处复制的一段源码也能直接贴进来。
     /// 任何解析失败都返回 null，由调用方给出提示，不抛到 UI 循环里。
     /// </summary>
+    /// <param name="text">剪贴板中的文本。</param>
+    /// <returns>可识别的编辑数据，格式不符时可为 null。</returns>
     public static Payload? Read(string? text)
     {
         if (string.IsNullOrWhiteSpace(text) || ChartLoadLimits.Exceeds(text.Length, MaxLength))

@@ -1,3 +1,6 @@
+// 编辑器分部的核心：编辑模式的进出、异步预览重建流水线、保存、模态输入框，以及拍 ↔ 像素 ↔ 秒的换算与吸附。
+// 时间轴按拍显示，播放/渲染时间按秒，两者之间一律经 BPM map 转换。
+
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -11,10 +14,6 @@ using static KuroakiGimmick.Core.Windows.WindowMotionConfig;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// 编辑器分部的核心：编辑模式的进出、异步预览重建流水线、保存、模态输入框，以及拍 ↔ 像素 ↔ 秒的换算与吸附。
-/// 时间轴按拍显示，播放/渲染时间按秒，两者之间一律经 BPM map 转换。
-/// </summary>
 public sealed partial class Viewer
 {
     bool editorMode, desktopPreview, loopEnabled, editorFollow, noteMagnet = true;
@@ -56,9 +55,7 @@ public sealed partial class Viewer
     void EnsureProxyInitiallyVisible(int target, string name)
     {
         if (editor == null || target < 0 || name.Equals("pra", StringComparison.OrdinalIgnoreCase) ||
-            // Custom proxies also start at pra=0: Custom Create runs before loadMods.
-            // When adding the first non-PRA clip to a NEW proxy, emit an explicit
-            // enabling clip so the author can immediately see what they edited.
+            // Custom Create 发生在 loadMods 前，新 proxy 的 pra 也从 0 开始。第一次为新 proxy 加入非 PRA 事件时写入显式启用事件，便于立即预览。
             editor.Vsm.Clips.Any(c => c.Proxy == target && c.Name.Equals("pra", StringComparison.OrdinalIgnoreCase))) return;
         editor.Vsm.Add(new VsmDocument.Clip(Guid.NewGuid(), 0, 0, "linear", "1", "1", "pra", target));
     }
@@ -66,14 +63,22 @@ public sealed partial class Viewer
     {
         if (editor == null || Busy) return;
         int count = EditableProxyCount;
-        if (count >= 64) { message = L.Get("Proxy limit: 64."); return; }
+        if (count >= 64)
+        {
+            message = L.Get("Proxy limit: 64.");
+            return;
+        }
         // 先扩声明再创建数据，两项都放在同一个可撤销操作里。
         Edit(L.Get("Add proxy ") + count, () =>
         {
             editor.Vsm.SetProxyCount(count + 1);
             EnsureProxyInitiallyVisible(count, "prx");
         });
-        if (EditableProxyCount > count) { newProxy = count; prGridMode = 1; }
+        if (EditableProxyCount > count)
+        {
+            newProxy = count;
+            prGridMode = 1;
+        }
     }
     void DeleteProxy(int target)
     {
@@ -81,21 +86,31 @@ public sealed partial class Viewer
         try
         {
             editor.DeleteProxy(target);
-            SetClipSelection(null); selectedWindowEvent = -1; editDrag = null;
+            SetClipSelection(null);
+            selectedWindowEvent = -1;
+            editDrag = null;
             newProxy = newProxy == target ? -1 : newProxy > target ? newProxy - 1 : newProxy;
-            prGridSolo = false; prGridSoloTarget = -1;
-            var expanded = expandedGimmickTracks.ToArray(); expandedGimmickTracks.Clear();
+            prGridSolo = false;
+            prGridSoloTarget = -1;
+            var expanded = expandedGimmickTracks.ToArray();
+            expandedGimmickTracks.Clear();
             foreach (int id in expanded) if (id != target) expandedGimmickTracks.Add(id > target ? id - 1 : id);
             layoutRevision = -1;
             message = L.Get("Proxy deleted / later IDs shifted down / undo available");
         }
-        catch (Exception ex) { message = L.Get("Edit rejected: ") + ex.Message; }
+        catch (Exception ex)
+        {
+            message = L.Get("Edit rejected: ") + ex.Message;
+        }
     }
     void EnableSelectedProxy()
     {
         if (editor == null || newProxy < 0 || newProxy >= EditableProxyCount || Busy) return;
         if (editor.Vsm.Clips.Any(c => c.Proxy == newProxy && c.Name.Equals("pra", StringComparison.OrdinalIgnoreCase)))
-        { message = L.Get("Proxy alpha is already authored. Edit its pra track instead."); return; }
+        {
+            message = L.Get("Proxy alpha is already authored. Edit its pra track instead.");
+            return;
+        }
         int p = newProxy;
         Edit(L.Get("Enable proxy ") + p, () => EnsureProxyInitiallyVisible(p, "prx"));
     }
@@ -142,7 +157,9 @@ public sealed partial class Viewer
         {
             editor ??= new EditorDocument(Current);
             if (persistRecentProjects && !editorMode) CaptureMainWindowForMode(WorkspaceMode.Viewer);
-            editorMode = true; help = false; settings = false;
+            editorMode = true;
+            help = false;
+            settings = false;
             if (DockingEnabled && !editorDockTabRestored && EditorSourceTabs() is { } sourceTabs)
             {
                 imageSources = sourceTabs.Active == "images";
@@ -156,18 +173,29 @@ public sealed partial class Viewer
             transport.SetDuration(EditorDuration());
             message = L.Get("EDITOR: click a note, add a clip, drag its body or right edge. Save creates an editable copy.");
         }
-        catch (Exception e) { message = L.Get("Editor unavailable: ") + e.Message; }
+        catch (Exception e)
+        {
+            message = L.Get("Editor unavailable: ") + e.Message;
+        }
     }
     /// <summary>在拖拽、手势或模态进行中拒绝切换，避免留下半途的编辑状态；退出只隐藏工作区，未保存的修改仍保留在 editor 里。</summary>
     void ToggleWorkspace()
     {
-        if (drawingWorkspaceFrame) { workspaceTogglePending = true; click = held = false; return; }
+        if (drawingWorkspaceFrame)
+        {
+            workspaceTogglePending = true;
+            click = held = false;
+            return;
+        }
         if (modalActive || editDrag != null || ImageGestureActive || dockDrag != null || dockSplitDrag != null || Busy) return;
         if (!editorMode) OpenEditor();
         else
         {
             if (persistRecentProjects) CaptureMainWindowForMode(WorkspaceMode.Editor);
-            editorMode = false; help = false; hoveredEditTrack = null; trackHelpWHeld = false;
+            editorMode = false;
+            help = false;
+            hoveredEditTrack = null;
+            trackHelpWHeld = false;
             workspaceManager.Switch(WorkspaceMode.Viewer);
             if (persistRecentProjects) ApplyMainWindowBounds(WorkspaceMode.Viewer);
             if (persistRecentProjects) SaveSettings();
@@ -185,16 +213,56 @@ public sealed partial class Viewer
         ResetTextObjects();
         ResetImageObjects();
         ResetGimmickTracks();
-        CancelImageImport(); droppedImages.Clear(); imageDropActive = false;
+        CancelImageImport();
+        droppedImages.Clear();
+        imageDropActive = false;
         if (editorBuild is { IsCompleted: false }) retiredImageReaders.Add(editorBuild);
-        activeMarker = null; workflow = ""; workflowAlpha = 0; chartExportPlan = null;
-        editor = null; editorBuild = null; compilingDocument = null; renderedRevision = compilingRevision = layoutRevision = -1;
-        CloseInline(); CloseClipMenu(); selectedClips.Clear(); marqueeActive = false; marqueePending = null; panActive = false;
-        selectedClip = null; selectedWindowEvent = -1; selectedNoteTime = null; editDrag = null; hoveredEditTrack = null;
-        prGridSelection = null; prGridLabels.Clear(); prGridShowIds = true; prGridShowCrop = prGridSolo = prGridSoloRendered = false;
+        activeMarker = null;
+        workflow = "";
+        workflowAlpha = 0;
+        chartExportPlan = null;
+        editor = null;
+        editorBuild = null;
+        compilingDocument = null;
+        renderedRevision = compilingRevision = layoutRevision = -1;
+        CloseInline();
+        CloseClipMenu();
+        selectedClips.Clear();
+        marqueeActive = false;
+        marqueePending = null;
+        panActive = false;
+        selectedClip = null;
+        selectedWindowEvent = -1;
+        selectedNoteTime = null;
+        editDrag = null;
+        hoveredEditTrack = null;
+        prGridSelection = null;
+        prGridLabels.Clear();
+        prGridShowIds = true;
+        prGridShowCrop = prGridSolo = prGridSoloRendered = false;
         proxyPickFrame = null;
-        trackHelpWHeld = false; trackHelpWDownAt = 0; displayedHelpTrack = null; motion.Snap("track-help-visible", 0);
-        trackScroll = inspectorScroll = 0; newProxy = -1; windowToolsExpanded = false; proxyPanelExpanded = false; proxyPickerPage = 0; prGridMode = 0; prGridStep = 20; prGridHudOffsetX = float.NaN; prGridHudOffsetY = 8; prGridHudExpanded = prGridHudDragging = false; prGridHudRect = default; editorSourceScroll = 0; motion.Snap("timeline-track-scroll", 0); motion.Snap("inspector-scroll", 0); beatStart = 0; windowTimelineConfig = null; nativeWindows?.Dispose(); nativeWindows = null;
+        trackHelpWHeld = false;
+        trackHelpWDownAt = 0;
+        displayedHelpTrack = null;
+        motion.Snap("track-help-visible", 0);
+        trackScroll = inspectorScroll = 0;
+        newProxy = -1;
+        windowToolsExpanded = false;
+        proxyPanelExpanded = false;
+        proxyPickerPage = 0;
+        prGridMode = 0;
+        prGridStep = 20;
+        prGridHudOffsetX = float.NaN;
+        prGridHudOffsetY = 8;
+        prGridHudExpanded = prGridHudDragging = false;
+        prGridHudRect = default;
+        editorSourceScroll = 0;
+        motion.Snap("timeline-track-scroll", 0);
+        motion.Snap("inspector-scroll", 0);
+        beatStart = 0;
+        windowTimelineConfig = null;
+        nativeWindows?.Dispose();
+        nativeWindows = null;
         if (editorMode) OpenEditor();
     }
     /// <summary>时间轴总长（秒），取谱面时长、音符结束与所有 WindowMovement 事件结束的最大值，末尾各留 0.5 秒余量。</summary>
@@ -205,8 +273,16 @@ public sealed partial class Viewer
     void Edit(string label, Action change)
     {
         if (editor == null || Busy) return;
-        try { editor.Change(label, change); message = label + L.Get(" / preview updating"); layoutRevision = -1; }
-        catch (Exception e) { message = L.Get("Edit rejected: ") + e.Message; }
+        try
+        {
+            editor.Change(label, change);
+            message = label + L.Get(" / preview updating");
+            layoutRevision = -1;
+        }
+        catch (Exception e)
+        {
+            message = L.Get("Edit rejected: ") + e.Message;
+        }
     }
     /// <summary>
     /// 每帧驱动编辑器：回收后台编译结果、必要时发起新的重建、处理循环试听与跟随播放头。
@@ -218,7 +294,11 @@ public sealed partial class Viewer
         // 主选中项一旦被别处改写（选中文字 / 图片 / 窗口事件、新建、撤销后重选……），批量选择自动作废。
         // 这样那十几处直接写 selectedClip 的旧代码都不必知道选择集的存在，不变量在这里统一收口。
         if (selectedClips.Count > 0 && (selectedClip is not Guid picked || !selectedClips.Contains(picked))) selectedClips.Clear();
-        if (pendingTextAdd && !modalActive) { pendingTextAdd = false; AddTextObject(); }
+        if (pendingTextAdd && !modalActive)
+        {
+            pendingTextAdd = false;
+            AddTextObject();
+        }
         if (editorBuild is { IsCompleted: true })
         {
             try
@@ -226,33 +306,49 @@ public sealed partial class Viewer
                 var s = editorBuild.GetAwaiter().GetResult();
                 if (ReferenceEquals(editor, compilingDocument) && editor?.Revision == compilingRevision && editorResourceRevision == compilingResourceRevision)
                 {
-                    Current = s; renderedRevision = compilingRevision; renderedResourceRevision = compilingResourceRevision; windowTimelineConfig = null;
+                    Current = s;
+                    renderedRevision = compilingRevision;
+                    renderedResourceRevision = compilingResourceRevision;
+                    windowTimelineConfig = null;
                     transport.SetDuration(EditorDuration());
                     message = L.Get("Preview updated. ") + Current.Chart.Diagnostics.Count + L.Get(" compatibility notices (not hidden).");
                 }
             }
-            catch (Exception ex) { message = L.Get("Preview rebuild failed: ") + ex.Message; renderedRevision = compilingRevision; renderedResourceRevision = compilingResourceRevision; }
+            catch (Exception ex)
+            {
+                message = L.Get("Preview rebuild failed: ") + ex.Message;
+                renderedRevision = compilingRevision;
+                renderedResourceRevision = compilingResourceRevision;
+            }
             editorBuild = null;
         }
         if (editor != null && editorBuild == null && (editor.Revision != renderedRevision || editorResourceRevision != renderedResourceRevision) && !Busy && editDrag == null && !ImageGestureActive)
         {
-            compilingDocument = editor; compilingRevision = editor.Revision; compilingResourceRevision = editorResourceRevision;
+            compilingDocument = editor;
+            compilingRevision = editor.Revision;
+            compilingResourceRevision = editorResourceRevision;
             // 实时预览和最终保存/导出必须消费同一份 canonical VSM；否则 inspector 已显示 14.125，
             // renderer 仍可能从未规范化源文本重新读回 14.1250138333。
-            // Immutable line records can safely cross to the load worker. Normalize large VSM text there,
-            // rather than spending seconds formatting a million source events in the SDL event pump.
+            // 不可变的源行快照可直接交给加载工作线程，在该线程规范化大型 VSM 文本。
+            // 这样可避免在 SDL 事件循环中格式化数百万行而阻塞输入。
             var vsmLines = editor.Vsm.Lines.ToArray();
             string imageText = editor.Images.Text, imageRoot = editor.Images.ResourceRoot;
-            var windows = editor.CompiledWindows(); var p = editor.Project.Copy();
+            var windows = editor.CompiledWindows();
+            var p = editor.Project.Copy();
             var textSources = editor.TextSources.ToDictionary(x => x.Key, x => x.Value);
-            p.RenderWidth = Current.Project.RenderWidth; p.PreviewVolume = Current.Project.PreviewVolume;
-            p.AudioDelayMs = Current.Project.AudioDelayMs; p.VisualDelayMs = Current.Project.VisualDelayMs;
-            p.TimelineOffsetMs = Current.Project.TimelineOffsetMs; p.ScrollSpeed = Current.Project.ScrollSpeed;
+            p.RenderWidth = Current.Project.RenderWidth;
+            p.PreviewVolume = Current.Project.PreviewVolume;
+            p.AudioDelayMs = Current.Project.AudioDelayMs;
+            p.VisualDelayMs = Current.Project.VisualDelayMs;
+            p.TimelineOffsetMs = Current.Project.TimelineOffsetMs;
+            p.ScrollSpeed = Current.Project.ScrollSpeed;
             p.GameUiEnabled = Current.Project.GameUiEnabled;
-            var old = Current; string? path = editor.SavedProjectPath ?? old.ProjectPath;
+            var old = Current;
+            string? path = editor.SavedProjectPath ?? old.ProjectPath;
             editorBuild = Task.Run(() =>
             {
-                var source = new VsmDocument(); source.Restore(vsmLines);
+                var source = new VsmDocument();
+                source.Restore(vsmLines);
                 return new Session(p, path, source.NormalizedText, windows, old, imageText, imageRoot, textSources);
             });
         }
@@ -284,7 +380,11 @@ public sealed partial class Viewer
     void SaveEditor(bool saveAs = false, Action? after = null)
     {
         if (editor == null || Busy || ImageGestureActive) return;
-        if (!saveAs && editor.SavedProjectPath != null) { SaveEditorAt(editor.SavedProjectPath, after); return; }
+        if (!saveAs && editor.SavedProjectPath != null)
+        {
+            SaveEditorAt(editor.SavedProjectPath, after);
+            return;
+        }
         string dir = Path.GetDirectoryName(Current.Project.Chart ?? Current.Project.Gimmick ?? Current.ProjectPath) ?? Paths.Output;
         string filename = "edit_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".sgv.json";
         Dialog(true, Path.Combine(dir, filename), paths => SaveEditorAt(paths[0], after));
@@ -305,25 +405,34 @@ public sealed partial class Viewer
             Current.Project.TextFiles = editor.Project.TextFiles == null ? null : new(editor.Project.TextFiles);
             Current.Project.ImagePathsRelativeToVsp = editor.Project.ImagePathsRelativeToVsp;
             renderedRevision = -1;
-            message = L.Get("Saved editor project: ") + saved; after?.Invoke();
+            message = L.Get("Saved editor project: ") + saved;
+            after?.Invoke();
         }
         catch (ImageSaveConflictException ex) when (!resolveImageNameConflicts)
         {
             imageSaveConflict = (ex.FileName, () =>
             {
                 if (ReferenceEquals(editor, document)) SaveEditorAt(path, after, resolveImageNameConflicts: true);
-            });
-            transport.SetPlaying(false); held = click = editorScrub = false;
-            workflowError = ""; workflow = displayedWorkflow = "save-image-conflict";
+            }
+            );
+            transport.SetPlaying(false);
+            held = click = editorScrub = false;
+            workflowError = "";
+            workflow = displayedWorkflow = "save-image-conflict";
             motion.Snap("workflow", 0);
         }
-        catch (Exception ex) { message = L.Get("Save failed: ") + ex.Message; }
+        catch (Exception ex)
+        {
+            message = L.Get("Save failed: ") + ex.Message;
+        }
     }
     /// <summary>返回 true 表示已拦截：有未保存修改时暂停播放并把动作挂起，等确认对话框决定是否真的丢弃。</summary>
     bool GuardUnsaved(Action discardAction)
     {
         if (editor?.Dirty != true) return false;
-        pendingDiscard = discardAction; transport.SetPlaying(false); return true;
+        pendingDiscard = discardAction;
+        transport.SetPlaying(false);
+        return true;
     }
     /// <summary>
     /// 打开数值 / 文本输入模态。会暂停播放并开启 SDL 文本输入。preserveWhitespace 用于文字内容一类
@@ -336,21 +445,41 @@ public sealed partial class Viewer
         // 模态要接管键盘，就地编辑必须先让位；否则两边都在收 0x303，输入会同时进两个缓冲。
         CloseInline();
         if (pausePlayback) transport.SetPlaying(false);
-        modalActive = true; modalTitle = title; modalValue = value;
+        modalActive = true;
+        modalTitle = title;
+        modalValue = value;
         modalWindow = ActiveUiWindow;
-        modalAccept = accept; modalError = ""; modalSelectAll = true; modalTrim = !preserveWhitespace;
-        if (!Sdl.SDL_StartTextInput(ActiveUiWindow)) { modalError = L.Get("Text input: ") + Sdl.Error; }
+        modalAccept = accept;
+        modalError = "";
+        modalSelectAll = true;
+        modalTrim = !preserveWhitespace;
+        if (!Sdl.SDL_StartTextInput(ActiveUiWindow))
+        {
+            modalError = L.Get("Text input: ") + Sdl.Error;
+        }
         click = false;
     }
     nint modalWindow;
-    void CloseValue() { modalActive = false; modalAccept = null;
+    void CloseValue()
+    {
+        modalActive = false;
+        modalAccept = null;
         if (modalWindow != 0) Sdl.SDL_StopTextInput(modalWindow);
-        modalWindow = 0; click = false; }
+        modalWindow = 0;
+        click = false;
+    }
     /// <summary>accept 抛异常时只把错误显示在模态里并保持打开，用户可以继续改；不会静默关闭而丢掉输入。</summary>
     void AcceptValue()
     {
-        try { modalAccept?.Invoke(modalTrim ? modalValue.Trim() : modalValue); CloseValue(); }
-        catch (Exception e) { modalError = e.Message; }
+        try
+        {
+            modalAccept?.Invoke(modalTrim ? modalValue.Trim() : modalValue);
+            CloseValue();
+        }
+        catch (Exception e)
+        {
+            modalError = e.Message;
+        }
     }
     /// <summary>
     /// 编辑器按钮：参考手册、帮助、模态、右键菜单或未保存确认覆盖在上层时一律禁用，防止点到被遮挡的工作区。
@@ -373,14 +502,19 @@ public sealed partial class Viewer
     {
         if (editor == null || selectedClip is not Guid id || EditorFindClip(id) is not { } c) return;
         // 校验放在模态回调里做：值非法时模态保持打开，而不是静默关闭把输入丢掉。
-        editor.Change(name, () => editor.Vsm.Replace(apply(c))); layoutRevision = -1; message = name;
+        editor.Change(name, () => editor.Vsm.Replace(apply(c)));
+        layoutRevision = -1;
+        message = name;
     }
     /// <summary>改 WindowMovement 事件走深拷贝后整体替换同一下标，UI 不认识的字段原样保留在 JSON 里，不会因为没读过就被丢掉。</summary>
     void EditWindow(Action<JsonObject> apply, string name)
     {
         if (editor?.Windows.Events is not { } a || selectedWindowEvent < 0 || selectedWindowEvent >= a.Count || a[selectedWindowEvent] is not JsonObject e) return;
-        var next = (JsonObject)e.DeepClone(); apply(next);
-        editor.Change(name, () => editor.ReplaceWindow(selectedWindowEvent, next)); layoutRevision = -1; message = name;
+        var next = (JsonObject)e.DeepClone();
+        apply(next);
+        editor.Change(name, () => editor.ReplaceWindow(selectedWindowEvent, next));
+        layoutRevision = -1;
+        message = name;
     }
     /// <summary>UI 像素 X → 拍。仅对时间轴轨道区有效。</summary>
     double BeatAt(float x) => beatStart + (x - editorTracksRect.X) / pixelsPerBeat;
@@ -412,13 +546,21 @@ public sealed partial class Viewer
     void AddMod(double? at = null, string? property = null, int? proxy = null)
     {
         if (editor == null) return;
-        string name = property ?? customMod; int target = proxy ?? GimmickAuthoring.SuggestedProxy(KuroakiGimmick.Core.Documentation.VsmReference.Shared.MatchMod(name).FirstOrDefault()?.Entry, newProxy, EditableProxyCount);
-        if (target >= EditableProxyCount) { message = L.Get("Proxy is outside the chart's declared !proxies range."); return; }
+        string name = property ?? customMod;
+        int target = proxy ?? GimmickAuthoring.SuggestedProxy(KuroakiGimmick.Core.Documentation.VsmReference.Shared.MatchMod(name).FirstOrDefault()?.Entry, newProxy, EditableProxyCount);
+        if (target >= EditableProxyCount)
+        {
+            message = L.Get("Proxy is outside the chart's declared !proxies range.");
+            return;
+        }
         double beat = at ?? InsertionBeat;
         double from = Current.Timeline.Get(name, Current.Timeline.Bpm.Time(beat), target);
         double to = name switch
         {
-            "przm" => 1.1, "prx" => 30, "pry" => -10, "prrz" => 12,
+            "przm" => 1.1,
+            "prx" => 30,
+            "pry" => -10,
+            "prrz" => 12,
             "pra" or "notealp" or "uialpha" => from > .5 ? 0 : 1,
             "freeze" or "fx_film" or "enable_hue" => from >= 1 ? 0 : 1,
             "changeskin" => (Math.Truncate(from) + 1) % 4,
@@ -442,7 +584,12 @@ public sealed partial class Viewer
             editor.Vsm.Add(clip);
         });
         if (EditorFindClip(clip.Id) != null)
-        { selectedClip = clip.Id; selectedWindowEvent = -1; inspectorScroll = 0; FocusAddedTrack(name, target, beat); }
+        {
+            selectedClip = clip.Id;
+            selectedWindowEvent = -1;
+            inspectorScroll = 0;
+            FocusAddedTrack(name, target, beat);
+        }
     }
     /// <summary>新增 WindowMovement 事件。时间轴按拍操作，写进 JSON 的 t / 时长一律先经 BPM map 换算成秒。</summary>
     void AddWindowEvent(string op, double? at = null, int? window = null)
@@ -451,7 +598,9 @@ public sealed partial class Viewer
         double beat = at ?? InsertionBeat;
         double t = Current.Timeline.Bpm.Time(beat), duration = Current.Timeline.Bpm.Time(beat + 1) - t;
         var e = NewEvent(op, t, duration, window ?? newWindow);
-        Edit(L.Get("Add ") + op, () => selectedWindowEvent = editor.AddWindow(e)); selectedClip = null; inspectorScroll = 0;
+        Edit(L.Get("Add ") + op, () => selectedWindowEvent = editor.AddWindow(e));
+        selectedClip = null;
+        inspectorScroll = 0;
     }
     /// <summary>删除当前选中项。优先级：图片对象组 → 片段 / 窗口事件 → 标记；三者互不越界，避免误删看不见的那一层。</summary>
     void DeleteSelection()
@@ -459,16 +608,28 @@ public sealed partial class Viewer
         if (editor == null) return;
         if (imageInspector && ActiveImageGroup is { } imageGroup && imageGroup.Editable)
         {
-            ImageAction(() => editor.DeleteImageGroup(imageGroup)); selectedImageGroup = selectedClip = null;
-            imagePoseTarget = ImagePoseTarget.Initial; layoutRevision = -1; return;
+            ImageAction(() => editor.DeleteImageGroup(imageGroup));
+            selectedImageGroup = selectedClip = null;
+            imagePoseTarget = ImagePoseTarget.Initial;
+            layoutRevision = -1;
+            return;
         }
         if (selectedClip == null && selectedWindowEvent < 0 && activeMarker is Guid marker)
-        { editor.RemoveMarker(marker); activeMarker = null; return; }
-        if (BatchSelection) { DeleteClips(); return; }
+        {
+            editor.RemoveMarker(marker);
+            activeMarker = null;
+            return;
+        }
+        if (BatchSelection)
+        {
+            DeleteClips();
+            return;
+        }
         if (selectedClip is Guid id) Edit(L.Get("Delete clip"), () => editor.Vsm.Delete(id));
         else if (selectedWindowEvent >= 0 && selectedWindowEvent < (editor.Windows.Events?.Count ?? 0))
             Edit(L.Get("Delete window event"), () => editor.Windows.Events!.RemoveAt(selectedWindowEvent));
-        selectedClip = null; selectedWindowEvent = -1;
+        selectedClip = null;
+        selectedWindowEvent = -1;
     }
     /// <summary>
     /// 复制到插入点。副本必定获得新 Id —— 事件身份不共享。若插入点就落在原件上，则顺延到原件之后，
@@ -485,28 +646,39 @@ public sealed partial class Viewer
                 if (Math.Abs(at - imageGroup.Beat) < 1e-9) at = imageGroup.End(Current.Timeline.Bpm) + (imageGroup.Duration == 0 ? 1 : 0);
                 Guid added = editor.DuplicateImageGroup(imageGroup, at, Current.Timeline.Bpm);
                 SelectImageObject(imageGroup.ImageId, true, added);
-            }); return;
+            });
+            return;
         }
-        if (BatchSelection) { DuplicateClips(); return; }
+        if (BatchSelection)
+        {
+            DuplicateClips();
+            return;
+        }
         double destination = InsertionBeat;
         if (selectedClip is Guid id && EditorFindClip(id) is { } c)
         {
             if (Math.Abs(destination - c.Beat) < 1e-7) destination += Math.Max(.25, c.End - c.Beat);
             var copy = c with { Id = Guid.NewGuid(), Beat = destination, RepeatEnd = c.RepeatEnd + destination - c.Beat };
-            Edit(L.Get("Duplicate clip"), () => editor.Vsm.Add(copy)); selectedClip = copy.Id;
+            Edit(L.Get("Duplicate clip"), () => editor.Vsm.Add(copy));
+            selectedClip = copy.Id;
         }
         else if (selectedWindowEvent >= 0 && selectedWindowEvent < (editor.Windows.Events?.Count ?? 0) && editor.Windows.Events![selectedWindowEvent] is JsonObject e)
         {
-            var copy = (JsonObject)e.DeepClone(); double t = Current.Timeline.Bpm.Time(destination);
+            var copy = (JsonObject)e.DeepClone();
+            double t = Current.Timeline.Bpm.Time(destination);
             if (Math.Abs(t - Number(e, "t")) < 1e-7) t += Math.Max(.125, Duration(e));
-            copy["t"] = t; Edit(L.Get("Duplicate window event"), () => selectedWindowEvent = editor.AddWindow(copy));
+            copy["t"] = t;
+            Edit(L.Get("Duplicate window event"), () => selectedWindowEvent = editor.AddWindow(copy));
         }
     }
     /// <summary>求 t 秒时的窗口位姿。WindowMotionTimeline 按配置对象的引用做缓存，配置换了才重建。</summary>
     IReadOnlyList<WindowPose> WindowPoses(double t)
     {
         if (!ReferenceEquals(windowTimelineConfig, Current.WindowMotion))
-        { windowTimelineConfig = Current.WindowMotion; windowTimeline = new(Current.WindowMotion, windowDesktopW, windowDesktopH); }
+        {
+            windowTimelineConfig = Current.WindowMotion;
+            windowTimeline = new(Current.WindowMotion, windowDesktopW, windowDesktopH);
+        }
         return ProxyWindowLayout.Compose(Current, t, windowTimeline!.At(t));
     }
     /// <summary>开关 LIVE 真实窗口预览。创建 SDL 窗口属于 GPU 工作，必须留在窗口线程；失败时立即 Dispose 并回到虚拟桌面预览。</summary>
@@ -516,21 +688,47 @@ public sealed partial class Viewer
         message = "This platform has one native window; use the virtual desktop preview.";
         return;
 #else
-        if (nativeWindows != null) { nativeWindows.Dispose(); nativeWindows = null; message = L.Get("Live windows closed."); return; }
-        if (!Current.WindowMotion.HasContent) { message = L.Get("No WindowMovement events or proxy bindings loaded."); return; }
+        if (nativeWindows != null)
+        {
+            nativeWindows.Dispose();
+            nativeWindows = null;
+            message = L.Get("Live windows closed.");
+            return;
+        }
+        if (!Current.WindowMotion.HasContent)
+        {
+            message = L.Get("No WindowMovement events or proxy bindings loaded.");
+            return;
+        }
         try
         {
-            nativeWindows = new(host.Gpu, host.Window); windowDesktopW = nativeWindows.Bounds.w; windowDesktopH = nativeWindows.Bounds.h;
-            windowTimelineConfig = null; message = L.Get("LIVE WINDOWS enabled. Escape or close any preview window to stop.");
+            nativeWindows = new(host.Gpu, host.Window);
+            windowDesktopW = nativeWindows.Bounds.w;
+            windowDesktopH = nativeWindows.Bounds.h;
+            windowTimelineConfig = null;
+            message = L.Get("LIVE WINDOWS enabled. Escape or close any preview window to stop.");
         }
-        catch (Exception e) { nativeWindows?.Dispose(); nativeWindows = null; message = L.Get("Live windows: ") + e.Message; }
+        catch (Exception e)
+        {
+            nativeWindows?.Dispose();
+            nativeWindows = null;
+            message = L.Get("Live windows: ") + e.Message;
+        }
 #endif
     }
     /// <summary>向真实窗口呈现一帧；只能在窗口线程调用。任何异常都当作后端失效，直接关闭 LIVE 预览而不是逐帧重试。</summary>
     void PresentNativeWindows()
     {
         if (nativeWindows == null || Busy) return;
-        try { nativeWindows.Present(Current, transport.Position, WindowPoses(transport.Position), Canvas, Renderer); }
-        catch (Exception e) { nativeWindows.Dispose(); nativeWindows = null; message = L.Get("Live windows stopped: ") + e.Message; }
+        try
+        {
+            nativeWindows.Present(Current, transport.Position, WindowPoses(transport.Position), Canvas, Renderer);
+        }
+        catch (Exception e)
+        {
+            nativeWindows.Dispose();
+            nativeWindows = null;
+            message = L.Get("Live windows stopped: ") + e.Message;
+        }
     }
 }

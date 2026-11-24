@@ -1,10 +1,11 @@
+// 纹理传输与同步读回：显式区分上传行距、读回行距和 fence 生命周期。
+
 using System.Runtime.InteropServices;
 using KuroakiGimmick.Native;
 using static KuroakiGimmick.Native.Sdl;
 
 namespace KuroakiGimmick.Graphics;
 
-/// <summary>纹理传输与同步读回：显式区分上传行距、读回行距和 fence 生命周期。</summary>
 public sealed unsafe partial class GpuDevice : IDisposable
 {
     /// <summary>创建 CPU/GPU 传输缓冲。调用者负责 finally 中释放，单位为字节。</summary>
@@ -18,8 +19,7 @@ public sealed unsafe partial class GpuDevice : IDisposable
         if (buffer != 0) return buffer;
         string error = Error;
 #if KG_SWITCH
-        // Completed texture uploads can still own deferred releases until SDL polls/waits.
-        // Drain them once on allocation exhaustion; do not retry other driver failures.
+        // 内存分配失败时轮询或等待已完成的上传，使 SDL 回收延迟释放的资源，再试一次。其他驱动错误直接传播。
         if (error.Contains("VK_ERROR_OUT_OF_HOST_MEMORY", StringComparison.Ordinal) ||
             error.Contains("VK_ERROR_OUT_OF_DEVICE_MEMORY", StringComparison.Ordinal))
         {

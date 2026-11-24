@@ -1,3 +1,5 @@
+// 将原版剧情序列的各阶段接入场景渲染。
+
 using KuroakiGimmick.Core;
 
 namespace KuroakiGimmick.Graphics;
@@ -13,35 +15,61 @@ public sealed class NativeSequenceRenderer : IDisposable
     readonly CustomEffects effects;
     /// <summary>角色背景的中转与滤镜输出目标；两者尺寸跟随传入的 scene，只在 Backgrounds 里按需缩放。</summary>
     readonly Target layer, filtered;
+    /// <summary>为原版剧情序列准备绘制使用的画布资源。</summary>
+    /// <param name="canvas">提交绘制命令的画布。</param>
+    /// <param name="native">原版对象渲染器。</param>
+    /// <param name="effects">演出效果渲染器。</param>
     public NativeSequenceRenderer(Canvas canvas, NativeGimmickRenderer native, CustomEffects effects)
-    { this.canvas = canvas; this.native = native; this.effects = effects; layer = new(canvas.Gpu, 320, 180); filtered = new(canvas.Gpu, 320, 180); }
+    {
+        this.canvas = canvas;
+        this.native = native;
+        this.effects = effects;
+        layer = new(canvas.Gpu, 320, 180);
+        filtered = new(canvas.Gpu, 320, 180);
+    }
     /// <summary>按 manifest 角色名查 mod 再求值；角色未声明时返回 fallback，不抛错也不猜测同名 mod。</summary>
     double M(Session session, string role, double time, double fallback = 0) => session.NativeGimmick.Data?.Sequence?.Mod(role) is { } mod ? session.Timeline.Get(mod, time) : fallback;
     /// <summary>
     /// chorus / enddrop 两个角色背景各自先画进 layer，按需过一遍房间 FX 图层，再以角色 alpha 贴回 scene。
     /// 顺序固定，不按 alpha 大小重排；目标缩放前先 Flush。
     /// </summary>
+    /// <param name="scene">要绘制到的场景目标。</param>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <param name="useEffects">是否启用背景效果。</param>
     public void Backgrounds(Target scene, Session session, double time, bool useEffects)
     {
         if (session.NativeGimmick.Data?.Sequence is not { } spec) return;
-        if (layer.Texture.Width != scene.Texture.Width) { canvas.Flush(); layer.Resize(scene.Texture.Width, scene.Texture.Height); filtered.Resize(scene.Texture.Width, scene.Texture.Height); }
+        if (layer.Texture.Width != scene.Texture.Width)
+        {
+            canvas.Flush();
+            layer.Resize(scene.Texture.Width, scene.Texture.Height);
+            filtered.Resize(scene.Texture.Width, scene.Texture.Height);
+        }
         foreach (string role in new[] { "chorus", "enddrop" })
         {
             double alpha = M(session, role + "Alpha", time);
             if (alpha <= 0 || !spec.Sprites.TryGetValue(role, out var sprite) || native.SequenceTexture(session, sprite) is not { } image) continue;
             canvas.Begin(layer, layer.Texture.Width, layer.Texture.Height, 320, 180, Color.Hex(0));
-            canvas.Quad(image, new(0, 0, 320, 180), Color.White); canvas.Flush();
+            canvas.Quad(image, new(0, 0, 320, 180), Color.White);
+            canvas.Flush();
             Texture input = layer.Texture;
             if (useEffects && spec.BackgroundLayers.TryGetValue(role, out var name) && session.Fx.Find(name) is { Enabled: true } fx)
-            { effects.RenderNativeLayer(filtered, input, fx, session, time); input = filtered.Texture; }
+            {
+                effects.RenderNativeLayer(filtered, input, fx, session, time);
+                input = filtered.Texture;
+            }
             canvas.Begin(scene, scene.Texture.Width, scene.Texture.Height, 320, 180);
-            canvas.Quad(input, new(0, 0, 320, 180), Color.White.Alpha(alpha)); canvas.Flush();
+            canvas.Quad(input, new(0, 0, 320, 180), Color.White.Alpha(alpha));
+            canvas.Flush();
         }
     }
     /// <summary>
     /// slash / gun 回调的斜线。按原版用反相目标色、目标系数取零的混合，画完必须恢复常规 source-alpha。
     /// 线条端点与走向全部来自 Timeline.Hash(seed)，同一 e.Index 重放结果一致，不使用运行时随机数。
     /// </summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void Slashes(Session session, double time)
     {
         if (session.NativeGimmick.Data?.Sequence is not { } spec) return;
@@ -49,7 +77,8 @@ public sealed class NativeSequenceRenderer : IDisposable
         canvas.Blend(BlendFactor.InverseDestinationColor, BlendFactor.Zero);
         foreach (var e in events)
         {
-            double age = time - e.Time; float width = (float)(12 * (1 - age) * (1 - age));
+            double age = time - e.Time;
+            float width = (float)(12 * (1 - age) * (1 - age));
             Color color = Color.Hex(e.Name == spec.Mod("slash") ? 0xFF00DCu : 0x4800FFu);
             for (int i = 0; i < e.Value; i++)
             {
@@ -61,6 +90,9 @@ public sealed class NativeSequenceRenderer : IDisposable
         canvas.Blend(BlendFactor.SourceAlpha, BlendFactor.InverseSourceAlpha);
     }
     /// <summary>返回替换用的 hold 覆盖贴图（固定取第 3 帧）；返回 null 表示条件不成立，调用方继续用公共的 sp_holdnote_overlay。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <returns>可用的长条覆盖纹理，无有效覆盖时为 null。</returns>
     public Texture? HoldOverlay(Session session, double time)
     {
         var spec = session.NativeGimmick.Data?.Sequence;
@@ -68,6 +100,8 @@ public sealed class NativeSequenceRenderer : IDisposable
             ? native.SequenceTexture(session, sprite, 3) : null;
     }
     /// <summary>HP 条 HUD，与固定游戏 HUD 同一遍绘制。受 GameUiEnabled 与 uialpha 双重门控；填充条按 hpAmount/100 横向缩放。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void Hud(Session session, double time)
     {
         if (!session.Project.GameUiEnabled || session.Timeline.Get("uialpha", time) == 0 || session.NativeGimmick.Data?.Sequence is not { } spec) return;
@@ -81,17 +115,26 @@ public sealed class NativeSequenceRenderer : IDisposable
         }
     }
     /// <summary>CG 画在 GUI 阶段，位于后处理之后，因此不受公共后处理影响；filtered 为真，走 post mode 0 的 shader。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void Gui(Session session, double time)
     {
         if (session.NativeGimmick.Data?.Sequence is not { } spec || !spec.Sprites.TryGetValue("cg", out var sprite)) return;
         native.DrawSequenceSprite(session, sprite, (int)Math.Floor(M(session, "cgFrame", time)), 160, 0,
             M(session, "cgScale", time) / 4, .25, M(session, "cgAlpha", time, 1), time, true, spec.CgEffect);
     }
-    public void Dispose() { layer.Dispose(); filtered.Dispose(); }
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        layer.Dispose();
+        filtered.Dispose();
+    }
     /// <summary>
     /// 结尾白场。时间过了 EndFadeTime 还不够，必须同时存在已触发的 EndFadeTrigger mod 事件，跳到尾部预览才不会凭空全白。
     /// 矩形按 (-1,-1,322,182) 略微外扩，避免缩放后边缘漏出一像素。
     /// </summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void EndFade(Session session, double time)
     {
         if (session.NativeGimmick.Data?.Sequence is not { EndFadeTime: { } start } spec || time < start ||

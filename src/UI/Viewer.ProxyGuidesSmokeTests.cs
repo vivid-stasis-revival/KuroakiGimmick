@@ -1,3 +1,5 @@
+// 检查 proxy 隔离预览及其对后续帧和导出的影响。
+
 using System.Numerics;
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Core.Editing;
@@ -7,11 +9,14 @@ namespace KuroakiGimmick.UI;
 
 public sealed partial class Viewer
 {
-    /// <summary>Checks guides against the former projection shader and the real game UV mask on the GPU.</summary>
+    /// <summary>使用原投影 shader 与真实游戏 UV 遮罩，在 GPU 上核对参考线。</summary>
     public void SmokeProxyGuides()
     {
         SmokeProxyLabelMotion();
-        void Check(bool ok, string reason) { if (!ok) throw new InvalidOperationException(reason); }
+        void Check(bool ok, string reason)
+        {
+            if (!ok) throw new InvalidOperationException(reason);
+        }
         void Near(float a, float b, string reason) => Check(Math.Abs(a - b) < .002, $"{reason}: {a} != {b}");
         Timeline TimelineFor(string mods, bool custom = true)
         {
@@ -21,7 +26,8 @@ public sealed partial class Viewer
         }
         string Mod(string name, double value, int proxy = 0) => $"0,0,linear,{value},{value},{name},{proxy}\n";
         var plain = ProxyGeometry.Sample(TimelineFor(""), 0, 0, true);
-        Near(plain.Left, 113, "Default source left"); Near(plain.Right, 208, "Default source right");
+        Near(plain.Left, 113, "Default source left");
+        Near(plain.Right, 208, "Default source right");
         var half = new ProxyMask(.5f, .4f, 0, 0, .05f, 0, 0, 0);
         Near(half.AlphaAt(new(150, 80)), 0, "Mask must use full-field UV, not crop-relative UV");
         Near(half.AlphaAt(new(168, 80)), .5f, "16-pixel left fade");
@@ -34,7 +40,8 @@ public sealed partial class Viewer
         {
             var pose = ProxyGeometry.Sample(TimelineFor(Mod("prrz", 90) + Mod("prx", 10), custom), 0, 0, custom);
             Check(pose.TryProject(new(180, 82), out var p), "Rotated point cannot project");
-            Near(p.X, 170, "Rotation/translation X"); Near(p.Y, custom ? 102 : 62, "Base/custom rotation convention");
+            Near(p.X, 170, "Rotation/translation X");
+            Near(p.Y, custom ? 102 : 62, "Base/custom rotation convention");
         }
         var crossing = ProxyGeometry.Sample(TimelineFor(Mod("prtrX", .03)), 0, 0, true);
         Check(crossing.ClipSegment(new(113, 82), new(208, 82), out var ca, out var cb) &&
@@ -46,7 +53,7 @@ public sealed partial class Viewer
         Check(crossing.ClipRegion(crossing.Source, clipped) >= 3, "Camera-plane crossing region lost its label");
         Check(singular.ClipRegion(singular.Source, clipped) == 0, "Collapsed geometry created a misleading visible label");
 
-        // Independent oracle: the original production vertex transform before geometry was shared.
+        // 独立对照使用几何逻辑共用前的原始顶点变换。
         const string originalVertex = """
             #version 330 core
             layout(location=0) in vec2 a_position;
@@ -79,15 +86,19 @@ public sealed partial class Viewer
         foreach (string fixture in fixtures)
         {
             var timeline = TimelineFor(maskMods + fixture);
-            var pose = ProxyGeometry.Sample(timeline, 0, 0, true); var mask = ProxyMask.Sample(timeline, 0, 0);
+            var pose = ProxyGeometry.Sample(timeline, 0, 0, true);
+            var mask = ProxyMask.Sample(timeline, 0, 0);
             double M(string name) => timeline.Get(name, 0, 0);
             Canvas.Begin(expected, 320, 180, 320, 180, new Color(0, 0, 0));
             oracle.Vec2("proxyOrigin", pose.Origin.X, pose.Origin.Y);
             oracle.Vec2("proxyScale", pose.ScaleX, pose.ScaleY);
             oracle.Vec2("proxyRotation", Math.Cos(pose.Angle * Math.PI / 180), Math.Sin(pose.Angle * Math.PI / 180));
             oracle.Vec2("proxyTrapezoid", M("prtrX"), M("prtrY"));
-            oracle.Vec2("proxySkew", -M("prsx"), -M("prsy")); oracle.Vec2("proxyTranslation", 160 + pose.X, 82 + pose.Y);
-            oracle.Float("xperiod", 10); oracle.Float("yperiod", 10); mask.Apply(oracle);
+            oracle.Vec2("proxySkew", -M("prsx"), -M("prsy"));
+            oracle.Vec2("proxyTranslation", 160 + pose.X, 82 + pose.Y);
+            oracle.Float("xperiod", 10);
+            oracle.Float("yperiod", 10);
+            mask.Apply(oracle);
             Canvas.Polygon(Canvas.White, new(pose.Left, pose.Top), new(pose.Right, pose.Top),
                 new(pose.Left, pose.Bottom), new(pose.Right, pose.Bottom), Color.White, pose.UV, oracle);
             var reference = Canvas.Read(expected);
@@ -101,7 +112,8 @@ public sealed partial class Viewer
                 if (pose.TryProject(source, out var screen))
                 {
                     Check(pose.TryUnproject(screen, out var back), "Inverse projection failed");
-                    Near(back.X, source.X, "Mouse inverse X"); Near(back.Y, source.Y, "Mouse inverse Y");
+                    Near(back.X, source.X, "Mouse inverse X");
+                    Near(back.Y, source.Y, "Mouse inverse Y");
                 }
         }
         Console.WriteLine("PASS proxy geometry/GPU: original shader parity, UV mask and fades, signed crops, rotation, scale, shear, perspective, camera clipping and reverse seeks");
@@ -113,10 +125,16 @@ public sealed partial class Viewer
             Mod("pra", 1, 1) + Mod("prx", 35, 1) + Mod("prrz", 12, 1) + Mod("prtrY", .002, 1) +
             Mod("shcl", .47, 1) + Mod("shcr", .38, 1) + Mod("shfl", .035, 1) + Mod("shfr", .02, 1);
         Current = new Session(new ViewerProject { Bpm = 120, RoomPreset = "none", Profile = "core", GameUiEnabled = false }, editedVsm: vsm);
-        editor = new EditorDocument(Current); editorMode = true; imageCanvas = textCanvas = desktopPreview = false;
+        editor = new EditorDocument(Current);
+        editorMode = true;
+        imageCanvas = textCanvas = desktopPreview = false;
         notes = true;
-        workflow = ""; help = settings = false; renderedRevision = editor.Revision; layoutRevision = -1;
-        newProxy = 0; prGridMode = 0;
+        workflow = "";
+        help = settings = false;
+        renderedRevision = editor.Revision;
+        layoutRevision = -1;
+        newProxy = 0;
+        prGridMode = 0;
         var clip = editor.Vsm.Clips.First(c => c.Name == "shcl");
         SetClipSelection(clip.Id);
         Check(newProxy == 1 && TryPrGridTarget(out int target) && target == 1, "SH clip kept a stale PR target");
@@ -124,8 +142,10 @@ public sealed partial class Viewer
         void Frame() => Draw(1440, 940);
         void Click(float x, float y)
         {
-            Handle(new() { Type = 0x401, Button = 1, X = x, Y = y }); Frame();
-            Handle(new() { Type = 0x402, Button = 1, X = x, Y = y }); Frame();
+            Handle(new() { Type = 0x401, Button = 1, X = x, Y = y });
+            Frame();
+            Handle(new() { Type = 0x402, Button = 1, X = x, Y = y });
+            Frame();
         }
         Frame();
         EditClip(c => c with { Proxy = 0 }, "Proxy guide target check");
@@ -134,28 +154,41 @@ public sealed partial class Viewer
         Check(TryPrGridTarget(out target) && target == 1, "Undo target edit left a stale guide");
         renderedRevision = editor.Revision;
         var sceneWithoutGuides = Canvas.Read(Renderer.Final);
-        prGridMode = 2; Frame();
+        prGridMode = 2;
+        Frame();
         Check(sceneWithoutGuides.SequenceEqual(Canvas.Read(Renderer.Final)), "Editor guides leaked into scene/export");
         Check(!TryPrGridTarget(out _) && prGridHudRect.W == 0, "OFF grid still owns a hit area");
-        prGridMode = 0; Frame();
+        prGridMode = 0;
+        Frame();
         foreach (int step in new[] { 10, 5, 20 })
-        { Click(prGridHudRect.X + prGridHudRect.W - 50, prGridHudRect.Y + 12); Check(prGridStep == step, "Grid step click failed"); }
+        {
+            Click(prGridHudRect.X + prGridHudRect.W - 50, prGridHudRect.Y + 12);
+            Check(prGridStep == step, "Grid step click failed");
+        }
         Click(prGridHudRect.X + prGridHudRect.W - 14, prGridHudRect.Y + 12);
         Check(prGridHudExpanded, "Grid details did not expand");
         Handle(new() { Type = 0x401, Button = 1, X = prGridHudRect.X + 15, Y = prGridHudRect.Y + 12 });
         Check(prGridHudDragging, "Grid header did not capture drag");
-        Handle(new() { Type = 0x20F }); Check(!prGridHudDragging, "Grid drag survived focus loss");
-        imageCanvas = true; Check(!TryPrGridTarget(out _), "Image canvas owns a hidden PR HUD"); imageCanvas = false;
-        newProxy = -1; selectedClip = null;
+        Handle(new() { Type = 0x20F });
+        Check(!prGridHudDragging, "Grid drag survived focus loss");
+        imageCanvas = true;
+        Check(!TryPrGridTarget(out _), "Image canvas owns a hidden PR HUD");
+        imageCanvas = false;
+        newProxy = -1;
+        selectedClip = null;
         hoveredEditTrack = new("shcr:1", "shcr", false, 1, "shcr");
         Check(TryPrGridTarget(out target) && target == 1, "SH track hover did not show its proxy");
         BeginTrackOrder(hoveredEditTrack);
-        Check(newProxy == 1, "SH track label did not select its proxy"); CancelTrackOrder();
-        newProxy = 0; Check(TryPrGridTarget(out target) && target == 0, "Picker did not override stale clip selection");
+        Check(newProxy == 1, "SH track label did not select its proxy");
+        CancelTrackOrder();
+        newProxy = 0;
+        Check(TryPrGridTarget(out target) && target == 0, "Picker did not override stale clip selection");
         SetClipSelection(clip.Id);
         Check(editor.Vsm.Text == sourceText, "Guide gestures modified the VSM");
         prGridHudExpanded = false;
-        mouseX = previewImage.X + previewImage.W * .61f; mouseY = previewImage.Y + previewImage.H * .59f; Frame();
+        mouseX = previewImage.X + previewImage.W * .61f;
+        mouseY = previewImage.Y + previewImage.H * .59f;
+        Frame();
         Console.WriteLine("PASS proxy guide UI: SH selection, picker priority, grid steps, details, focus loss, hidden hit areas and unchanged scene/VSM");
 
         Check(prGridLabels.Count == 2, "Both visible proxies need an ID tag");
@@ -181,8 +214,14 @@ public sealed partial class Viewer
         void IdentityScene(string mods)
         {
             Current = new Session(Current.Project.Copy(), editedVsm: "!obj:obj_custom_gimmick\n!proxies:4\n" + mods);
-            editor = new EditorDocument(Current); renderedRevision = editor.Revision; layoutRevision = -1;
-            SetClipSelection(null); newProxy = 0; prGridSelection = null; mouseX = mouseY = 0; Frame();
+            editor = new EditorDocument(Current);
+            renderedRevision = editor.Revision;
+            layoutRevision = -1;
+            SetClipSelection(null);
+            newProxy = 0;
+            prGridSelection = null;
+            mouseX = mouseY = 0;
+            Frame();
         }
         IdentityScene(Mod("pra", 1) + Mod("pra", 1, 1) + Mod("pra", 1, 2) + Mod("pra", 1, 3));
         Check(prGridLabels.Count == 4, "Overlapping proxies dropped their ID tags");
@@ -192,35 +231,43 @@ public sealed partial class Viewer
             for (int b = a + 1; b < prGridLabels.Count; b++)
                 Check(!Overlaps(prGridLabels[a].Bounds, prGridLabels[b].Bounds), "Overlapping proxies have unreadable ID tags");
         }
-        // Reproduce the reported ambiguity: P0 is offscreen while P1 is still rendered.
-        // P2 is hidden and P3 fully masked, so neither should pretend to be visible.
+        // 覆盖已报告的歧义：P0 在视口外，P1 仍可见，隐藏的 P2 和完全被遮罩的 P3 均不应显示为可见。
         IdentityScene(Mod("pra", 1) + Mod("pry", 180) + Mod("pra", 1, 1) + Mod("prrz", 12, 1) +
             Mod("prx", 20, 1) + Mod("pra", 0, 2) + Mod("pra", 1, 3) + Mod("shcl", 1, 3));
         Check(TryPrGridTarget(out target) && target == 0 && prGridLabels.Count == 1 && prGridLabels[0].Target == 1,
             "Offscreen selection was confused with a different visible proxy");
-        var identityScene = Canvas.Read(Renderer.Final); string identityVsm = editor.Vsm.Text;
+        var identityScene = Canvas.Read(Renderer.Final);
+        string identityVsm = editor.Vsm.Text;
         ClickTag(1);
         Check(identityScene.SequenceEqual(Canvas.Read(Renderer.Final)) && identityVsm == editor.Vsm.Text,
             "Selecting an ID altered the scene/export or document");
-        SelectProxyFromGuide(0); prGridHudExpanded = false; Frame();
+        SelectProxyFromGuide(0);
+        prGridHudExpanded = false;
+        Frame();
         var visibleLabel = prGridLabels.Single(l => l.Target == 1);
-        mouseX = visibleLabel.Bounds.X + 15; mouseY = visibleLabel.Bounds.Y + 12; Frame();
+        mouseX = visibleLabel.Bounds.X + 15;
+        mouseY = visibleLabel.Bounds.Y + 12;
+        Frame();
         Console.WriteLine("PASS proxy identity: clickable IDs, inspector sync, crowded labels, offscreen selection, hidden/masked proxies, toggle, cycling and unchanged scene/export");
 
-        // A full-width source crop is not the footprint of the lane artwork (Stage4a P4).
+        // 全宽源裁剪包含的范围大于轨道美术的实际占用区域，Stage4a 的 P4 即为此例。
         var wide = ProxyGeometry.Sample(TimelineFor(Mod("prcl", 320)), 0, 0, true);
         var laneRegion = ProxyTrackRegion(wide);
-        Near(laneRegion.X, 113, "Wide crop lane reference left"); Near(laneRegion.W, 95, "Wide crop must not frame the full screen as a lane");
+        Near(laneRegion.X, 113, "Wide crop lane reference left");
+        Near(laneRegion.W, 95, "Wide crop must not frame the full screen as a lane");
         IdentityScene(Mod("pra", 1) + Mod("prx", -60) + Mod("prcl", 320) + Mod("pra", 1, 1) + Mod("prx", 60, 1));
-        byte[] complete = Canvas.Read(Renderer.Final); string unchanged = editor.Vsm.Text;
+        byte[] complete = Canvas.Read(Renderer.Final);
+        string unchanged = editor.Vsm.Text;
         Click(prGridHudRect.X + 30, prGridHudRect.Y + 77);
         Check(prGridSolo && prGridSoloRendered, "Solo preview button did not activate");
         Check(prGridLabels.Count == 1 && prGridLabels[0].Target == 0, "Solo preview labels other proxies");
         byte[] isolated = Canvas.Gpu.Read(Renderer.ProxyInspectionTexture!);
         Check(!isolated.SequenceEqual(complete), "Solo preview still contains the entire composite");
         Check(complete.SequenceEqual(Canvas.Read(Renderer.Final)), "Solo preview overwrote Final/export");
-        Frame(); Check(complete.SequenceEqual(Canvas.Read(Renderer.Final)), "Solo preview changed the next complete frame");
-        SelectProxyFromGuide(2); Frame();
+        Frame();
+        Check(complete.SequenceEqual(Canvas.Read(Renderer.Final)), "Solo preview changed the next complete frame");
+        SelectProxyFromGuide(2);
+        Frame();
         Check(prGridLabels.Count == 0, "Hidden selected proxy still has a misleading visible tag");
         byte[] hiddenSolo = Canvas.Gpu.Read(Renderer.ProxyInspectionTexture!);
         Check(hiddenSolo.Where((_, index) => index % 4 != 3).All(c => c == 0), "Hidden proxy solo must be empty");
@@ -229,7 +276,9 @@ public sealed partial class Viewer
         Click(prGridHudRect.X + 30, prGridHudRect.Y + 77);
         Check(!prGridSolo && !prGridSoloRendered && complete.SequenceEqual(Canvas.Read(Renderer.Final)), "Leaving solo changed the normal preview");
         Check(editor.Vsm.Text == unchanged, "Solo/crop controls rewrote chart parameters");
-        SelectProxyFromGuide(0); prGridShowCrop = false; Frame();
+        SelectProxyFromGuide(0);
+        prGridShowCrop = false;
+        Frame();
         Console.WriteLine("PASS proxy isolation: real source render, separate output, unchanged next frame/export/VSM, hidden proxy has no ghost frame, wide crop uses lane reference");
         SmokeProxyFooter();
         SmokeProxyPicking();

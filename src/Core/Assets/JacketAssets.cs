@@ -1,3 +1,5 @@
+// 根据工程与对象的曲绘模式选择资源并识别动画帧条。
+
 using System.Globalization;
 using System.Text.RegularExpressions;
 using StbImageSharp;
@@ -10,6 +12,7 @@ namespace KuroakiGimmick.Core;
 // 对应 o_csm_jacket 与 o_gameplay_jacketoverlay。封面始终是外部资源，不随程序分发。
 public sealed class JacketAssets
 {
+    /// <summary>从 Plaudite 目录表读取的曲绘名称。</summary>
     public static string[] PlauditeNames => LoadCatalog("plaudite");
     static string[] LoadCatalog(string key)
     {
@@ -20,19 +23,41 @@ public sealed class JacketAssets
             : throw new InvalidDataException("Missing or invalid jacket catalog: " + key);
     }
 
+    /// <summary>当前曲绘的选择模式，初始为 normal。</summary>
     public string Mode { get; private set; } = "normal";
+    /// <summary>工程使用的默认曲绘路径。</summary>
     public string? DefaultPath { get; private set; }
+    /// <summary>是否采用自定义演出对象的曲绘布局。</summary>
     public bool CustomLayout { get; private set; }
+    /// <summary>曲绘是否参与辉光绘制。</summary>
     public bool Glow { get; private set; } = true;
-    /// <summary>CSM 3.4.0 horizontal square-frame jacket strip metadata for the song's default jacket.</summary>
+    /// <summary>CSM 3.4.0 默认曲绘的横向方形动画帧条信息。</summary>
     public bool Animated { get; private set; }
+    /// <summary>水平方形帧条中检测到的帧数，最少为 1。</summary>
     public int AnimatedFrames { get; private set; } = 1;
+    /// <summary>曲绘选择器支持的条目数。</summary>
     public int Count { get; private set; } = 1;
+    /// <summary>已找到的曲绘索引与文件路径。</summary>
     public Dictionary<int, string> Files { get; } = [];
     /// <summary>负值取最后一张；其余按 ceil 后对 Count 取模，这是原版协议行为，不要改成四舍五入或钳制。</summary>
+    /// <param name="value">曲绘选择轨道的值。</param>
+    /// <returns>负值选择末项，其余按向上取整后的编号循环。</returns>
     public int Index(double value) => value < 0 ? Count - 1 : (int)(Math.Ceiling(value) % Count);
+    /// <summary>在 custom 或 plaudite 模式下采样对应曲绘轨道，其余模式取 0。</summary>
+    /// <param name="timeline">用于采样轨道和回调的时间轴。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <returns>当前模式选中的曲绘索引。</returns>
     public int IndexAt(Timeline timeline, double time) => Mode is "custom" or "plaudite" ? Index(timeline.Get(Mode + "_jacket", time)) : 0;
+    /// <summary>取得当前时刻选中的曲绘路径，缺失时为 null。</summary>
+    /// <param name="timeline">用于采样轨道和回调的时间轴。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <returns>当前曲绘路径，未找到该帧时为 null。</returns>
     public string? At(Timeline timeline, double time) => Files.GetValueOrDefault(IndexAt(timeline, time));
+    /// <summary>结合工程、对象定义与图片尺寸建立曲绘资源表。</summary>
+    /// <param name="project">当前工程的路径与呈现配置。</param>
+    /// <param name="chart">提供音符、演出事件及诊断的谱面。</param>
+    /// <param name="native">已解析的原版对象资源配置。</param>
+    /// <returns>按当前对象及工程设置解析的曲绘集合。</returns>
     public static JacketAssets Load(ViewerProject project, Chart chart, NativeGimmickProfile? native = null)
     {
         var result = new JacketAssets
@@ -54,7 +79,7 @@ public sealed class JacketAssets
         string? Find(string dir,
             string stem) => Directory.Exists(dir) ? Directory.EnumerateFiles(dir).Order(StringComparer.Ordinal).FirstOrDefault(f => Path.GetFileNameWithoutExtension(f).Equals(stem, StringComparison.OrdinalIgnoreCase) && Path.GetExtension(f).ToLowerInvariant() is ".gif" or ".png" or ".jpg" or ".jpeg") : null;
         result.DefaultPath = project.Jacket ?? Find(root, "jacket");
-        result.Mode = result.CustomLayout? SongFiles.ConfigString(project, "JACKET_MANAGE_MODE", "plaudite") : "normal";
+        result.Mode = result.CustomLayout ? SongFiles.ConfigString(project, "JACKET_MANAGE_MODE", "plaudite") : "normal";
         if (result.Mode is not ("normal" or "plaudite" or "custom"))
         {
             chart.Diagnostics.Add(new("jacket", 0, "Unknown JACKET_MANAGE_MODE: " + result.Mode + "; cover multiplication disabled."));
@@ -192,7 +217,9 @@ public sealed class JacketAssets
             native.Resources["song-generic-fallback"] = file;
         }
         catch (Exception ex) when (ResourceFiles.IsResourceError(ex))
-        { native.Fail("song-generic-fallback", ex.Message); }
+        {
+            native.Fail("song-generic-fallback", ex.Message);
+        }
     }
 }
 

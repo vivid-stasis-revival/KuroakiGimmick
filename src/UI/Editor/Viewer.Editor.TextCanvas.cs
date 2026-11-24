@@ -1,3 +1,6 @@
+// 文本画布：在 320x180 逻辑空间里直接拖动文本，以及缩放/旋转手势。
+// 与 image 画布不同，这里的缩放以视口中心为锚点、没有平移视图的概念，所以只需要一个 textZoom。
+
 using System.Numerics;
 using KuroakiGimmick.Core.Editing;
 using KuroakiGimmick.Graphics;
@@ -5,10 +8,6 @@ using KuroakiGimmick.Native;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// 文本画布：在 320x180 逻辑空间里直接拖动文本，以及缩放/旋转手势。
-/// 与 image 画布不同，这里的缩放以视口中心为锚点、没有平移视图的概念，所以只需要一个 textZoom。
-/// </summary>
 public sealed partial class Viewer
 {
     /// <summary>
@@ -23,14 +22,17 @@ public sealed partial class Viewer
         float scale = viewport.W / 320 * textZoom;
         var origin = new Vector2(viewport.X + viewport.W / 2 - 160 * scale, viewport.Y + viewport.H / 2 - 90 * scale);
         var projection = Matrix3x2.CreateScale(scale) * Matrix3x2.CreateTranslation(origin);
-        Canvas.Clip(viewport); Canvas.Fill(viewport, Theme.PanelAlt);
+        Canvas.Clip(viewport);
+        Canvas.Fill(viewport, Theme.PanelAlt);
         for (int x = 0; x <= 320; x += 20) Canvas.Line(origin.X + x * scale, origin.Y, origin.X + x * scale, origin.Y + 180 * scale, 1, line);
         for (int y = 0; y <= 180; y += 20) Canvas.Line(origin.X, origin.Y + y * scale, origin.X + 320 * scale, origin.Y + y * scale, 1, line);
         double beat = Current.Timeline.Bpm.Beat(time);
         double Value(string name) => textDragValues?.GetValueOrDefault(name, textSampler.Get(name, beat)) ?? textSampler.Get(name, beat);
         textBounds.Clear();
         Renderer.DrawAuthoringTexts(Current, time, projection, Value, selectedTextId, (id, corners) =>
-        { if (corners.All(p => float.IsFinite(p.X + p.Y))) textBounds[id] = corners; });
+        {
+            if (corners.All(p => float.IsFinite(p.X + p.Y))) textBounds[id] = corners;
+        });
         Vector2 anchor = default, rotation = default;
         if (selectedTextId is { } selected && textBounds.TryGetValue(selected, out var box))
         {
@@ -59,16 +61,33 @@ public sealed partial class Viewer
         bool Hit(Vector2[] corners)
         {
             var edges = Enumerable.Range(0, 4).Select(i =>
-            { var a = corners[(i + 1) % 4] - corners[i]; var b = pointer - corners[i]; return a.X * b.Y - a.Y * b.X; }).ToArray();
+            {
+                var a = corners[(i + 1) % 4] - corners[i];
+                var b = pointer - corners[i];
+                return a.X * b.Y - a.Y * b.X;
+            }).ToArray();
             return edges.All(n => n >= 0) || edges.All(n => n <= 0);
         }
         string? pick = kind != 0 ? selectedTextId : textBounds.Reverse().Where(p => Hit(p.Value)).Select(p => p.Key).FirstOrDefault();
         if (pick == null) return;
-        if (selectedTextId != pick || !textInspector) { SelectText(pick); click = false; return; }
-        if (Math.Abs(beat - textAt) > 1e-6) { transport.Seek(Current.Timeline.Bpm.Time(textAt)); message = L.Get("Located text target; drag again to edit."); click = false; return; }
+        if (selectedTextId != pick || !textInspector)
+        {
+            SelectText(pick);
+            click = false;
+            return;
+        }
+        if (Math.Abs(beat - textAt) > 1e-6)
+        {
+            transport.Seek(Current.Timeline.Bpm.Time(textAt));
+            message = L.Get("Located text target; drag again to edit.");
+            click = false;
+            return;
+        }
         textDrag = new(editor, editor.Revision, pick, pointer, anchor, scale, kind,
             textSampler.Get("textX", pick, textAt), textSampler.Get("textY", pick, textAt), textSampler.Get("textscale", pick, textAt), textSampler.Get("textrot", pick, textAt));
-        textDragValues = null; click = false; Sdl.SDL_CaptureMouse(true);
+        textDragValues = null;
+        click = false;
+        Sdl.SDL_CaptureMouse(true);
     }
     /// <summary>
     /// 手势过程中只更新 textDragValues 这份预览覆盖值，不写文档；屏幕位移先除 CanvasScale 换回逻辑单位。
@@ -81,7 +100,11 @@ public sealed partial class Viewer
         var delta = (pointer - drag.Pointer) / drag.CanvasScale;
         textDragValues = new(StringComparer.Ordinal);
         void Put(string kind, double value) => textDragValues[TextValueSampler.Name(kind, drag.Id)] = value;
-        if (drag.Kind == 0) { Put("textX", drag.X + delta.X); Put("textY", drag.Y + delta.Y); }
+        if (drag.Kind == 0)
+        {
+            Put("textX", drag.X + delta.X);
+            Put("textY", drag.Y + delta.Y);
+        }
         else if (drag.Kind == 1)
             Put("textscale", Math.CopySign(Math.Clamp(Math.Abs(drag.Scale) * Vector2.Distance(pointer, drag.Anchor) / Math.Max(1, Vector2.Distance(drag.Pointer, drag.Anchor)), .001, 1000), drag.Scale));
         else
@@ -105,27 +128,53 @@ public sealed partial class Viewer
         {
             if (e.WindowID != 0 && e.WindowID != ActiveUiWindowId) return false;
             if (e.Type is 0x20F or 0x100 or Sdl.WindowCloseRequested || e.Type == 0x300 && e.Scan == 41)
-            { textDrag = null; textDragValues = null; held = click = false; Sdl.SDL_CaptureMouse(false); return e.Type is not (0x100 or Sdl.WindowCloseRequested); }
-            if (e.Type == 0x400) { mouseX = e.X; mouseY = e.Y; UpdateTextDrag(new(e.X, e.Y)); return true; }
+            {
+                textDrag = null;
+                textDragValues = null;
+                held = click = false;
+                Sdl.SDL_CaptureMouse(false);
+                return e.Type is not (0x100 or Sdl.WindowCloseRequested);
+            }
+            if (e.Type == 0x400)
+            {
+                mouseX = e.X;
+                mouseY = e.Y;
+                UpdateTextDrag(new(e.X, e.Y));
+                return true;
+            }
             if (e.Type == 0x402 && e.Button == 1)
             {
-                UpdateTextDrag(new(e.X, e.Y)); var values = textDragValues; textDrag = null; textDragValues = null;
+                UpdateTextDrag(new(e.X, e.Y));
+                var values = textDragValues;
+                textDrag = null;
+                textDragValues = null;
                 if (editor == drag.Owner && editor.Revision == drag.Revision && Vector2.Distance(drag.Pointer, new(e.X, e.Y)) > 2 && values != null)
-                    TextAction(() => CommitTextValues(values.ToDictionary(x => { Core.CustomText.TryMod(x.Key, out var kind, out _); return kind; }, x => x.Value)));
-                held = click = false; Sdl.SDL_CaptureMouse(false); return true;
+                    TextAction(() => CommitTextValues(values.ToDictionary(x =>
+{
+    Core.CustomText.TryMod(x.Key, out var kind, out _);
+    return kind;
+}, x => x.Value)));
+                held = click = false;
+                Sdl.SDL_CaptureMouse(false);
+                return true;
             }
             return e.Type is >= 0x300 and <= 0x403;
         }
         if (!editorMode || !textCanvas || UiOverlayVisible || Busy || !previewFrame.Contains(mouseX, mouseY)) return false;
         if (e.Type == 0x403 && (Sdl.SDL_GetModState() & 0x0CC0) != 0)
-        { textZoom = Math.Clamp(textZoom * MathF.Pow(1.15f, e.WheelY), .25f, 8); return true; }
+        {
+            textZoom = Math.Clamp(textZoom * MathF.Pow(1.15f, e.WheelY), .25f, 8);
+            return true;
+        }
         if (e.Type == 0x300 && e.Scan is >= 79 and <= 82 && !transport.Playing && selectedTextId != null)
         {
-            EnsureTexts(); if (textSampler == null) return true;
+            EnsureTexts();
+            if (textSampler == null) return true;
             double step = (e.Modifiers & 3) != 0 ? 10 : 1;
             string kind = e.Scan is 79 or 80 ? "textX" : "textY";
             double value = textSampler.Get(kind, selectedTextId, textAt) + (e.Scan is 80 or 82 ? -step : step);
-            TextAction(() => CommitTextValues(new Dictionary<string, double> { [kind] = value })); return true;
+            TextAction(() => CommitTextValues(new Dictionary<string, double> { [kind] = value }));
+            return true;
         }
         return false;
     }

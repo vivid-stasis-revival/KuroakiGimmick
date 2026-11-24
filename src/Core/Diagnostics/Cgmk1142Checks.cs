@@ -1,10 +1,12 @@
+// 用内置合成谱面核对 CGMK 换肤与相关编辑行为。
+
 using System.Text.Json.Nodes;
 using KuroakiGimmick.Core.Editing;
 using KuroakiGimmick.Core.Windows;
 
 namespace KuroakiGimmick.Core;
 
-/// <summary>Synthetic CGMK 1.14.2 programs and skin-change authoring round trips.</summary>
+/// <summary>用合成 CGMK 1.14.2 程序验证换肤的创作与往返保存。</summary>
 internal static class Cgmk1142Checks
 {
     internal static void Run()
@@ -31,7 +33,8 @@ internal static class Cgmk1142Checks
             {
                 File.WriteAllText(scriptPath, source);
                 var chart = new Chart { ObjectName = "obj_custom_gimmick" };
-                chart.PerFrame.Add(new(0, 1, "test")); chart.PerFrame.Add(new(2, 3, "test"));
+                chart.PerFrame.Add(new(0, 1, "test"));
+                chart.PerFrame.Add(new(2, 3, "test"));
                 return (new Timeline(chart, project, 3), chart);
             }
             var structures = RunScript("""
@@ -144,6 +147,9 @@ internal static class Cgmk1142Checks
             Check(new Timeline(sides, project, 1).Callbacks.Any(c => c.Name == "sides"), "1.14.2 retains sides callback after duplicate registration removal");
             Console.WriteLine("PASS CGMK 1.14.2: " + checks + " checks");
         }
-        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
     }
 }

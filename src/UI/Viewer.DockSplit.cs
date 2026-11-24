@@ -1,3 +1,5 @@
+// 拖动工作区分隔条时更新面板尺寸并绘制分隔线。
+
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Graphics;
 using KuroakiGimmick.Native;
@@ -18,7 +20,10 @@ public sealed partial class Viewer
         if (dockSplitDrag is { } dragging)
         {
             if (e.Type == 0x300 && e.Scan == 41 || e.Type == 0x20F)
-            { EndDockSplit(true); return true; }
+            {
+                EndDockSplit(true);
+                return true;
+            }
             if (window.Id != dockSplitWindow?.Id) return false;
             if (e.Type == 0x400)
             {
@@ -30,7 +35,11 @@ public sealed partial class Viewer
                 held = click = false;
                 return true;
             }
-            if (e.Type == 0x402 && e.Button == 1) { EndDockSplit(false); return true; }
+            if (e.Type == 0x402 && e.Button == 1)
+            {
+                EndDockSplit(false);
+                return true;
+            }
             return e.Type is >= 0x300 and <= 0x403;
         }
         if (e.Type != 0x401 || e.Button != 1 || UiOverlayVisible || Busy ||
@@ -40,14 +49,21 @@ public sealed partial class Viewer
         Rect area = window.Main
             ? new(24, 91, viewport.Width - 48, viewport.Height - (editorMode ? 152 : 159))
             : new(0, 0, viewport.Width, viewport.Height);
-        var panels = new List<DockPanelRect>(); var splitters = new List<DockSplitterRect>();
+        var panels = new List<DockPanelRect>();
+        var splitters = new List<DockSplitterRect>();
         layout.Solve(RootFor(window), area, panels, splitters);
         foreach (var splitter in splitters)
         {
             if (!splitter.Rect.Contains(e.X, e.Y)) continue;
             if (e.Clicks >= 2)
-            { layout.Resize(splitter.Split, .5f); SaveSettings(); held = click = false; return true; }
-            dockSplitDrag = splitter; dockSplitWindow = window;
+            {
+                layout.Resize(splitter.Split, .5f);
+                SaveSettings();
+                held = click = false;
+                return true;
+            }
+            dockSplitDrag = splitter;
+            dockSplitWindow = window;
             dockSplitLayout = layout;
             dockSplitStartRatio = splitter.Split.Ratio;
             dockSplitCaptured = Sdl.SDL_CaptureMouse(true);
@@ -61,7 +77,9 @@ public sealed partial class Viewer
     {
         if (dockSplitDrag is { } dragging && cancel)
             dockSplitLayout?.Resize(dragging.Split, dockSplitStartRatio);
-        dockSplitDrag = null; dockSplitWindow = null; dockSplitLayout = null;
+        dockSplitDrag = null;
+        dockSplitWindow = null;
+        dockSplitLayout = null;
         if (dockSplitCaptured) Sdl.SDL_CaptureMouse(false);
         dockSplitCaptured = false;
         held = click = false;
@@ -77,7 +95,7 @@ public sealed partial class Viewer
                 dockSplitDrag is { } drag && ReferenceEquals(drag.Split, splitter.Split);
             var r = splitter.Rect;
             Canvas.Fill(r, Theme.PanelAlt);
-            // Keep a generous input target without drawing a thick accent frame.
+            // 扩大分隔条的命中范围，同时保持视觉边框纤细。
             Rect rule = splitter.Split.Axis == DockAxis.Horizontal
                 ? new(r.X + r.W / 2, r.Y, 1, r.H)
                 : new(r.X, r.Y + r.H / 2, r.W, 1);

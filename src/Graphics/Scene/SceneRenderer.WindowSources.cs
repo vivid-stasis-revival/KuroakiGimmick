@@ -1,3 +1,5 @@
+// 捕获窗口动作所引用的场景画面。
+
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Core.Windows;
 namespace KuroakiGimmick.Graphics;
@@ -27,15 +29,23 @@ public sealed partial class SceneRenderer
     /// 主源取最终合成结果，普通 proxy 绑定沿用既有轨道目标与 shader。
     /// 未登记的 GameMaker surface id 直接返回 false，不拿主源顶替。
     /// </summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <param name="pose">窗口当前的来源与裁剪姿态。</param>
+    /// <param name="rect">目标绘制矩形。</param>
+    /// <returns>已取得并绘制该窗口来源时为 true。</returns>
     public bool DrawWindowSource(Session session, double time, WindowPose pose, Rect rect)
     {
         if (pose.Proxy < 0)
         {
             if (pose.Source != 0) return false;
-            canvas.Quad(Final.Texture, rect, Color.White); return true;
+            canvas.Quad(Final.Texture, rect, Color.White);
+            return true;
         }
         int p = pose.Proxy;
-        canvas.Flush(); proxyShader.Float("Time", session.Timeline.Bpm.Beat(time)); proxyShader.Vec2("Texel", 1.0 / 320, 1.0 / 180);
+        canvas.Flush();
+        proxyShader.Float("Time", session.Timeline.Bpm.Beat(time));
+        proxyShader.Vec2("Texel", 1.0 / 320, 1.0 / 180);
         foreach (var (uniform, mod) in new (string, string)[]
         {
             ("xspd", "shxs"), ("xperiod", "shxp"), ("xamp", "shxa"), ("yspd", "shys"), ("yperiod", "shyp"), ("yamp", "shya"),
@@ -44,6 +54,8 @@ public sealed partial class SceneRenderer
         var uv = new Rect((float)(pose.CropX / 320), (float)(pose.CropY / 180), (float)(pose.CropW / 320), (float)(pose.CropH / 180));
         if (pose.FlipX) uv = new(uv.X + uv.W, uv.Y, -uv.W, uv.H);
         if (pose.FlipY) uv = new(uv.X, uv.Y + uv.H, uv.W, -uv.H);
-        canvas.Quad(windowField?.Texture ?? field.Texture, rect, Color.White.Alpha(pose.Alpha), uv, shader: proxyShader); canvas.Flush(); return true;
+        canvas.Quad(windowField?.Texture ?? field.Texture, rect, Color.White.Alpha(pose.Alpha), uv, shader: proxyShader);
+        canvas.Flush();
+        return true;
     }
 }

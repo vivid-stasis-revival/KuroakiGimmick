@@ -1,9 +1,6 @@
 namespace KuroakiGimmick.Core;
 
-/// <summary>
-/// User-wide engine settings, independent from each song's .sgv.json project.
-/// Environment variables remain authoritative for benchmark/CI modes.
-/// </summary>
+/// <summary>设备级引擎选择独立于歌曲工程；基准测试和 CI 可通过环境变量覆盖偏好。</summary>
 internal static class OptimizationEngineSettings
 {
     static readonly object Gate = new();

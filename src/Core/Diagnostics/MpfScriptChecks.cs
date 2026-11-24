@@ -1,6 +1,8 @@
+// 验证 MPF 预览的离线求值及其与时间轴的衔接。
+
 namespace KuroakiGimmick.Core;
 
-/// <summary>MPF 1.14 regression checks; synthetic fixtures, no private charts or GPU.</summary>
+/// <summary>使用合成谱面验证 MPF 1.14，无需私有谱面或 GPU。</summary>
 internal static class MpfScriptChecks
 {
     internal static int Run()
@@ -76,9 +78,7 @@ internal static class MpfScriptChecks
             Check(loopChart.Diagnostics.Any(d => d.Error && d.Message.Contains("MaxLoopReached", StringComparison.Ordinal)),
                 "infinite loop bound");
 
-            // FakeAC-style Init reads are legal SAFE MPF functions. Offline preview
-            // has no player/replay input, so those counters are zero with a notice
-            // instead of killing the script and hiding all image tweens.
+            // FakeAC 式 Init 读取属于合法的 MPF 函数。离线预览无玩家或回放输入，返回零并给出提示，后续图片缓动仍需执行。
             string fakeFile = Path.Combine(dir, "cmpf", "ENCORE.testaaa.vsmpf");
             File.WriteAllText(fakeFile, """
                 ::Init::

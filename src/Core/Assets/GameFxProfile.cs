@@ -1,3 +1,5 @@
+// 发现房间预设和原版效果来源，检查图层、参数和采样纹理。
+
 using System.Text.Json;
 using StbImageSharp;
 
@@ -12,16 +14,28 @@ public sealed class GameFxProfile
     /// <summary>房间 FX 的一层。Filter 是原版滤镜名，必须与 Name 配对；Depth 大的先合成，Visible 为 false 时仍求值但不绘制。</summary>
     public sealed class Layer
     {
+        /// <summary>房间效果层的名称。</summary>
         public string Name { get; set; } = "";
+        /// <summary>应用于该层的滤镜类型键。</summary>
         public string Filter { get; set; } = "";
+        /// <summary>该层参与场景排序的深度。</summary>
         public int Depth { get; set; }
+        /// <summary>来源房间中图层的可见状态。</summary>
         public bool Visible { get; set; } = true;
+        /// <summary>该层效果是否启用。</summary>
         public bool Enabled { get; set; } = true;
+        /// <summary>按参数名保存的 JSON 滤镜配置。</summary>
         public Dictionary<string, JsonElement> Parameters { get; set; } = [];
+        /// <summary>可选的滤镜采样纹理路径。</summary>
         public string? TexturePath { get; set; }
+        /// <summary>可覆盖可见状态的轨道名。</summary>
         public string? VisibilityMod { get; set; }
+        /// <summary>使滤镜参数随时间轴采样的轨道绑定。</summary>
         public Dictionary<string, string> ParameterMods { get; set; } = [];
         /// <summary>取标量参数；缺失或非有限值直接抛错，不替换成 0，避免把错配置渲染成看似正常的画面。</summary>
+        /// <param name="name">滤镜参数名。</param>
+        /// <returns>该参数的数值。</returns>
+        /// <exception cref="InvalidDataException">参数缺失或数值非有限。</exception>
         public double Number(string name)
         {
             if (!Parameters.TryGetValue(name, out var p) || p.ValueKind != JsonValueKind.Number || !p.TryGetDouble(out double v)
@@ -31,6 +45,11 @@ public sealed class GameFxProfile
             }
             return v;
         }
+        /// <summary>读取指定长度的数值数组，参数缺失或维度不符时抛出异常。</summary>
+        /// <param name="name">滤镜参数名。</param>
+        /// <param name="length">期望的向量分量数。</param>
+        /// <returns>含指定数量分量的数组。</returns>
+        /// <exception cref="InvalidDataException">参数缺失、数组长度不符或分量非有限。</exception>
         public double[] Vector(string name, int length)
         {
             if (!Parameters.TryGetValue(name, out var p) || p.ValueKind != JsonValueKind.Array || p.GetArrayLength() != length)
@@ -46,20 +65,36 @@ public sealed class GameFxProfile
         }
     }
 
+    /// <summary>当前选用的效果配置文件路径。</summary>
     public string? Path { get; private set; }
+    /// <summary>生效的 GameMaker 房间名。</summary>
     public string? Room { get; private set; }
+    /// <summary>标识效果配置来源的说明。</summary>
     public string Source { get; private set; } = "none";
+    /// <summary>自动选择房间时是否使用了回退配置。</summary>
     public bool AutoFallback { get; private set; }
+    /// <summary>查找房间预设时得到的关联信息。</summary>
     public string? RoomAssociation { get; private set; }
+    /// <summary>支持的房间预设键。</summary>
     public static readonly string[] Presets = ["auto", "gameplay", "plaudite", "angelstar", "scarletdeath", "extendnova", "sekaisen",
         "starcrashers", "lastwish", "none"];
+    /// <summary>将 scene_gameplay 系列名称转换为配置使用的短键。</summary>
+    /// <param name="name">房间名或预设名。</param>
+    /// <returns>规范化的预设键。</returns>
     public static string NormalizePreset(string name) => name.StartsWith("scene_gameplay_",
         StringComparison.Ordinal) ? name[15..] : name == "scene_gameplay" ? "gameplay" : name;
+    /// <summary>配置中已加载的效果层。</summary>
     public List<Layer> Layers { get; } = [];
+    /// <summary>OldFilm 滤镜使用的完整 uniform 名称集合。</summary>
     public static readonly string[] FilmParameters = "FlickerIntensity FlickerSpeed JitterIntensity Saturation SpeckIntensity BarScale BarSpeed BarFrequency RingScale RingSharpness RingIntensity"
         .Split(' ').Select(n => "g_OldFilm" + n).ToArray();
+    /// <summary>动态效果定义的来源位置。</summary>
     public string? DynamicDefinitions { get; private set; }
+    /// <summary>按名称返回首个匹配图层，缺失时为 null。</summary>
+    /// <param name="name">效果层名。</param>
+    /// <returns>匹配的首层，未找到时为 null。</returns>
     public Layer? Find(string name) => Layers.FirstOrDefault(l => l.Name == name);
+    /// <summary>从演出控制到效果层的名称映射。</summary>
     public static readonly Dictionary<string, string> ModLayers = new()
     {
         ["fx_film"] = "FX_film",
@@ -73,6 +108,11 @@ public sealed class GameFxProfile
     /// preset 为 auto 时才查房间关联；读取失败按文件/图层记入诊断并跳过该层，不替换成别的滤镜。
     /// 返回的 Layers 已按 Depth 从大到小排序，决定与对象 pass 的合成顺序。
     /// </summary>
+    /// <param name="project">当前工程的路径与呈现配置。</param>
+    /// <param name="chart">提供音符、演出事件及诊断的谱面。</param>
+    /// <param name="native">已解析的原版对象资源配置。</param>
+    /// <returns>当前工程生效的房间效果及其来源信息。</returns>
+    /// <exception cref="InvalidDataException">工程指定了不受支持的房间预设。</exception>
     public static GameFxProfile Load(ViewerProject project, Chart chart, NativeGimmickProfile? native = null)
     {
         var result = new GameFxProfile();
@@ -113,7 +153,7 @@ public sealed class GameFxProfile
                     {
                         using var song = JsonDocument.Parse(File.ReadAllText(info));
                         var j = song.RootElement;
-                        string? name = j.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String? n.GetString() : null;
+                        string? name = j.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() : null;
                         if (SongFiles.Difficulty(project.Chart ?? project.Gimmick ?? "").Equals("ENCORE", StringComparison.OrdinalIgnoreCase)
                             && j.TryGetProperty("enc_data", out var enc) && enc.ValueKind == JsonValueKind.Object && enc.TryGetProperty("name",
                             out n) && n.ValueKind == JsonValueKind.String)
@@ -326,9 +366,14 @@ public sealed class GameFxProfile
                     if (layer.Number("g_ZoomBlurFocusRadius") <= 0)
                         throw new InvalidDataException("Zoom focus radius must be positive.");
                     string sampler = layer.Parameters["g_ZoomBlurTexture"].GetString() ?? throw new InvalidDataException("Missing zoom texture.");
-                    try { layer.TexturePath = ResourceFiles.ContainedFile(System.IO.Path.GetDirectoryName(origin)!, sampler); }
-                    catch(FileNotFoundException)
-                    { layer.TexturePath = ResourceFiles.ContainedFile(System.IO.Path.Combine(Paths.Assets, "GameFX"), sampler + ".png"); }
+                    try
+                    {
+                        layer.TexturePath = ResourceFiles.ContainedFile(System.IO.Path.GetDirectoryName(origin)!, sampler);
+                    }
+                    catch (FileNotFoundException)
+                    {
+                        layer.TexturePath = ResourceFiles.ContainedFile(System.IO.Path.Combine(Paths.Assets, "GameFX"), sampler + ".png");
+                    }
                     new ImageResourceBudget().Check(layer.TexturePath);
                 }
                 else if (layer.Filter == "_filter_colour_balance")
@@ -408,7 +453,7 @@ public sealed class GameFxProfile
                     }
                     foreach (var value in strings.RootElement.EnumerateArray())
                     {
-                        string? raw = value.ValueKind == JsonValueKind.String? value.GetString() : null;
+                        string? raw = value.ValueKind == JsonValueKind.String ? value.GetString() : null;
                         if (raw == null || !raw.TrimStart().StartsWith('{'))
                         {
                             continue;
@@ -428,7 +473,7 @@ public sealed class GameFxProfile
                                 parameters.Add(key, v.Clone());
                             }
                         }
-                        // CGMK 1.14.1: LBG is behind glow only when JACKET_GLOW is enabled.
+                        // CGMK 1.14.1 仅在 JACKET_GLOW 开启时将 LBG 放在辉光后方。
                         // 保留内嵌定义里的真实默认值；谱面的 scale/amount 在绘制时才覆盖。
                         var entry = AppJson.SerializeToElement(new Layer
                         {
@@ -471,7 +516,7 @@ public sealed class GameFxProfile
             || e.Name is "fx_hue_hue" or "fx_hue_saturation" && result.Find("FX_hue") == null) && e.To != ModCatalog.Default(e.Name, e.Proxy)))
         {
             chart.Diagnostics.Add(new("fx", 0, result.Source == "none"
-                || result.AutoFallback? "No verified red/hue layer for this custom object. Preview uses source colourise/hue formulas with fallback ordering; select the actual room to determine these layers." : "Selected room has no red/hue layer. The missing layer is not rendered; choose a different room only if it matches the game."));
+                || result.AutoFallback ? "No verified red/hue layer for this custom object. Preview uses source colourise/hue formulas with fallback ordering; select the actual room to determine these layers." : "Selected room has no red/hue layer. The missing layer is not rendered; choose a different room only if it matches the game."));
         }
         if (result.Find("FX_chroma") is { Visible: false } && chart.Mods.Any(e => e.Name == "fx_chroma_distort" && e.To != 0))
         {

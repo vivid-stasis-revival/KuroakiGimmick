@@ -1,8 +1,13 @@
+// 在源行上展开或合并循环事件。
+
 namespace KuroakiGimmick.Core.Editing;
 
 public sealed partial class VsmDocument
 {
-    /// <summary>Expand in place, retaining source order, untouched tokens and the original comment once.</summary>
+    /// <summary>在原位置展开循环，保留来源顺序、未编辑的词元及一份原始注释。</summary>
+    /// <param name="selection">选中的事件 ID。</param>
+    /// <returns>展开后可供选择的事件 ID。</returns>
+    /// <exception cref="FormatException">选中事件已失效、没有循环可拆分或展开数量超限。</exception>
     public Guid[] SplitLoops(IEnumerable<Guid> selection)
     {
         var ids = selection.ToHashSet();
@@ -15,14 +20,26 @@ public sealed partial class VsmDocument
         var result = new List<Guid>();
         foreach (var line in Lines)
         {
-            if (line.Event is not { } clip || !ids.Contains(clip.Id)) { lines.Add(line); continue; }
-            if (clip.RepeatEnd == null) { lines.Add(line); result.Add(clip.Id); continue; }
+            if (line.Event is not { } clip || !ids.Contains(clip.Id))
+            {
+                lines.Add(line);
+                continue;
+            }
+            if (clip.RepeatEnd == null)
+            {
+                lines.Add(line);
+                result.Add(clip.Id);
+                continue;
+            }
             for (int i = 0; i < clip.RepeatCount; i++)
             {
                 var single = clip with
                 {
-                    Id = i == 0 ? clip.Id : Guid.NewGuid(), Beat = clip.Beat + i * clip.RepeatStep,
-                    RepeatEnd = null, RepeatStep = 1, ParenthesizedRepeat = false
+                    Id = i == 0 ? clip.Id : Guid.NewGuid(),
+                    Beat = clip.Beat + i * clip.RepeatStep,
+                    RepeatEnd = null,
+                    RepeatStep = 1,
+                    ParenthesizedRepeat = false
                 };
                 var source = i == 0 ? line : line with { Text = Body(line.Text).TrimEnd() };
                 var rewritten = RewriteLine(source, single);
@@ -34,10 +51,10 @@ public sealed partial class VsmDocument
         return result.ToArray();
     }
 
-    /// <summary>
-    /// Merge an uninterrupted source block with identical payload and evenly spaced occurrences.
-    /// Do not cross other events: even another track can read dynamic values or fire callbacks.
-    /// </summary>
+    /// <summary>将内容相同且等间距的连续源行合并。其他轨道也可能读取动态值或触发回调，因此不能跨过事件合并。</summary>
+    /// <param name="selection">选中的事件 ID。</param>
+    /// <returns>合并得到的循环事件 ID。</returns>
+    /// <exception cref="FormatException">事件数量、间隔、顺序或属性不符合连续循环的合并条件。</exception>
     public Guid MergeLoop(IEnumerable<Guid> selection)
     {
         var ids = selection.ToHashSet();
@@ -74,9 +91,17 @@ public sealed partial class VsmDocument
         var result = new List<Line>(Lines.Count);
         foreach (var line in Lines)
         {
-            if (line.Event is not { } c || !ids.Contains(c.Id)) { result.Add(line); continue; }
-            if (c.Id == first.Id) { result.Add(RewriteLine(line, merged)); continue; }
-            // Keep comments from removed rows as standalone source comments.
+            if (line.Event is not { } c || !ids.Contains(c.Id))
+            {
+                result.Add(line);
+                continue;
+            }
+            if (c.Id == first.Id)
+            {
+                result.Add(RewriteLine(line, merged));
+                continue;
+            }
+            // 被合并行中的注释保留为独立源行。
             string body = Body(line.Text), comment = line.Text[body.Length..];
             if (comment.Length > 0) result.Add(new(comment, line.Ending, null));
         }

@@ -1,3 +1,5 @@
+// 通过 SDL_RunApp 启动 iOS 预览，并协调 UIKit 文件选择与 SDL 帧回调。
+
 using System.Runtime.InteropServices;
 using Foundation;
 using UIKit;
@@ -21,6 +23,7 @@ internal static class IosEntry
     static KuroakiGimmick.UI.Viewer? viewer;
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     delegate void FrameCallback(nint userdata);
+    // LIFETIME: 静态字段保持委托可达，使 SDL 在后续帧调用时能继续使用回调入口。
     static readonly FrameCallback frame = Frame;
     [DllImport("__Internal", CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
@@ -47,14 +50,20 @@ internal static class IosEntry
                 bool finished = false;
                 string[] selected = [];
                 importingAssets = true;
-                Pick(false, null, false, values => { selected = values; Volatile.Write(ref finished, true); });
-                // SDL_RunApp is on UIKit's main thread. Keep the scene and picker responsive
-                // before the editor's frame callback has been installed.
+                Pick(false, null, false, values =>
+{
+    selected = values;
+    Volatile.Write(ref finished, true);
+});
+                // THREADING: 编辑器帧回调尚未安装，主线程在等待选择结果期间继续处理 UIKit 事件。
                 while (!Volatile.Read(ref finished))
                     NSRunLoop.Current.RunUntil(NSDate.FromTimeIntervalSinceNow(0.02));
                 importingAssets = false;
                 if (selected.Length == 0) return 0;
-                try { installed = MobileAssetPack.Install(selected[0], root); }
+                try
+                {
+                    installed = MobileAssetPack.Install(selected[0], root);
+                }
                 catch (Exception ex)
                 {
                     Console.Error.WriteLine(ex);
@@ -76,7 +85,8 @@ internal static class IosEntry
 
     static void StartFrames(Host h, KuroakiGimmick.UI.Viewer v)
     {
-        host = h; viewer = v;
+        host = h;
+        viewer = v;
         MobilePlatform.WatchLifecycle(v.PauseMobile);
         SDL_SetiOSEventPump(false);
         Sdl.Require(SDL_SetiOSAnimationCallback(h.Window, 1, frame, 0));
@@ -84,12 +94,20 @@ internal static class IosEntry
     [ObjCRuntime.MonoPInvokeCallback(typeof(FrameCallback))]
     static void Frame(nint userdata)
     {
-        try { if (viewer?.MobileFrame() != false) return; }
-        catch (Exception ex) { Console.Error.WriteLine(ex); }
+        try
+        {
+            if (viewer?.MobileFrame() != false) return;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(ex);
+        }
         if (host != null) SDL_SetiOSAnimationCallback(host.Window, 1, null, 0);
         MobilePlatform.StopWatchingLifecycle();
-        viewer?.Dispose(); host?.Dispose();
-        viewer = null; host = null;
+        viewer?.Dispose();
+        host?.Dispose();
+        viewer = null;
+        host = null;
     }
     static UIViewController DialogPresenter()
     {
@@ -115,9 +133,13 @@ internal static class IosEntry
     }
     static void CloseDialogWindow()
     {
-        // All callers run on UIKit's main thread; close before invoking a completion
-        // that may immediately create another picker (startup retry).
-        if (dialogWindow != null) { dialogWindow.Hidden = true; dialogWindow.Dispose(); dialogWindow = null; }
+        // THREADING: 在 UIKit 主线程先关闭当前对话框，再调用完成回调；启动重试可能立即打开另一个选择器。
+        if (dialogWindow != null)
+        {
+            dialogWindow.Hidden = true;
+            dialogWindow.Dispose();
+            dialogWindow = null;
+        }
         nint pointer = host == null ? 0 : Sdl.SDL_GetPointerProperty(Sdl.SDL_GetWindowProperties(host.Window), "SDL.window.uikit.window", 0);
         if (pointer != 0) ObjCRuntime.Runtime.GetNSObject<UIWindow>(pointer)?.MakeKeyAndVisible();
     }
@@ -130,13 +152,33 @@ internal static class IosEntry
             if (save)
             {
                 var alert = UIAlertController.Create("Save to Exports", "Files are available in Files → On My iPhone/iPad → Kuroaki/Gimmick → Exports.", UIAlertControllerStyle.Alert);
-                alert.AddTextField(field => { nameInput = field; field.Text = Path.GetFileName(suggested ?? "project.sgv.json"); });
-                alert.AddAction(UIAlertAction.Create("Cancel", UIAlertActionStyle.Cancel, _ => { nameInput = null; CloseDialogWindow(); completion([]); }));
+                alert.AddTextField(field =>
+{
+    nameInput = field;
+    field.Text = Path.GetFileName(suggested ?? "project.sgv.json");
+});
+                alert.AddAction(UIAlertAction.Create("Cancel", UIAlertActionStyle.Cancel, _ =>
+{
+    nameInput = null;
+    CloseDialogWindow();
+    completion([]);
+}));
                 alert.AddAction(UIAlertAction.Create("Save", UIAlertActionStyle.Default, _ =>
                 {
-                    try { completion([MobilePlatform.SavePath(suggested, nameInput?.Text ?? "")]); }
-                    catch (Exception ex) { Console.Error.WriteLine(ex); completion([]); }
-                    finally { nameInput = null; CloseDialogWindow(); }
+                    try
+                    {
+                        completion([MobilePlatform.SavePath(suggested, nameInput?.Text ?? "")]);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine(ex);
+                        completion([]);
+                    }
+                    finally
+                    {
+                        nameInput = null;
+                        CloseDialogWindow();
+                    }
                 }));
                 presenter.BeginInvokeOnMainThread(() => presenter.PresentViewController(alert, true, null));
                 return;
@@ -148,7 +190,7 @@ internal static class IosEntry
                 AllowsMultipleSelection = !folder && !assets,
                 ModalPresentationStyle = UIModalPresentationStyle.FullScreen
             };
-            documentPicker = picker; // Keep the managed event bridge alive until dismissal.
+            documentPicker = picker; // LIFETIME: 保持托管事件桥可达，直到选择器关闭。
             int completed = 0;
             void Finish(string[] values, string? error = null)
             {
@@ -212,7 +254,10 @@ internal static class IosEntry
                     if (string.IsNullOrEmpty(name) || name is "." or "..") throw new IOException("Invalid document name.");
                     string target = Path.Combine(batch, name);
                     if (File.Exists(target) || Directory.Exists(target)) throw new IOException("Duplicate document name: " + name);
-                    try { CopyLocal(source, target); }
+                    try
+                    {
+                        CopyLocal(source, target);
+                    }
                     catch
                     {
                         if (Directory.Exists(target)) Directory.Delete(target, true);
@@ -221,13 +266,19 @@ internal static class IosEntry
                     }
                     result = target;
                 }
-                catch (Exception ex) { failure = ex; }
+                catch (Exception ex)
+                {
+                    failure = ex;
+                }
             });
             if (failure != null) throw failure;
             if (error != null) throw new IOException(error.LocalizedDescription);
             return result ?? throw new IOException("Cannot read the selected document.");
         }
-        finally { if (scoped) url.StopAccessingSecurityScopedResource(); }
+        finally
+        {
+            if (scoped) url.StopAccessingSecurityScopedResource();
+        }
     }
     static void CopyLocal(string source, string target)
     {

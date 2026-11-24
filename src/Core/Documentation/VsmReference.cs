@@ -1,3 +1,5 @@
+// 加载 VSM 指令参考索引，供帮助界面按条目查询。
+
 using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -14,7 +16,9 @@ internal sealed class VsmReference
     internal sealed class SourceDocument
     {
         // 以下几个类型都是 System.Text.Json 的反序列化目标：无参构造 + init-only 属性，实例一经生成即视为只读。
-        public SourceDocument() { }
+        public SourceDocument()
+        {
+        }
         public string File { get; init; } = "";
         public string Sha256 { get; init; } = "";
         public int LineCount { get; init; }
@@ -24,10 +28,12 @@ internal sealed class VsmReference
     /// <summary>文档正文的一个排版块（段落、代码、表格）。Kind 决定该看哪几个字段，其余字段为空。</summary>
     internal sealed class Block
     {
-        public Block() { }
+        public Block()
+        {
+        }
         public string Kind { get; init; } = "paragraph";
         public string Text { get; init; } = "";
-        // Optional in the JSON index; source-generated deserialization may supply null when omitted.
+        // JSON 索引中该字段可省略，源生成反序列化后可能为 null。
         public string? Language { get; init; }
         public string[] Columns { get; init; } = [];
         public string[][] Rows { get; init; } = [];
@@ -40,7 +46,9 @@ internal sealed class VsmReference
     /// </summary>
     internal sealed class Entry
     {
-        public Entry() { }
+        public Entry()
+        {
+        }
         public string Id { get; init; } = "";
         public string Kind { get; init; } = "";
         public string Name { get; init; } = "";
@@ -65,7 +73,9 @@ internal sealed class VsmReference
     /// <summary>反序列化出来的整份文档数据；SchemaVersion 与 Revision 用于确认这份资源与当前程序版本配套。</summary>
     internal sealed class Data
     {
-        public Data() { }
+        public Data()
+        {
+        }
         public int SchemaVersion { get; init; }
         public string Revision { get; init; } = "";
         public SourceDocument[] Sources { get; init; } = [];

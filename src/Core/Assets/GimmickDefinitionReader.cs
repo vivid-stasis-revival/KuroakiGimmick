@@ -13,6 +13,11 @@ public static class GimmickDefinitionReader
     /// migrations 记录已完成迁移的旧字段；fail 按组件上报无法迁移的旧函数，其余定义继续加载。
     /// 结构本身非法（perFrameFunctions 不是数组、超过 32 项、名字为空）仍直接抛出，不降级成部分可用。
     /// </summary>
+    /// <param name="json">对象定义的 JSON 文本。</param>
+    /// <param name="migrations">接收格式迁移说明的集合。</param>
+    /// <param name="fail">记录无效组件及原因的回调。</param>
+    /// <returns>解析后的对象定义。</returns>
+    /// <exception cref="InvalidDataException">定义为空、旧格式字段无法迁移或定义结构不合法。</exception>
     public static GimmickDefinition Read(string json, List<string>? migrations = null, Action<string, string>? fail = null)
     {
         var definition = AppJson.Deserialize<GimmickDefinition>(json,

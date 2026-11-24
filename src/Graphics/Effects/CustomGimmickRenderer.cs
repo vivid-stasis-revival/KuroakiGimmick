@@ -1,3 +1,5 @@
+// 为自定义演出加载精灵并绘制星体、侧条和 DF 等效果。
+
 using KuroakiGimmick.Core;
 
 namespace KuroakiGimmick.Graphics;
@@ -8,12 +10,13 @@ public sealed partial class CustomGimmickRenderer : IDisposable
     readonly Canvas canvas;
     readonly Dictionary<string, Texture> textures = [];
     readonly HashSet<string> failed = [];
+    /// <summary>为自定义对象建立使用指定画布的精灵渲染器。</summary>
+    /// <param name="canvas">提交绘制命令的画布。</param>
     public CustomGimmickRenderer(Canvas canvas) => this.canvas = canvas;
     /// <summary>按精灵名取纹理；路径必须落在 CustomGimmicks 目录内且通过预算检查，分配前先 Flush。失败写入诊断并记名，后续直接返回 null。</summary>
     Texture? Image(Session session, string name)
     {
-        // Native profiles own their exported sprite requirements. Do not silently
-        // substitute a legacy CustomGimmicks image when a native resource is absent.
+        // 原版对象有各自的导出精灵要求，缺失资源时不能静默改用旧版 CustomGimmicks 图片。
         string key = name;
         string? nativeFile = null;
         bool native = session.Chart.ObjectName != "obj_custom_gimmick";
@@ -43,19 +46,30 @@ public sealed partial class CustomGimmickRenderer : IDisposable
                 }
             }
             string file = nativeFile ?? ResourceFiles.ContainedFile(root, relative);
-            new ImageResourceBudget().Check(file); canvas.Flush();
-            texture = Texture.Load(canvas.Gpu, file); textures.Add(key, texture); return texture;
+            new ImageResourceBudget().Check(file);
+            canvas.Flush();
+            texture = Texture.Load(canvas.Gpu, file);
+            textures.Add(key, texture);
+            return texture;
         }
         catch (Exception ex) when (ResourceFiles.IsResourceError(ex))
-        { failed.Add(key); session.Chart.Diagnostics.Add(new("custom-gimmick/" + name, 0, ex.Message, true)); return null; }
+        {
+            failed.Add(key);
+            session.Chart.Diagnostics.Add(new("custom-gimmick/" + name, 0, ex.Message, true));
+            return null;
+        }
     }
     static (float H, float S, float V) Hsv(uint rgb)
     {
-        var c = Color.Hex(rgb); float max = Math.Max(c.R, Math.Max(c.G, c.B)), min = Math.Min(c.R, Math.Min(c.G, c.B)), d = max - min;
+        var c = Color.Hex(rgb);
+        float max = Math.Max(c.R, Math.Max(c.G, c.B)), min = Math.Min(c.R, Math.Min(c.G, c.B)), d = max - min;
         float h = d == 0 ? 0 : max == c.R ? (c.G - c.B) / d % 6 : max == c.G ? (c.B - c.R) / d + 2 : (c.R - c.G) / d + 4;
         return ((h / 6 + 1) % 1, max == 0 ? 0 : d / max, max);
     }
     /// <summary>星星颜色按 y 在上下两端色之间插值：色相/饱和度在 HSV 空间线性插值，明度插完后再乘到 RGB 上，与原版一致。mask 通道不染色。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <param name="mask">是否绘制遮罩星体。</param>
     public void DrawStars(Session session, double time, bool mask)
     {
         foreach (var star in session.Stars.At(time, mask))
@@ -64,20 +78,25 @@ public sealed partial class CustomGimmickRenderer : IDisposable
             Color color = Color.White;
             if (!mask)
             {
-                var a = Hsv(star.Top); var b = Hsv(star.Bottom); float p = (float)(star.Y / 185);
+                var a = Hsv(star.Top);
+                var b = Hsv(star.Bottom);
+                float p = (float)(star.Y / 185);
                 float L(float x, float y) => x + (y - x) * p;
-                color = Color.Hsv(L(a.H, b.H), L(a.S, b.S)); float v = L(a.V, b.V);
+                color = Color.Hsv(L(a.H, b.H), L(a.S, b.S));
+                float v = L(a.V, b.V);
                 color = new(color.R * v, color.G * v, color.B * v);
             }
             canvas.Quad(image, new((float)star.X - 7, (float)star.Y - 7, 14, 14), color.Alpha(star.Alpha));
         }
     }
     /// <summary>雪花噪点按拍推进帧号，四块 160×90 分屏各错开一帧；cover1 对应 sp_cover4_0，这组映射照抄原版，别按名字顺序“纠正”。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void DrawCovers(Session session, double time)
     {
         if (session.Chart.ObjectName != "obj_custom_gimmick") return;
-        double flash=session.Timeline.Get("wflash",time);
-        if(flash>0)canvas.Fill(new(0,0,320,180),Color.White.Alpha(flash));
+        double flash = session.Timeline.Get("wflash", time);
+        if (flash > 0) canvas.Fill(new(0, 0, 320, 180), Color.White.Alpha(flash));
         double snow = session.Timeline.Get("static", time);
         if (snow > 0)
         {
@@ -93,31 +112,43 @@ public sealed partial class CustomGimmickRenderer : IDisposable
             if (alpha > 0 && Image(session, sprite) is { } image) canvas.Quad(image, new(0, 0, 320, 180), Color.Hex(0).Alpha(alpha));
         }
     }
-    public void Dispose() { fireworkMask?.Dispose(); fireworkCutout?.Dispose(); fireworkComposite?.Dispose(); foreach (var texture in textures.Values) texture.Dispose(); textures.Clear(); }
-
-    /// <summary>InitMisc callbacks ignore their values; the latest surviving blip draws an opaque GUI black field.</summary>
-    public void DrawEndBlip(Session session,double time)
+    /// <inheritdoc/>
+    public void Dispose()
     {
-        if(session.Chart.ObjectName!="obj_custom_gimmick")return;
-        double? birth=null;
-        foreach(var callback in session.Timeline.Callbacks)
+        fireworkMask?.Dispose();
+        fireworkCutout?.Dispose();
+        fireworkComposite?.Dispose();
+        foreach (var texture in textures.Values) texture.Dispose();
+        textures.Clear();
+    }
+
+    /// <summary>InitMisc 回调忽略传入值，由仍存活的最近一次闪烁绘制不透明的 GUI 黑色覆盖层。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    public void DrawEndBlip(Session session, double time)
+    {
+        if (session.Chart.ObjectName != "obj_custom_gimmick") return;
+        double? birth = null;
+        foreach (var callback in session.Timeline.Callbacks)
         {
-            if(callback.Time>time)break;
-            if(callback.Name=="sg_endblip")birth=callback.Time;
-            else if(callback.Name=="sg_endblip_destroy")birth=null;
+            if (callback.Time > time) break;
+            if (callback.Name == "sg_endblip") birth = callback.Time;
+            else if (callback.Name == "sg_endblip_destroy") birth = null;
         }
-        if(birth==null)return;
-        canvas.Fill(new(0,0,320,180),Color.Hex(0));
-        double scale=10*(1-Easings.Eval("outExpo",time-birth.Value));
-        if(scale>0 && Image(session,"sp_sg_endblip_0") is { } image)
-            canvas.Quad(image,new(0,(float)(90-27*scale),320,(float)(54*scale)),Color.White);
+        if (birth == null) return;
+        canvas.Fill(new(0, 0, 320, 180), Color.Hex(0));
+        double scale = 10 * (1 - Easings.Eval("outExpo", time - birth.Value));
+        if (scale > 0 && Image(session, "sp_sg_endblip_0") is { } image)
+            canvas.Quad(image, new(0, (float)(90 - 27 * scale), 320, (float)(54 * scale)), Color.White);
     }
 
     /// <summary>Lorelei 实例只画自身侧条，不产生 Apocalypse 的拖尾；xscale 的符号决定镜像。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void DrawLoreleiSides(Session session, double time)
     {
-        if(session.Chart.ObjectName!="obj_custom_gimmick"&&!session.NativeGimmick.HasBehavior("grid-sides"))return;
-        string sprite=session.NativeGimmick.Behavior("grid-sides")?.Text("sides","sp_lorelei_sidething")??"sp_lorelei_sidething";
+        if (session.Chart.ObjectName != "obj_custom_gimmick" && !session.NativeGimmick.HasBehavior("grid-sides")) return;
+        string sprite = session.NativeGimmick.Behavior("grid-sides")?.Text("sides", "sp_lorelei_sidething") ?? "sp_lorelei_sidething";
         var callbacks = session.Timeline.Callbacks;
         for (int i = SortedSearch.LowerBound(callbacks, time - LoreleiSides.Lifetime, e => e.Time);
             i < callbacks.Count && callbacks[i].Time <= time; i++)
@@ -127,7 +158,7 @@ public sealed partial class CustomGimmickRenderer : IDisposable
             foreach (var side in LoreleiSides.At(callback.Name, time - callback.Time))
             {
                 if (Image(session, sprite + "_" + side.Frame) is not { } texture) continue;
-                // These sprites are 120x180 with origin (60,90).
+                // 这些精灵尺寸为 120×180，绘制原点为 (60,90)。
                 canvas.Quad(texture, new((float)side.X - 60 * side.Direction, (float)side.Y - 90,
                     120 * side.Direction, 180), Color.White.Alpha(side.Alpha));
             }
@@ -135,10 +166,12 @@ public sealed partial class CustomGimmickRenderer : IDisposable
     }
 
     /// <summary>DF 装饰：两条侧线、白底和可裁剪的网格。网格按 df_grid_top/bottom 同时裁几何与 UV，拉伸贴图不等价。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void DrawDf(Session session, double time)
     {
-        bool firstBreath=session.NativeGimmick.Behavior("grid-sides")?.Flag("redBackground")==true;
-        bool native=session.NativeGimmick.HasBehavior("grid-sides");
+        bool firstBreath = session.NativeGimmick.Behavior("grid-sides")?.Flag("redBackground") == true;
+        bool native = session.NativeGimmick.HasBehavior("grid-sides");
         if (!native && !session.DfEnabled) return;
         double M(string name) => session.Timeline.Get(name, time);
         double lineAlpha = native ? 1 : M("df_sideline_alpha");
@@ -148,18 +181,21 @@ public sealed partial class CustomGimmickRenderer : IDisposable
             canvas.Quad(line, new(left, 0, 1, 180), Color.White.Alpha(lineAlpha));
             canvas.Quad(line, new(right, 0, 1, 180), Color.White.Alpha(lineAlpha));
         }
-        if (native && M("lr_mountain_bg") > 0 && Image(session, (session.NativeGimmick.Behavior("grid-sides")?.Text("mountain","sp_lorelei_mountain")??"sp_lorelei_mountain")+"_0") is { } mountain)
+        if (native && M("lr_mountain_bg") > 0 && Image(session, (session.NativeGimmick.Behavior("grid-sides")?.Text("mountain", "sp_lorelei_mountain") ?? "sp_lorelei_mountain") + "_0") is { } mountain)
             canvas.Quad(mountain, new(0, 0, 320, 180), Color.White.Alpha(M("lr_mountain_bg")));
         if (M("df_whitebg") > 0) canvas.Fill(new(-1, -1, 322, 182),
             (firstBreath ? Color.GameMaker(255) : Color.White).Alpha(M("df_whitebg")));
         float top = (float)Math.Clamp(M("df_grid_top"), 0, 180), bottom = (float)Math.Clamp(M("df_grid_bottom"), 0, 180);
-        if (bottom > top && M("df_grid_alpha") > 0 && Image(session, (session.NativeGimmick.Behavior("grid-sides")?.Text("grid","sp_df_grid")??"sp_df_grid")+"_0") is { } grid)
+        if (bottom > top && M("df_grid_alpha") > 0 && Image(session, (session.NativeGimmick.Behavior("grid-sides")?.Text("grid", "sp_df_grid") ?? "sp_df_grid") + "_0") is { } grid)
             canvas.Quad(grid, new(0, top, 320, bottom - top), Color.White.Alpha(M("df_grid_alpha")), new(0, top / 180, 1, (bottom - top) / 180));
-        if(native)DrawDfFlashes(session,time);
+        if (native) DrawDfFlashes(session, time);
     }
-    public void DrawDfFlashes(Session session,double time)
+    /// <summary>绘制 DF 效果的闪光覆盖层。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    public void DrawDfFlashes(Session session, double time)
     {
-        if(session.Chart.ObjectName=="obj_custom_gimmick"&&!session.DfEnabled)return;
+        if (session.Chart.ObjectName == "obj_custom_gimmick" && !session.DfEnabled) return;
         if (Image(session, "sp_df_sideline_0") is { } flashLine)
             foreach (var callback in session.Timeline.Callbacks.Where(e => e.Name == "df_sideline2" && e.Time <= time && time < e.Time + .75))
             {
@@ -175,6 +211,8 @@ public sealed partial class CustomGimmickRenderer : IDisposable
     /// 拖尾粒子每 .0067 秒出生、存活 .6 秒；时间轴给回调留 1 秒，包含侧条消失后的粒子。
     /// 位置与色相全部来自 Timeline.Hash(seed)，同一 e.Index 每次重放结果相同，不使用运行时随机数。
     /// </summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void DrawSides(Session session, double time)
     {
         bool custom = session.Chart.ObjectName == "obj_custom_gimmick";
@@ -186,13 +224,13 @@ public sealed partial class CustomGimmickRenderer : IDisposable
             double age = time - e.Time;
             string kind = custom ? e.Name switch { "apocalypse_sidething" => "apocalypse", "astellion_sidething" => "astellion", _ => "unravel" } : bindings![e.Name];
             bool apocalypse = kind == "apocalypse", astellion = kind == "astellion";
-            // Apocalypse starts opaque, decelerates at 1800 px/s² and fades at 3/s.
+            // Apocalypse 初始完全不透明，以 1800 像素/秒² 减速，每秒降低 3 个单位的透明度。
             double sideLife = apocalypse ? 1.0 / 3 : .3875;
             double Distance(double t) => 800 * t - (apocalypse ? 900 * t * t : 0);
             foreach (int dir in new[] { 1, -1 })
             {
                 double startX = dir == 1 ? 150 : 170;
-                // Astellion has no unravel trail; InitSides creates one expanding spark per side.
+                // Astellion 没有 unravel 拖尾；InitSides 在每侧各生成一个扩张的火花。
                 if (astellion && age < .25 && Image(session, "sp_ast_particle_0") is { } spark)
                 {
                     uint seed = unchecked((uint)e.Index * 47 + (dir == 1 ? 9127u : 19213u));
@@ -205,7 +243,8 @@ public sealed partial class CustomGimmickRenderer : IDisposable
                 if (!astellion && Image(session, "sp_particle_0") is { } particle)
                     for (int i = 0; i * .0067 < sideLife && i * .0067 <= age; i++)
                     {
-                        double birth = i * .0067, elapsed = age - birth; if (elapsed >= .6) continue;
+                        double birth = i * .0067, elapsed = age - birth;
+                        if (elapsed >= .6) continue;
                         uint seed = unchecked((uint)e.Index * 65537 + (uint)i * 41 + (dir == 1 ? 7301u : 9413u));
                         float x = (float)(startX - Distance(birth) * dir), y = Math.Min(160, MathF.Floor(Timeline.Hash(seed) * 141) + 20) - (float)(elapsed * 30);
                         float size = (float)((.3 + .2 * Timeline.Hash(seed + 1)) * (1 - .5 * elapsed / .6) * 32);

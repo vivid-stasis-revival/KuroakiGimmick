@@ -1,3 +1,5 @@
+// 处理停靠面板上下文菜单的绘制与输入。
+
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Graphics;
 using KuroakiGimmick.Native;
@@ -12,24 +14,34 @@ public sealed partial class Viewer
         if (dockContextPanel != null)
         {
             if (e.Type == 0x20F || e.Type == 0x300 && e.Scan == 41)
-            { dockContextPanel = null; held = click = false; return true; }
+            {
+                dockContextPanel = null;
+                held = click = false;
+                return true;
+            }
             if (e.Type is 0x400 or 0x401 or 0x402)
             {
-                mouseX = e.X; mouseY = e.Y;
+                mouseX = e.X;
+                mouseY = e.Y;
                 if (e.Type == 0x401 && e.Button == 1) click = held = true;
                 if (e.Type == 0x402 && e.Button == 1) held = false;
                 if (e.Type == 0x401 && e.Button == 3) dockContextPanel = null;
                 return true;
             }
             if (e.Type == 0x403)
-            { dockContextScroll = Math.Max(0, dockContextScroll - (int)Math.Round(e.WheelY)); return true; }
+            {
+                dockContextScroll = Math.Max(0, dockContextScroll - (int)Math.Round(e.WheelY));
+                return true;
+            }
             return e.Type is >= 0x300 and <= 0x403;
         }
         if (window.CleanPreview && e.Type == 0x401 && e.Button == 3 && !UiOverlayVisible &&
             !Busy && dockDrag == null && dockSplitDrag == null && editDrag == null && !ImageGestureActive)
         {
             dockContextPanel = "preview";
-            dockContextX = e.X; dockContextY = e.Y; dockContextScroll = 0;
+            dockContextX = e.X;
+            dockContextY = e.Y;
+            dockContextScroll = 0;
             held = click = false;
             return true;
         }
@@ -37,7 +49,9 @@ public sealed partial class Viewer
             dockDrag != null || dockSplitDrag != null || editDrag != null || ImageGestureActive ||
             !TryDockHeader(window, e.X, e.Y, out var panelId)) return false;
         dockContextPanel = panelId;
-        dockContextX = e.X; dockContextY = e.Y; dockContextScroll = 0;
+        dockContextX = e.X;
+        dockContextY = e.Y;
+        dockContextScroll = 0;
         held = click = false;
         return true;
     }
@@ -47,13 +61,18 @@ public sealed partial class Viewer
         if (dockContextPanel is not { } panelId) return;
         var layout = workspaceManager.Current;
         string? sourceRoot = layout.WindowOf(panelId);
-        if (sourceRoot == null) { dockContextPanel = null; return; }
+        if (sourceRoot == null)
+        {
+            dockContextPanel = null;
+            return;
+        }
         var actions = new List<(string Label, Action Run)>();
         actions.Add(("DETACH TO NEW WINDOW", () =>
         {
             string root = "dock-" + Guid.NewGuid().ToString("N");
             if (layout.AddWindow(root)) layout.Move(panelId, root, null, DockSide.Center);
-        }));
+        }
+        ));
         if (sourceRoot != DockLayout.MainWindow)
             actions.Add(("DOCK TO MAIN WINDOW", () => layout.ReturnToMain(panelId)));
         foreach (string other in layout.Roots.Keys.Where(id => id != sourceRoot).Order(StringComparer.Ordinal))
@@ -68,7 +87,8 @@ public sealed partial class Viewer
             {
                 activeWorkspaceWindow.ShowPreviewControls = !activeWorkspaceWindow.ShowPreviewControls;
                 ConfigureDockWindow(activeWorkspaceWindow, layout, sourceRoot);
-            }));
+            }
+            ));
         }
         actions.Add(("RESET PANEL POSITION", () => layout.ReturnToMain(panelId)));
         var definitions = editorMode ? PanelRegistry.Editor : PanelRegistry.Viewer;
@@ -79,10 +99,11 @@ public sealed partial class Viewer
         int visible = Math.Min(actions.Count, Math.Max(1, (int)((height - menuTop - 10) / rowHeight)));
         dockContextScroll = Math.Clamp(dockContextScroll, 0, Math.Max(0, actions.Count - visible));
         float x = Math.Clamp(dockContextX, 2, Math.Max(2, width - menuWidth - 2));
-        // Keep the menu out of the invisible native move/resize strip.
+        // 菜单需避开原生移动和缩放窗口使用的不可见边缘。
         float y = Math.Clamp(dockContextY, menuTop, Math.Max(menuTop, height - visible * rowHeight - 8));
         var bounds = new Rect(x, y, menuWidth, visible * rowHeight + 8);
-        Canvas.Fill(bounds, panel); Canvas.Border(bounds, soft);
+        Canvas.Fill(bounds, panel);
+        Canvas.Border(bounds, soft);
         dockContextInput = true;
         try
         {
@@ -98,7 +119,10 @@ public sealed partial class Viewer
                 break;
             }
         }
-        finally { dockContextInput = false; }
+        finally
+        {
+            dockContextInput = false;
+        }
         if (actions.Count > visible)
             Text($"{dockContextScroll + 1}–{dockContextScroll + visible} / {actions.Count}",
                 x + menuWidth - 80, y - 16, 10, soft, true);

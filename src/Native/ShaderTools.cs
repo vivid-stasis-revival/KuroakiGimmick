@@ -77,8 +77,8 @@ internal static unsafe class ShaderTools
     internal static byte[] BlobBytes(nint blob)
     {
         var table = *(nint**)blob;
-        var pointer = ((delegate* unmanaged[Stdcall]<nint, nint>) table[3])(blob);
-        var size = ((delegate* unmanaged[Stdcall]<nint, nuint>) table[4])(blob);
+        var pointer = ((delegate* unmanaged[Stdcall]<nint, nint>)table[3])(blob);
+        var size = ((delegate* unmanaged[Stdcall]<nint, nuint>)table[4])(blob);
         return new ReadOnlySpan<byte>((void*)pointer, checked((int)size)).ToArray();
     }
     /// <summary>同上的 vtable 约定：槽位 2 是 IUnknown::Release。空句柄直接跳过，不做二次释放。</summary>

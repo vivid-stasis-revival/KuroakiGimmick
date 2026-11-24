@@ -1,3 +1,5 @@
+// 保留 GLSL 运算表达式，只改写 uniform、sampler 和输入输出声明。
+
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -7,7 +9,6 @@ using static KuroakiGimmick.Native.ShaderTools;
 
 namespace KuroakiGimmick.Graphics;
 
-/// <summary>保留 GLSL 运算表达式，只改写 uniform、sampler 和输入输出声明。</summary>
 internal static unsafe partial class ShaderCompiler
 {
     internal static bool TargetIosMsl { get; set; }
@@ -178,6 +179,7 @@ internal static unsafe partial class ShaderCompiler
 
         try
         {
+            // SAFETY: 固定 SPIR-V 数组，以 32 位字为单位传入解析器；context 管理解析结果的生命周期。
             fixed (byte* bytes = spirv)
             {
                 Check(spvc_context_parse_spirv(context, (uint*)bytes, (nuint)spirv.Length / 4, out nint ir));

@@ -1,3 +1,5 @@
+// 管理 SDL GPU 纹理的创建、像素上传与释放。
+
 using StbImageSharp;
 using static KuroakiGimmick.Native.Sdl;
 
@@ -6,13 +8,25 @@ namespace KuroakiGimmick.Graphics;
 /// <summary>拥有一对 GPU texture/sampler。上传完成后不保留 CPU 解码数组；重复/线性采样属于资源状态。</summary>
 public sealed class Texture : IDisposable
 {
+    /// <summary>SDL GPU 纹理的原生句柄。</summary>
     public nint Id { get; private set; }
     internal nint Sampler { get; private set; }
+    /// <summary>纹理基础级的像素宽度。</summary>
     public int Width { get; }
+    /// <summary>纹理基础级的像素高度。</summary>
     public int Height { get; }
+    /// <summary>包含基础级的 mip 层数。</summary>
     public int MipLevels { get; }
     readonly GpuDevice gpu;
     /// <summary>pixels 为 null 时创建可当渲染目标的纹理，否则创建只读采样纹理；mipmaps 只对带像素的纹理生效。</summary>
+    /// <param name="gpu">持有渲染资源的 GPU 设备。</param>
+    /// <param name="width">目标宽度。</param>
+    /// <param name="height">目标高度。</param>
+    /// <param name="pixels">初始化纹理的像素数据。</param>
+    /// <param name="repeat">是否重复寻址。</param>
+    /// <param name="linear">是否使用线性过滤。</param>
+    /// <param name="mipmaps">是否创建 mip 层。</param>
+    /// <exception cref="ArgumentException">RGBA 图像尺寸或像素数据无效。</exception>
     public Texture(GpuDevice gpu, int width, int height, byte[]? pixels = null, bool repeat = false, bool linear = false, bool mipmaps = false)
     {
         this.gpu = gpu;
@@ -76,6 +90,12 @@ public sealed class Texture : IDisposable
         }
     }
     /// <summary>按 RGBA8 解码磁盘图片并立即上传；CPU 侧的解码结果不再保留。</summary>
+    /// <param name="gpu">持有渲染资源的 GPU 设备。</param>
+    /// <param name="path">图像文件路径。</param>
+    /// <param name="repeat">是否重复寻址。</param>
+    /// <param name="linear">是否使用线性过滤。</param>
+    /// <param name="mipmaps">是否创建 mip 层。</param>
+    /// <returns>从源图像创建的 GPU 纹理。</returns>
     public static Texture Load(GpuDevice gpu, string path, bool repeat = false, bool linear = false, bool mipmaps = false)
     {
         using var input = File.OpenRead(path);

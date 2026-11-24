@@ -1,3 +1,5 @@
+// shaderc/SPIRV-Cross/D3DCompiler 的结果读取、错误传递和原生资源释放。
+
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -6,13 +8,13 @@ using static KuroakiGimmick.Native.ShaderTools;
 
 namespace KuroakiGimmick.Graphics;
 
-/// <summary>shaderc/SPIRV-Cross/D3DCompiler 的结果读取、错误传递和原生资源释放。</summary>
 internal static unsafe partial class ShaderCompiler
 {
     /// <summary>同步调用 shaderc；无论成功失败都释放原生 result，失败时把 shaderc 的原始错误信息带出。</summary>
     static byte[] RunShaderc(nint compiler, string source, bool vertex, bool preprocess, nint options = 0)
     {
         byte[] bytes = Encoding.UTF8.GetBytes(source), file = "gimmick.glsl\0"u8.ToArray(), entry = "main\0"u8.ToArray();
+        // SAFETY: 固定源码与两个空结尾名称，shaderc 接收源码的实际字节长度；返回数据在释放 result 之前复制。
         fixed (byte* p = bytes, f = file, e = entry)
         {
             nint result = preprocess ? shaderc_compile_into_preprocessed_text(compiler, p, (nuint)bytes.Length, vertex ? 0 : 1, f, e,
@@ -69,6 +71,7 @@ internal static unsafe partial class ShaderCompiler
     {
         byte[] bytes = Encoding.UTF8.GetBytes(source), entry = "main\0"u8.ToArray(),
             target = Encoding.ASCII.GetBytes(vertex ? "vs_5_1\0" : "ps_5_1\0");
+        // SAFETY: 编译期间固定源码、入口名与目标配置字符串；解除固定后不再通过这些指针访问数组。
         fixed (byte* p = bytes, e = entry, t = target)
         {
             int result = D3DCompile(p, (nuint)bytes.Length, null, 0, 0, e, t, 1u << 15, 0, out nint code, out nint errors);

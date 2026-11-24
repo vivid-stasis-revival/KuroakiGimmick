@@ -1,6 +1,7 @@
+// 仅供 UI 覆盖层使用的呈现透明度；场景渲染与导出不进入这些作用域，因此顶点数据与非 UI 路径完全一致。
+
 namespace KuroakiGimmick.Graphics;
 
-/// <summary>仅供 UI 覆盖层使用的呈现透明度；场景渲染与导出不进入这些作用域，因此顶点数据与非 UI 路径完全一致。</summary>
 public sealed partial class Canvas
 {
     // 顶点 alpha 只在显式的 UI 作用域内被乘一次。Begin 会把它重置为 1；
@@ -8,8 +9,11 @@ public sealed partial class Canvas
     float presentationOpacity = 1;
     internal float PresentationOpacity => presentationOpacity;
     /// <summary>与外层作用域相乘嵌套；Dispose 时恢复进入前的值。</summary>
+    /// <param name="opacity">相对于当前状态的透明度倍率。</param>
+    /// <returns>释放时还原上一级透明度的作用域。</returns>
     public IDisposable Opacity(float opacity) => new OpacityScope(this, opacity);
     /// <summary>忽略外层淡入淡出，把呈现透明度重置为绝对的 1，退出作用域后恢复。</summary>
+    /// <returns>临时以完全不透明方式绘制的作用域。</returns>
     public IDisposable Unfaded() => new OpacityScope(this, 1, absolute: true);
     /// <summary>非有限的 opacity 一律当作 1；Dispose 幂等，重复调用不会再次回退。</summary>
     sealed class OpacityScope : IDisposable

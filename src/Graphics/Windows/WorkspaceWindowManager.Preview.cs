@@ -4,6 +4,10 @@ namespace KuroakiGimmick.Graphics;
 
 public sealed partial class WorkspaceWindowManager
 {
+    /// <summary>更新窗口标题并设置是否仅呈现预览。</summary>
+    /// <param name="window">已登记的工作区窗口。</param>
+    /// <param name="title">窗口标题。</param>
+    /// <param name="previewOnly">是否仅显示预览。</param>
     public void ConfigurePresentation(Window window, string title, bool previewOnly)
     {
         CheckThread();

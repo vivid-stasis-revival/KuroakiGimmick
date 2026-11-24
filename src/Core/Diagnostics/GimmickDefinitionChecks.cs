@@ -1,6 +1,6 @@
 namespace KuroakiGimmick.Core;
 
-/// <summary>Exercise external definition loading in the actual published executable, without private assets or SDL.</summary>
+/// <summary>通过实际发布的可执行文件检查外部对象定义加载，无需私有素材或 SDL。</summary>
 internal static class GimmickDefinitionChecks
 {
     internal static int Run()
@@ -14,13 +14,19 @@ internal static class GimmickDefinitionChecks
         }
         void Reject(string json, string expected)
         {
-            try { GimmickValidation.Validate(GimmickDefinitionReader.Read(json)); }
+            try
+            {
+                GimmickValidation.Validate(GimmickDefinitionReader.Read(json));
+            }
             catch (InvalidDataException ex) when (ex.Message.Contains(expected, StringComparison.Ordinal))
-            { checks++; return; }
+            {
+                checks++;
+                return;
+            }
             throw new InvalidDataException("Malformed definition was not rejected: " + expected);
         }
         const string objectName = "obj_starcrashers_gimmick";
-        // Synthetic fixture: no game resource data is embedded in this regression check.
+        // 回归用例使用合成数据，无需内嵌游戏素材。
         const string v2 = """
             {"version":2,"objectName":"obj_starcrashers_gimmick","completeObject":false,
              "behaviors":[{"type":"masked-starfield","mods":{"starspd_multiplier":"configured_speed"}}],
@@ -40,9 +46,7 @@ internal static class GimmickDefinitionChecks
             Check(definition.CompositeLifecycle?.Create.SequenceEqual(new[] { "effect.on" }) == true,
                 "v2 lifecycle was discarded");
 
-            // Core Base/Custom charts must work without any native definitions.
-            // They have built-in render paths, while genuine native objects still
-            // report missing or invalid manifests.
+            // 核心 Base 和 Custom 谱面使用内置渲染路径，即使无原版定义也能工作；原版对象仍应报告缺失或无效清单。
             var customCore = NativeGimmickProfile.Load(new ViewerProject { Profile = "auto" },
                 new Chart { ObjectName = "obj_custom_gimmick" }, root);
             Check(customCore.Data == null && customCore.Issues.Count == 0,

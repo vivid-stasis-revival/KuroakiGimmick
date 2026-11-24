@@ -1,3 +1,5 @@
+// 处理时间轴轨道拖动排序及相关显示状态。
+
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Graphics;
 using KuroakiGimmick.Native;
@@ -33,9 +35,13 @@ public sealed partial class Viewer
         {
             var group = groups[key];
             var header = group.FirstOrDefault(track => track.Key == key);
-            if (header == null || group.Length == 1) { editTracks.AddRange(group); continue; }
+            if (header == null || group.Length == 1)
+            {
+                editTracks.AddRange(group);
+                continue;
+            }
             editTracks.Add(header);
-            // Preserve the original core-track/document order unless the author saved a custom order.
+            // 除非作者保存了自定义顺序，否则沿用核心轨和文档原顺序。
             var children = group.Where(track => track.Key != key).ToDictionary(track => track.Key, StringComparer.Ordinal);
             foreach (string child in editor.OrderedTracks(children.Keys)) editTracks.Add(children[child]);
         }
@@ -47,20 +53,28 @@ public sealed partial class Viewer
         if (!track.Window && track.Target >= 0 && track.ImageId == null && track.TextId == null)
             newProxy = track.Target;
         string root = TrackRoot(track);
-        draggedTrackKey = track.Key; draggedTrackParent = root == track.Key ? null : root;
+        draggedTrackKey = track.Key;
+        draggedTrackParent = root == track.Key ? null : root;
         draggedTrackLabel = track.Label;
-        trackDragStartY = mouseY; trackOrderMoved = trackDropValid = false;
+        trackDragStartY = mouseY;
+        trackOrderMoved = trackDropValid = false;
         trackScrollTick = uptime.Elapsed.TotalSeconds;
-        hoveredEditTrack = displayedHelpTrack = null; trackHelpVisualActive = trackHelpHitRectValid = false;
-        trackHelpWHeld = false; motion.Snap("track-help-visible", 0);
-        click = false; held = true; Sdl.SDL_CaptureMouse(true);
+        hoveredEditTrack = displayedHelpTrack = null;
+        trackHelpVisualActive = trackHelpHitRectValid = false;
+        trackHelpWHeld = false;
+        motion.Snap("track-help-visible", 0);
+        click = false;
+        held = true;
+        Sdl.SDL_CaptureMouse(true);
     }
 
     void CancelTrackOrder()
     {
         if (draggedTrackKey == null) return;
-        draggedTrackKey = draggedTrackParent = null; trackDropValid = false;
-        click = held = false; Sdl.SDL_CaptureMouse(false);
+        draggedTrackKey = draggedTrackParent = null;
+        trackDropValid = false;
+        click = held = false;
+        Sdl.SDL_CaptureMouse(false);
     }
 
     bool HandleTrackOrderInput(Sdl.Event e)
@@ -68,10 +82,14 @@ public sealed partial class Viewer
         if (draggedTrackKey == null) return false;
         if (e.WindowID != 0 && e.WindowID != ActiveUiWindowId) return false;
         if (e.Type is 0x20F or 0x100 or Sdl.WindowCloseRequested || e.Type == 0x300 && e.Scan == 41)
-        { CancelTrackOrder(); return e.Type is not (0x100 or Sdl.WindowCloseRequested); }
+        {
+            CancelTrackOrder();
+            return e.Type is not (0x100 or Sdl.WindowCloseRequested);
+        }
         if (e.Type is 0x400 or 0x402)
         {
-            mouseX = e.X; mouseY = e.Y;
+            mouseX = e.X;
+            mouseY = e.Y;
             trackOrderMoved |= Math.Abs(mouseY - trackDragStartY) >= 4;
             UpdateTrackDrop();
         }
@@ -102,10 +120,18 @@ public sealed partial class Viewer
         string root = TrackRoot(editTracks[at]);
         if (draggedTrackParent is { } parent)
         {
-            if (root != parent) { trackDropValid = false; return; }
+            if (root != parent)
+            {
+                trackDropValid = false;
+                return;
+            }
             int firstChild = editTracks.FindIndex(track => track.Key != parent && TrackRoot(track) == parent);
             int lastChild = editTracks.FindLastIndex(track => track.Key != parent && TrackRoot(track) == parent);
-            if (firstChild < 0) { trackDropValid = false; return; }
+            if (firstChild < 0)
+            {
+                trackDropValid = false;
+                return;
+            }
             float middle = editorTracksRect.Y + (at + .5f - trackShownScroll) * 35;
             trackDropIndex = Math.Clamp(mouseY < middle ? at : at + 1, firstChild, lastChild + 1);
             trackDropBefore = trackDropIndex <= lastChild ? editTracks[trackDropIndex].Key : null;
@@ -139,7 +165,8 @@ public sealed partial class Viewer
             Canvas.Line(editorTimelineRect.X + 2, y, editorTracksRect.X + editorTracksRect.W, y, 3, soft);
         }
         var ghost = new Rect(editorTimelineRect.X + 5, mouseY - 16, Math.Max(40, editorTracksRect.X - editorTimelineRect.X - 10), 32);
-        Canvas.Fill(ghost, Theme.PanelRaised.Alpha(.95)); Canvas.Border(ghost, soft);
+        Canvas.Fill(ghost, Theme.PanelRaised.Alpha(.95));
+        Canvas.Border(ghost, soft);
         Text(draggedTrackLabel, ghost.X + 10, ghost.Y + 7, 12, white, max: ghost.W - 20);
         Canvas.Clip(null);
     }

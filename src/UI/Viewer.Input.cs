@@ -1,3 +1,5 @@
+// 交互层状态协调器。加载结果通过主线程队列提交，GPU 操作只在窗口线程执行；设置、输入与绘制分文件维护。
+
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
@@ -8,12 +10,10 @@ using KuroakiGimmick.Native;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// 交互层状态协调器。加载结果通过主线程队列提交，GPU 操作只在窗口线程执行；设置、输入与绘制分文件维护。
-/// </summary>
 public sealed partial class Viewer
 {
     /// <summary>只处理输入状态和命令，不在事件分支内直接执行耗时文件加载。</summary>
+    /// <param name="e">交给当前工作区处理的 SDL 事件。</param>
     public void Handle(Sdl.Event e)
     {
         activePointer = mainPointer;
@@ -24,13 +24,16 @@ public sealed partial class Viewer
             >= 0x400 and <= 0x403 or >= 0x1000 and <= 0x1004;
         if (windowEvent && e.WindowID != 0 && workspaceWindows.TryGet(e.WindowID, out var dockWindow) &&
             dockWindow is { Main: false } && HandleDockWindowEvent(e, dockWindow)) return;
-        // Window Motion and stale closed-window events cannot start workspace gestures.
+        // 窗口动作预览或已关闭窗口的滞留事件不能启动工作区手势。
         if (windowEvent && e.WindowID != 0 && e.WindowID != ActiveUiWindowId) return;
         if ((e.Type is 0x401 or 0x20E) && inlineWindow != 0 && inlineWindow != ActiveUiWindow)
-        { AcceptInline(); if (InlineActive) return; }
+        {
+            AcceptInline();
+            if (InlineActive) return;
+        }
         // 先换算到逻辑坐标，再按优先级交给各手势 / 覆盖层处理器；任一处理器吃掉事件后，下方的 viewer 快捷键不再响应。
-        // Handle SDL native fingers before LogicalInput: their coordinates and windowID
-        // occupy different offsets from mouse events. Discard SDL's duplicate touch-mouse.
+        // 在 LogicalInput 之前处理 SDL 原生手指事件，其坐标和 windowID 的偏移与鼠标不同。
+        // 丢弃 SDL 为同一触摸生成的重复鼠标事件。
         if (HandleTouchInput(e)) return;
         if ((e.Type is 0x400 or 0x401 or 0x402) && e.MouseWhich == Sdl.TouchMouseId) return;
         if (e.Type == 0x401 && e.Button == 1) mouseClickFromTouch = sendingTouchMouse;
@@ -45,8 +48,8 @@ public sealed partial class Viewer
         if (HandleDockDragInput(e, workspaceWindows.Main)) return;
         if (HandleStartupInput(e)) return;
         if (HandleTrackOrderInput(e)) return;
-        if (HandlePrGridGesture(e)) return; // Floating PR calibration HUD owns its header drag and [+] toggle.
-        if (HandleProxySceneGesture(e)) return; // Plain double-click yields to images/text; Shift explicitly picks a proxy.
+        if (HandlePrGridGesture(e)) return; // 浮动 PR 校准面板独占标题拖动和加号开关。
+        if (HandleProxySceneGesture(e)) return; // 普通双击优先选择图片或文字，按 Shift 时显式拾取 proxy。
         if (HandleSceneDirectGesture(e)) return;
         if (HandleTextGesture(e)) return;
         if (HandleActiveImageGesture(e)) return;
@@ -101,7 +104,7 @@ public sealed partial class Viewer
             // 报告面板上方的滚轮翻页；其余位置每格滚动 seek 0.25 秒。
             if (activePanel == "diagnostics")
             {
-                diagnosticPage = Math.Max(0, diagnosticPage - (int) e.WheelY);
+                diagnosticPage = Math.Max(0, diagnosticPage - (int)e.WheelY);
             }
             else
             {

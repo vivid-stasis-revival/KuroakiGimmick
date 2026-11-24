@@ -1,10 +1,9 @@
+// 场景合成协调器。对象背景、资源图层、轨道、固定 HUD 与后处理按显式边界组织；预览和视频导出共用此入口。
+
 using KuroakiGimmick.Core;
 
 namespace KuroakiGimmick.Graphics;
 
-/// <summary>
-/// 场景合成协调器。对象背景、资源图层、轨道、固定 HUD 与后处理按显式边界组织；预览和视频导出共用此入口。
-/// </summary>
 public sealed partial class SceneRenderer
 {
     /// <summary>判定档位，定义在 ScoreState 上：命中特效与 HUD 上的判定文本必须用同一个档位。</summary>
@@ -69,9 +68,9 @@ public sealed partial class SceneRenderer
             // 这里统一走 NoteMotion.X —— 它比轨道里那份内联公式只多一个 xoffsetind{lane}，
             // 而该 mod 不在 VSB 的二进制表里，非自制谱恒为 0，两者等价。
             float cx = (float)(NoteSkin.LaneX(wide ? 1 : 0, chartLane) + NoteMotion.X(map, h.Time, lane, h.Lead + session.Project.VisualDelayMs));
-            float cy = (float) JudgmentLineY(map, h.Time);
+            float cy = (float)JudgmentLineY(map, h.Time);
             // 种子只由这次判定自身的时间与轨道导出，因此在编辑器里增删别的音符不会打乱已有音符的颗粒分布。
-            uint seed = unchecked((uint)(long) Math.Round(h.Time * 1000) * 131u + (uint) lane * 17u);
+            uint seed = unchecked((uint)(long)Math.Round(h.Time * 1000) * 131u + (uint)lane * 17u);
             if (h.Kind == ScoreState.HitKind.HoldTick)
             {
                 // 原版 obj_pressed_holds 对每个 piece 只传 arg7：没有指示框，也没有音符颗粒，只有两簇钻尘。
@@ -112,21 +111,38 @@ public sealed partial class SceneRenderer
         judgmentTemplates.Clear();
         foreach (var h in session.Score.HitsBetween(t - IndicatorLife, t, holdTicks, preview: interactivePreview, layers: previewLayers))
         {
-            if (!judgmentSingleTexture || judgmentWhite == null) { DrawHit(h); continue; }
+            if (!judgmentSingleTexture || judgmentWhite == null)
+            {
+                DrawHit(h);
+                continue;
+            }
             var key = (h.Time, h.Lane, h.Kind, h.Lead);
             if (judgmentTemplates.TryGetValue(key, out var template))
-            { canvas.AppendInstances(judgmentWhite, judgmentTemplateBuffers[template.Slot].AsSpan(0, template.Count)); continue; }
-            if (judgmentTemplates.Count >= 256) { DrawHit(h); continue; }
+            {
+                canvas.AppendInstances(judgmentWhite, judgmentTemplateBuffers[template.Slot].AsSpan(0, template.Count));
+                continue;
+            }
+            if (judgmentTemplates.Count >= 256)
+            {
+                DrawHit(h);
+                continue;
+            }
             int slot = judgmentTemplates.Count;
             if (slot == judgmentTemplateBuffers.Count) judgmentTemplateBuffers.Add([]);
             float[] buffer = judgmentTemplateBuffers[slot];
             canvas.StartInstanceCapture(judgmentWhite);
             int count;
-            try { DrawHit(h); }
-            finally { count = canvas.FinishInstanceCapture(ref buffer); }
+            try
+            {
+                DrawHit(h);
+            }
+            finally
+            {
+                count = canvas.FinishInstanceCapture(ref buffer);
+            }
             judgmentTemplateBuffers[slot] = buffer;
             judgmentTemplates[key] = (slot, count);
-            // Every hit still emits every sprite, in the original sequence; only identical calculations are reused.
+            // 按原始顺序发出每次判定的全部精灵，只复用相同的算术结果。
             canvas.AppendInstances(judgmentWhite, buffer.AsSpan(0, count));
         }
     }
@@ -154,11 +170,11 @@ public sealed partial class SceneRenderer
             {
                 continue;
             }
-            uint seed = unchecked((uint)(long) Math.Round(hitTime * 1000) * 977u);
+            uint seed = unchecked((uint)(long)Math.Round(hitTime * 1000) * 977u);
             for (int burst = 0; burst < 4; burst++)
             {
                 float vx = burst < 2 ? -1 : 1, vy = (burst % 2 == 0 ? -1 : 1) * .4f;
-                DrawHitDust(160 + vx * offset, (float) ComboDustY, t - hitTime, seed + (uint) burst * 64, vx, vy, ComboDustLife,
+                DrawHitDust(160 + vx * offset, (float)ComboDustY, t - hitTime, seed + (uint)burst * 64, vx, vy, ComboDustLife,
                     Color.White, ComboDustCount, ComboDustAlpha);
             }
         }
@@ -216,8 +232,8 @@ public sealed partial class SceneRenderer
         for (int i = 0; i < NoteParticleCount; i++)
         {
             // 原版是 (random(2) - 1) * 幅度，即以 0 为中心的双向散布。
-            float vx = (Timeline.Hash(seed + (uint) i * 2) * 2 - 1) * .75f;
-            float vy = (Timeline.Hash(seed + (uint) i * 2 + 1) * 2 - 1) * .4f;
+            float vx = (Timeline.Hash(seed + (uint)i * 2) * 2 - 1) * .75f;
+            float vy = (Timeline.Hash(seed + (uint)i * 2 + 1) * 2 - 1) * .4f;
             float x = cx + vx * travel, y = cy + vy * travel;
             JudgmentQuad(noteParticles[JudgementTier], new(x - half, y - half, half * 2, half * 2), Color.White.Alpha(alpha), angle: 45);
         }
@@ -243,11 +259,11 @@ public sealed partial class SceneRenderer
         var color = tint.Alpha(alpha);
         for (int i = 0; i < count; i++)
         {
-            float vx = Timeline.Hash(seed + (uint) i * 2) * .5f * xspd;
-            float vy = Timeline.Hash(seed + (uint) i * 2 + 1) * .5f * yspd;
+            float vx = Timeline.Hash(seed + (uint)i * 2) * .5f * xspd;
+            float vy = Timeline.Hash(seed + (uint)i * 2 + 1) * .5f * yspd;
             // irandom(image_number) 取的是 0..4 的闭区间，而精灵只有四帧，4 会被 GameMaker 绕回 0，
             // 所以第 0 帧的出现概率是其余帧的两倍。照搬这个偏斜。
-            var texture = dustTextures[(int)(Timeline.Hash(seed + (uint) i * 2 + 128) * 5) % dustTextures.Length];
+            var texture = dustTextures[(int)(Timeline.Hash(seed + (uint)i * 2 + 128) * 5) % dustTextures.Length];
             JudgmentQuad(texture, new(cx + vx * travel - 4, cy + vy * travel - 4, 9, 9), color);
         }
     }

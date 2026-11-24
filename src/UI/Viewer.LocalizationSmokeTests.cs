@@ -1,3 +1,5 @@
+// 切换中英文并检查文字度量与界面状态。
+
 using System.Text.Json;
 using KuroakiGimmick.Core;
 
@@ -5,7 +7,7 @@ namespace KuroakiGimmick.UI;
 
 public sealed partial class Viewer
 {
-    /// <summary>Exercise both languages without saving preferences or changing the scene.</summary>
+    /// <summary>验证中英文切换期间的界面表现，不保存偏好或更改场景。</summary>
     public void SmokeLocalization()
     {
         string language = preferences.UiLanguage;

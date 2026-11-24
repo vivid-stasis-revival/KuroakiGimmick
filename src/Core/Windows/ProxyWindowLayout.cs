@@ -9,6 +9,10 @@ public static class ProxyWindowLayout
     /// 求出 <paramref name="t"/>（秒）时刻各 proxy 窗口的位姿，结果按 Z 升序返回。
     /// 输入的 <paramref name="movement"/> 位姿按 Id 覆盖合并，绑定表的表序就是 Index，不排序、不去重。
     /// </summary>
+    /// <param name="s">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="t">查询时刻，单位为秒。</param>
+    /// <param name="movement">窗口动作的采样结果。</param>
+    /// <returns>合并窗口动作和 proxy 绑定后的可绘制窗口列表。</returns>
     public static IReadOnlyList<WindowPose> Compose(Session s, double t, IReadOnlyList<WindowPose> movement)
     {
         var result = movement.ToDictionary(p => p.Id);
@@ -25,8 +29,16 @@ public static class ProxyWindowLayout
             // 裁剪区默认值（prct=.08 / prcb=0 / prcl=prcr=.35）表示"未被谱面改写"，此时沿用原版的固定矩形；
             // 一旦有一侧被改写，才切到按 mod 值计算——这样旧资源的像素级取值不会因为引入新公式而漂移。
             double defLeft = 113 - M("shxa"), left = defLeft, right = left + 95 + 2 * M("shxa"), top = 0, bottom = 165;
-            if (!ProxyCropDefaults.Matches(M("prct"), .08) || M("prcb") != 0) { top = 180 * M("prcb") - 1; bottom = 180 - Math.Ceiling(180 * M("prct")); }
-            if (!ProxyCropDefaults.Matches(M("prcl"), .35) || !ProxyCropDefaults.Matches(M("prcr"), .35)) { left = M("prcl"); right = M("prcr"); }
+            if (!ProxyCropDefaults.Matches(M("prct"), .08) || M("prcb") != 0)
+            {
+                top = 180 * M("prcb") - 1;
+                bottom = 180 - Math.Ceiling(180 * M("prct"));
+            }
+            if (!ProxyCropDefaults.Matches(M("prcl"), .35) || !ProxyCropDefaults.Matches(M("prcr"), .35))
+            {
+                left = M("prcl");
+                right = M("prcr");
+            }
             // 裁剪区中心相对原版锚点 (47, 82) 的偏移先按缩放拉伸，再随 Z 轴旋转，保证旋转以窗口中心而非画布原点为轴。
             double w = right - left, h = bottom - top, dx = (left - defLeft + w * .5 - 47) * sx, dy = (top + h * .5 - 82) * sy;
             double x = 160 + M("prx") + M("prxb") + M("prxc") + M("prxd") + dx * Math.Cos(angle) - dy * Math.Sin(angle);
@@ -44,8 +56,17 @@ public static class ProxyWindowLayout
             var p = result[id];
             // 自身没绑定 proxy 的窗口从同 source 的窗口继承裁剪、翻转和 alpha，使镜像窗口显示同一份内容。
             if (p.Proxy < 0 && p.Source != 0 && sources.TryGetValue(p.Source, out var source))
-                result[id] = p with { Proxy = source.Proxy, CropX = source.CropX, CropY = source.CropY, CropW = source.CropW,
-                    CropH = source.CropH, FlipX = source.FlipX, FlipY = source.FlipY, Alpha = source.Alpha };
+                result[id] = p with
+                {
+                    Proxy = source.Proxy,
+                    CropX = source.CropX,
+                    CropY = source.CropY,
+                    CropW = source.CropW,
+                    CropH = source.CropH,
+                    FlipX = source.FlipX,
+                    FlipY = source.FlipY,
+                    Alpha = source.Alpha
+                };
         }
         return result.Values.OrderBy(p => p.Z).ToArray();
     }

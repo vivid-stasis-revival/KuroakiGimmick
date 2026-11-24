@@ -1,3 +1,5 @@
+// 在离屏目标上合成曲绘、原版统计元素与曲目信息。
+
 using System.Globalization;
 using System.Numerics;
 using KuroakiGimmick.Core;
@@ -11,6 +13,7 @@ namespace KuroakiGimmick.Graphics;
 /// </summary>
 public sealed class InfoCardRenderer : IDisposable
 {
+    /// <summary>曲目信息卡设计坐标系的宽度。曲目信息卡设计坐标系的高度。</summary>
     public const int BaseWidth = 1280, BaseHeight = 720;
     /// <summary>统计面板的像素画布尺寸与它在卡面上的放大倍数。</summary>
     const float PanelW = 226, PanelH = 92, PanelScale = 3, PanelX = 548, PanelY = 414;
@@ -45,6 +48,13 @@ public sealed class InfoCardRenderer : IDisposable
     /// 画一张卡片并返回离屏 target。<paramref name="pixelWidth"/> 只改变像素密度，版面不变；
     /// target 由本对象持有并复用，调用方只读不销毁。只能在窗口线程调用。
     /// </summary>
+    /// <param name="canvas">提交绘制命令的画布。</param>
+    /// <param name="fonts">界面字体集合。</param>
+    /// <param name="gameUi">绘制游戏文字和 HUD 的渲染器。</param>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="card">曲目信息与统计值。</param>
+    /// <param name="pixelWidth">目标的物理像素宽度。</param>
+    /// <returns>按指定宽度绘制的 16:9 卡片目标。</returns>
     public Target Render(Canvas canvas, Fonts fonts, GameUiRenderer gameUi, Session session, SongInfoCard card, int pixelWidth)
     {
         int width = Math.Clamp(pixelWidth, BaseWidth, 7680), height = width * 9 / 16;
@@ -57,8 +67,7 @@ public sealed class InfoCardRenderer : IDisposable
             canvas.Flush();
             target.Resize(width, height);
         }
-        // The reference Python draws the pattern at 226x92 and scales it with NEAREST.
-        // Do not rasterize its diagonals directly at card/export resolution.
+        // 参照实现先在 226×92 像素上绘制再使用最近邻放大，高分辨率导出仍需保留源图斜线的像素台阶。
         EnsurePanelPattern(canvas);
         canvas.Begin(target, width, height, BaseWidth, BaseHeight, Bg0);
         // 安静的网格底纹，避免大片纯色看起来像没画完。
@@ -84,8 +93,14 @@ public sealed class InfoCardRenderer : IDisposable
                 jacket?.Dispose();
                 jacket = null;
                 // 封面损坏不应该让整张卡片画不出来，退回 NO JACKET 占位。
-                try { jacket = Texture.Load(canvas.Gpu, card.JacketPath); }
-                catch (Exception ex) when (ex is IOException or InvalidDataException) { jacket = null; }
+                try
+                {
+                    jacket = Texture.Load(canvas.Gpu, card.JacketPath);
+                }
+                catch (Exception ex) when (ex is IOException or InvalidDataException)
+                {
+                    jacket = null;
+                }
                 jacketPath = card.JacketPath;
             }
         }
@@ -108,7 +123,7 @@ public sealed class InfoCardRenderer : IDisposable
         float sourceWidth = jacket.Width / (float)frames;
         float factor = Math.Min(440f / sourceWidth, 440f / jacket.Height);
         float w = Math.Max(1, Round(sourceWidth * factor)), h = Math.Max(1, Round(jacket.Height * factor));
-        // Information cards use frame 0 so an animated horizontal strip is not displayed as one stretched ultra-wide image.
+        // 信息卡使用曲绘第 0 帧，避免把整条水平动画帧当作一幅超宽图拉伸。
         canvas.Quad(jacket, new(54 + (440 - w) / 2, 100 + (440 - h) / 2, w, h), Color.White, new(0, 0, 1f / frames, 1));
     }
 
@@ -150,25 +165,20 @@ public sealed class InfoCardRenderer : IDisposable
         }
     }
 
-    /// <summary>
-    /// Build the stat backdrop once on its native 226x92 pixel grid, then sample it
-    /// with NEAREST on the card. Drawing these polygons directly at 3x/4K resolution
-    /// produces smooth diagonal stripes instead of the reference's pixel stair-steps.
-    /// </summary>
+    /// <summary>在原始 226×92 像素网格上生成一次统计背景，再以最近邻采样绘制卡片，以保留高分辨率输出中的阶梯状斜纹。</summary>
     void EnsurePanelPattern(Canvas canvas)
     {
         if (panelPattern != null) return;
-        // Target defaults to a nearest-neighbour sampler. Its physical and logical
-        // dimensions must match so each polygon is rasterized to one source pixel.
+        // 目标默认最近邻采样，物理与逻辑尺寸相同才能把一个源像素光栅化到一个目标像素。
         panelPattern = new Target(canvas.Gpu, (int)PanelW, (int)PanelH);
         canvas.Begin(panelPattern, (int)PanelW, (int)PanelH, PanelW, PanelH, Bg1);
-        // Render-target bounds provide the same clipping as PIL's 226x92 canvas.
+        // 渲染目标边界提供与 PIL 的 226×92 画布相同的裁剪范围。
         for (int k = -(int)PanelH; k < PanelW + 24; k += 20)
         {
-            // Python's k // 20 floors negative values; C# integer division truncates.
+            // Python 的 k // 20 向下取整，C# 的整数除法则向零截断。
             int stripe = (int)Math.Floor(k / 20.0);
             var c = PatternColors[(stripe % PatternColors.Length + PatternColors.Length) % PatternColors.Length];
-            // Canvas.Polygon expects TL, TR, BL, BR, not polygon-outline order.
+            // Canvas.Polygon 的顶点顺序为左上、右上、左下、右下。
             canvas.Polygon(canvas.White,
                 new Vector2(k, 0), new Vector2(k + 10, 0),
                 new Vector2(k + 26, PanelH), new Vector2(k + 36, PanelH), c);
@@ -182,7 +192,7 @@ public sealed class InfoCardRenderer : IDisposable
                     Math.Min(PanelH - 1, y + 3) - y), c);
             }
         }
-        // Queue the finished low-res pass before the full card samples this target.
+        // 先提交完成的低分辨率 pass，再由信息卡采样该目标。
         canvas.Flush();
     }
 
@@ -254,6 +264,7 @@ public sealed class InfoCardRenderer : IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
         jacket?.Dispose();

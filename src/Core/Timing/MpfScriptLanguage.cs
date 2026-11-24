@@ -1,12 +1,11 @@
+// 对受支持的 MPF 源语言进行词法分析、解析及受限求值。
+
 using System.Globalization;
 using System.Text;
 
 namespace KuroakiGimmick.Core;
 
-/// <summary>
-/// Custom Gimmicks 1.14.2 .vsmpf author-language subset. The parser is intentionally
-/// closed: no C# scripting, reflection, file access, or arbitrary user functions.
-/// </summary>
+/// <summary>解析 Custom Gimmicks 1.14.2 的 .vsmpf 语言子集。语法封闭，不提供 C# 脚本、反射、文件访问或任意用户函数。</summary>
 internal sealed class MpfScriptLanguage
 {
     abstract record Expr
@@ -19,8 +18,14 @@ internal sealed class MpfScriptLanguage
                 context.ExpressionDepth--;
                 throw new InvalidDataException("MaxDepthReached: MPF expression exceeds 128 levels.");
             }
-            try { return EvalCore(context); }
-            finally { context.ExpressionDepth--; }
+            try
+            {
+                return EvalCore(context);
+            }
+            finally
+            {
+                context.ExpressionDepth--;
+            }
         }
         internal abstract object? EvalCore(Context context);
     }
@@ -72,12 +77,16 @@ internal sealed class MpfScriptLanguage
             double l = Number(a), r = Number(b);
             return Op switch
             {
-                "+" => l + r, "-" => l - r, "*" => l * r,
+                "+" => l + r,
+                "-" => l - r,
+                "*" => l * r,
                 "/" => r == 0 ? throw new DivideByZeroException("ZeroDivisionError") : l / r,
                 @"\" => r == 0 ? throw new DivideByZeroException("ZeroDivisionError") : Math.Floor(l / r),
                 "%" => r == 0 ? throw new DivideByZeroException("ZeroDivisionError") : l % r,
-                "<" => l < r ? 1d : 0d, "<=" => l <= r ? 1d : 0d,
-                ">" => l > r ? 1d : 0d, ">=" => l >= r ? 1d : 0d,
+                "<" => l < r ? 1d : 0d,
+                "<=" => l <= r ? 1d : 0d,
+                ">" => l > r ? 1d : 0d,
+                ">=" => l >= r ? 1d : 0d,
                 _ => throw new InvalidDataException("Unknown operator: " + Op)
             };
         }
@@ -157,8 +166,14 @@ internal sealed class MpfScriptLanguage
             {
                 if (++count > context.MaxLoop) throw new InvalidDataException("MaxLoopReached");
                 context.Budget();
-                try { Body.Run(context); }
-                catch (FlowException flow) { if (!flow.ContinueLoop) break; }
+                try
+                {
+                    Body.Run(context);
+                }
+                catch (FlowException flow)
+                {
+                    if (!flow.ContinueLoop) break;
+                }
             }
         }
     }
@@ -172,8 +187,14 @@ internal sealed class MpfScriptLanguage
             {
                 if (++count > context.MaxLoop) throw new InvalidDataException("MaxLoopReached");
                 context.Budget();
-                try { Body.Run(context); }
-                catch (FlowException flow) { if (!flow.ContinueLoop) break; }
+                try
+                {
+                    Body.Run(context);
+                }
+                catch (FlowException flow)
+                {
+                    if (!flow.ContinueLoop) break;
+                }
                 Step?.Run(context);
             }
         }
@@ -189,7 +210,7 @@ internal sealed class MpfScriptLanguage
         int budgetTick = -1;
         internal int ExpressionDepth;
         long allocated;
-        // Cumulative per script/session, including refreshes. Charge before allocating.
+        // 预算按脚本与会话累计，包含刷新；先计入预算再分配。
         internal void Allocate(int count)
         {
             if (count < 0 || count > 1_000_000 - allocated)
@@ -201,9 +222,7 @@ internal sealed class MpfScriptLanguage
             if (++Steps > 100_000 || --remainingSteps < 0)
                 throw new InvalidDataException("MaxLoopReached: MPF preview execution budget exceeded.");
         }
-        // A lifetime instruction cap kills otherwise bounded Main programs on long songs.
-        // Refill only as simulation time advances, never on Init/Finish or range refresh.
-        // The capped reserve still bounds bursts and overlapping ranges in the same tick.
+        // 整段歌曲共用固定指令额会使本来有界的 Main 在长谱中断。仅在模拟时间推进时补充预算，Init、Finish 和区间刷新不补充；有限储备仍约束同 tick 的突发与重叠调用。
         internal void AdvanceTick(int tick)
         {
             if (tick <= budgetTick) return;
@@ -213,8 +232,10 @@ internal sealed class MpfScriptLanguage
         internal void Reset()
         {
             Variables.Clear();
-            Variables["beat"] = 0d; Variables["beatStart"] = 0d;
-            Variables["beatEnd"] = 0d; Variables["pi"] = Math.PI;
+            Variables["beat"] = 0d;
+            Variables["beatStart"] = 0d;
+            Variables["beatEnd"] = 0d;
+            Variables["pi"] = Math.PI;
         }
     }
 
@@ -236,8 +257,12 @@ internal sealed class MpfScriptLanguage
     public int MaxLoop { get; }
     MpfScriptLanguage(Statement? init, Statement main, Statement? finish, string risk, bool refresh, int maxLoop)
     {
-        this.init = init; this.main = main; this.finish = finish;
-        RiskLevel = risk; RefreshOnEachRun = refresh; MaxLoop = maxLoop;
+        this.init = init;
+        this.main = main;
+        this.finish = finish;
+        RiskLevel = risk;
+        RefreshOnEachRun = refresh;
+        MaxLoop = maxLoop;
     }
     public void Run(Context context, string phase)
     {
@@ -270,10 +295,23 @@ internal sealed class MpfScriptLanguage
         int pos, loopDepth, parseDepth;
         Token Current => tokens[Math.Min(pos, tokens.Count - 1)];
         bool Is(string s) => Current.Kind is "id" or "operator" && Current.Value == s;
-        bool Match(string s) { if (!Is(s)) return false; pos++; return true; }
-        Token Take() { var item = Current; pos++; return item; }
+        bool Match(string s)
+        {
+            if (!Is(s)) return false;
+            pos++;
+            return true;
+        }
+        Token Take()
+        {
+            var item = Current;
+            pos++;
+            return item;
+        }
         InvalidDataException Error(string reason) => new("SyntaxError at line " + Current.Line + ": " + reason);
-        void Require(string s) { if (!Match(s)) throw Error("expected '" + s + "'."); }
+        void Require(string s)
+        {
+            if (!Match(s)) throw Error("expected '" + s + "'.");
+        }
         string Identifier()
         {
             if (Current.Kind != "id") throw Error("expected identifier.");
@@ -281,7 +319,10 @@ internal sealed class MpfScriptLanguage
         }
         internal Parser(string source, int lineOffset, HashSet<string> declared, string section, string risk)
         {
-            this.declared = declared; this.section = section; this.risk = risk; tokens = Tokenize(source, lineOffset);
+            this.declared = declared;
+            this.section = section;
+            this.risk = risk;
+            tokens = Tokenize(source, lineOffset);
         }
         internal Statement Parse()
         {
@@ -297,8 +338,14 @@ internal sealed class MpfScriptLanguage
                 parseDepth--;
                 throw Error("maximum syntax nesting depth (128) exceeded.");
             }
-            try { return parse(); }
-            finally { parseDepth--; }
+            try
+            {
+                return parse();
+            }
+            finally
+            {
+                parseDepth--;
+            }
         }
         Statement ParseStatementCore()
         {
@@ -315,17 +362,27 @@ internal sealed class MpfScriptLanguage
             }
             if (Match("if"))
             {
-                Require("("); var test = Expression(); Require(")");
+                Require("(");
+                var test = Expression();
+                Require(")");
                 var yes = ParseStatement();
                 var no = Match("else") ? ParseStatement() : null;
                 return new Conditional(test, yes, no);
             }
             if (Match("while"))
             {
-                Require("("); var test = Expression(); Require(")");
+                Require("(");
+                var test = Expression();
+                Require(")");
                 loopDepth++;
-                try { return new WhileLoop(test, ParseStatement()); }
-                finally { loopDepth--; }
+                try
+                {
+                    return new WhileLoop(test, ParseStatement());
+                }
+                finally
+                {
+                    loopDepth--;
+                }
             }
             if (Match("for"))
             {
@@ -337,18 +394,26 @@ internal sealed class MpfScriptLanguage
                 var after = Is(")") ? null : Simple(false);
                 Require(")");
                 loopDepth++;
-                try { return new ForLoop(before, test, after, ParseStatement()); }
-                finally { loopDepth--; }
+                try
+                {
+                    return new ForLoop(before, test, after, ParseStatement());
+                }
+                finally
+                {
+                    loopDepth--;
+                }
             }
             if (Match("break"))
             {
                 if (loopDepth == 0) throw Error("break outside loop.");
-                Require(";"); return new LoopJump(false);
+                Require(";");
+                return new LoopJump(false);
             }
             if (Match("continue"))
             {
                 if (loopDepth == 0) throw Error("continue outside loop.");
-                Require(";"); return new LoopJump(true);
+                Require(";");
+                return new LoopJump(true);
             }
             return Simple(true);
         }
@@ -381,9 +446,13 @@ internal sealed class MpfScriptLanguage
         }
         static int Priority(string op) => op switch
         {
-            "||" => 1, "&&" => 2, "==" or "!=" => 3,
+            "||" => 1,
+            "&&" => 2,
+            "==" or "!=" => 3,
             "<" or ">" or "<=" or ">=" => 4,
-            "+" or "-" => 5, "*" or "/" or "%" or @"\" => 6, _ => 0
+            "+" or "-" => 5,
+            "*" or "/" or "%" or @"\" => 6,
+            _ => 0
         };
         Expr Expression(int minPriority = 1) => Nested(() => ExpressionCore(minPriority));
         Expr ExpressionCore(int minPriority)
@@ -403,12 +472,23 @@ internal sealed class MpfScriptLanguage
             if (Match("-")) return new Unary("-", Prefix());
             if (Match("!")) return new Unary("!", Prefix());
             Expr result;
-            if (Match("(")) { result = Expression(); Require(")"); }
+            if (Match("("))
+            {
+                result = Expression();
+                Require(")");
+            }
             else if (Match("["))
             {
                 var list = new List<Expr>();
-                if (!Is("]")) { do { list.Add(Expression()); } while (Match(",")); }
-                Require("]"); result = new ArrayLiteral(list);
+                if (!Is("]"))
+                {
+                    do
+                    {
+                        list.Add(Expression());
+                    } while (Match(","));
+                }
+                Require("]");
+                result = new ArrayLiteral(list);
             }
             else if (Current.Kind == "number")
             {
@@ -432,8 +512,15 @@ internal sealed class MpfScriptLanguage
                     if (name is "get_game_var_global" or "get_game_var_instance" && risk == "SAFE")
                         throw Error("PermissionError: function '" + name + "' needs RISK or higher RISK_LEVEL.");
                     var args = new List<Expr>();
-                    if (!Is(")")) { do { args.Add(Expression()); } while (Match(",")); }
-                    Require(")"); result = new Call(name, args);
+                    if (!Is(")"))
+                    {
+                        do
+                        {
+                            args.Add(Expression());
+                        } while (Match(","));
+                    }
+                    Require(")");
+                    result = new Call(name, args);
                 }
                 else
                 {
@@ -442,7 +529,12 @@ internal sealed class MpfScriptLanguage
                 }
             }
             else throw Error("unexpected token '" + Current.Value + "'.");
-            while (Match("[")) { var index = Expression(); Require("]"); result = new Index(result, index); }
+            while (Match("["))
+            {
+                var index = Expression();
+                Require("]");
+                result = new Index(result, index);
+            }
             return result;
         }
     }
@@ -454,8 +546,17 @@ internal sealed class MpfScriptLanguage
         while (pos < src.Length)
         {
             char c = src[pos];
-            if (c == '\n') { line++; pos++; continue; }
-            if (char.IsWhiteSpace(c)) { pos++; continue; }
+            if (c == '\n')
+            {
+                line++;
+                pos++;
+                continue;
+            }
+            if (char.IsWhiteSpace(c))
+            {
+                pos++;
+                continue;
+            }
             if (c == '/' && pos + 1 < src.Length && src[pos + 1] == '/')
             {
                 while (pos < src.Length && src[pos] != '\n') pos++;
@@ -465,15 +566,22 @@ internal sealed class MpfScriptLanguage
             {
                 int start = pos++;
                 while (pos < src.Length && (char.IsAsciiDigit(src[pos]) || src[pos] == '.')) pos++;
-                tokens.Add(new(src[start..pos], "number", line)); continue;
+                tokens.Add(new(src[start..pos], "number", line));
+                continue;
             }
             if (c == '"')
             {
-                pos++; var value = new StringBuilder(); bool ended = false;
+                pos++;
+                var value = new StringBuilder();
+                bool ended = false;
                 while (pos < src.Length && src[pos] != '\n')
                 {
                     char ch = src[pos++];
-                    if (ch == '"') { ended = true; break; }
+                    if (ch == '"')
+                    {
+                        ended = true;
+                        break;
+                    }
                     if (ch == '\\' && pos < src.Length)
                     {
                         char escaped = src[pos++];
@@ -482,22 +590,28 @@ internal sealed class MpfScriptLanguage
                     value.Append(ch);
                 }
                 if (!ended) throw new InvalidDataException("SyntaxError at line " + line + ": unterminated string.");
-                tokens.Add(new(value.ToString(), "string", line)); continue;
+                tokens.Add(new(value.ToString(), "string", line));
+                continue;
             }
             if (char.IsAsciiLetter(c) || c == '_')
             {
                 int start = pos++;
                 while (pos < src.Length && (char.IsAsciiLetterOrDigit(src[pos]) || src[pos] == '_')) pos++;
-                tokens.Add(new(src[start..pos], "id", line)); continue;
+                tokens.Add(new(src[start..pos], "id", line));
+                continue;
             }
             string two = pos + 1 < src.Length ? src.Substring(pos, 2) : "";
             if (new[] { "==", "!=", "<=", ">=", "&&", "||", "+=", "-=", "*=", "/=", "%=", @"\=" }.Contains(two))
             {
-                tokens.Add(new(two, "operator", line)); pos += 2; continue;
+                tokens.Add(new(two, "operator", line));
+                pos += 2;
+                continue;
             }
             if ("+-*/%\\=<>!(){}[],;".Contains(c))
             {
-                tokens.Add(new(c.ToString(), "operator", line)); pos++; continue;
+                tokens.Add(new(c.ToString(), "operator", line));
+                pos++;
+                continue;
             }
             throw new InvalidDataException("SyntaxError at line " + line + ": unexpected character '" + c + "'.");
         }
@@ -522,8 +636,10 @@ internal sealed class MpfScriptLanguage
             if (rank >= 0)
             {
                 if (rank <= lastRank) throw new InvalidDataException("SyntaxError at line " + (i + 1) + ": repeated or out-of-order section.");
-                lastRank = rank; current = row;
-                section[current] = (new StringBuilder(), i + 1); continue;
+                lastRank = rank;
+                current = row;
+                section[current] = (new StringBuilder(), i + 1);
+                continue;
             }
             if (row.StartsWith("::", StringComparison.Ordinal))
                 throw new InvalidDataException("SyntaxError at line " + (i + 1) + ": unknown section.");

@@ -1,6 +1,6 @@
 namespace KuroakiGimmick.Core;
 
-/// <summary>Parser and bounded interpreter regressions independent of game assets.</summary>
+/// <summary>使用独立于游戏素材的用例验证解析器和有界解释器。</summary>
 internal static class MpfLanguageChecks
 {
     internal static int Run()
@@ -14,15 +14,25 @@ internal static class MpfLanguageChecks
         void Reject(Action action, string name)
         {
             bool rejected = false;
-            try { action(); }
-            catch (InvalidDataException) { rejected = true; }
+            try
+            {
+                action();
+            }
+            catch (InvalidDataException)
+            {
+                rejected = true;
+            }
             Check(rejected, name);
         }
         var received = new List<string>();
         var context = new MpfScriptLanguage.Context();
         context.Reset();
-        context.Function = (_, args) => { received.Add((string)args[0]!); return 0d; };
-        // These strings must remain literals even when they spell grammar tokens.
+        context.Function = (_, args) =>
+{
+    received.Add((string)args[0]!);
+    return 0d;
+};
+        // 即使内容与语法词元相同，这些字符串也必须保留字面含义。
         string[] literals = ["(", ")", "[", "]", "-", "!", "true", "false", ";", "if", "=", "||"];
         foreach (string literal in literals)
         {
@@ -49,13 +59,19 @@ internal static class MpfLanguageChecks
             budget.Steps = 0;
             for (int step = 0; step < 100_000; step++) budget.Budget();
         }
-        budget.Reset(); budget.Steps = 0; budget.AdvanceTick(0);
+        budget.Reset();
+        budget.Steps = 0;
+        budget.AdvanceTick(0);
         Reject(() => budget.Budget(), "refresh and repeated ranges cannot refill the same tick");
-        budget.AdvanceTick(1); budget.Steps = 0;
+        budget.AdvanceTick(1);
+        budget.Steps = 0;
         budget.Budget();
         Check(budget.Steps == 1, "advancing the simulation clock replenishes execution budget");
         var busyFrame = new MpfScriptLanguage.Context();
-        Reject(() => { for (int i = 0; i <= 100_000; i++) busyFrame.Budget(); },
+        Reject(() =>
+{
+    for (int i = 0; i <= 100_000; i++) busyFrame.Budget();
+},
             "single invocation instruction cap remains enforced");
         var arrays = MpfScriptLanguage.Parse("::Main::\nvar a = [1,2,3];");
         var constrained = new MpfScriptLanguage.Context();

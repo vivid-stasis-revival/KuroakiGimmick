@@ -4,15 +4,14 @@ using static KuroakiGimmick.Native.Sdl;
 
 namespace KuroakiGimmick.Graphics;
 
-// Versioned binary format avoids reflection-based JSON on the interpreter.
+// 使用带版本的二进制缓存格式，使解释器无需通过反射解析 JSON。
 internal static class SwitchShaderPack
 {
     const int Magic = 0x5053474b; // KGSP
     const int Version = 1;
     internal static string Key(string source, bool vertex)
     {
-        // A cache identifier, not a security hash. Pure managed arithmetic avoids OpenSSL
-        // imports on mono-nx. The full original source is verified on every load.
+        // 此值用于查找缓存。以托管算术避免 mono-nx 引入 OpenSSL，每次加载还要比对完整原始源码。
         ulong a = 14695981039346656037UL, b = 1099511628211UL;
         foreach (byte value in Encoding.UTF8.GetBytes((vertex ? "V\n" : "F\n") + source))
         {
@@ -56,12 +55,23 @@ internal static class SwitchShaderPack
     {
         var compiled = ShaderCompiler.Compile(source, vertex, GpuShaderFormat.SpirV);
         using var w = new BinaryWriter(File.Create(Path.Combine(directory, Key(source, vertex) + ".kgsp")), Encoding.UTF8);
-        w.Write(Magic); w.Write(Version); w.Write(vertex); w.Write(source); w.Write(compiled.Entry);
+        w.Write(Magic);
+        w.Write(Version);
+        w.Write(vertex);
+        w.Write(source);
+        w.Write(compiled.Entry);
         w.Write(compiled.Uniforms.Length);
-        foreach (var u in compiled.Uniforms) { w.Write(u.Name); w.Write(u.Type); w.Write(u.Offset); }
+        foreach (var u in compiled.Uniforms)
+        {
+            w.Write(u.Name);
+            w.Write(u.Type);
+            w.Write(u.Offset);
+        }
         w.Write(compiled.Samplers.Length);
         foreach (var sampler in compiled.Samplers) w.Write(sampler);
-        w.Write(compiled.NativeSource); w.Write(compiled.Code.Length); w.Write(compiled.Code);
+        w.Write(compiled.NativeSource);
+        w.Write(compiled.Code.Length);
+        w.Write(compiled.Code);
     }
 
     internal static void Bake(string directory, IEnumerable<string> extraDirectories)
@@ -80,7 +90,7 @@ internal static class SwitchShaderPack
             (Canvas.BasicFragmentSource, false), (SceneRenderer.CompositeFragmentSource, false),
             (CustomEffects.CombineFragmentSource, false), (CustomEffects.PosterizeFragmentSource, false)
         };
-        // External resource packs use exactly the same AdaptGml transformation as the renderer.
+        // 外部资源包与渲染器必须使用同一 AdaptGml 转换。
         foreach (var root in new[] { Paths.Assets }.Concat(extraDirectories))
         {
             if (!Directory.Exists(root)) throw new DirectoryNotFoundException(root);

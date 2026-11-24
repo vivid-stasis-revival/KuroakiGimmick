@@ -1,12 +1,12 @@
+// 直接拾取 proxy，保证编辑目标与预览校准使用同一 ID。
+
 using KuroakiGimmick.Graphics;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>Direct Proxy selection; the editor target and the preview calibration refer to the same ID.</summary>
 public sealed partial class Viewer
 {
-    // Select a proxy without seeking playback; scroll its first proxy track into view.
-    // Empty proxies remain selectable and can receive their first event.
+    // 选择 proxy 时保持播放时刻不变，将其首条轨道滚入视图；空 proxy 仍可选并能接收首个事件。
     void FocusProxyTrack(int target)
     {
         if (editor == null || target < 0) return;

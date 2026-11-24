@@ -1,21 +1,18 @@
+// 管理会话的原生轨道句柄与线程本地帧缓存。
+
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
 
 namespace KuroakiGimmick.Core;
 
-/// <summary>
-/// Rust Optimization Engine v0.3.0: immutable, session-scoped timeline track arrays.
-/// One native call produces an entire frame's base track values. Ordinary Get() uses
-/// thread-local frame data without crossing FFI. Object-specific alias/per-frame/fades
-/// remain in C# so that the original semantics survive this incremental migration.
-/// </summary>
+/// <summary>Rust Optimization Engine v0.3.0 在会话内持有不可变轨道，一次原生调用求得整帧基础值。Get 从线程本地帧缓存读取，对象别名、逐帧函数和渐变仍按 C# 规则求值。</summary>
 internal static unsafe partial class RustTimelineBridge
 {
     private const string Library = "kg_native_core";
     private const uint Abi = 0x00030000;
 
-    // Exact IDs of timeline_runtime.rs. Do not reorder without increasing ABI.
+    // COMPAT: 编号对应 timeline_runtime.rs；更改顺序必须同步升级 ABI。
     private static readonly string[] EaseNames = [
         "linear", "inSine", "outSine", "inOutSine", "inQuad", "outQuad", "inOutQuad",
         "inCubic", "outCubic", "inOutCubic", "inQuart", "outQuart", "inOutQuart",
@@ -43,16 +40,31 @@ internal static unsafe partial class RustTimelineBridge
 
     internal sealed class NativeTrackHandle : SafeHandle
     {
-        public NativeTrackHandle() : base(IntPtr.Zero, ownsHandle: true) { }
+        public NativeTrackHandle() : base(IntPtr.Zero, ownsHandle: true)
+        {
+        }
         internal NativeTrackHandle(nint pointer) : this() => SetHandle(pointer);
         public override bool IsInvalid => handle == IntPtr.Zero;
         protected override bool ReleaseHandle()
         {
-            // SafeHandle may run on the finalizer thread. Never throw from it.
-            try { NativeFree(handle); return true; }
-            catch (DllNotFoundException) { return false; }
-            catch (EntryPointNotFoundException) { return false; }
-            catch (BadImageFormatException) { return false; }
+            // LIFETIME: SafeHandle 可能在终结线程释放，释放路径不得向外抛出异常。
+            try
+            {
+                NativeFree(handle);
+                return true;
+            }
+            catch (DllNotFoundException)
+            {
+                return false;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return false;
+            }
+            catch (BadImageFormatException)
+            {
+                return false;
+            }
         }
     }
 
@@ -74,10 +86,7 @@ internal static unsafe partial class RustTimelineBridge
         internal bool Ready;
     }
 
-    /// <summary>
-    /// Each native handle is managed by SafeHandle. Each thread receives its own
-    /// frame buffer so background snapshots cannot overwrite the main render's data.
-    /// </summary>
+    /// <summary>原生句柄由 SafeHandle 管理。每个线程持有独立帧缓冲区，后台快照不会覆盖主线程的采样结果。</summary>
     internal sealed class Runtime
     {
         private readonly NativeTrackHandle handle;
@@ -115,6 +124,7 @@ internal static unsafe partial class RustTimelineBridge
             long started = Profile ? Stopwatch.GetTimestamp() : 0;
             try
             {
+                // SAFETY: 固定本线程帧缓存，在调用范围内按输出数组的实际容量接收采样值。
                 fixed (double* outputs = current.Values)
                 {
                     int result = NativeEvaluate(handle, time, outputs, (nuint)current.Values.Length);
@@ -189,8 +199,7 @@ internal static unsafe partial class RustTimelineBridge
         {
             if (NativeVersion() != Abi || Marshal.SizeOf<TrackSpec>() != 16 || Marshal.SizeOf<TrackSegment>() != 40)
                 throw new InvalidOperationException("RustTimeline ABI/layout mismatch.");
-            // Build once, after C# has applied all special event semantics and built
-            // particle tables. Both languages observe identical event ordering.
+            // C# 完成特殊事件处理和粒子表构建后再建立原生快照，使两端使用相同的事件顺序。
             var specs = new TrackSpec[tracks.Count];
             var segments = new List<TrackSegment>();
             var indices = new Dictionary<(string Name, int Proxy), int>(tracks.Count);
@@ -198,25 +207,36 @@ internal static unsafe partial class RustTimelineBridge
             int index = 0;
             foreach (var track in tracks)
             {
-                // List<T> uses Int32 counts, so enforce its limit before appending.
+                // List 的元素数为 Int32，追加前必须检查剩余容量。
                 if (track.Value.Count > int.MaxValue - segments.Count)
                     throw new InvalidDataException("RustTimeline segment count overflow.");
                 double defaultValue = initial(track.Key.Name, track.Key.Proxy);
-                specs[index] = new TrackSpec { Offset = (uint)segments.Count,
-                    Count = (uint)track.Value.Count, Initial = defaultValue };
+                specs[index] = new TrackSpec
+                {
+                    Offset = (uint)segments.Count,
+                    Count = (uint)track.Value.Count,
+                    Initial = defaultValue
+                };
                 indices.Add(track.Key, index);
                 reference[index] = (track.Key.Name, track.Key.Proxy, track.Value, defaultValue);
                 foreach (var segment in track.Value)
                 {
                     if (!EaseId.TryGetValue(segment.Ease, out uint easing))
                         throw new InvalidDataException("Unsupported RustTimeline easing: " + segment.Ease);
-                    segments.Add(new TrackSegment { Time = segment.Time, Duration = segment.Duration,
-                        From = segment.From, To = segment.To, Ease = easing });
+                    segments.Add(new TrackSegment
+                    {
+                        Time = segment.Time,
+                        Duration = segment.Duration,
+                        From = segment.From,
+                        To = segment.To,
+                        Ease = easing
+                    });
                 }
                 index++;
             }
             TrackSegment[] flat = segments.ToArray();
             nint pointer = 0;
+            // SAFETY: 轨道规格与连续片段数组在创建原生运行时的调用期间同时固定。
             fixed (TrackSpec* specsPointer = specs)
             fixed (TrackSegment* segmentPointer = flat)
             {
@@ -261,22 +281,21 @@ internal static unsafe partial class RustTimelineBridge
                 chart.Mods.Add(new ModEvent(0, 0, "linear", 0, 7, "pra", 4, order++));
                 chart.Mods.Add(new ModEvent(2, 4, "linear", 573613, 6, "scrollspeed", -1, order++));
                 chart.Mods.Add(new ModEvent(3, 2, "inQuad", 573613, 573613, "scrollspeed", -1, order++));
-                var timeline = new Timeline(chart, new ViewerProject {Bpm = 120, ScrollSpeed = 3}, 2);
+                var timeline = new Timeline(chart, new ViewerProject { Bpm = 120, ScrollSpeed = 3 }, 2);
                 if (timeline.RustTracks == null)
                     throw new InvalidOperationException("Native RustTimeline was not initialized.");
-                foreach (double time in new[] {0.0, .001, .125, .5, .75, 1.0, 1.5, 2.0, 3.0, -.1, .25})
+                foreach (double time in new[] { 0.0, .001, .125, .5, .75, 1.0, 1.5, 2.0, 3.0, -.1, .25 })
                 {
-                    timeline.PrepareFrame(time); // verify compares every native track against C#
+                    timeline.PrepareFrame(time); // verify 将逐轨比较原生值与 C# 求值结果。
                     if (!timeline.RustTracks.Active)
                         throw new InvalidDataException("RustTimeline parity check silently fell back to C#.");
-                    // Both writes happen at beat 0. Earlier seek points must
-                    // still return the original proxy value, not the final 7.
+                    // 两条写入均在第 0 拍发生。向前跳到写入之前仍应读到原 proxy 值。
                     double expectedPra = time < 0 ? 0 : 7;
                     if (!timeline.RustTracks.TryGet("pra", 4, time, out double nativePra))
                         throw new InvalidDataException($"RustTimeline proxy=4 track missing at {time:R}.");
                     if (!Near(nativePra, expectedPra) || !Near(timeline.Get("pra", time, 4), expectedPra))
                         throw new InvalidDataException($"RustTimeline proxy tie order changed at {time:R}: expected {expectedPra:R}, Rust {nativePra:R}.");
-                    if (!Near(timeline.Get("pra", time, 5),0))
+                    if (!Near(timeline.Get("pra", time, 5), 0))
                         throw new InvalidDataException("RustTimeline default proxy state changed.");
                 }
                 foreach (double speed in new[] { 1.2, 5.0, 3.0, 2.46 })
@@ -294,6 +313,9 @@ internal static unsafe partial class RustTimelineBridge
             }
             Console.WriteLine("PASS RustTimeline: 31 easings, reverse seek, tied events, proxy isolation, live scroll/inherited endpoints, managed/native parity");
         }
-        finally {Environment.SetEnvironmentVariable("KG_RUST_ENGINE", old);}
+        finally
+        {
+            Environment.SetEnvironmentVariable("KG_RUST_ENGINE", old);
+        }
     }
 }

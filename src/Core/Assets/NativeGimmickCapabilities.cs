@@ -6,8 +6,7 @@ namespace KuroakiGimmick.Core;
 /// </summary>
 public static class NativeGimmickCapabilities
 {
-    // MaskedStarFieldState, DirectionalDustTimeline, NativeGimmickRenderer.Starcrashers*,
-    // GameUiRenderer.Starcrashers and Timeline's callback dispatch consume these names.
+    // 这些名称由 MaskedStarFieldState、DirectionalDustTimeline、Starcrashers 渲染路径和 Timeline 回调分派共用。
     private static readonly string[] starcrashers =
     [
         "starspd_multiplier", "starspawner_timer", "starspd_low", "starspd_high",
@@ -16,36 +15,47 @@ public static class NativeGimmickCapabilities
         "chorus_satalli_alli_particles", "chorus_satalli_sat_particles", "ending_coroutine"
     ];
 
+    /// <summary>可由对象定义组合使用的组件类型键。</summary>
     public static readonly string[] Types = ["masked-starfield","lyric-sprite","target-track","room-fx","sprite-dialogue","jacket-particles",
         "side-starfield","instruction-panel","price-dialogue","desktop","grid-sides","crt-console","ambient-lifecycle","lane-starfield",
         "checker-tint","reset-animation","palette-slash","duration-slash","multiply-jacket"];
-    public static IEnumerable<string> Mods(GimmickDefinition definition) => definition.Behaviors.SelectMany(component=>component.Mods.Values);
+    /// <summary>枚举各组件绑定到的实际 mod 名。</summary>
+    /// <param name="definition">当前对象的声明式演出定义。</param>
+    /// <returns>所有组件实际绑定到的 mod 名。</returns>
+    public static IEnumerable<string> Mods(GimmickDefinition definition) => definition.Behaviors.SelectMany(component => component.Mods.Values);
 
-    public static string? ParameterType(string type,string name)=> (type,name) switch
+    /// <summary>查询组件参数所接受的数据类型名，未知参数可返回 null。</summary>
+    /// <param name="type">组件类型键。</param>
+    /// <param name="name">参数名。</param>
+    /// <returns>该参数的类型名，未知组合返回 null。</returns>
+    public static string? ParameterType(string type, string name) => (type, name) switch
     {
-        ("multiply-jacket","skipIndex" or "x" or "y" or "width" or "height")=>"number",
-        ("multiply-jacket","linear")=>"bool",
-        ("crt-console","outlineText" or "commands" or "grave")=>"bool",
-        ("crt-console","font")=>"string",
-        ("grid-sides","redBackground")=>"bool",
-        ("grid-sides","mountain" or "grid" or "sides")=>"string",
-        ("ambient-lifecycle","destroyMod")=>"string",
-        ("ambient-lifecycle","destroyThreshold")=>"number",
-        ("reset-animation","sprite")=>"string",
-        ("reset-animation","resetBeat" or "fps" or "lastFrame")=>"number",
-        ("jacket-particles","transitionTime")=>"number",
-        ("price-dialogue","fallingTimeMs")=>"number",
-        _=>null
+        ("multiply-jacket", "skipIndex" or "x" or "y" or "width" or "height") => "number",
+        ("multiply-jacket", "linear") => "bool",
+        ("crt-console", "outlineText" or "commands" or "grave") => "bool",
+        ("crt-console", "font") => "string",
+        ("grid-sides", "redBackground") => "bool",
+        ("grid-sides", "mountain" or "grid" or "sides") => "string",
+        ("ambient-lifecycle", "destroyMod") => "string",
+        ("ambient-lifecycle", "destroyThreshold") => "number",
+        ("reset-animation", "sprite") => "string",
+        ("reset-animation", "resetBeat" or "fps" or "lastFrame") => "number",
+        ("jacket-particles", "transitionTime") => "number",
+        ("price-dialogue", "fallingTimeMs") => "number",
+        _ => null
     };
 
+    /// <summary>返回指定组件可使用的角色键集合。</summary>
+    /// <param name="type">组件类型键。</param>
+    /// <returns>该组件使用的角色键列表。</returns>
     public static IReadOnlyList<string> Roles(string type) => type switch
     {
         "masked-starfield" => starcrashers,
         "lyric-sprite" => ["lwtext", "film", "glow", "filmsat", "lwflickerspd", "lwjitterintensity", "lwchroma"],
         "target-track" => ["track_alpha", "sekaisen_arrow_point", "sekaisen_target_point", "sekaisen_jacket",
             "starspawner_timer", "starspd_low", "starspd_high", "starspd_multiplier", "en_whiteoverlay", "eo_endcg"],
-        // These three controls feed the source room FX parameter/visibility bindings.
-        "room-fx" => ["en_whiteoverlay","en_posterize","en_posterize_vis","sn_bg_fxamp","fx_zoom"],
+        // 这三个控制驱动源房间 FX 的参数和可见性绑定。
+        "room-fx" => ["en_whiteoverlay", "en_posterize", "en_posterize_vis", "sn_bg_fxamp", "fx_zoom"],
 
 
         "sprite-dialogue" => ["1_speech", "1_glitch", "2_bg_pics", "2_dialbox_size", "2_dialbox_circles",
@@ -64,9 +74,9 @@ public static class NativeGimmickCapabilities
         "crt-console" => ["stopmotionnoteskin", "sm_bar_show", "sm_bar_progress", "storycheck1", "storycheck2",
             "temporaryshadercreate", "temporaryshaderdestroy", "sm_leftbg_frameset", "sm_rightbg_frameset", "sm_pushcommand", "sm_killcommand",
             "self_satcolor","self_satalpha","self_satframe","self_tsukicolor","self_tsukialpha","self_tsukiframe","self_destsg","self_gravefg"],
-        "multiply-jacket"=>["frame"],
-        "ambient-lifecycle"=>["uialpha"],
-        "lane-starfield" or "checker-tint" or "reset-animation" or "palette-slash" or "duration-slash"=>[],
+        "multiply-jacket" => ["frame"],
+        "ambient-lifecycle" => ["uialpha"],
+        "lane-starfield" or "checker-tint" or "reset-animation" or "palette-slash" or "duration-slash" => [],
         _ => []
     };
 }

@@ -1,3 +1,5 @@
+// 在保留来源文本的同时维护可编辑事件、循环和 proxy 声明。
+
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -14,6 +16,17 @@ public sealed partial class VsmDocument
     /// 一个可视化编辑单元。<c>Id</c> 是事件身份，跨编辑保持不变，决定它对应哪一源行——不要用行号或字段值当身份。
     /// Beat/Duration/RepeatStep 单位是拍；From/To 保留源文本原样（含 "_" 表示沿用当前值），不在此处转成数值。
     /// </summary>
+    /// <param name="Id">编辑器内的事件标识。</param>
+    /// <param name="Beat">起始拍。</param>
+    /// <param name="Duration">持续拍数。</param>
+    /// <param name="Ease">缓动名称。</param>
+    /// <param name="From">源起值文本。</param>
+    /// <param name="To">源终值文本。</param>
+    /// <param name="Name">轨道或回调名称。</param>
+    /// <param name="Proxy">目标 proxy 编号。</param>
+    /// <param name="RepeatEnd">重复终点拍，null 表示不循环。</param>
+    /// <param name="RepeatStep">重复步长，单位为拍。</param>
+    /// <param name="ParenthesizedRepeat">是否保留括号形式的循环语法。</param>
     public sealed record Clip(Guid Id, double Beat, double Duration, string Ease, string From, string To,
         string Name, int Proxy, double? RepeatEnd = null, double RepeatStep = 1, bool ParenthesizedRepeat = false)
     {
@@ -28,17 +41,27 @@ public sealed partial class VsmDocument
     }
 
     // record 是不可变的。历史快照因此可以共享未改动的行，不必复制上兆字节的文本。
+    /// <summary>保留原始换行及解析结果的 VSM 行。</summary>
+    /// <param name="Text">源行正文。</param>
+    /// <param name="Ending">源换行符。</param>
+    /// <param name="Event">解析出的事件，非事件行可为 null。</param>
     public sealed record Line(string Text, string Ending, Clip? Event);
     List<Line> lines = [];
+    /// <summary>按来源顺序保留的文本行与事件表示。</summary>
     public List<Line> Lines
     {
         get => lines;
-        private set { lines = value; InvalidateLookup(); }
+        private set
+        {
+            lines = value;
+            InvalidateLookup();
+        }
     }
     /// <summary>源文件的编码，写回时照此还原。默认是不带 BOM 的 UTF-8 且对非法字节抛错，不做静默替换。</summary>
     public Encoding Encoding { get; private set; } = new UTF8Encoding(false, true);
     /// <summary>读到的 BOM 原始字节，写回时原样放在最前面；源文件没有 BOM 就不会凭空补一个。</summary>
     public byte[] Preamble { get; private set; } = [];
+    /// <summary>新增 VSM 行时采用的换行符。</summary>
     public string NewLine { get; private set; } = "\n";
     /// <summary>源文档没写 !proxies 时，编辑器从当前谱面继承的 proxy 数量提示；只在作者首次创建 proxy 事件时使用。</summary>
     internal int ProxyCountHint { get; set; } = 1;
@@ -50,6 +73,9 @@ public sealed partial class VsmDocument
     public int PreservedLineCount => GetPreservedLineCount();
 
     /// <summary>识别并记住 BOM 与编码，写回时原样还原；64 MiB 上限先于解码生效。</summary>
+    /// <param name="path">VSM 文件路径。</param>
+    /// <returns>保留源行及换行符的文档。</returns>
+    /// <exception cref="InvalidDataException">VSM 文件超过当前加载上限。</exception>
     public static VsmDocument Load(string path)
     {
         if (ChartLoadLimits.Exceeds(new FileInfo(path).Length, 64 * 1024 * 1024)) throw new InvalidDataException("VSM exceeds 64 MiB.");
@@ -62,13 +88,25 @@ public sealed partial class VsmDocument
         // UTF-32 的 BOM 前两字节与 UTF-16 LE 相同，必须先判 4 字节形式，否则会误判编码。
         if (bytes.StartsWith(new byte[] { 0xEF, 0xBB, 0xBF })) doc.Preamble = [0xEF, 0xBB, 0xBF];
         else if (bytes.StartsWith(new byte[] { 0xFF, 0xFE, 0, 0 }))
-        { doc.Encoding = new UTF32Encoding(false, false, true); doc.Preamble = [0xFF, 0xFE, 0, 0]; }
+        {
+            doc.Encoding = new UTF32Encoding(false, false, true);
+            doc.Preamble = [0xFF, 0xFE, 0, 0];
+        }
         else if (bytes.StartsWith(new byte[] { 0, 0, 0xFE, 0xFF }))
-        { doc.Encoding = new UTF32Encoding(true, false, true); doc.Preamble = [0, 0, 0xFE, 0xFF]; }
+        {
+            doc.Encoding = new UTF32Encoding(true, false, true);
+            doc.Preamble = [0, 0, 0xFE, 0xFF];
+        }
         else if (bytes.StartsWith(new byte[] { 0xFF, 0xFE }))
-        { doc.Encoding = new UnicodeEncoding(false, false, true); doc.Preamble = [0xFF, 0xFE]; }
+        {
+            doc.Encoding = new UnicodeEncoding(false, false, true);
+            doc.Preamble = [0xFF, 0xFE];
+        }
         else if (bytes.StartsWith(new byte[] { 0xFE, 0xFF }))
-        { doc.Encoding = new UnicodeEncoding(true, false, true); doc.Preamble = [0xFE, 0xFF]; }
+        {
+            doc.Encoding = new UnicodeEncoding(true, false, true);
+            doc.Preamble = [0xFE, 0xFF];
+        }
         stream.Position = doc.Preamble.Length;
         using var reader = new StreamReader(stream, doc.Encoding, detectEncodingFromByteOrderMarks: false, bufferSize: 64 * 1024);
         doc.Parse(reader);
@@ -76,9 +114,13 @@ public sealed partial class VsmDocument
     }
 
     /// <summary>从已在内存里的文本建文档，不经过文件，因此保持默认编码与空 BOM。</summary>
+    /// <param name="text">VSM 源文本。</param>
+    /// <returns>解析得到的可编辑文档。</returns>
     public static VsmDocument FromText(string text)
     {
-        var doc = new VsmDocument(); doc.Parse(text); return doc;
+        var doc = new VsmDocument();
+        doc.Parse(text);
+        return doc;
     }
 
     /// <summary>
@@ -86,6 +128,8 @@ public sealed partial class VsmDocument
     /// 不写 "mods" 行：原版 read_mods_file 一开始就是 mods 模式，只认 "mpf" 一个切换标记，
     /// 写了反而会被当成事件行切分，取 parts[1] 越界直接崩。mpf 段必须排在最后，原版没有回到 mods 的路。
     /// </summary>
+    /// <param name="chart">提供音符、演出事件及诊断的谱面。</param>
+    /// <returns>从谱面事件构建的文档。</returns>
     public static VsmDocument FromChart(Chart chart)
     {
         var text = new StringBuilder($"!obj:{chart.ObjectName}\n");
@@ -163,7 +207,10 @@ public sealed partial class VsmDocument
             if (proxy is < -1 or > 63 || fields[5].Length == 0) return null;
             return new(id, start, duration, fields[2], fields[3], fields[4], fields[5], proxy, end, step, range.Parenthesized);
         }
-        catch (Exception ex) when (ex is FormatException or OverflowException) { return null; }
+        catch (Exception ex) when (ex is FormatException or OverflowException)
+        {
+            return null;
+        }
     }
 
     /// <summary>源文件里的数值只接受普通/科学记数法，不接受编辑器那套分数与"拍+分数"输入。</summary>
@@ -179,6 +226,9 @@ public sealed partial class VsmDocument
     /// 4 位小数：编辑器显示、结构化编辑、工程保存、实时预览与正式导出统一使用同一表示，
     /// 不允许 14.1250138333 / 7.9125085600016067 这类运算尾巴重新泄漏出来。-0 也统一写成 0。
     /// </summary>
+    /// <param name="n">待序列化的数值。</param>
+    /// <returns>使用项目数值精度的 VSM 文本。</returns>
+    /// <exception cref="FormatException">输入为非有限数值。</exception>
     public static string N(double n)
     {
         if (!double.IsFinite(n)) throw new FormatException("A finite number is required.");
@@ -187,13 +237,23 @@ public sealed partial class VsmDocument
         return rounded.ToString("0.####", CultureInfo.InvariantCulture);
     }
     /// <summary>把一个作者数值收敛到与 VSM 最终文本完全一致的 double，避免拖拽后内存里继续带着隐藏尾巴。</summary>
+    /// <param name="n">待规范化的数值。</param>
+    /// <returns>按写出格式往返解析后的数值。</returns>
     public static double Canonical(double n) => double.Parse(N(n), NumberStyles.Float, CultureInfo.InvariantCulture);
     /// <summary>作者时间/值按最终 VSM 语义比较，同时保留原先的微小 epsilon 容差；绝不能再拿 raw double 做裸 ==。</summary>
+    /// <param name="a">第一个数值。</param>
+    /// <param name="b">第二个数值。</param>
+    /// <param name="epsilon">允许的误差。</param>
+    /// <returns>两数之差在容许范围内时为 true。</returns>
     public static bool NearlyEqual(double a, double b, double epsilon = 1e-9) =>
         Canonical(a) == Canonical(b) || Math.Abs(a - b) <= epsilon;
     /// <summary>编辑器显示与最终 VSM 使用同一套最多 4 位小数的作者数值规则；UI 与导出因此不会再各说各话。</summary>
+    /// <param name="n">待显示的数值。</param>
+    /// <returns>编辑器使用的数值文本。</returns>
     public static string Ui(double n) => N(n);
     /// <summary>编辑器显示 From / To 时也收掉旧文件里已有的浮点尾巴；源 token 本身不会因此被改写。</summary>
+    /// <param name="value">源端点文本。</param>
+    /// <returns>规范化后的显示文本，无法解析时保留原文。</returns>
     public static string UiValue(string value)
     {
         if (value == "_") return value;
@@ -201,8 +261,13 @@ public sealed partial class VsmDocument
             ? Ui(n) : value;
     }
     /// <summary>573613 是原版表示"沿用当前值"的哨兵值，写回源文件时还原成 "_"。</summary>
+    /// <param name="n">要写入 VSM 的端点值。</param>
+    /// <returns>哨兵 573613 写作下划线，其余为规范化数字。</returns>
     public static string Value(double n) => n == 573613 ? "_" : N(n);
     /// <summary>接受编辑器输入语法；失败时抛 FormatException，由调用方提示用户而不是静默取 0。</summary>
+    /// <param name="text">编辑器中的数值输入。</param>
+    /// <returns>解析得到的数值。</returns>
+    /// <exception cref="FormatException">输入无法转换为有限数值。</exception>
     public static double Number(string text)
     {
         text = text.Trim();
@@ -224,24 +289,32 @@ public sealed partial class VsmDocument
     }
 
     /// <summary>按事件身份查片段。找不到返回 null，通常意味着这条已被撤销或删除，调用方应当放弃本次操作而不是新建一条。</summary>
+    /// <param name="id">来源事件 ID。</param>
+    /// <returns>匹配的事件，未找到时为 null。</returns>
     public Clip? Find(Guid id)
     {
         int i = FindLineIndex(id);
         return i >= 0 ? Lines[i].Event : null;
     }
     /// <summary>诊断用的 1 基源行号；事件身份始终是 Id，行号会随插入删除变化，不要拿它做标识。</summary>
+    /// <param name="id">来源事件 ID。</param>
+    /// <returns>从 1 开始的源行号，未找到时为 0。</returns>
     public int SourceLine(Guid id) => FindLineIndex(id) + 1;
     /// <summary>整份行表回到快照。Line 是不可变 record，直接复用同一批对象即可，不必也不应深拷贝文本。</summary>
+    /// <param name="snapshot">要恢复的文档快照。</param>
     public void Restore(Line[] snapshot)
     {
         Lines = snapshot.ToList();
         NewLine = Lines.FirstOrDefault(line => line.Ending.Length > 0)?.Ending ?? "\n";
     }
     /// <summary>按原编码写出，并在前面补回原始 BOM；未编辑的文档由此可逐字节还原。</summary>
+    /// <returns>保留当前文档换行约定的字节。</returns>
     public byte[] Bytes()
     {
         byte[] body = Encoding.GetBytes(Text), result = new byte[Preamble.Length + body.Length];
-        Preamble.CopyTo(result, 0); body.CopyTo(result, Preamble.Length); return result;
+        Preamble.CopyTo(result, 0);
+        body.CopyTo(result, Preamble.Length);
+        return result;
     }
     /// <summary>
     /// 成品 VSM 文本。所有能够结构化解析的七字段事件与 mpf 时间都重新写成 canonical 数字；
@@ -258,7 +331,9 @@ public sealed partial class VsmDocument
                 string meaningful = Body(line.Text).Trim();
                 if (meaningful == "mpf")
                 {
-                    perFrame = true; output.Append(line.Text).Append(line.Ending); continue;
+                    perFrame = true;
+                    output.Append(line.Text).Append(line.Ending);
+                    continue;
                 }
                 output.Append(perFrame ? NormalizedPerFrameLine(line) : NormalizedLine(line));
             }
@@ -307,10 +382,13 @@ public sealed partial class VsmDocument
         return string.Join(',', parts) + suffix + line.Ending;
     }
     /// <summary>按源编码/BOM 输出 canonical VSM，供保存副本与所有正式导出统一使用。</summary>
+    /// <returns>按规范换行写出的文档字节。</returns>
     public byte[] NormalizedBytes()
     {
         byte[] body = Encoding.GetBytes(NormalizedText), result = new byte[Preamble.Length + body.Length];
-        Preamble.CopyTo(result, 0); body.CopyTo(result, Preamble.Length); return result;
+        Preamble.CopyTo(result, 0);
+        body.CopyTo(result, Preamble.Length);
+        return result;
     }
 
     /// <summary>
@@ -336,6 +414,8 @@ public sealed partial class VsmDocument
     /// 把片段写成一行 VSM 源文本。剪贴板与源文件共用同一套字段格式，因此贴回来的行必定能被同一个解析器读回；
     /// 这里只产出事件行本身，不含 "mods" 头也不含注释 —— 原版 read_mods_file 见到这两者会崩。
     /// </summary>
+    /// <param name="c">要编码的 VSM 事件。</param>
+    /// <returns>可写入 VSM 的事件行。</returns>
     public static string Compose(Clip c) => string.Join(',', Fields(c));
 
     /// <summary>提交前的取值校验；抛出的 FormatException 文案会直接显示给用户，所以写的是可操作的约束而非内部术语。</summary>
@@ -354,11 +434,14 @@ public sealed partial class VsmDocument
     }
 
     /// <summary>就地改写同一源行，保持事件身份与行序不变；只重写真正变化的字段，其余字段连同原有空白和注释一并保留。</summary>
+    /// <param name="next">替换现有事件的新内容。</param>
+    /// <exception cref="InvalidOperationException">要替换的来源事件已不存在。</exception>
     public void Replace(Clip next)
     {
         int i = FindLineIndex(next.Id);
         if (i < 0) throw new InvalidOperationException("The source event no longer exists.");
-        var line = Lines[i]; var previous = line.Event!;
+        var line = Lines[i];
+        var previous = line.Event!;
         // 拍/时长是编辑器自己算出来的，提交边界必须先 canonicalize；From/To 仍只改用户真正碰过的字段。
         next = Canonicalize(next, false) with
         {
@@ -367,7 +450,7 @@ public sealed partial class VsmDocument
         };
         Validate(next);
         EnsureProxyDeclaration(next.Proxy);
-        // EnsureProxyDeclaration may insert a header before this event, so resolve the stable Id again instead of reusing the old index.
+        // EnsureProxyDeclaration 可能在本事件之前插入头字段，之后须按稳定 ID 重新定位索引。
         i = FindLineIndex(next.Id);
         ReplaceIndexedLine(i, RewriteLine(Lines[i], next));
     }
@@ -411,6 +494,8 @@ public sealed partial class VsmDocument
     /// 扩容 !proxies（最多 64），保留原头部的缩进、行末注释和换行。
     /// 不允许缩到已有事件使用的下标之下，也不会无端修改其它元数据。
     /// </summary>
+    /// <param name="count">新的 proxy 数量。</param>
+    /// <exception cref="FormatException">数量不在 0 至 64 之间，或无法涵盖已有 proxy 事件。</exception>
     public void SetProxyCount(int count)
     {
         if (count is < 0 or > 64 || Clips.Any(c => c.Proxy >= count))
@@ -424,8 +509,11 @@ public sealed partial class VsmDocument
             string original = body[(colon + 1)..];
             int spaces = original.Length - original.TrimStart().Length;
             int trailing = original.Length - original.TrimEnd().Length;
-            Lines[i] = line with { Text = body[..(colon + 1)] + original[..spaces] + count.ToString(CultureInfo.InvariantCulture)
-                + (trailing > 0 ? original[^trailing..] : "") + suffix };
+            Lines[i] = line with
+            {
+                Text = body[..(colon + 1)] + original[..spaces] + count.ToString(CultureInfo.InvariantCulture)
+                + (trailing > 0 ? original[^trailing..] : "") + suffix
+            };
         }
         else
         {
@@ -438,7 +526,9 @@ public sealed partial class VsmDocument
         // 否则撤销新建 !proxies 后，UI 会继续显示撤销前的数量。
     }
 
-    /// <summary>Remove a proxy and compact later IDs, preserving all other source tokens.</summary>
+    /// <summary>删除一个 proxy 并收紧后续编号，同时保留其余源词元。</summary>
+    /// <param name="target">要移除的 proxy 编号。</param>
+    /// <exception cref="ArgumentOutOfRangeException">要删除的 proxy 编号不在当前范围内。</exception>
     public void DeleteProxy(int target)
     {
         int count = ProxyCount;
@@ -452,12 +542,19 @@ public sealed partial class VsmDocument
             if (perFrame) continue;
             string[] fields = body.Split(',');
             if (fields.Length != 7 || !int.TryParse(fields[6].Trim(), out int proxy) || proxy < target) continue;
-            if (proxy == target) { Lines.RemoveAt(i--); continue; }
+            if (proxy == target)
+            {
+                Lines.RemoveAt(i--);
+                continue;
+            }
             string token = fields[6];
             int left = token.Length - token.TrimStart().Length, right = token.Length - token.TrimEnd().Length;
             fields[6] = token[..left] + (proxy - 1).ToString(CultureInfo.InvariantCulture) + (right > 0 ? token[^right..] : "");
-            Lines[i] = line with { Text = string.Join(',', fields) + line.Text[body.Length..],
-                Event = line.Event is { } clip ? clip with { Proxy = proxy - 1 } : null };
+            Lines[i] = line with
+            {
+                Text = string.Join(',', fields) + line.Text[body.Length..],
+                Event = line.Event is { } clip ? clip with { Proxy = proxy - 1 } : null
+            };
         }
         SetProxyCount(count - 1);
     }
@@ -481,6 +578,7 @@ public sealed partial class VsmDocument
     /// 文件里已有 mpf 段时插到它前面：原版 read_mods_file 的 mode 只能 mods→mpf 单向切换，
     /// 没有写 "mods" 回去的办法，那一行只会被当成事件行切分然后越界崩掉。既有段落和注释一律不动。
     /// </summary>
+    /// <param name="clip">要添加的演出事件。</param>
     public void Add(Clip clip)
     {
         clip = Canonicalize(clip, true);
@@ -494,6 +592,9 @@ public sealed partial class VsmDocument
     }
 
     /// <summary>仅限作者显式操作。保持文件结构与其它元数据完好：只替换值本身，原有缩进、行尾注释和行位置不变。</summary>
+    /// <param name="key">头字段名称。</param>
+    /// <param name="value">要写入的头字段内容。</param>
+    /// <exception cref="FormatException">对象头字段的值不符合格式要求。</exception>
     public void SetHeader(string key, string value)
     {
         if (key != "obj" || string.IsNullOrWhiteSpace(value) || value.Any(c => c is '\r' or '\n' or ','))
@@ -517,13 +618,21 @@ public sealed partial class VsmDocument
     /// 删除属于某张 VSP 图片的全部 mod 行。已解析事件与解析失败但仍能明确识别出第 6 列图片 mod 名的行都会删除；
     /// mpf 段之后不再按 mod 解释，因此绝不碰那里的不透明文本。
     /// </summary>
+    /// <param name="imageId">目标图片 ID。</param>
+    /// <returns>被移除的关联事件数。</returns>
     public int DeleteImageEvents(string imageId)
     {
-        int removed = 0; bool perFrame = false;
+        int removed = 0;
+        bool perFrame = false;
         for (int i = 0; i < Lines.Count;)
         {
             string body = Body(Lines[i].Text).Trim();
-            if (body == "mpf") { perFrame = true; i++; continue; }
+            if (body == "mpf")
+            {
+                perFrame = true;
+                i++;
+                continue;
+            }
             bool target = false;
             if (!perFrame)
             {
@@ -536,11 +645,17 @@ public sealed partial class VsmDocument
                         target = string.Equals(rawId, imageId, StringComparison.Ordinal);
                 }
             }
-            if (target) { Lines.RemoveAt(i); removed++; } else i++;
+            if (target)
+            {
+                Lines.RemoveAt(i);
+                removed++;
+            }
+            else i++;
         }
         return removed;
     }
 
     /// <summary>整行删除，连同它的换行一起消失；其余行的文本与顺序不受影响，不做任何重排或重新格式化。</summary>
+    /// <param name="id">来源事件 ID。</param>
     public void Delete(Guid id) => Lines.RemoveAll(l => l.Event?.Id == id);
 }

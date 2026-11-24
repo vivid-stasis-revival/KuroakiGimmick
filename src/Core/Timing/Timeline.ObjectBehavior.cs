@@ -1,6 +1,7 @@
+// 由对象定义驱动的时间轴行为；不依赖任何特定歌曲、精灵名或回调名。
+
 namespace KuroakiGimmick.Core;
 
-/// <summary>由对象定义驱动的时间轴行为；不依赖任何特定歌曲、精灵名或回调名。</summary>
 public sealed partial class Timeline
 {
     /// <summary>一条逐帧绑定：区间用拍，Value 是有界标量表达式，求值时才换算成秒。</summary>
@@ -27,7 +28,7 @@ public sealed partial class Timeline
         {
             return;
         }
-        nativeFunctions = new NativeFunctionTimeline(this,chart);
+        nativeFunctions = new NativeFunctionTimeline(this, chart);
         foreach (var function in chart.PerFrame)
         {
             if (!definition.PerFrameBindings.TryGetValue(function.Function, out var outputs))
@@ -58,7 +59,7 @@ public sealed partial class Timeline
         for (int tick = 1; tick <= Math.Ceiling(duration * LogicTicksPerSecond); tick++)
         {
             // 时间由 tick 序号导出，而不是累加浮点步长：累加会让长曲子末尾产生漂移，破坏可复现性。
-            double time = tick / (double) LogicTicksPerSecond;
+            double time = tick / (double)LogicTicksPerSecond;
             double interval = Get(emitter.IntervalMod, time);
             if (!double.IsFinite(interval) || interval <= 0)
             {
@@ -82,14 +83,14 @@ public sealed partial class Timeline
                 }
                 timer -= interval;
                 // 种子只由发射序号导出，因此同一份谱面每次烘焙出完全相同的粒子；每个粒子再按固定步长取子种子。
-                uint seed = unchecked((uint) emissionIndex++ * 31 + emitter.Seed);
+                uint seed = unchecked((uint)emissionIndex++ * 31 + emitter.Seed);
                 float x = MathF.Floor(Hash(seed) * (float)(emitter.Width + 1));
                 float y = MathF.Floor(Hash(seed + 1) * (float)(emitter.Height + 1));
                 for (uint index = 0; index < emitter.ParticlesPerEmission; index++)
                 {
                     uint particle = seed + 2 + index * 5;
-                    float vx = (Hash(particle) * 2 - 1) * (float) emitter.Speed;
-                    float vy = (Hash(particle + 1) * 2 - 1) * (float) emitter.Speed;
+                    float vx = (Hash(particle) * 2 - 1) * (float)emitter.Speed;
+                    float vy = (Hash(particle + 1) * 2 - 1) * (float)emitter.Speed;
                     double death = time + emitter.Lifetime;
                     // 速度是“每 tick 位移”，所以位置按 step 个 tick 线性外推，而不是乘以秒数。
                     for (int step = 1; step <= Math.Ceiling(emitter.Lifetime * LogicTicksPerSecond); step++)
@@ -98,11 +99,11 @@ public sealed partial class Timeline
                         if (px < -emitter.Margin || px > emitter.Width + emitter.Margin || py < -emitter.Margin
                             || py > emitter.Height + emitter.Margin)
                         {
-                            death = Math.Min(death, time + step / (double) LogicTicksPerSecond);
+                            death = Math.Min(death, time + step / (double)LogicTicksPerSecond);
                             break;
                         }
                     }
-                    float saturation = emitter.SaturationMod == null ? 0 : (float) Math.Clamp(Get(emitter.SaturationMod, time), 0, 1);
+                    float saturation = emitter.SaturationMod == null ? 0 : (float)Math.Clamp(Get(emitter.SaturationMod, time), 0, 1);
                     ObjectParticles.Add(new(time, x, y, vx, vy, Math.Min(frameCount - 1, (int)(Hash(particle + 2) * frameCount)),
                         MathF.Floor(Hash(particle + 3) * 256) / 255, saturation, death, Life: emitter.Lifetime));
                 }

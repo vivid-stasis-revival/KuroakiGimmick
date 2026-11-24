@@ -13,15 +13,15 @@ public sealed partial class Viewer
 
     void SetSplitOverlappingTimelineClips(bool enabled, bool persist = true)
     {
-        CloseClipMenu(); editDrag = null;
+        CloseClipMenu();
+        editDrag = null;
         preferences.SplitOverlappingTimelineClips = enabled;
         layoutRevision = -1;
         if (persist) SaveSettings();
         click = false;
     }
 
-    // Stable chronological interval partition. Touching intervals share a row; simultaneous
-    // zero-length events do not. The source order and playback precedence never change.
+    // 按时间稳定分配子行；首尾相接的区间可共行，同刻的零长度事件需分行。保留源顺序及播放优先级。
     static int AssignTimelineLanes<T>(IEnumerable<(T Id, double Start, double End)> intervals, Dictionary<T, int> lanes) where T : notnull
     {
         var active = new PriorityQueue<int, (double End, double Start, int Lane)>();
@@ -30,9 +30,13 @@ public sealed partial class Viewer
         foreach (var item in intervals.OrderBy(item => item.Start))
         {
             while (active.TryPeek(out int released, out var end) && end.End <= item.Start && end.Start < item.Start)
-            { active.Dequeue(); available.Enqueue(released, released); }
+            {
+                active.Dequeue();
+                available.Enqueue(released, released);
+            }
             int lane = available.Count > 0 ? available.Dequeue() : count++;
-            active.Enqueue(lane, (item.End, item.Start, lane)); lanes[item.Id] = lane;
+            active.Enqueue(lane, (item.End, item.Start, lane));
+            lanes[item.Id] = lane;
         }
         return Math.Max(1, count);
     }
@@ -41,8 +45,10 @@ public sealed partial class Viewer
     {
         if (editor == null) return;
         EnsureTimelineClipIndex();
-        clipRowLanes.Clear(); windowRowLanes.Clear(); timelineLaneCounts.Clear();
-        // Empty lane maps put every event back in lane zero, including hit-testing and row copy.
+        clipRowLanes.Clear();
+        windowRowLanes.Clear();
+        timelineLaneCounts.Clear();
+        // 清空子行映射后，绘制、命中和整行复制都回到第 0 行。
         if (!preferences.SplitOverlappingTimelineClips) return;
         foreach (var track in editor.Vsm.Clips.GroupBy(c => c.TrackKey))
             timelineLaneCounts[track.Key] = AssignTimelineLanes(track.Select(c => (c.Id, c.Beat, VsmVisualEnd(c))), clipRowLanes);
@@ -58,14 +64,19 @@ public sealed partial class Viewer
 
     void SplitTimelineRows()
     {
-        var tracks = editTracks.ToArray(); editTracks.Clear();
+        var tracks = editTracks.ToArray();
+        editTracks.Clear();
         foreach (var track in tracks)
         {
-            // Container headers stay unique; only their property rows split into sibling lanes.
+            // 容器标题只出现一次，仅属性行拆成同级子行。
             int count = track.GimmickGroup || track.ImageGroup || track.TextId != null ? 1 : timelineLaneCounts.GetValueOrDefault(track.Key, 1);
             for (int lane = 0; lane < count; lane++)
-                editTracks.Add(track with { Lane = lane, Key = lane == 0 ? track.Key : track.Key + "/lane:" + lane,
-                    Label = count == 1 ? track.Label : track.Label + $" [{lane + 1}]" });
+                editTracks.Add(track with
+                {
+                    Lane = lane,
+                    Key = lane == 0 ? track.Key : track.Key + "/lane:" + lane,
+                    Label = count == 1 ? track.Label : track.Label + $" [{lane + 1}]"
+                });
         }
     }
 

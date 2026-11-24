@@ -8,8 +8,11 @@ namespace KuroakiGimmick.Core;
 /// </summary>
 public static class Paths
 {
+    /// <summary>稳定版本的应用版本号。</summary>
     public const string Version = "0.1.5";
+    /// <summary>稳定版本的构建编号。</summary>
     public const string BuildNumber = "18.5";
+    /// <summary>无程序集构建标识时使用的稳定版显示文本。</summary>
     public const string StableBuildRevision = "v0.1.5 / 18.5";
     /// <summary>
     /// UI/CLI 显示的构建标识来自程序集 InformationalVersion。CI 可注入 "Nightly / &lt;sha&gt;"，
@@ -49,17 +52,24 @@ public static class Paths
         }
     }
 
-    /// <summary>导出的默认落点，在“我的文档”下；只是初值，用户指定的路径优先。</summary>
 #if KG_SWITCH
+    /// <summary>平台可写根目录中的默认导出目录。</summary>
     public static string Output => Path.Combine(KuroakiGimmick.Native.SwitchPlatform.Root, "Exports");
+    /// <summary>平台可写根目录中的 UserData，保存日志与设备设置。</summary>
     public static string LogDirectory => Path.Combine(KuroakiGimmick.Native.SwitchPlatform.Root, "UserData");
 #elif KG_MOBILE
+    /// <summary>平台可写根目录中的默认导出目录。</summary>
     public static string Output => Path.Combine(KuroakiGimmick.Native.MobilePlatform.Root, "Exports");
+    /// <summary>平台可写根目录中的 UserData，保存日志与设备设置。</summary>
     public static string LogDirectory => Path.Combine(KuroakiGimmick.Native.MobilePlatform.Root, "UserData");
 #else
+    /// <summary>用户文档目录下的默认导出位置，显式选择的目录优先。</summary>
     public static string Output => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "KuroakiGimmick", "Exports");
     /// <summary>日志、设置与图片导入暂存都在这里。用本地应用数据目录而非漫游目录，这些内容不应跟着用户账户同步。</summary>
     public static string LogDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KuroakiGimmick");
- #endif
+#endif
+    /// <summary>在应用资源根目录下解析指定公共资源子目录。</summary>
+    /// <param name="name">共享资源子目录名。</param>
+    /// <returns>位于资源根目录下的完整目录名。</returns>
     public static string SharedAssetDirectory(string name) => Path.Combine(Assets, name);
 }

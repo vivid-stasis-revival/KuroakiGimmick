@@ -1,23 +1,40 @@
+// 绘制价格对话的发送者与 GUI 文字。
+
 using KuroakiGimmick.Core;
 
 namespace KuroakiGimmick.Graphics;
 
 public sealed partial class GameUiRenderer
 {
+    /// <summary>绘制当前价格对话的消息发送者文字。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void DrawPriceDialogueSender(Session session, double time)
     {
         Use(session.GameUi);
-        if (current?.Data == null) { session.NativeGimmick.Fail("multigrode-font", "Original dialogue font is unavailable."); return; }
+        if (current?.Data == null)
+        {
+            session.NativeGimmick.Fail("multigrode-font", "Original dialogue font is unavailable.");
+            return;
+        }
         var table = session.NativeGimmick.Data!.DialogueTable;
         if (PriceDialogueState.Index(session.Timeline.Get("dialogue_id", time), table.Count) is not { } index) return;
         var color = Color.White.Alpha(session.Timeline.Get("text_alpha", time));
         Text(Font(session), table[index].Sender + " says:", 35, 49, color, color);
         canvas.Flush();
     }
+    /// <summary>绘制价格对话界面的价格与文本元素。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="state">价格与对话索引的采样状态。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void DrawPriceDialogueGui(Session session, PriceDialogueState state, double time)
     {
         Use(session.GameUi);
-        if (current?.Data == null) { session.NativeGimmick.Fail("multigrode-font", "Original price/dialogue font is unavailable."); return; }
+        if (current?.Data == null)
+        {
+            session.NativeGimmick.Fail("multigrode-font", "Original price/dialogue font is unavailable.");
+            return;
+        }
         string font = Font(session);
         float x = (float)session.Timeline.Get("fruitmemoryx", time);
         double[] prices = [state.Fruits[0], state.Banana, state.Fruits[1], state.Fruits[2], state.Fruits[3]];
@@ -31,8 +48,7 @@ public sealed partial class GameUiRenderer
             for (int lane = 0; lane < 4; lane++)
                 Text(font, PriceDialogueState.Format(state.FallingPrice(lane)), 126 + 23 * lane, (float)falling.Y, color, color, center: true, scale: .75f);
         }
-        // TextDrawer.gradual defaults to false. The source never calls setGradual
-        // or next(), so refresh renders complete lines immediately, not a typewriter.
+        // TextDrawer.gradual 默认关闭，原版没有调用 setGradual 或 next，因此刷新后立即绘出完整文本行。
         if (state.BodyIndexAt(time) is { } body)
         {
             var color = Color.White.Alpha(session.Timeline.Get("text_alpha", time));

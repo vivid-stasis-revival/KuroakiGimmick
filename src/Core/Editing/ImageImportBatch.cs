@@ -10,20 +10,34 @@ namespace KuroakiGimmick.Core.Editing;
 public sealed class ImageImportBatch : IDisposable
 {
     /// <summary>OriginalPath 只用来起名与报错，真正被读取和写入 VSP 的始终是 StagedPath。Width/Height 是解码后的实际像素尺寸。</summary>
+    /// <param name="OriginalPath">用户选择的来源路径。</param>
+    /// <param name="StagedPath">导入期间使用的暂存路径。</param>
+    /// <param name="Sha256">内容的 SHA-256 摘要。</param>
+    /// <param name="Width">图像像素宽度。</param>
+    /// <param name="Height">图像像素高度。</param>
     public sealed record Image(string OriginalPath, string StagedPath, string Sha256, int Width, int Height);
     readonly List<Image> images = [];
+    /// <summary>通过批次准备阶段的图片资源与源尺寸。</summary>
     public IReadOnlyList<Image> Images => images;
+    /// <summary>本批次使用的暂存目录。</summary>
     public string DirectoryPath { get; }
     ImageImportBatch(string path) => DirectoryPath = path;
     /// <summary>只认这几种静态位图。判断只看扩展名，真正的格式与完整性在 <see cref="Prepare"/> 里靠解码确认。</summary>
+    /// <param name="path">候选图片路径。</param>
+    /// <returns>扩展名属于支持的图片类型时为 true。</returns>
     public static bool Accepts(string path) => Path.GetExtension(path).ToLowerInvariant() is ".png" or ".jpg" or ".jpeg" or ".bmp" or ".tga";
     /// <summary>
     /// 把选中的图片逐一复制到日志目录下的一次性暂存文件夹，并在此处做完全部校验。
     /// 上限从严：单批 1..32 张、单文件 64 MiB、边长 16384 px、单张解码后 64 MiB、整批解码后 256 MiB。
     /// 任何一张失败都会连整批一起 Dispose，不留半截目录。
     /// </summary>
+    /// <param name="paths">用户选中的图片路径。</param>
+    /// <returns>持有已暂存图片的批次，使用后由调用方释放。</returns>
+    /// <exception cref="ArgumentException">图片批次数量不在 1 至 32 之间。</exception>
+    /// <exception cref="IOException">图片暂存路径无法用 VSP CSV 表示，或文件无法复制。</exception>
     public static ImageImportBatch Prepare(IEnumerable<string> paths)
     {
+        // 1. 限制选择数量并准备本次导入专用的暂存目录。
         string[] selected = paths.Take(33).ToArray();
         if (selected.Length is < 1 or > 32) throw new ArgumentException("Import between 1 and 32 static images at a time.");
         string folder = Path.Combine(Paths.LogDirectory, "image-imports", Guid.NewGuid().ToString("N"));
@@ -34,6 +48,7 @@ public sealed class ImageImportBatch : IDisposable
         try
         {
             long total = 0;
+            // 2. 逐文件复制并校验图像类型、帧尺寸及整批解码预算。
             foreach (string entry in selected)
             {
                 if (!Accepts(entry)) throw new ArgumentException("Use static PNG, JPEG, BMP or TGA images: " + entry);
@@ -59,9 +74,14 @@ public sealed class ImageImportBatch : IDisposable
                 stream.Position = 0;
                 // 落定之前必须真的解一遍像素，不能只看文件头：像素流损坏的图片一旦生成了事件，只会在渲染时才崩。
                 ImageResult decoded;
-                try { decoded = ImageResult.FromStream(stream, ColorComponents.RedGreenBlueAlpha); }
+                try
+                {
+                    decoded = ImageResult.FromStream(stream, ColorComponents.RedGreenBlueAlpha);
+                }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
-                { throw new InvalidDataException("Image pixel decode failed: " + path, ex); }
+                {
+                    throw new InvalidDataException("Image pixel decode failed: " + path, ex);
+                }
                 if (decoded.Width != info.Width || decoded.Height != info.Height || decoded.Data.LongLength != bytes)
                     throw new InvalidDataException("Inconsistent decoded image dimensions: " + path);
                 stream.Position = 0;
@@ -70,13 +90,22 @@ public sealed class ImageImportBatch : IDisposable
             }
             return batch;
         }
-        catch { batch.Dispose(); throw; }
+        catch
+        {
+            batch.Dispose();
+            throw;
+        }
     }
     /// <summary>删掉整个一次性暂存目录。清理失败只写一行提示，不抛异常——释放路径上再抛会盖掉真正的错误。</summary>
     public void Dispose()
     {
-        try { if (Directory.Exists(DirectoryPath)) Directory.Delete(DirectoryPath, true); }
+        try
+        {
+            if (Directory.Exists(DirectoryPath)) Directory.Delete(DirectoryPath, true);
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        { Console.Error.WriteLine("Image cache cleanup: " + ex.Message); }
+        {
+            Console.Error.WriteLine("Image cache cleanup: " + ex.Message);
+        }
     }
 }

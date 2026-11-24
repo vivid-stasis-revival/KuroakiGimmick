@@ -1,3 +1,6 @@
+// 图像画布：在 320x180 逻辑空间里直接拖动 image 对象，以及移动/缩放/旋转手势的完整生命周期。
+// 画布只画 image 自身，不套 proxy、不过 screen FX，所以这里看到的不等于最终成片。
+
 using System.Numerics;
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Core.Editing;
@@ -6,10 +9,6 @@ using KuroakiGimmick.Native;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// 图像画布：在 320x180 逻辑空间里直接拖动 image 对象，以及移动/缩放/旋转手势的完整生命周期。
-/// 画布只画 image 自身，不套 proxy、不过 screen FX，所以这里看到的不等于最终成片。
-/// </summary>
 public sealed partial class Viewer
 {
     /// <summary>
@@ -35,19 +34,22 @@ public sealed partial class Viewer
     void DrawImageCanvas(Rect viewport, double time)
     {
         EnsureImageModel();
-        Canvas.Clip(viewport); Canvas.Fill(viewport, Theme.Background);
+        Canvas.Clip(viewport);
+        Canvas.Fill(viewport, Theme.Background);
         imageCanvasMap = ImageCanvasMap.Create(viewport.X, viewport.Y, viewport.W, viewport.H, imageViewCenter, imageViewZoom);
         var map = imageCanvasMap;
         Vector2 a = map.ToView(Vector2.Zero), b = map.ToView(new(320, 180));
         Canvas.Fill(new(a.X, a.Y, b.X - a.X, b.Y - a.Y), Theme.PanelAlt);
         for (int n = 0; n <= 320; n += 20)
         {
-            var p = map.ToView(new(n, 0)); var q = map.ToView(new(n, 180));
+            var p = map.ToView(new(n, 0));
+            var q = map.ToView(new(n, 180));
             Canvas.Line(p.X, p.Y, q.X, q.Y, 1, n == 160 ? Theme.GridMajor : Theme.Grid);
         }
         for (int n = 0; n <= 180; n += 20)
         {
-            var p = map.ToView(new(0, n)); var q = map.ToView(new(320, n));
+            var p = map.ToView(new(0, n));
+            var q = map.ToView(new(320, n));
             Canvas.Line(p.X, p.Y, q.X, q.Y, 1, Theme.Grid);
         }
         Canvas.Border(new(a.X, a.Y, b.X - a.X, b.Y - a.Y), muted);
@@ -66,13 +68,15 @@ public sealed partial class Viewer
         {
             if (hiddenImageItems.Contains(item.Id) || imageSolo && selectedImageId != item.Id) continue;
             if (!float.IsFinite(pose.Matrix.M11 + pose.Matrix.M12 + pose.Matrix.M21 + pose.Matrix.M22 + pose.Matrix.M31 + pose.Matrix.M32)) continue;
-            var texture = Renderer.AuthoringImageTexture(Current, item.Asset); if (texture == null) continue;
+            var texture = Renderer.AuthoringImageTexture(Current, item.Asset);
+            if (texture == null) continue;
             Vector2 Corner(float x, float y) => map.ToView(Vector2.Transform(new(x, y), pose.Matrix));
             Canvas.Polygon(texture, Corner(-.5f, -.5f), Corner(.5f, -.5f), Corner(-.5f, .5f), Corner(.5f, .5f),
                 Color.Hex(pose.Rgb).Alpha(pose.Alpha), new(pose.Frame / (float)item.Frames, 0, 1f / item.Frames, 1));
             imageCanvasItems.Add((item, pose));
         }
-        imageHandleHits.Clear(); imagePathHits.Clear();
+        imageHandleHits.Clear();
+        imagePathHits.Clear();
         if (imagePathVisible && selectedImageId != null) DrawImagePaths(map);
         var selected = imageCanvasItems.FirstOrDefault(p => p.Item.Id == selectedImageId);
         if (selected.Item != null)
@@ -81,7 +85,8 @@ public sealed partial class Viewer
             Vector2 Corner(float x, float y) => map.ToView(Vector2.Transform(new(x, y), matrix));
             var corners = new[] { Corner(-.5f, -.5f), Corner(.5f, -.5f), Corner(.5f, .5f), Corner(-.5f, .5f) };
             for (int i = 0; i < 4; i++) ImageLine(corners[i], corners[(i + 1) % 4], 2, white);
-            Vector2 center = Corner(0, 0); ImageLine(center - new Vector2(5, 0), center + new Vector2(5, 0), 1.5f, white);
+            Vector2 center = Corner(0, 0);
+            ImageLine(center - new Vector2(5, 0), center + new Vector2(5, 0), 1.5f, white);
             ImageLine(center - new Vector2(0, 5), center + new Vector2(0, 5), 1.5f, white);
             string issue = ImageTransformIssue();
             if (issue.Length == 0)
@@ -94,16 +99,20 @@ public sealed partial class Viewer
                         new(-.5f, 0), new(.5f, 0), new(0, -.5f), new(0, .5f) })
                     {
                         Vector2 p = Corner(handle.X, handle.Y);
-                        Canvas.Fill(new(p.X - 4, p.Y - 4, 8, 8), white); Canvas.Border(new(p.X - 4, p.Y - 4, 8, 8), red);
+                        Canvas.Fill(new(p.X - 4, p.Y - 4, 8, 8), white);
+                        Canvas.Border(new(p.X - 4, p.Y - 4, 8, 8), red);
                         imageHandleHits.Add((p, handle, 1));
                     }
                 }
                 if (handles.HasFlag(ImageChannels.Rotation))
                 {
                     Vector2 top = Corner(0, -.5f), direction = top - center;
-                    if (direction.LengthSquared() < .01f) direction = new(0, -1); else direction = Vector2.Normalize(direction);
-                    var rotation = top + direction * 26; ImageLine(top, rotation, 1.5f, white);
-                    ImageDiamond(rotation, 6, Theme.AccentSoft); imageHandleHits.Add((rotation, Vector2.Zero, 2));
+                    if (direction.LengthSquared() < .01f) direction = new(0, -1);
+                    else direction = Vector2.Normalize(direction);
+                    var rotation = top + direction * 26;
+                    ImageLine(top, rotation, 1.5f, white);
+                    ImageDiamond(rotation, 6, Theme.AccentSoft);
+                    imageHandleHits.Add((rotation, Vector2.Zero, 2));
                 }
             }
             Text(selected.Item.Id, viewport.X + 10, viewport.Y + 34, 13, white, max: viewport.W - 20);
@@ -146,7 +155,8 @@ public sealed partial class Viewer
         if (selectedImageId == null || imageSampler == null) return;
         foreach (var group in ImageGroups(selectedImageId).Where(g => g.Editable && g.Duration > 0 && g.Channels.HasFlag(ImageChannels.Position)).Take(512))
         {
-            var startPose = GroupEndpoint(group, false); var endPose = GroupEndpoint(group, true);
+            var startPose = GroupEndpoint(group, false);
+            var endPose = GroupEndpoint(group, true);
             if (imageObjectDrag is { } pathDrag && imagePoseTarget == ImagePoseTarget.Path)
             {
                 double dx = imageDragPose.X - pathDrag.Original.X, dy = imageDragPose.Y - pathDrag.Original.Y;
@@ -159,7 +169,8 @@ public sealed partial class Viewer
                 if (imagePoseTarget == ImagePoseTarget.End) endPose = imageDragPose;
             }
             Color color = group.Id == ActiveImageGroup?.Id ? Theme.AccentSoft : Color.Hex(0x87C9E8);
-            var start = map.ToView(new((float)startPose.X, (float)startPose.Y)); var finish = map.ToView(new((float)endPose.X, (float)endPose.Y));
+            var start = map.ToView(new((float)startPose.X, (float)startPose.Y));
+            var finish = map.ToView(new((float)endPose.X, (float)endPose.Y));
             ImageLine(start, finish, 1.5f, color);
             // 圆点表示这条直线段上的缓动分布，不代表存在一条贝塞尔曲线——轨迹本身始终是直线。
             for (int i = 1; i < 8; i++)
@@ -168,8 +179,10 @@ public sealed partial class Viewer
                 var p = map.ToView(new((float)(startPose.X + (endPose.X - startPose.X) * t), (float)(startPose.Y + (endPose.Y - startPose.Y) * t)));
                 Canvas.Fill(new(p.X - 2, p.Y - 2, 4, 4), color);
             }
-            ImageDiamond(start, 5, color); ImageDiamond(finish, 6, color);
-            imagePathHits.Add((start, group, false)); imagePathHits.Add((finish, group, true));
+            ImageDiamond(start, 5, color);
+            ImageDiamond(finish, 6, color);
+            imagePathHits.Add((start, group, false));
+            imagePathHits.Add((finish, group, true));
         }
     }
     /// <summary>
@@ -179,12 +192,17 @@ public sealed partial class Viewer
     void HandleImageCanvasClick(Rect viewport)
     {
         if (!click || !viewport.Contains(mouseX, mouseY) || mouseY < viewport.Y + 27 || Busy || UiOverlayVisible || editDrag != null || ImageGestureActive) return;
-        var screen = new Vector2(mouseX, mouseY); var world = imageCanvasMap.ToWorld(screen);
+        var screen = new Vector2(mouseX, mouseY);
+        var world = imageCanvasMap.ToWorld(screen);
         if (selectedImageId != null && imageInspector && ImageTransformIssue().Length == 0)
         {
             foreach (var hit in imageHandleHits.AsEnumerable().Reverse())
                 if (Vector2.DistanceSquared(screen, hit.Screen) <= 100)
-                { StartImageGesture(hit.Kind, hit.Handle, world); click = false; return; }
+                {
+                    StartImageGesture(hit.Kind, hit.Handle, world);
+                    click = false;
+                    return;
+                }
         }
         // 按住 Alt（0x0300 = 左右 Alt）时轨迹节点优先于压在上面的图；不按 Alt 时保持“点哪拖哪”的直觉。
         // Alt 同时还负责在重叠的图之间循环切换选中。
@@ -194,8 +212,11 @@ public sealed partial class Viewer
             foreach (var hit in imagePathHits.AsEnumerable().Reverse())
                 if (Vector2.DistanceSquared(screen, hit.Screen) <= 121)
                 {
-                    SelectImageObject(hit.Group.ImageId, true, hit.Group.Id); SetImageTarget(hit.End ? ImagePoseTarget.End : ImagePoseTarget.Start);
-                    StartImageGesture(0, Vector2.Zero, world); click = false; return;
+                    SelectImageObject(hit.Group.ImageId, true, hit.Group.Id);
+                    SetImageTarget(hit.End ? ImagePoseTarget.End : ImagePoseTarget.Start);
+                    StartImageGesture(0, Vector2.Zero, world);
+                    click = false;
+                    return;
                 }
         }
         var picks = imageCanvasItems.Where(x => !lockedImageItems.Contains(x.Item.Id) && ImageCanvasMap.Hit(x.Pose.Matrix, world)).Reverse().ToArray();
@@ -207,7 +228,12 @@ public sealed partial class Viewer
                 int index = Array.FindIndex(picks, p => p.Item.Id == selectedImageId);
                 item = picks[(index + 1 + picks.Length) % picks.Length].Item;
             }
-            if (selectedImageId != item.Id || !imageInspector) { SelectImageObject(item.Id); click = false; return; }
+            if (selectedImageId != item.Id || !imageInspector)
+            {
+                SelectImageObject(item.Id);
+                click = false;
+                return;
+            }
             StartImageGesture(0, Vector2.Zero, world);
         }
         click = false;
@@ -219,23 +245,43 @@ public sealed partial class Viewer
     /// </summary>
     void StartImageGesture(int kind, Vector2 handle, Vector2 pointer)
     {
-        if (editor == null || ActiveImageItem is not { } item || transport.Playing) { transport.SetPlaying(false); return; }
-        string issue = ImageTransformIssue(); if (issue.Length > 0) { imageObjectError = issue; return; }
+        if (editor == null || ActiveImageItem is not { } item || transport.Playing)
+        {
+            transport.SetPlaying(false);
+            return;
+        }
+        string issue = ImageTransformIssue();
+        if (issue.Length > 0)
+        {
+            imageObjectError = issue;
+            return;
+        }
         if (Math.Abs(Current.Timeline.Bpm.Beat(transport.Position) - ImageEditBeat) > 1e-8)
         {
             transport.Seek(Current.Timeline.Bpm.Time(ImageEditBeat));
-            message = L.Get("Positioned at ") + imagePoseTarget + L.Get(". Drag again to edit this pose."); return;
+            message = L.Get("Positioned at ") + imagePoseTarget + L.Get(". Drag again to edit this pose.");
+            return;
         }
         ImageChannels channel = kind == 0 ? ImageChannels.Position : kind == 1 ? ImageChannels.Scale : ImageChannels.Rotation;
         if (imagePoseTarget is ImagePoseTarget.Start or ImagePoseTarget.End && ActiveImageGroup is { } group &&
             (!group.Editable || (group.Channels & channel) == 0))
-        { imageObjectError = L.Get("Select INITIAL / KEY, or the animation for this property."); return; }
-        var pose = ReadImagePose(); var offset = pointer - new Vector2((float)pose.X, (float)pose.Y);
-        imageDragPose = pose; imageDragMoved = false;
-        imageRotationLastAngle = MathF.Atan2(offset.Y, offset.X); imageRotationAccumulated = 0;
+        {
+            imageObjectError = L.Get("Select INITIAL / KEY, or the animation for this property.");
+            return;
+        }
+        var pose = ReadImagePose();
+        var offset = pointer - new Vector2((float)pose.X, (float)pose.Y);
+        imageDragPose = pose;
+        imageDragMoved = false;
+        imageRotationLastAngle = MathF.Atan2(offset.Y, offset.X);
+        imageRotationAccumulated = 0;
         imageObjectDrag = new(editor, editor.Revision, pose, pointer, handle, kind, imageCanvasMap, item.Width, item.Height,
             MathF.Atan2(offset.Y, offset.X), channel);
-        Sdl.SDL_CaptureMouse(true); held = true; click = false; hoveredEditTrack = null; trackHelpWHeld = false;
+        Sdl.SDL_CaptureMouse(true);
+        held = true;
+        click = false;
+        hoveredEditTrack = null;
+        trackHelpWHeld = false;
     }
     /// <summary>
     /// 手势过程中更新预览姿态，不落盘。位移阈值 2 是 UI 像素（先乘 Map.Scale 换算），所以缩放再小的视图也不会误判成拖动。
@@ -245,7 +291,8 @@ public sealed partial class Viewer
     void UpdateImageGesture(float x, float y)
     {
         if (imageObjectDrag is not { } d) return;
-        var world = d.Map.ToWorld(new(x, y)); var delta = world - d.Start;
+        var world = d.Map.ToWorld(new(x, y));
+        var delta = world - d.Start;
         imageDragMoved |= delta.Length() * d.Map.Scale > 2;
         if (d.Kind == 0) imageDragPose = d.Original with { X = d.Original.X + delta.X, Y = d.Original.Y + delta.Y };
         else if (d.Kind == 1)
@@ -273,23 +320,46 @@ public sealed partial class Viewer
     {
         if (!ImageGestureActive) return false;
         if (e.WindowID != 0 && e.WindowID != ActiveUiWindowId) return false;
-        if (e.Type == 0x20F || e.Type == 0x300 && e.Scan == 41) { CancelImageGesture(); return true; }
-        if (e.Type is 0x100 or Sdl.WindowCloseRequested) { CancelImageGesture(); return false; }
-        if (e.Type == 0x400) { mouseX = e.X; mouseY = e.Y; UpdateImageGesture(e.X, e.Y); return true; }
+        if (e.Type == 0x20F || e.Type == 0x300 && e.Scan == 41)
+        {
+            CancelImageGesture();
+            return true;
+        }
+        if (e.Type is 0x100 or Sdl.WindowCloseRequested)
+        {
+            CancelImageGesture();
+            return false;
+        }
+        if (e.Type == 0x400)
+        {
+            mouseX = e.X;
+            mouseY = e.Y;
+            UpdateImageGesture(e.X, e.Y);
+            return true;
+        }
         if (e.Type == 0x402 && e.Button == 1)
         {
-            mouseX = e.X; mouseY = e.Y; UpdateImageGesture(e.X, e.Y);
-            var drag = imageObjectDrag; imageObjectDrag = null;
+            mouseX = e.X;
+            mouseY = e.Y;
+            UpdateImageGesture(e.X, e.Y);
+            var drag = imageObjectDrag;
+            imageObjectDrag = null;
             if (drag != null && imageDragMoved && editor == drag.Owner && editor.Revision == drag.Revision)
                 ImageAction(() => CommitImagePose(imageDragPose, drag.Channels));
-            FinishImageGroupDrag(); held = click = false; Sdl.SDL_CaptureMouse(false); return true;
+            FinishImageGroupDrag();
+            held = click = false;
+            Sdl.SDL_CaptureMouse(false);
+            return true;
         }
         return e.Type is >= 0x300 and <= 0x403; // 捕获手势期间吞掉全部键鼠事件：背后不能再保存、拖播放头或编辑。
     }
     /// <summary>取消手势并释放鼠标捕获。只有确实捕获过才调 SDL_CaptureMouse(false)，避免多余的解捕获调用。</summary>
     void CancelImageGesture()
     {
-        bool capture = ImageGestureActive; imageObjectDrag = null; imageGroupDrag = null; held = click = false;
+        bool capture = ImageGestureActive;
+        imageObjectDrag = null;
+        imageGroupDrag = null;
+        held = click = false;
         if (capture) Sdl.SDL_CaptureMouse(false);
     }
     /// <summary>
@@ -303,13 +373,22 @@ public sealed partial class Viewer
         {
             if (imageCanvasMap.Scale <= 0) return true;
             Vector2 pointer = imageCanvasMap.ToWorld(new(mouseX, mouseY));
-            float old = imageViewZoom; imageViewZoom = Math.Clamp(imageViewZoom * MathF.Pow(1.12f, e.WheelY), .05f, 8);
-            imageViewCenter = pointer - (pointer - imageViewCenter) * old / imageViewZoom; return true;
+            float old = imageViewZoom;
+            imageViewZoom = Math.Clamp(imageViewZoom * MathF.Pow(1.12f, e.WheelY), .05f, 8);
+            imageViewCenter = pointer - (pointer - imageViewCenter) * old / imageViewZoom;
+            return true;
         }
         if (e.Type != 0x300 || (e.Modifiers & 0x0CC0) != 0 || e.Scan is < 79 or > 82) return false;
-        transport.SetPlaying(false); var p = ReadImagePose(); double amount = (e.Modifiers & 3) != 0 ? 10 : 1;
-        ImageAction(() => CommitImagePose(e.Scan switch { 79 => p with { X = p.X + amount }, 80 => p with { X = p.X - amount },
-            81 => p with { Y = p.Y + amount }, _ => p with { Y = p.Y - amount } }, ImageChannels.Position));
+        transport.SetPlaying(false);
+        var p = ReadImagePose();
+        double amount = (e.Modifiers & 3) != 0 ? 10 : 1;
+        ImageAction(() => CommitImagePose(e.Scan switch
+        {
+            79 => p with { X = p.X + amount },
+            80 => p with { X = p.X - amount },
+            81 => p with { Y = p.Y + amount },
+            _ => p with { Y = p.Y - amount }
+        }, ImageChannels.Position));
         return true;
     }
 }

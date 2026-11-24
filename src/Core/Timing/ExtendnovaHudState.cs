@@ -1,8 +1,14 @@
 namespace KuroakiGimmick.Core;
 
-/// <summary>Source NoteScoring sets shake=1 on successful hits; Step decays it at one unit/second.</summary>
+/// <summary>原版 NoteScoring 在成功命中时将震动设为 1，Step 每秒衰减一个单位。</summary>
 public static class ExtendnovaHudState
 {
+    /// <summary>依据判定与震动轨道计算当前 HUD 的横纵偏移。</summary>
+    /// <param name="timeline">用于采样轨道和回调的时间轴。</param>
+    /// <param name="score">自动演奏判定与计分状态。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <param name="mod">要采样的 mod 名称。</param>
+    /// <returns>当前时刻的 HUD 横纵偏移。</returns>
     public static (double X, double Y) Shake(Timeline timeline, ScoreState score, double time, string mod)
     {
         double strength = 0;

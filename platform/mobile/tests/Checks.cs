@@ -1,3 +1,5 @@
+// 检查移动端资源包、导入路径及不同平台的 shader 缓存。
+
 using System.IO.Compression;
 using KuroakiGimmick.Native;
 using KuroakiGimmick.Graphics;
@@ -7,10 +9,20 @@ namespace KuroakiGimmick.MobileChecks;
 
 internal static class Checks
 {
-    static void Assert(bool value, string message) { if (!value) throw new Exception(message); }
+    static void Assert(bool value, string message)
+    {
+        if (!value) throw new Exception(message);
+    }
     static void Reject(Action action, string message)
     {
-        try { action(); } catch (Exception ex) when (ex is IOException or InvalidDataException or ArgumentException or InvalidOperationException) { return; }
+        try
+        {
+            action();
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or ArgumentException or InvalidOperationException)
+        {
+            return;
+        }
         throw new Exception(message);
     }
     static void CheckResourcePack(string resources, string baked, string root)
@@ -86,7 +98,8 @@ internal static class Checks
             zip = Path.Combine(root, "malicious.zip");
             using (var archive = ZipFile.Open(zip, ZipArchiveMode.Create))
             {
-                using var writer = new StreamWriter(archive.CreateEntry("../../escape.txt").Open()); writer.Write("escape");
+                using var writer = new StreamWriter(archive.CreateEntry("../../escape.txt").Open());
+                writer.Write("escape");
             }
             int before = Directory.GetDirectories(Path.Combine(root, "Songs")).Length;
             Reject(() => MobilePlatform.ExpandImport(zip), "ZIP traversal accepted.");
@@ -105,9 +118,11 @@ internal static class Checks
                     string copy = Path.Combine(destination, Path.GetFileName(file));
                     File.Copy(file, copy);
                     using var reader = new BinaryReader(File.OpenRead(file));
-                    reader.ReadInt32(); reader.ReadInt32();
+                    reader.ReadInt32();
+                    reader.ReadInt32();
                     var format = (GpuShaderFormat)reader.ReadUInt32();
-                    bool vertex = reader.ReadBoolean(); string source = reader.ReadString();
+                    bool vertex = reader.ReadBoolean();
+                    string source = reader.ReadString();
                     var compiled = MobileShaderPack.Load(source, vertex, format);
                     Assert(compiled.Code.Length > 0 && compiled.Entry.Length > 0, "Empty shader payload.");
                     Assert(compiled.Uniforms.Select((u, i) => u.Offset == i * 16).All(x => x), "Uniform ABI changed.");
@@ -120,6 +135,10 @@ internal static class Checks
             Console.WriteLine($"Mobile checks passed: save paths, literal arguments, song ZIP import, traversal cleanup, {checkedPacks} shader packs and format/corruption rejection.");
             return 0;
         }
-        finally { Directory.SetCurrentDirectory(original); if (Directory.Exists(root)) Directory.Delete(root, true); }
+        finally
+        {
+            Directory.SetCurrentDirectory(original);
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
     }
 }

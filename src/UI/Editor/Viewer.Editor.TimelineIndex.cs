@@ -1,3 +1,5 @@
+// 为时间轴视口与选择操作维护可查询的事件索引。
+
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Core.Editing;
 
@@ -27,8 +29,14 @@ public sealed partial class Viewer
         if (editor == null || ReferenceEquals(timelineIndexOwner, editor) && timelineIndexRevision == editor.VsmRevision
             && ReferenceEquals(timelineIndexTiming, Current.NoteIndex)) return;
         var previousTracks = new Dictionary<string, IntervalIndex<VsmDocument.Clip>>(timelineClipIndices);
-        timelineClipIndices.Clear(); timelineClipsById.Clear(); timelineTextIndices.Clear(); timelineTextAnimations.Clear();
-        timelineImageIndices.Clear(); timelineProxyClipCounts.Clear(); timelineProxyAlpha.Clear(); timelineClipCount = 0;
+        timelineClipIndices.Clear();
+        timelineClipsById.Clear();
+        timelineTextIndices.Clear();
+        timelineTextAnimations.Clear();
+        timelineImageIndices.Clear();
+        timelineProxyClipCounts.Clear();
+        timelineProxyAlpha.Clear();
+        timelineClipCount = 0;
         timelineDeclaredProxyCount = editor.Vsm.ProxyCount;
         var tracks = new Dictionary<string, List<IntervalIndex<VsmDocument.Clip>.Entry>>();
         var texts = new Dictionary<string, List<VsmDocument.Clip>>();
@@ -36,10 +44,12 @@ public sealed partial class Viewer
         foreach (var c in editor.Vsm.Clips)
         {
             if (c.Name.Equals("pra", StringComparison.OrdinalIgnoreCase)) timelineProxyAlpha.Add(c.Proxy);
-            timelineClipCount++; timelineProxyClipCounts[c.Proxy] = timelineProxyClipCounts.GetValueOrDefault(c.Proxy) + 1;
+            timelineClipCount++;
+            timelineProxyClipCounts[c.Proxy] = timelineProxyClipCounts.GetValueOrDefault(c.Proxy) + 1;
             var e = new IntervalIndex<VsmDocument.Clip>.Entry(c, c.Beat, VsmVisualEnd(c), order++);
             if (!tracks.TryGetValue(c.TrackKey, out var list)) tracks[c.TrackKey] = list = [];
-            list.Add(e); timelineClipsById[c.Id] = e;
+            list.Add(e);
+            timelineClipsById[c.Id] = e;
             if (CustomText.TryMod(c.Name, out _, out var id))
             {
                 if (!texts.TryGetValue(id, out var text)) texts[id] = text = [];
@@ -56,7 +66,8 @@ public sealed partial class Viewer
         {
             var groups = clips.GroupBy(c => (c.Beat, c.Duration, c.Ease)).Select((g, i) =>
             {
-                var c = g.First(); double end = g.Max(VsmVisualEnd);
+                var c = g.First();
+                double end = g.Max(VsmVisualEnd);
                 bool raw = g.Any(c => c.RepeatEnd != null || c.From is "_" or "573613" || c.To is "_" or "573613" || c.Proxy != -1);
                 return new IntervalIndex<TextClipGroup>.Entry(new(c, end, raw), c.Beat, end, i);
             }).ToArray();
@@ -64,7 +75,9 @@ public sealed partial class Viewer
             timelineTextAnimations[id] = groups.Where(g => g.Value.Clip.Duration > 0).Select(g => g.Value.Clip).ToArray();
         }
         BuildGimmickGroups();
-        timelineIndexOwner = editor; timelineIndexRevision = editor.VsmRevision; timelineIndexTiming = Current.NoteIndex;
+        timelineIndexOwner = editor;
+        timelineIndexRevision = editor.VsmRevision;
+        timelineIndexTiming = Current.NoteIndex;
     }
 
     VsmDocument.Clip? EditorFindClip(Guid id)
@@ -80,8 +93,16 @@ public sealed partial class Viewer
         return selectedClips.Where(timelineClipsById.ContainsKey).Select(id => timelineClipsById[id]).OrderBy(e => e.Order).Select(e => e.Value).ToArray();
     }
 
-    int EditorProxyCount() { EnsureTimelineClipIndex(); return timelineDeclaredProxyCount; }
-    bool EditorHasProxyAlpha(int proxy) { EnsureTimelineClipIndex(); return timelineProxyAlpha.Contains(proxy); }
+    int EditorProxyCount()
+    {
+        EnsureTimelineClipIndex();
+        return timelineDeclaredProxyCount;
+    }
+    bool EditorHasProxyAlpha(int proxy)
+    {
+        EnsureTimelineClipIndex();
+        return timelineProxyAlpha.Contains(proxy);
+    }
 
     int EditorClipCount(int? proxy = null)
     {
@@ -109,11 +130,12 @@ public sealed partial class Viewer
 
     List<VsmDocument.Clip> VisibleTimelineClips(string key)
     {
-        timelineVisibleEntries.Clear(); timelineVisibleClips.Clear();
+        timelineVisibleEntries.Clear();
+        timelineVisibleClips.Clear();
         if (!timelineClipIndices.TryGetValue(key, out var index)) return timelineVisibleClips;
         double start = beatStart - 10 / pixelsPerBeat, end = beatStart + editorTracksRect.W / pixelsPerBeat;
         foreach (var e in index.Overlap(start, end)) timelineVisibleEntries.Add(e);
-        // Drag preview may move previously invisible selected intervals into view. Keep source ordering.
+        // 拖动预览可能将原先不可见的选中区间带入视图，仍按来源顺序绘制。
         if (editDrag?.Clip is { } drag)
         {
             foreach (var id in selectedClips)

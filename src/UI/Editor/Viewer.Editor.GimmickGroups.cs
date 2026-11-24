@@ -23,15 +23,19 @@ public sealed partial class Viewer
 
     void SetGimmickGrouping(bool grouped, bool persist = true)
     {
-        CloseInline(); CloseClipMenu(); editDrag = null;
+        CloseInline();
+        CloseClipMenu();
+        editDrag = null;
         preferences.GroupGimmickTracks = grouped;
         if (!grouped) SetClipSelection(selectedClip);
-        layoutRevision = -1; trackScroll = 0; motion.Snap("timeline-track-scroll", 0);
+        layoutRevision = -1;
+        trackScroll = 0;
+        motion.Snap("timeline-track-scroll", 0);
         if (persist) SaveSettings();
         click = false;
     }
 
-    // A view over the existing rows: source IDs, line order, values and repeat syntax remain untouched.
+    // 仅对现有源行建立视图，保留事件 ID、源顺序、值及循环语法。
     void GroupGimmickRows()
     {
         if (!preferences.GroupGimmickTracks) return;
@@ -41,7 +45,11 @@ public sealed partial class Viewer
         editTracks.Clear();
         foreach (var track in original)
         {
-            if (!IsGimmickTrack(track)) { editTracks.Add(track); continue; }
+            if (!IsGimmickTrack(track))
+            {
+                editTracks.Add(track);
+                continue;
+            }
             if (!seen.Add(track.Target)) continue;
             editTracks.Add(new(GimmickTrackKey(track.Target), track.Target < 0 ? L.Get("GLOBAL GIMMICKS") : "Proxy " + track.Target,
                 false, track.Target, track.Target < 0 ? "scrollspeed" : "prx", GimmickGroup: true));
@@ -51,7 +59,8 @@ public sealed partial class Viewer
 
     void BuildGimmickGroups()
     {
-        gimmickGroupIndices.Clear(); gimmickGroupsByClip.Clear();
+        gimmickGroupIndices.Clear();
+        gimmickGroupsByClip.Clear();
         if (editor == null) return;
         gimmickGroupRevision = editor.Revision;
         foreach (var target in editor.Vsm.Clips.Where(c => IsGimmickMod(c.Name, c.Proxy)).GroupBy(c => c.Proxy))
@@ -59,7 +68,7 @@ public sealed partial class Viewer
             var groups = target.GroupBy(c => (c.Beat, c.Duration, c.Ease, Repeat: c.RepeatEnd != null ? c.Id : Guid.Empty))
                 .SelectMany(g =>
                 {
-                    // Equal timing can combine different channels, never two copies of the same channel.
+                    // 相同时间可组合不同通道，同一通道的两次写入仍须独立。
                     var occurrences = new Dictionary<string, int>(StringComparer.Ordinal);
                     return g.Select(c => (Clip: c, Lane: occurrences[c.Name] = occurrences.GetValueOrDefault(c.Name) + 1))
                         .GroupBy(c => c.Lane).Select(row => row.Select(c => c.Clip).ToArray());
@@ -74,9 +83,14 @@ public sealed partial class Viewer
     {
         bool remove = additive && group.All(c => selectedClips.Contains(c.Id));
         if (!additive && !group.All(c => selectedClips.Contains(c.Id))) selectedClips.Clear();
-        foreach (var clip in group) { if (remove) selectedClips.Remove(clip.Id); else selectedClips.Add(clip.Id); }
+        foreach (var clip in group)
+        {
+            if (remove) selectedClips.Remove(clip.Id);
+            else selectedClips.Add(clip.Id);
+        }
         selectedClip = remove ? selectedClips.Count > 0 ? selectedClips.First() : null : group[0].Id;
-        SyncPickedProxy(selectedClip); imageInspector = textInspector = false;
+        SyncPickedProxy(selectedClip);
+        imageInspector = textInspector = false;
     }
 
     void DrawGimmickGroupClips(int target, float y, bool interactive)
@@ -93,7 +107,8 @@ public sealed partial class Viewer
             Math.Max(9, BeatX(e.End) - BeatX(e.Start)), 23).Contains(mouseX, mouseY)).Value : null;
         foreach (var entry in visible)
         {
-            var clips = entry.Value; var first = clips[0];
+            var clips = entry.Value;
+            var first = clips[0];
             string label = string.Join(" + ", clips.Select(c => c.Name).Distinct());
             DrawEventClip(y, entry.Start, entry.End, label, clips.Any(c => selectedClips.Contains(c.Id)),
                 false, first, null, -1, interactive && ReferenceEquals(clips, hit), clips);

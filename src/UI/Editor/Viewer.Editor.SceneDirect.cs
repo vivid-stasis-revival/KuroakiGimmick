@@ -1,3 +1,7 @@
+// GAME SCENE 直接操作层。最终预览仍由 SceneRenderer 绘制；本层只在其上建立作者坐标的命中框，
+// 双击选中 image/text，随后拖拽只提交 X/Y。选择框故意画在最终后处理之后，因此即使 uialpha/FX/proxy
+// 让对象很难看清，编辑器手柄本身也不会一起消失。一次拖拽只在松手时写一个 Undo 事务。
+
 using System.Numerics;
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Core.Editing;
@@ -6,14 +10,12 @@ using KuroakiGimmick.Native;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// GAME SCENE 直接操作层。最终预览仍由 SceneRenderer 绘制；本层只在其上建立作者坐标的命中框，
-/// 双击选中 image/text，随后拖拽只提交 X/Y。选择框故意画在最终后处理之后，因此即使 uialpha/FX/proxy
-/// 让对象很难看清，编辑器手柄本身也不会一起消失。一次拖拽只在松手时写一个 Undo 事务。
-/// </summary>
 public sealed partial class Viewer
 {
-    enum SceneDirectKind { Image, Text }
+    enum SceneDirectKind
+    {
+        Image, Text
+    }
     sealed record SceneDirectHit(SceneDirectKind Kind, string Id, Vector2[] Corners);
     sealed record SceneDirectDrag(EditorDocument Owner, long Revision, SceneDirectKind Kind, string Id,
         Vector2 Pointer, float ScaleX, float ScaleY, double X, double Y, ImageEditPose ImagePose);
@@ -57,7 +59,8 @@ public sealed partial class Viewer
         sceneDirectHits.Clear();
         if (editor == null || imageCanvas || textCanvas || desktopPreview || viewport.W <= 0 || viewport.H <= 0) return;
 
-        EnsureImageModel(); EnsureTexts();
+        EnsureImageModel();
+        EnsureTexts();
         var projection = SceneDirectProjection(viewport);
         double beat = Current.Timeline.Bpm.Beat(time);
         var imageOverrides = new Dictionary<string, double>(StringComparer.Ordinal);
@@ -83,7 +86,10 @@ public sealed partial class Viewer
             if (textSampler == null) return;
             double Value(string name) => sceneDirectTextValues?.GetValueOrDefault(name, textSampler.Get(name, beat)) ?? textSampler.Get(name, beat);
             Renderer.MeasureAuthoringTexts(Current, time, projection, Value,
-                (id, corners) => { if (corners.All(p => float.IsFinite(p.X + p.Y))) sceneDirectHits.Add(new(SceneDirectKind.Text, id, corners)); });
+                (id, corners) =>
+{
+    if (corners.All(p => float.IsFinite(p.X + p.Y))) sceneDirectHits.Add(new(SceneDirectKind.Text, id, corners));
+});
         }
 
         if (Current.Chart.ObjectName == "obj_custom_gimmick")
@@ -129,20 +135,27 @@ public sealed partial class Viewer
         if (editor == null) return;
         double beat = Current.Timeline.Bpm.Beat(transport.Position);
         float sx = Math.Max(.0001f, previewImage.W / 320f), sy = Math.Max(.0001f, previewImage.H / 180f);
-        sceneDirectMoved = false; sceneDirectTextValues = null;
+        sceneDirectMoved = false;
+        sceneDirectTextValues = null;
 
         if (hit.Kind == SceneDirectKind.Image)
         {
             SelectImageObject(hit.Id, canvas: false, keyBeat: beat);
             string issue = ImageTransformIssue();
-            if (issue.Length > 0) { message = L.Get("Scene drag unavailable: ") + issue; return; }
-            var pose = ReadImagePose(); sceneDirectImagePose = pose;
+            if (issue.Length > 0)
+            {
+                message = L.Get("Scene drag unavailable: ") + issue;
+                return;
+            }
+            var pose = ReadImagePose();
+            sceneDirectImagePose = pose;
             sceneDirectDrag = new(editor, editor.Revision, hit.Kind, hit.Id, pointer, sx, sy, pose.X, pose.Y, pose);
         }
         else
         {
             SelectText(hit.Id, canvas: false, atBeat: beat);
-            EnsureTexts(); if (textSampler == null) return;
+            EnsureTexts();
+            if (textSampler == null) return;
             double x = textSampler.Get("textX", hit.Id, textAt), y = textSampler.Get("textY", hit.Id, textAt);
             sceneDirectDrag = new(editor, editor.Revision, hit.Kind, hit.Id, pointer, sx, sy, x, y, default);
         }
@@ -177,17 +190,34 @@ public sealed partial class Viewer
         {
             if (e.WindowID != 0 && e.WindowID != ActiveUiWindowId) return false;
             if (e.Type == 0x20F || e.Type == 0x300 && e.Scan == 41)
-            { CancelSceneDirectGesture(); return true; }
-            if (e.Type is 0x100 or Sdl.WindowCloseRequested) { CancelSceneDirectGesture(); return false; }
+            {
+                CancelSceneDirectGesture();
+                return true;
+            }
+            if (e.Type is 0x100 or Sdl.WindowCloseRequested)
+            {
+                CancelSceneDirectGesture();
+                return false;
+            }
             if (e.Type == 0x400)
-            { mouseX = e.X; mouseY = e.Y; UpdateSceneDirectDrag(new(e.X, e.Y)); return true; }
+            {
+                mouseX = e.X;
+                mouseY = e.Y;
+                UpdateSceneDirectDrag(new(e.X, e.Y));
+                return true;
+            }
             if (e.Type == 0x402 && e.Button == 1)
             {
-                mouseX = e.X; mouseY = e.Y; UpdateSceneDirectDrag(new(e.X, e.Y));
+                mouseX = e.X;
+                mouseY = e.Y;
+                UpdateSceneDirectDrag(new(e.X, e.Y));
                 bool commit = sceneDirectMoved && editor == drag.Owner && editor.Revision == drag.Revision;
                 var imagePose = sceneDirectImagePose;
                 Dictionary<string, double>? textValues = sceneDirectTextValues;
-                sceneDirectDrag = null; sceneDirectTextValues = null; held = click = false; Sdl.SDL_CaptureMouse(false);
+                sceneDirectDrag = null;
+                sceneDirectTextValues = null;
+                held = click = false;
+                Sdl.SDL_CaptureMouse(false);
                 if (commit)
                 {
                     if (drag.Kind == SceneDirectKind.Image) ImageAction(() => CommitImagePose(imagePose, ImageChannels.Position));
@@ -204,7 +234,8 @@ public sealed partial class Viewer
 
         if (!editorMode || settings || UiOverlayVisible || Busy || imageCanvas || textCanvas || desktopPreview || prGridSoloRendered) return false;
         if (e.Type != 0x401 || e.Button != 1) return false;
-        mouseX = e.X; mouseY = e.Y;
+        mouseX = e.X;
+        mouseY = e.Y;
         if (!previewImage.Contains(mouseX, mouseY)) return false;
         var pointer = new Vector2(mouseX, mouseY);
         var hit = SceneDirectPick(pointer);
@@ -231,7 +262,13 @@ public sealed partial class Viewer
     void CancelSceneDirectGesture()
     {
         bool active = sceneDirectDrag != null;
-        sceneDirectDrag = null; sceneDirectTextValues = null; sceneDirectMoved = false;
-        if (active) { held = click = false; Sdl.SDL_CaptureMouse(false); }
+        sceneDirectDrag = null;
+        sceneDirectTextValues = null;
+        sceneDirectMoved = false;
+        if (active)
+        {
+            held = click = false;
+            Sdl.SDL_CaptureMouse(false);
+        }
     }
 }

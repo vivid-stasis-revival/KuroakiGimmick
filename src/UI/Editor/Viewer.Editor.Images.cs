@@ -1,3 +1,6 @@
+// 图片导入：拖放接收、后台解码、确认弹窗与资源生命周期。
+// 解码一律扔到 Task.Run，输入事件分支里不做文件读取，否则拖一批大图会把窗口线程卡住。
+
 using System.Runtime.InteropServices;
 using System.Numerics;
 using KuroakiGimmick.Core;
@@ -7,10 +10,6 @@ using KuroakiGimmick.Native;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// 图片导入：拖放接收、后台解码、确认弹窗与资源生命周期。
-/// 解码一律扔到 Task.Run，输入事件分支里不做文件读取，否则拖一批大图会把窗口线程卡住。
-/// </summary>
 public sealed partial class Viewer
 {
     readonly List<string> droppedImages = [];
@@ -41,44 +40,81 @@ public sealed partial class Viewer
         {
             if (e.Type is 0x400 or 0x401 or 0x402)
             {
-                mouseX = e.X; mouseY = e.Y;
-                if (e.Type == 0x401 && e.Button == 1 && pendingImages != null) { held = true; click = true; }
+                mouseX = e.X;
+                mouseY = e.Y;
+                if (e.Type == 0x401 && e.Button == 1 && pendingImages != null)
+                {
+                    held = true;
+                    click = true;
+                }
                 if (e.Type == 0x402 && e.Button == 1) held = false;
             }
             if (e.Type == 0x300 && e.Repeat == 0 && e.Scan == 41) CancelImageImport();
             return e.Type is not (0x100 or Sdl.WindowCloseRequested);
         }
         if (!editorMode || e.Type is < 0x1000 or > 0x1004) return false;
-        if (e.Type == 0x1002) { droppedImages.Clear(); droppedImagePosition = null; imageDropActive = !Busy && !UiOverlayVisible; lastImageDrop = Environment.TickCount64; return true; }
-        if (e.Type == 0x1004) { imageDropActive = !Busy && !UiOverlayVisible; lastImageDrop = Environment.TickCount64; return true; }
+        if (e.Type == 0x1002)
+        {
+            droppedImages.Clear();
+            droppedImagePosition = null;
+            imageDropActive = !Busy && !UiOverlayVisible;
+            lastImageDrop = Environment.TickCount64;
+            return true;
+        }
+        if (e.Type == 0x1004)
+        {
+            imageDropActive = !Busy && !UiOverlayVisible;
+            lastImageDrop = Environment.TickCount64;
+            return true;
+        }
         if (e.Type == 0x1000)
         {
             // event.data 的所有权在 SDL3 手里：必须在取下一个事件之前把这段 UTF-8 字符串复制出来。
             string? path = Marshal.PtrToStringUTF8(e.DropData);
             if (path == null) return true;
             if (Busy || UiOverlayVisible || dialogOpen || editDrag != null || ImageGestureActive || resizingLayout != 0)
-            { imageDropActive = false; droppedImages.Clear(); message = L.Get("Close the dialog or finish the active operation before dropping images."); return true; }
+            {
+                imageDropActive = false;
+                droppedImages.Clear();
+                message = L.Get("Close the dialog or finish the active operation before dropping images.");
+                return true;
+            }
             if (!ImageImportBatch.Accepts(path))
             {
-                if (droppedImages.Count > 0) { droppedImages.Clear(); imageDropActive = false; message = L.Get("Drop images separately from chart/project files."); return true; }
+                if (droppedImages.Count > 0)
+                {
+                    droppedImages.Clear();
+                    imageDropActive = false;
+                    message = L.Get("Drop images separately from chart/project files.");
+                    return true;
+                }
                 imageDropActive = false;
                 // 其它格式仍走原来的资源/谱面打开流程。
                 if (Path.GetExtension(path).ToLowerInvariant() is ".gif" or ".webp" or ".svg" or ".heic")
-                { message = L.Get("Use a static PNG, JPEG, BMP or TGA image. Animated/vector formats are not imported."); return true; }
-                LoadPaths([path]); return true;
+                {
+                    message = L.Get("Use a static PNG, JPEG, BMP or TGA image. Animated/vector formats are not imported.");
+                    return true;
+                }
+                LoadPaths([path]);
+                return true;
             }
             if (droppedImages.Count == 0)
             {
-                transport.SetPlaying(false); droppedImagePosition = null;
+                transport.SetPlaying(false);
+                droppedImagePosition = null;
                 if (previewImage.W > 0 && previewImage.H > 0 && previewImage.Contains(e.DropX, e.DropY))
                     droppedImagePosition = imageCanvas && imageCanvasMap.Scale > 0 ? imageCanvasMap.ToWorld(new(e.DropX, e.DropY)) :
                         new Vector2((e.DropX - previewImage.X) / previewImage.W * 320, (e.DropY - previewImage.Y) / previewImage.H * 180);
             }
-            droppedImages.Add(path); lastImageDrop = Environment.TickCount64; return true;
+            droppedImages.Add(path);
+            lastImageDrop = Environment.TickCount64;
+            return true;
         }
         if (e.Type == 0x1003)
         {
-            imageDropActive = false; FlushImageDrops(); return true;
+            imageDropActive = false;
+            FlushImageDrops();
+            return true;
         }
         return true;
     }
@@ -86,8 +122,11 @@ public sealed partial class Viewer
     void FlushImageDrops()
     {
         if (droppedImages.Count == 0) return;
-        var paths = droppedImages.ToArray(); droppedImages.Clear();
-        var position = droppedImagePosition; droppedImagePosition = null; BeginImageImportAt(paths, position);
+        var paths = droppedImages.ToArray();
+        droppedImages.Clear();
+        var position = droppedImagePosition;
+        droppedImagePosition = null;
+        BeginImageImportAt(paths, position);
     }
     void ChooseImageImport()
     {
@@ -104,9 +143,13 @@ public sealed partial class Viewer
     {
         if (Busy || ImageGestureActive || !EnsureAuthoring() || editor == null) return;
         if (paths.Length == 0) return;
-        transport.SetPlaying(false); imageOwner = editor; imageInsertBeat = InsertionBeat;
-        imageInsertPosition = position; imageReplacementId = replacement;
-        held = click = editorScrub = false; imageImportError = "";
+        transport.SetPlaying(false);
+        imageOwner = editor;
+        imageInsertBeat = InsertionBeat;
+        imageInsertPosition = position;
+        imageReplacementId = replacement;
+        held = click = editorScrub = false;
+        imageImportError = "";
         imageLoad = Task.Run(() => ImageImportBatch.Prepare(paths));
         message = L.Get("Importing image(s)...");
     }
@@ -119,23 +162,44 @@ public sealed partial class Viewer
         // 被丢弃的 session 里可能还有 CPU 端读取线程在跑，要让它暂存的路径保持有效，不能提前删。
         for (int i = retiredImageReaders.Count - 1; i >= 0; i--)
             if (retiredImageReaders[i].IsCompleted)
-            { _ = retiredImageReaders[i].Exception; retiredImageReaders.RemoveAt(i); }
+            {
+                _ = retiredImageReaders[i].Exception;
+                retiredImageReaders.RemoveAt(i);
+            }
         // 有些后端/测试只发单个文件事件、不发 complete 事件，所以静默 150ms 后就自行收口。
         if (droppedImages.Count > 0 && Environment.TickCount64 - lastImageDrop > 150)
-        { imageDropActive = false; FlushImageDrops(); }
+        {
+            imageDropActive = false;
+            FlushImageDrops();
+        }
         if (imageDropActive && Environment.TickCount64 - lastImageDrop > 1500) imageDropActive = false;
         if (imageLoad is not { IsCompleted: true }) return;
-        var task = imageLoad; imageLoad = null;
+        var task = imageLoad;
+        imageLoad = null;
         try
         {
             var batch = task.GetAwaiter().GetResult();
-            if (!ReferenceEquals(editor, imageOwner)) { batch.Dispose(); return; }
+            if (!ReferenceEquals(editor, imageOwner))
+            {
+                batch.Dispose();
+                return;
+            }
             pendingImages = batch;
-            var chart = new Chart(); VsmReader.ReplaceModsText(chart, editor!.Vsm.Text, "image-import.vsm");
+            var chart = new Chart();
+            VsmReader.ReplaceModsText(chart, editor!.Vsm.Text, "image-import.vsm");
             if (imageReplacementId != null || chart.ObjectName == "obj_custom_gimmick") CommitImages(false);
-            else { motion.Snap("image-import", 0); message = L.Get("Confirm the Custom Gimmick object before importing images."); }
+            else
+            {
+                motion.Snap("image-import", 0);
+                message = L.Get("Confirm the Custom Gimmick object before importing images.");
+            }
         }
-        catch (Exception ex) { pendingImages?.Dispose(); pendingImages = null; message = L.Get("Image import failed: ") + ex.Message; }
+        catch (Exception ex)
+        {
+            pendingImages?.Dispose();
+            pendingImages = null;
+            message = L.Get("Image import failed: ") + ex.Message;
+        }
     }
     /// <summary>
     /// 真正写入文档。替换模式要求恰好一张图，且保留原 id、层、帧数与已有动画。
@@ -152,18 +216,27 @@ public sealed partial class Viewer
             {
                 var item = Current.Images.Items.FirstOrDefault(i => i.Id == replacement) ?? throw new InvalidOperationException(L.Get("Image no longer exists."));
                 if (pendingImages.Images.Count != 1) throw new InvalidOperationException(L.Get("Choose exactly one replacement image."));
-                editor.ReplaceImageResource(item, pendingImages.Images[0]); names = new[] { replacement };
+                editor.ReplaceImageResource(item, pendingImages.Images[0]);
+                names = new[] { replacement };
             }
             else names = editor.ImportImages(pendingImages, imageInsertBeat, switchObject, imageInsertPosition);
-            retainedImageBatches.Add(pendingImages); pendingImages = null;
+            retainedImageBatches.Add(pendingImages);
+            pendingImages = null;
             string name = "imgalp_" + names[0];
-            selectedClip = editor.Vsm.Clips.LastOrDefault(c => c.Name == name)?.Id; selectedWindowEvent = -1; inspectorScroll = 0;
+            selectedClip = editor.Vsm.Clips.LastOrDefault(c => c.Name == name)?.Id;
+            selectedWindowEvent = -1;
+            inspectorScroll = 0;
             SelectImageObject(names[0]);
-            FocusImageTrack(names[0], imageInsertBeat); imageDropActive = false;
+            FocusImageTrack(names[0], imageInsertBeat);
+            imageDropActive = false;
             held = click = false;
             message = imageReplacementId != null ? L.Get("Replaced image resource; placement and animations preserved.") : L.Format($"Added {names.Count} image(s). Drag in IMAGE CANVAS; edit INITIAL or add a motion. Chart Folder includes resources.");
         }
-        catch (Exception ex) { imageImportError = ex.Message; message = L.Get("Image import failed: ") + ex.Message; }
+        catch (Exception ex)
+        {
+            imageImportError = ex.Message;
+            message = L.Get("Image import failed: ") + ex.Message;
+        }
     }
     /// <summary>选文件替换当前 image 的资源。id 先取出来存进闭包，对话框返回时选中项可能已经变了。</summary>
     void ChooseImageReplacement()
@@ -175,7 +248,9 @@ public sealed partial class Viewer
     /// <summary>取消导入并释放尚未提交的 batch。同时清掉 held/click，免得关闭弹窗那一下穿透到下面的工作区。</summary>
     void CancelImageImport()
     {
-        pendingImages?.Dispose(); pendingImages = null; held = click = false;
+        pendingImages?.Dispose();
+        pendingImages = null;
+        held = click = false;
     }
     /// <summary>拖放悬停时的提示框，顺带显示会落在哪一拍。仅提示，不参与任何命中判定。</summary>
     void DrawImageDropOverlay()
@@ -183,7 +258,8 @@ public sealed partial class Viewer
         if (!editorMode || !imageDropActive || Busy || UiOverlayVisible) return;
         Canvas.Border(previewFrame, Color.Hex(0x85DCFF), 3);
         var r = new Rect(previewFrame.X + 18, previewFrame.Y + 18, Math.Min(470, previewFrame.W - 36), 70);
-        Canvas.Fill(r, panel); Canvas.Border(r, soft);
+        Canvas.Fill(r, panel);
+        Canvas.Border(r, soft);
         Text(L.Get("DROP IMAGE TO ADD GIMMICK"), r.X + 14, r.Y + 12, 16, white, max: r.W - 28);
         Text(L.Format($"Insert at beat {InsertionBeat:0.###} / PNG, JPEG, BMP, TGA"), r.X + 14, r.Y + 40, 12, muted, max: r.W - 28);
     }
@@ -197,7 +273,8 @@ public sealed partial class Viewer
         using var fade = Canvas.Opacity(imageImportAlpha);
         Canvas.Fill(new(0, 0, w, h), Color.Hex(0, .88f));
         var r = new Rect(w / 2f - 355, h / 2f - 180, 710, 360);
-        Canvas.Fill(r, panel); Canvas.Border(r, soft);
+        Canvas.Fill(r, panel);
+        Canvas.Border(r, soft);
         Text(imageReplacementId != null ? L.Get("REPLACE IMAGE RESOURCE") : L.Get("IMPORT IMAGE GIMMICK"), r.X + 24, r.Y + 25, 22, white);
         Text(L.Format($"{pendingImages?.Images.Count ?? 0} image(s) / beat {imageInsertBeat:0.######}"), r.X + 24, r.Y + 72, 15, white);
         Text(imageReplacementId != null ? L.Get("One source image replaces only the selected instance.") : L.Get("Images require obj_custom_gimmick."), r.X + 24, r.Y + 117, 16, white);
@@ -211,7 +288,10 @@ public sealed partial class Viewer
             if (Button(imageReplacementId != null ? L.Get("REPLACE") : L.Get("USE CUSTOM OBJ + IMPORT"), new(r.X + 24, r.Y + 286, 398, 42), primary: true, enabled: pendingImages != null)) CommitImages(true);
             if (Button(L.Get("CANCEL"), new(r.X + 440, r.Y + 286, 246, 42), enabled: pendingImages != null)) CancelImageImport();
         }
-        finally { imageImportInput = false; }
+        finally
+        {
+            imageImportInput = false;
+        }
     }
     /// <summary>
     /// 退出前的收尾，顺序要紧：先等所有后台任务（导出准备、导出写入、预览重建、退役读取器）结束，
@@ -221,13 +301,43 @@ public sealed partial class Viewer
     void ReleaseImageImports()
     {
         // 暂存目录被删除时，不允许还有后台读取线程持有其中的路径。
-        try { chartExportPrepare?.GetAwaiter().GetResult(); } catch (Exception) { }
-        try { chartExportWrite?.GetAwaiter().GetResult(); } catch (Exception) { }
-        try { editorBuild?.GetAwaiter().GetResult(); } catch (Exception) { }
+        try
+        {
+            chartExportPrepare?.GetAwaiter().GetResult();
+        }
+        catch (Exception)
+        {
+        }
+        try
+        {
+            chartExportWrite?.GetAwaiter().GetResult();
+        }
+        catch (Exception)
+        {
+        }
+        try
+        {
+            editorBuild?.GetAwaiter().GetResult();
+        }
+        catch (Exception)
+        {
+        }
         foreach (var task in retiredImageReaders)
-            try { task.GetAwaiter().GetResult(); } catch (Exception) { }
+            try
+            {
+                task.GetAwaiter().GetResult();
+            }
+            catch (Exception)
+            {
+            }
         retiredImageReaders.Clear();
-        try { if (imageLoad != null) imageLoad.GetAwaiter().GetResult().Dispose(); } catch (Exception) { }
+        try
+        {
+            if (imageLoad != null) imageLoad.GetAwaiter().GetResult().Dispose();
+        }
+        catch (Exception)
+        {
+        }
         pendingImages?.Dispose();
         foreach (var batch in retainedImageBatches) batch.Dispose();
         retainedImageBatches.Clear();

@@ -1,18 +1,28 @@
+// 在支持的平台显示带确认复选框的原生提示框。
+
 #if !KG_MOBILE && !KG_SWITCH
 using System.Runtime.InteropServices;
 using KuroakiGimmick.Native;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>Native desktop confirmation with a real checkbox and a disabled-until-checked destructive button.</summary>
+/// <summary>桌面原生确认框包含实际复选框，只有勾选后才能使用破坏性操作按钮。</summary>
 internal static class NativeRiskMessageBox
 {
     internal static bool TryShow(nint parent, ChartSizeWarningText text, out bool confirmed)
     {
         confirmed = false;
-        if (OperatingSystem.IsMacOS()) { confirmed = Mac.Show(text); return true; }
-        if (OperatingSystem.IsWindows()) { confirmed = Windows.Show(parent, text); return true; }
-        return false; // Other desktop environments use the same modal message box in the SDL UI.
+        if (OperatingSystem.IsMacOS())
+        {
+            confirmed = Mac.Show(text);
+            return true;
+        }
+        if (OperatingSystem.IsWindows())
+        {
+            confirmed = Windows.Show(parent, text);
+            return true;
+        }
+        return false; // 其他桌面环境使用 SDL 界面中的等效模态消息框。
     }
 
     static class Mac
@@ -22,18 +32,27 @@ internal static class NativeRiskMessageBox
         [DllImport(Objc)] static extern nint sel_registerName(string name);
         [DllImport(Objc)] static extern nint objc_allocateClassPair(nint parent, string name, nint extra);
         [DllImport(Objc)] static extern void objc_registerClassPair(nint cls);
-        [DllImport(Objc)] [return: MarshalAs(UnmanagedType.I1)] static extern bool class_addMethod(nint cls, nint selector, nint method, string types);
+        [DllImport(Objc)][return: MarshalAs(UnmanagedType.I1)] static extern bool class_addMethod(nint cls, nint selector, nint method, string types);
         [DllImport(Objc, EntryPoint = "objc_msgSend")] static extern nint Send(nint obj, nint selector);
         [DllImport(Objc, EntryPoint = "objc_msgSend")] static extern nint Send(nint obj, nint selector, nint arg);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void Action(nint self, nint selector, nint sender);
-        static readonly Action Toggle = (_, _, sender) => { if (confirmButton != 0) Send(confirmButton, Sel("setEnabled:"), Send(sender, Sel("state")) == 1 ? 1 : 0); };
+        static readonly Action Toggle = (_, _, sender) =>
+{
+    if (confirmButton != 0) Send(confirmButton, Sel("setEnabled:"), Send(sender, Sel("state")) == 1 ? 1 : 0);
+};
         static nint confirmButton;
         static nint Sel(string name) => sel_registerName(name);
         static nint String(string text)
         {
             nint memory = Marshal.StringToCoTaskMemUTF8(text);
-            try { return Send(objc_getClass("NSString"), Sel("stringWithUTF8String:"), memory); }
-            finally { Marshal.FreeCoTaskMem(memory); }
+            try
+            {
+                return Send(objc_getClass("NSString"), Sel("stringWithUTF8String:"), memory);
+            }
+            finally
+            {
+                Marshal.FreeCoTaskMem(memory);
+            }
         }
         internal static bool Show(ChartSizeWarningText text)
         {
@@ -60,17 +79,28 @@ internal static class NativeRiskMessageBox
                 nint check = Send(alert, Sel("suppressionButton"));
                 Send(check, Sel("setTitle:"), String(text.Acknowledgement));
                 Send(check, Sel("setState:"), 0);
-                Send(check, Sel("setTarget:"), target); Send(check, Sel("setAction:"), Sel("toggleRisk:"));
+                Send(check, Sel("setTarget:"), target);
+                Send(check, Sel("setAction:"), Sel("toggleRisk:"));
                 return Send(alert, Sel("runModal")) == 1001 && Send(check, Sel("state")) == 1;
             }
-            finally { confirmButton = 0; Send(alert, Sel("release")); Send(target, Sel("release")); }
+            finally
+            {
+                confirmButton = 0;
+                Send(alert, Sel("release"));
+                Send(target, Sel("release"));
+            }
         }
     }
 
     static unsafe class Windows
     {
-        [StructLayout(LayoutKind.Sequential, Pack = 1)] struct Button { public int Id; public nint Text; }
-        [StructLayout(LayoutKind.Sequential, Pack = 1)] struct Config
+        [StructLayout(LayoutKind.Sequential, Pack = 1)]
+        struct Button
+        {
+            public int Id; public nint Text;
+        }
+        [StructLayout(LayoutKind.Sequential, Pack = 1)]
+        struct Config
         {
             public uint Size; public nint Parent, Instance; public uint Flags, CommonButtons;
             public nint Title, Icon, Instruction, Content; public uint ButtonCount; public Button* Buttons;
@@ -87,13 +117,21 @@ internal static class NativeRiskMessageBox
             int* checkedValue = (int*)data;
             if (notification == 0) SendMessage(window, 0x400 + 111, 101, 0); // TDN_CREATED / TDM_ENABLE_BUTTON.
             if (notification == 8)
-            { *checkedValue = value != 0 ? 1 : 0; SendMessage(window, 0x400 + 111, 101, *checkedValue); }
+            {
+                *checkedValue = value != 0 ? 1 : 0;
+                SendMessage(window, 0x400 + 111, 101, *checkedValue);
+            }
             return notification == 2 && value == 101 && *checkedValue == 0 ? 1 : 0;
         }
         internal static bool Show(nint parent, ChartSizeWarningText text)
         {
             var strings = new List<nint>();
-            nint String(string value) { nint p = Marshal.StringToCoTaskMemUni(value); strings.Add(p); return p; }
+            nint String(string value)
+            {
+                nint p = Marshal.StringToCoTaskMemUni(value);
+                strings.Add(p);
+                return p;
+            }
             try
             {
                 Button* buttons = stackalloc Button[2];
@@ -102,17 +140,29 @@ internal static class NativeRiskMessageBox
                 int check = 0;
                 var config = new Config
                 {
-                    Size = (uint)sizeof(Config), Parent = Sdl.SDL_GetPointerProperty(Sdl.SDL_GetWindowProperties(parent), "SDL.window.win32.hwnd", 0),
-                    Flags = 0x8 | 0x1000, Title = String("Kuroaki/Gimmick"), Icon = (nint)0xffff,
-                    Instruction = String(text.Title), Content = String(text.Body), ButtonCount = 2, Buttons = buttons,
-                    DefaultButton = 100, Verification = String(text.Acknowledgement),
-                    Callback = Marshal.GetFunctionPointerForDelegate(Handler), Data = (nint)(&check), Width = 430
+                    Size = (uint)sizeof(Config),
+                    Parent = Sdl.SDL_GetPointerProperty(Sdl.SDL_GetWindowProperties(parent), "SDL.window.win32.hwnd", 0),
+                    Flags = 0x8 | 0x1000,
+                    Title = String("Kuroaki/Gimmick"),
+                    Icon = (nint)0xffff,
+                    Instruction = String(text.Title),
+                    Content = String(text.Body),
+                    ButtonCount = 2,
+                    Buttons = buttons,
+                    DefaultButton = 100,
+                    Verification = String(text.Acknowledgement),
+                    Callback = Marshal.GetFunctionPointerForDelegate(Handler),
+                    Data = (nint)(&check),
+                    Width = 430
                 };
                 int result = TaskDialogIndirect(in config, out int button, out _, out int verified);
                 if (result < 0) Marshal.ThrowExceptionForHR(result);
                 return button == 101 && verified != 0 && check != 0;
             }
-            finally { foreach (nint memory in strings) Marshal.FreeCoTaskMem(memory); }
+            finally
+            {
+                foreach (nint memory in strings) Marshal.FreeCoTaskMem(memory);
+            }
         }
     }
 }

@@ -1,8 +1,7 @@
+// 无显示状态的时间轴。构建时按拍数和声明顺序整理轨道；查询不依赖上一帧，因此预览、倒拖和导出可以共享结果。
+
 namespace KuroakiGimmick.Core;
 
-/// <summary>
-/// 无显示状态的时间轴。构建时按拍数和声明顺序整理轨道；查询不依赖上一帧，因此预览、倒拖和导出可以共享结果。
-/// </summary>
 public sealed partial class Timeline
 {
     /// <summary>
@@ -13,17 +12,20 @@ public sealed partial class Timeline
         name is "fx_underwater" or "fx_chroma_distort" ? Math.Max(.01, value) : value;
 
     /// <summary>读取基础轨道后应用声明式别名、逐帧覆盖与回调淡入；不修改时间轴状态。</summary>
+    /// <param name="name">轨道名。</param>
+    /// <param name="t">查询时刻，单位为秒。</param>
+    /// <param name="proxy">目标 proxy 编号，-1 表示全局。</param>
+    /// <returns>解析该时刻有效写入后的轨道值。</returns>
     public double Get(string name, double t, int proxy = -1)
     {
         if (proxy == -1 && TrySequenceWrite(name, t, out double sourceWrite)) return SafeModValue(name, sourceWrite);
-        if (proxy == -1 && Native?.Data?.ValueBindings.TryGetValue(name,out var forced) == true)
-            return SafeModValue(name,forced.Value(this,t));
-        if (mpfScripts?.TryValue(name,t,proxy,out double scriptValue)==true)
-            return SafeModValue(name,scriptValue);
-        if (nativeFunctions?.TryValue(name,t,proxy,out double programValue)==true)
-            return SafeModValue(name,programValue);
-        // Main frame path: one Rust FFI call in PrepareFrame, zero crossings per Get.
-        // Other times/threads fall back to original C# automatically.
+        if (proxy == -1 && Native?.Data?.ValueBindings.TryGetValue(name, out var forced) == true)
+            return SafeModValue(name, forced.Value(this, t));
+        if (mpfScripts?.TryValue(name, t, proxy, out double scriptValue) == true)
+            return SafeModValue(name, scriptValue);
+        if (nativeFunctions?.TryValue(name, t, proxy, out double programValue) == true)
+            return SafeModValue(name, programValue);
+        // 主帧在 PrepareFrame 中调用一次 Rust，后续 Get 读取本线程缓存；其他时刻或线程回退到 C#。
         if (TryNativeBase(name, t, proxy, out double nativeValue))
             return SafeModValue(name, nativeValue);
         double initial = Initial(name, proxy);
@@ -91,11 +93,18 @@ public sealed partial class Timeline
             if (write.Mod != name) continue;
             double trigger = SequenceTriggerTime(write.Trigger);
             double at = Math.Max(write.Time, trigger);
-            if (at <= time && at >= last) { last = at; value = write.Value; }
+            if (at <= time && at >= last)
+            {
+                last = at;
+                value = write.Value;
+            }
         }
         return last > double.NegativeInfinity && last >= NativeTrackWriteTime(name, -1, time);
     }
 
+    /// <summary>查询给定序列触发键的生效时刻。</summary>
+    /// <param name="trigger">剧情序列的触发键。</param>
+    /// <returns>最早的触发秒数，未触发时为正无穷。</returns>
     public double SequenceTriggerTime(string trigger)
     {
         double time = Native?.Data?.Sequence?.AutomaticTriggers.GetValueOrDefault(trigger, double.PositiveInfinity) ?? double.PositiveInfinity;
@@ -105,6 +114,10 @@ public sealed partial class Timeline
     }
 
     /// <summary>二分选择已经开始的最后一个事件；同一时间的后声明事件覆盖先声明事件。</summary>
+    /// <param name="list">按起点排序的插值段。</param>
+    /// <param name="t">查询时刻，单位为秒。</param>
+    /// <param name="initial">首个片段之前的初始值。</param>
+    /// <returns>在查询时刻生效的数值。</returns>
     public static double Evaluate(List<Segment> list, double t, double initial)
     {
         int low = 0, high = list.Count;

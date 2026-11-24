@@ -18,17 +18,21 @@ public sealed partial class Viewer
     {
         if (sourceOwner == null) return;
         string? previous = ActiveMpfSource?.Path;
-        sourceMpfTab = true; sourceSelecting = false; sourceTop = 0; sourceLeft = 0;
-        sourceMpfFiles.Clear(); workflowError = sourceMpfStatus = "";
+        sourceMpfTab = true;
+        sourceSelecting = false;
+        sourceTop = 0;
+        sourceLeft = 0;
+        sourceMpfFiles.Clear();
+        workflowError = sourceMpfStatus = "";
         var sources = MpfScriptSources.Resolve(sourceOwner.Project);
         foreach (var (name, path) in sources.Files.OrderBy(pair => pair.Key, StringComparer.Ordinal))
             sourceMpfFiles.Add((name, path));
         if (sources.Errors.Count > 0) workflowError = string.Join("; ", sources.Errors);
-        // Missing referenced scripts get a draft at the expected difficulty filename. No file
-        // is created until the author explicitly saves it.
+        // 缺失脚本按预期的难度文件名创建草稿，直到作者显式保存才写文件。
         if (sources.Root != null && sourceVsm != null && sources.Errors.Count == 0)
         {
-            var chart = new Chart(); VsmReader.ReplaceModsText(chart, sourceVsm.Text, "source.vsm");
+            var chart = new Chart();
+            VsmReader.ReplaceModsText(chart, sourceVsm.Text, "source.vsm");
             foreach (string name in chart.PerFrame.Select(frame => frame.Function).Distinct(StringComparer.Ordinal))
             {
                 if (sources.Files.ContainsKey(name) || NativeFunctionTimeline.Supports(Current.NativeGimmick.Data, name)
@@ -48,7 +52,10 @@ public sealed partial class Viewer
     {
         if (sourceMpfFiles.Count == 0) return;
         sourceMpfIndex = (index + sourceMpfFiles.Count) % sourceMpfFiles.Count;
-        sourceTop = 0; sourceLeft = 0; sourceSelecting = false; workflowError = "";
+        sourceTop = 0;
+        sourceLeft = 0;
+        sourceSelecting = false;
+        workflowError = "";
         string path = sourceMpfFiles[sourceMpfIndex].Path;
         try
         {
@@ -56,14 +63,19 @@ public sealed partial class Viewer
             sourceMpfStatus = path;
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or FormatException)
-        { workflowError = ex.Message; }
+        {
+            workflowError = ex.Message;
+        }
     }
 
     void SaveMpfSource(string? historyRoot = null)
     {
         if (ActiveMpfSource is not { } file || editor == null || sourceOwner != editor) return;
         if (editor.Revision != sourceRevision)
-        { workflowError = L.Get("Document changed. Reopen the source editor before applying."); return; }
+        {
+            workflowError = L.Get("Document changed. Reopen the source editor before applying.");
+            return;
+        }
         try
         {
             if (file.Save(historyRoot)) editorResourceRevision++;
@@ -72,7 +84,9 @@ public sealed partial class Viewer
             message = sourceMpfStatus;
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or FormatException)
-        { workflowError = ex.Message; }
+        {
+            workflowError = ex.Message;
+        }
     }
 
     void DrawMpfSourcePicker(Rect box)

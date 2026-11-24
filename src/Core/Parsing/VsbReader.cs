@@ -1,3 +1,5 @@
+// 解码二进制谱面，处理扩展 mod 编号并将数据交给 Chart。
+
 using System.Text;
 
 namespace KuroakiGimmick.Core;
@@ -8,6 +10,11 @@ namespace KuroakiGimmick.Core;
 // VSC1：字节对齐的小端 GameMaker buffer；浮点字段一律 f32，读入后再升为 double。
 public static class VsbReader
 {
+    /// <summary>从 VSB 二进制谱面读取音符、元数据及演出数据。</summary>
+    /// <param name="path">VSB 文件路径。</param>
+    /// <param name="definitionPath">可选的对象定义路径。</param>
+    /// <param name="profile">演出配置键。</param>
+    /// <returns>解析后的二进制谱面。</returns>
     public static Chart Load(string path, string? definitionPath = null, string profile = "auto")
     {
         if (RustEngineBridge.TryLoadVsb(path, definitionPath, profile, out var native) && native != null)
@@ -124,7 +131,7 @@ public static class VsbReader
                             177 => r.ReadSByte(),
                             178 => r.ReadUInt32(),
                             179 => r.ReadInt32(),
-                            181 => (double) BitConverter.UInt16BitsToHalf(r.ReadUInt16()),
+                            181 => (double)BitConverter.UInt16BitsToHalf(r.ReadUInt16()),
                             182 => Float(r),
                             183 => r.ReadByte() != 0,
                             184 => CString(r),
@@ -196,7 +203,7 @@ public static class VsbReader
                             var proxy = r.ReadSByte();
                             // GameMaker 把非正的 duration 当作立即赋值。
                             // Order 用当前计数，保留同一拍事件的二进制先后顺序。
-                            c.Mods.Add(new(beat, duration, ease < ModCatalog.BinaryEases.Length? ModCatalog.BinaryEases[ease] : $"ease_{ease}",
+                            c.Mods.Add(new(beat, duration, ease < ModCatalog.BinaryEases.Length ? ModCatalog.BinaryEases[ease] : $"ease_{ease}",
                                 from, to, ModCatalog.Decode(id, c.ObjectName, extraMods), proxy, c.Mods.Count));
                         }
                         else if (m == 236)

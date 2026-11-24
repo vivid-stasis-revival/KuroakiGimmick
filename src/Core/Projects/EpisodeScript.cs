@@ -1,3 +1,5 @@
+// 从歌曲目录查找谱面内剧情，并将脚本按触发时刻展开为剧情序列。
+
 using System.Text.Json;
 
 namespace KuroakiGimmick.Core;
@@ -40,7 +42,9 @@ public sealed class EpisodeScript
         "se", "bgm_gain", "bgm_stop", "end", "goto", "abort",
     };
 
+    /// <summary>谱面内剧情脚本的来源路径。</summary>
     public string Path { get; }
+    /// <summary>读取和展开剧情脚本时产生的诊断。</summary>
     public IReadOnlyList<Diagnostic> Diagnostics { get; }
     /// <summary>剧本非空才值得展开；缺剧本或剧本坏掉时这里是 false，诊断已经说明了原因。</summary>
     public bool Playable => steps.Count > 0;
@@ -68,9 +72,12 @@ public sealed class EpisodeScript
 
     /// <summary>
     /// 读同目录的剧本。只做解析与静态诊断——按字数算停留时间要先换行，而换行要量游戏字体的宽度，
-    /// 那是绘制侧才有的能力，所以时刻表留给 <see cref="Expand"/>。
+    /// 那是绘制侧才有的能力，所以时刻表留给 <see cref="Expand(IReadOnlyList{double}, Func{string, float})"/>。
     /// 谱面里没有 custom_episode 时返回 null；文件缺失或损坏返回带诊断的空剧本，不抛异常。
     /// </summary>
+    /// <param name="p">当前工程的路径与呈现配置。</param>
+    /// <param name="chart">提供音符、演出事件及诊断的谱面。</param>
+    /// <returns>找到并加载的剧情脚本，没有可用脚本时为 null。</returns>
     public static EpisodeScript? Load(ViewerProject p, Chart chart)
     {
         if (!chart.Mods.Any(e => e.Name.Equals(ModName, StringComparison.OrdinalIgnoreCase)))
@@ -91,6 +98,9 @@ public sealed class EpisodeScript
     /// 这首歌的剧本文件，不问谱面有没有触发过它。编辑器要在作者写下第一条 custom_episode 之前
     /// 就知道"这里能插剧情"，而那时 <see cref="Load"/> 按定义只会返回 null。
     /// </summary>
+    /// <param name="p">当前工程的路径与呈现配置。</param>
+    /// <param name="chart">提供音符、演出事件及诊断的谱面。</param>
+    /// <returns>已定位的剧情文件路径，缺失时为 null。</returns>
     public static string? Find(ViewerProject p, Chart chart)
     {
         string? directory = SongFiles.Root(p);
@@ -101,6 +111,8 @@ public sealed class EpisodeScript
     }
 
     /// <summary>解析一份剧本并给出静态诊断。文件损坏或没有可用步骤都只报诊断，不抛异常。</summary>
+    /// <param name="file">剧情文件路径。</param>
+    /// <returns>从文件中读取的脚本。</returns>
     public static EpisodeScript Read(string file)
     {
         try
@@ -138,6 +150,9 @@ public sealed class EpisodeScript
     /// 按触发时刻把剧本展开成绝对时间的对白序列，交给 <see cref="NativeStoryState"/> 重放。
     /// 每次触发各自成窗：模组在新触发到来时先停掉正在播的那段，不排队。
     /// </summary>
+    /// <param name="triggers">各次剧情触发的歌曲秒数。</param>
+    /// <param name="width">测量一段文本宽度的回调。</param>
+    /// <returns>按触发时刻展开的剧情序列。</returns>
     public NativeSequenceDefinition Expand(IReadOnlyList<double> triggers, Func<string, float> width)
     {
         var sequence = new NativeSequenceDefinition();
@@ -151,6 +166,8 @@ public sealed class EpisodeScript
     }
 
     /// <summary>第 <paramref name="index"/> 次触发的窗口名。与谱面里的 mod 名区分开，避免被当成一个 mod 查表。</summary>
+    /// <param name="index">触发点的索引。</param>
+    /// <returns>该触发点的稳定序列键。</returns>
     public static string Trigger(int index) =>
         "custom_episode#" + index.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
@@ -161,6 +178,9 @@ public sealed class EpisodeScript
     /// 编辑器据此画区间：画剧本的完整长度会承诺一段根本演不完的剧情。
     /// 起点相同的两次触发不算切断彼此（那只是同一拍上的重复行），因此只看严格更晚的那些。
     /// </summary>
+    /// <param name="sequence">定义剧情、音频和场景事件的序列。</param>
+    /// <param name="index">要查询的触发点索引。</param>
+    /// <returns>该次剧情的起止秒数与提前截断标志。</returns>
     public static (double Start, double End, bool Truncated) Extent(NativeSequenceDefinition sequence, int index)
     {
         var window = sequence.StoryWindows[index];
@@ -184,24 +204,24 @@ public sealed class EpisodeScript
             {
                 case "line":
                 case "narration":
-                {
-                    if (step.Text == null)
                     {
+                        if (step.Text == null)
+                        {
+                            break;
+                        }
+                        double speed = step.Speed is double s && s > 0 ? s : DefaultSpeed;
+                        string body = step.Text;
+                        if (step.Wrap ?? defaultWrap)
+                        {
+                            // 停留时间按换行之后的长度算，所以换行必须先做。
+                            body = string.Join('\n', NativeStoryState.Wrap(body, width, step.Width ?? defaultWidth));
+                        }
+                        cues.Add(new(time, trigger, Speaker(step.Who), body, speed));
+                        double typing = body.Length / (100 * speed);
+                        double stay = step.Dwell ?? dwell + body.Length * 40 / Math.Max(0.1, speed);
+                        time += typing + Math.Max(200, stay) / 1000;
                         break;
                     }
-                    double speed = step.Speed is double s && s > 0 ? s : DefaultSpeed;
-                    string body = step.Text;
-                    if (step.Wrap ?? defaultWrap)
-                    {
-                        // 停留时间按换行之后的长度算，所以换行必须先做。
-                        body = string.Join('\n', NativeStoryState.Wrap(body, width, step.Width ?? defaultWidth));
-                    }
-                    cues.Add(new(time, trigger, Speaker(step.Who), body, speed));
-                    double typing = body.Length / (100 * speed);
-                    double stay = step.Dwell ?? dwell + body.Length * 40 / Math.Max(0.1, speed);
-                    time += typing + Math.Max(200, stay) / 1000;
-                    break;
-                }
                 case "narrator":
                     // 只改名字框，不产生新的一句；下一句对白会带着这个名字出现。
                     break;

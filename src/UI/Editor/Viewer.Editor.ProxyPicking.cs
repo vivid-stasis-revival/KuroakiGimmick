@@ -18,12 +18,12 @@ public sealed partial class Viewer
         int count = Math.Min(frame.Session.Chart.Proxies, EditableProxyCount);
         bool custom = frame.Session.Chart.ObjectName == "obj_custom_gimmick";
         var timeline = frame.Session.Timeline;
-        // Match the displayed frame, not the advancing audio playhead.
+        // 拾取按已经显示的帧采样，避免使用正在推进的音频播放头。
         return ProxyScenePicking.Pick(timeline, frame.Time, custom, count, logical, frame.OnlyProxy);
     }
 
     bool HandleProxySceneGesture(Sdl.Event e) => e.Type == 0x401 && e.Button == 1 &&
-        // Mouse Y overlaps Event.Modifiers in SDL's union; only SDL_GetModState is valid here.
+        // SDL 联合体中鼠标 Y 与 Event.Modifiers 有重叠，此处应通过 SDL_GetModState 查询修饰键。
         HandleProxySceneGesture(e, (Sdl.SDL_GetModState() & 3) != 0);
 
     bool HandleProxySceneGesture(Sdl.Event e, bool forceProxy)
@@ -37,13 +37,12 @@ public sealed partial class Viewer
             prGridLabels.Any(label => label.Bounds.Contains(e.X, e.Y))) return false;
         if (!forceProxy && e.Clicks < 2) return false;
         var pointer = new Vector2(e.X, e.Y);
-        // Preserve existing image/text selection and drag on ordinary double-clicks.
-        // Shift also reserves the first press, so an already selected background image
-        // cannot begin a drag while the user is trying to double-click the proxy behind it.
+        // 普通双击保留原图片和文字选择及拖动；按 Shift 时预留第一次按下，避免双击后方 proxy 时先拖动已选的背景图。
         var intent = ProxyScenePicking.Resolve(true, forceProxy, e.Clicks,
             frame.OnlyProxy == null && SceneDirectPick(pointer) != null);
         if (intent == ProxyScenePicking.Intent.Pass) return false;
-        mouseX = e.X; mouseY = e.Y;
+        mouseX = e.X;
+        mouseY = e.Y;
         if (intent == ProxyScenePicking.Intent.Pick && PickProxyInScene(pointer, frame) is int target)
         {
             SelectProxyFromGuide(target);

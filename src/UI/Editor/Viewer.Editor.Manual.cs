@@ -1,12 +1,11 @@
+// VSM 语法手册浏览器（F1）。阻塞覆盖层：显示期间下面的工作区不接受键盘和滚轮。
+// 它只读，任何操作都不会创建事件或改动谱面。
+
 using KuroakiGimmick.Graphics;
 using KuroakiGimmick.Native;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// VSM 语法手册浏览器（F1）。阻塞覆盖层：显示期间下面的工作区不接受键盘和滚轮。
-/// 它只读，任何操作都不会创建事件或改动谱面。
-/// </summary>
 public sealed partial class Viewer
 {
     // 这个浏览器是覆盖在源文档目录之上的只读模态视图。搜索框复用编辑器的 Unicode 输入对话框，
@@ -90,7 +89,12 @@ public sealed partial class Viewer
         if (e.Type == 0x300)
         {
             bool command = (e.Modifiers & 0x0CC0) != 0;
-            if (e.Repeat == 0 && (e.Scan is 41 or 58 or 11)) { help = false; trackHelpWHeld = false; click = false; }
+            if (e.Repeat == 0 && (e.Scan is 41 or 58 or 11))
+            {
+                help = false;
+                trackHelpWHeld = false;
+                click = false;
+            }
             else if (command && e.Scan == 9 && e.Repeat == 0) SearchManual();
             else if (e.Scan == 81) SelectManual(manualSelected + 1);
             else if (e.Scan == 82) SelectManual(manualSelected - 1);
@@ -181,7 +185,10 @@ public sealed partial class Viewer
             14, HelpSecondaryColor, max: outer.W - 40, unified: true);
         if (ManualButton(L.Get("搜索  Ctrl/Cmd+F"), new(left, top + 69, 170, 34))) SearchManual();
         if (ManualButton(L.Get("清空"), new(left + 180, top + 69, 65, 34)))
-        { manualQuery = manualCategory = ""; RefreshManual(); }
+        {
+            manualQuery = manualCategory = "";
+            RefreshManual();
+        }
         Text(manualQuery.Length > 0 ? manualQuery : L.Get("输入原始名字、中文作用、配置、obj 或 mpf"), left + 260, top + 76,
             16, HelpSummaryColor, max: outer.W - 300, unified: true);
 
@@ -208,7 +215,11 @@ public sealed partial class Viewer
             string summary = EditorHelpLayout.FitTitle(entry.Short.Replace('\n', ' '), rect.W - 18,
                 s => fonts.Measure(s, 12, unified: true));
             Text(summary, rect.X + 9, rect.Y + 32, 12, HelpSecondaryColor, max: rect.W - 18, unified: true);
-            if (hover && click) { SelectManual(index); click = false; }
+            if (hover && click)
+            {
+                SelectManual(index);
+                click = false;
+            }
         }
         Canvas.Clip(null);
         DrawManualScrollbar(manualListRect, manualListStart, Math.Max(0, manualResults.Length - manualVisible),

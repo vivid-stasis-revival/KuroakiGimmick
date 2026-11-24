@@ -1,12 +1,11 @@
+// 编辑器输入分派。这里的判断顺序本身就是契约：辅助窗口 → 退出 → workflow → 参考手册 → 模态 →
+// 快速帮助 → 编辑器快捷键，上层覆盖层一律吞掉下层的键盘与滚轮，只放行鼠标事件给覆盖层自己的按钮。
+// 事件分支里只做状态切换，不做慢速文件加载。
+
 using System.Runtime.InteropServices;
 using KuroakiGimmick.Native;
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// 编辑器输入分派。这里的判断顺序本身就是契约：辅助窗口 → 退出 → workflow → 参考手册 → 模态 →
-/// 快速帮助 → 编辑器快捷键，上层覆盖层一律吞掉下层的键盘与滚轮，只放行鼠标事件给覆盖层自己的按钮。
-/// 事件分支里只做状态切换，不做慢速文件加载。
-/// </summary>
 public sealed partial class Viewer
 {
     /// <summary>返回 true 表示该事件专属于编辑器 / 真实窗口预览，已被消费，不再往 viewer 输入层传。</summary>
@@ -17,12 +16,21 @@ public sealed partial class Viewer
         if (windowEvent && e.WindowID != 0 && e.WindowID != ActiveUiWindowId)
         {
             if (nativeWindows?.Owns(e.WindowID) == true && (e.Type == Sdl.WindowCloseRequested || e.Type == 0x300 && e.Scan == 41))
-            { nativeWindows.Dispose(); nativeWindows = null; message = L.Get("Live windows closed."); }
+            {
+                nativeWindows.Dispose();
+                nativeWindows = null;
+                message = L.Get("Live windows closed.");
+            }
             return true;
         }
         if (e.Type == 0x100 || e.Type == Sdl.WindowCloseRequested)
         {
-            if (ChartExportBusy) { chartExportCancellation?.Cancel(); message = L.Get("Cancelling export; close again when it has stopped."); return true; }
+            if (ChartExportBusy)
+            {
+                chartExportCancellation?.Cancel();
+                message = L.Get("Cancelling export; close again when it has stopped.");
+                return true;
+            }
             if (referenceOpen) CloseReference();
             if (!GuardUnsaved(() => quit = true)) quit = true;
             return true;
@@ -31,7 +39,11 @@ public sealed partial class Viewer
         if (ReferenceVisible) return HandleReferenceInput(e);
         if (UiClosingOverlay)
         {
-            if (e.Type is 0x400 or 0x401 or 0x402) { mouseX = e.X; mouseY = e.Y; }
+            if (e.Type is 0x400 or 0x401 or 0x402)
+            {
+                mouseX = e.X;
+                mouseY = e.Y;
+            }
             held = click = false;
             return true;
         }
@@ -45,7 +57,11 @@ public sealed partial class Viewer
             if (e.Type == 0x303)
             {
                 string value = Marshal.PtrToStringUTF8(e.TextData) ?? "";
-                if (modalSelectAll) { modalValue = ""; modalSelectAll = false; }
+                if (modalSelectAll)
+                {
+                    modalValue = "";
+                    modalSelectAll = false;
+                }
                 if (modalValue.Length + value.Length <= 65536) modalValue += value;
                 return true;
             }
@@ -61,11 +77,19 @@ public sealed partial class Viewer
                     try
                     {
                         string value = Marshal.PtrToStringUTF8(ptr) ?? "";
-                        if (value.Length > 65536) { modalError = L.Get("Clipboard text exceeds 64 KiB."); return true; }
+                        if (value.Length > 65536)
+                        {
+                            modalError = L.Get("Clipboard text exceeds 64 KiB.");
+                            return true;
+                        }
                         modalValue = modalSelectAll ? value : (modalValue + value);
-                        if (modalValue.Length > 65536) modalValue = modalValue[..65536]; modalSelectAll = false;
+                        if (modalValue.Length > 65536) modalValue = modalValue[..65536];
+                        modalSelectAll = false;
                     }
-                    finally { Sdl.SDL_free(ptr); }
+                    finally
+                    {
+                        Sdl.SDL_free(ptr);
+                    }
                 }
                 else if (e.Scan is 42 or 76)
                 {
@@ -87,7 +111,10 @@ public sealed partial class Viewer
         // 鼠标点在输入框以外时它只提交并返回 false，这一次点击继续往下走，照常落到用户真正瞄准的控件上。
         if (InlineActive && HandleInlineInput(e)) return true;
         if (e.Type == 0x300 && e.Repeat == 0 && e.Scan == 58 && !Busy && !settings)
-        { OpenContextReference(); return true; }
+        {
+            OpenContextReference();
+            return true;
+        }
         // 快速帮助在显示期间是阻塞覆盖层。导航键和滚轮不能拖动播放头或编辑下面的时间轴；
         // 鼠标事件仍然放行，这样帮助自己的按钮还能点。
         if (help)
@@ -101,7 +128,8 @@ public sealed partial class Viewer
             // 但 W 的抬起必须在这里被观察到，否则松手后帮助卡片会一直挂着。
             if (e.Scan == 26)
             {
-                trackHelpWHeld = false; trackHelpWDownAt = 0;
+                trackHelpWHeld = false;
+                trackHelpWDownAt = 0;
                 return editorMode;
             }
             return false;
@@ -109,27 +137,52 @@ public sealed partial class Viewer
         if (e.Type == 0x401) mouseClicks = e.Clicks;
         if (e.Type == 0x402 && e.Button == 1)
         {
-            mouseX = e.X; mouseY = e.Y;
-            if (editorMode) { FinishDrag(); FinishMarquee(); }
+            mouseX = e.X;
+            mouseY = e.Y;
+            if (editorMode)
+            {
+                FinishDrag();
+                FinishMarquee();
+            }
             editorScrub = false;
         }
         // 右键：按住拖 = 平移时间轴（横向按拍、纵向按轨道行），原地松手 = 在指针处弹菜单。
         // 右键事件不会更新 mouseX / mouseY 的公共路径，所以这里必须自己写进去。
         if (editorMode && e.Type is 0x401 or 0x402 && e.Button == 3)
         {
-            mouseX = e.X; mouseY = e.Y;
-            if (e.Type == 0x401) { if (!Busy && editorTimelineRect.Contains(e.X, e.Y)) BeginPan(e.X, e.Y); }
+            mouseX = e.X;
+            mouseY = e.Y;
+            if (e.Type == 0x401)
+            {
+                if (!Busy && editorTimelineRect.Contains(e.X, e.Y)) BeginPan(e.X, e.Y);
+            }
             else FinishPan(e.X, e.Y);
             return true;
         }
-        if (e.Type == 0x400 && panActive) { mouseX = e.X; mouseY = e.Y; UpdatePan(e.X, e.Y); return true; }
+        if (e.Type == 0x400 && panActive)
+        {
+            mouseX = e.X;
+            mouseY = e.Y;
+            UpdatePan(e.X, e.Y);
+            return true;
+        }
         if (e.Type == 0x300 && e.Repeat == 0 && e.Scan == 41 && nativeWindows != null)
-        { nativeWindows.Dispose(); nativeWindows = null; return true; }
+        {
+            nativeWindows.Dispose();
+            nativeWindows = null;
+            return true;
+        }
         if (e.Type == 0x300 && e.Repeat == 0 && e.Scan == 43 && !Busy && !settings)
-        { ToggleWorkspace(); return true; }
+        {
+            ToggleWorkspace();
+            return true;
+        }
         // 即使已经切回 Viewer 也要保存编辑文档本身，而不只是它旧的工程引用。
         if (e.Type == 0x300 && e.Repeat == 0 && (e.Modifiers & 0x0CC0) != 0 && e.Scan == 22 && editor != null)
-        { SaveEditor((e.Modifiers & 3) != 0); return true; }
+        {
+            SaveEditor((e.Modifiers & 3) != 0);
+            return true;
+        }
         if (!editorMode || settings) return false;
         if (help)
         {
@@ -165,35 +218,94 @@ public sealed partial class Viewer
         // 拖拽进行中不接受，否则会在一次拖拽中途改掉插入点。
         if (!command && (e.Modifiers & 0x0300) == 0 && e.Scan == 8 && editDrag == null)
         {
-            if (shift && activeMarker is Guid marker) { editor?.RemoveMarker(marker); activeMarker = null; }
+            if (shift && activeMarker is Guid marker)
+            {
+                editor?.RemoveMarker(marker);
+                activeMarker = null;
+            }
             else if (!shift) MarkTimestamp();
             return true;
         }
-        if (command && e.Scan == 8) { OpenChartExport(); return true; }
+        if (command && e.Scan == 8)
+        {
+            OpenChartExport();
+            return true;
+        }
         if (!command && e.Scan == 26)
         {
             // 长按 W 且指针停在原始轨道名上时，展开详细帮助卡片。
-            trackHelpWHeld = true; trackHelpWDownAt = Environment.TickCount64;
+            trackHelpWHeld = true;
+            trackHelpWDownAt = Environment.TickCount64;
             return true;
         }
         // scancode 41 = Esc：拖拽中按下只取消本次拖拽，不退出编辑器。
-        if (e.Scan == 41 && editDrag != null) { editDrag = null; return true; }
+        if (e.Scan == 41 && editDrag != null)
+        {
+            editDrag = null;
+            return true;
+        }
         // 29 = Z，28 = Y：撤销 / 重做后作废布局缓存，否则时间轴仍按旧结构绘制。
         if (command && e.Scan == 29)
-        { if (shift) editor?.Redo(); else editor?.Undo(); layoutRevision = -1; return true; }
-        if (command && e.Scan == 28) { editor?.Redo(); layoutRevision = -1; return true; }
-        if (!command && e.Scan is 42 or 76) { DeleteSelection(); return true; }
-        if (!command && e.Scan == 7) { DuplicateSelection(); return true; }
+        {
+            if (shift) editor?.Redo();
+            else editor?.Undo();
+            layoutRevision = -1;
+            return true;
+        }
+        if (command && e.Scan == 28)
+        {
+            editor?.Redo();
+            layoutRevision = -1;
+            return true;
+        }
+        if (!command && e.Scan is 42 or 76)
+        {
+            DeleteSelection();
+            return true;
+        }
+        if (!command && e.Scan == 7)
+        {
+            DuplicateSelection();
+            return true;
+        }
         // 27 = X，6 = C，25 = V：选择集经系统剪贴板往返，两个编辑器实例之间因此可以互相粘贴。
         // 就地编辑与模态在更前面就已经拦下按键，这里不会抢走文本框里的复制粘贴。
-        if (command && e.Scan == 27) { CutSelection(); return true; }
-        if (command && e.Scan == 6) { CopySelection(); return true; }
-        if (command && e.Scan == 25) { PasteClipboard(); return true; }
+        if (command && e.Scan == 27)
+        {
+            CutSelection();
+            return true;
+        }
+        if (command && e.Scan == 6)
+        {
+            CopySelection();
+            return true;
+        }
+        if (command && e.Scan == 25)
+        {
+            PasteClipboard();
+            return true;
+        }
         // 4 = A，5 = B，15 = L：以当前播放位置（秒）换算成拍设置循环试听区间；出点至少比入点晚 1/8 拍。
-        if (!command && e.Scan == 4) { loopIn = Current.Timeline.Bpm.Beat(transport.Position); return true; }
-        if (!command && e.Scan == 5) { loopOut = Math.Max(loopIn + .125, Current.Timeline.Bpm.Beat(transport.Position)); return true; }
-        if (!command && e.Scan == 15) { loopEnabled = !loopEnabled; return true; }
-        if (!command && e.Scan == 40) { AddMod(); return true; }
+        if (!command && e.Scan == 4)
+        {
+            loopIn = Current.Timeline.Bpm.Beat(transport.Position);
+            return true;
+        }
+        if (!command && e.Scan == 5)
+        {
+            loopOut = Math.Max(loopIn + .125, Current.Timeline.Bpm.Beat(transport.Position));
+            return true;
+        }
+        if (!command && e.Scan == 15)
+        {
+            loopEnabled = !loopEnabled;
+            return true;
+        }
+        if (!command && e.Scan == 40)
+        {
+            AddMod();
+            return true;
+        }
         return false;
     }
 }

@@ -1,13 +1,12 @@
+// 难度切换。歌曲目录带 info.json 时列出磁盘上真实存在的难度，切换等价于打开对应的谱面文件 ——
+// 音频、封面、VSM 与 BPM 都由 SongFiles 重新解析，BACKSTAGE 因此会换成 enc_data 指定的那一套。
+
 using System.Runtime.InteropServices;
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Graphics;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// 难度切换。歌曲目录带 info.json 时列出磁盘上真实存在的难度，切换等价于打开对应的谱面文件 ——
-/// 音频、封面、VSM 与 BPM 都由 SongFiles 重新解析，BACKSTAGE 因此会换成 enc_data 指定的那一套。
-/// </summary>
 public sealed partial class Viewer
 {
     SongFiles.SongDifficulty[] difficulties = [];
@@ -35,8 +34,7 @@ public sealed partial class Viewer
             {
                 File.WriteAllText(Path.Combine(dir, level + ".vsc"), "0,3,0,b:245|t:0|v:undefined|s:undefined\n1000,0,0\n");
             }
-            // CSM treats SHATTER as an independent song entry. Even when info.json explicitly points at main-song media,
-            // a SHATTER file that omits those fields must fall back to the directory defaults rather than inherit them.
+            // CSM 把 SHATTER 当作独立歌曲。即使 info.json 显式指定主曲媒体，SHATTER 缺失对应字段时也应使用目录默认值。
             File.WriteAllText(Path.Combine(dir, "info.json"),
                 "{\"audio_id\":\"main.ogg\",\"jacket\":\"main.png\",\"preview_id\":\"main-preview.ogg\",\"jacket_animated\":true}");
             string file = Path.Combine(dir, SongInfo.ShatterFile);

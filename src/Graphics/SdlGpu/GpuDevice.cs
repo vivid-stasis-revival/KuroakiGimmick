@@ -1,3 +1,5 @@
+// 管理 SDL GPU 设备、命令提交和窗口呈现使用的资源。
+
 using System.Buffers;
 using System.Runtime.InteropServices;
 using KuroakiGimmick.Native;
@@ -11,8 +13,10 @@ namespace KuroakiGimmick.Graphics;
 public sealed unsafe partial class GpuDevice : IDisposable
 {
     // SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM。它是原生枚举值，不是每像素字节数。
+    /// <summary>设备纹理操作使用的 RGBA8 格式常量。</summary>
     public const uint Rgba8 = 4;
 
+    /// <summary>SDL_GPUDevice 原生句柄。</summary>
     public nint Handle { get; private set; }
 
     /// <summary>SDL 为本设备实际选中的后端驱动名，形如 metal / direct3d12 / vulkan；查询成功前保持 unknown，比较时忽略大小写。</summary>
@@ -21,8 +25,11 @@ public sealed unsafe partial class GpuDevice : IDisposable
     /// <summary>本设备需要生成的 shader 字节码格式，由驱动决定；不同后端的字节码不可互换。</summary>
     public GpuShaderFormat ShaderFormat { get; private set; } = GpuShaderFormat.Invalid;
 
+    /// <summary>当前设备是否使用 Metal 后端。</summary>
     public bool Metal => Driver.Equals("metal", StringComparison.OrdinalIgnoreCase);
+    /// <summary>当前设备是否使用 Direct3D 12 后端。</summary>
     public bool Direct3D12 => Driver.Equals("direct3d12", StringComparison.OrdinalIgnoreCase);
+    /// <summary>当前设备是否使用 Vulkan 后端。</summary>
     public bool Vulkan => Driver.Equals("vulkan", StringComparison.OrdinalIgnoreCase);
 
     readonly nint window;
@@ -39,7 +46,14 @@ public sealed unsafe partial class GpuDevice : IDisposable
     {
         nint handle = handle;
         public bool Complete(nint device) => handle == 0 || SDL_QueryGPUFence(device, handle);
-        public void Release(nint device) { if (handle != 0) { SDL_ReleaseGPUFence(device, handle); handle = 0; } }
+        public void Release(nint device)
+        {
+            if (handle != 0)
+            {
+                SDL_ReleaseGPUFence(device, handle);
+                handle = 0;
+            }
+        }
     }
     sealed class MeshSlot
     {
@@ -63,15 +77,19 @@ public sealed unsafe partial class GpuDevice : IDisposable
         IntRect? Clip = null, BlendFactor Source = BlendFactor.SourceAlpha,
         BlendFactor Destination = BlendFactor.InverseSourceAlpha, uint First = 0, uint Count = 0);
 
-    /// <summary>Poll the bounded main-window GPU queue before building another frame. The SDL event pump keeps running under GPU backpressure.</summary>
+    /// <summary>建立下一帧前轮询有界的主窗口 GPU 队列，队列繁忙时仍处理 SDL 事件。</summary>
+    /// <returns>当前窗口允许继续构建呈现帧时为 true。</returns>
     public bool PresentationReady()
     {
         while (presentationFences.TryPeek(out var fence) && fence.Complete(Handle))
-        { presentationFences.Dequeue(); fence.Release(Handle); }
+        {
+            presentationFences.Dequeue();
+            fence.Release(Handle);
+        }
         return presentationFences.Count < 2;
     }
 
-    /// <summary>Worker-owned GPU context with no window or swapchain; all calls stay on its render thread.</summary>
+    /// <summary>导出工作线程持有的独立 GPU 上下文，不创建窗口或交换链，所有调用留在所属渲染线程上。</summary>
     internal GpuDevice(string driver)
     {
         hidden = true;
@@ -81,10 +99,17 @@ public sealed unsafe partial class GpuDevice : IDisposable
             Driver = GetGpuDriverName(Handle);
             ShaderFormat = SelectShaderFormat(Driver, SDL_GetGPUShaderFormats(Handle));
         }
-        catch { SDL_DestroyGPUDevice(Handle); Handle = 0; throw; }
+        catch
+        {
+            SDL_DestroyGPUDevice(Handle);
+            Handle = 0;
+            throw;
+        }
     }
 
     /// <summary>沿用输入版本的平台选择、双帧在途上限及隐藏窗口 present 策略。</summary>
+    /// <param name="window">SDL 窗口句柄。</param>
+    /// <param name="hidden">窗口是否以隐藏状态启动。</param>
     public GpuDevice(nint window, bool hidden)
     {
         this.window = window;
@@ -128,6 +153,8 @@ public sealed unsafe partial class GpuDevice : IDisposable
     internal static nint Check(nint handle, string operation) => handle != 0 ? handle : throw new InvalidOperationException(operation + ": " + Error);
 
     /// <summary>登记辅助纹理单元。主纹理 unit 0 由每次 Draw 单独提供。</summary>
+    /// <param name="unit">要绑定的纹理槽位。</param>
+    /// <param name="texture">用于该操作的 GPU 纹理。</param>
     public void BindTexture(int unit, Texture texture) => textures[unit] = texture;
 
     /// <summary>unit 0 恒为本次 Draw 传入的主纹理；unit 大于等于 1 必须先由 BindTexture 登记，否则抛出。</summary>
@@ -243,14 +270,13 @@ public sealed unsafe partial class GpuDevice : IDisposable
         if (aborted) return;
         if (data.Length > MaxRecordedFloatCount)
         {
-            int quantum = shader.Instanced ? 16 : 48; // complete instances or quad triangle pairs
+            int quantum = shader.Instanced ? 16 : 48; // 切分边界保持实例或四边形的两个三角形完整。
             int block = MaxRecordedFloatCount / quantum * quantum;
             for (int offset = 0; offset < data.Length; offset += block)
                 Draw(target, width, height, shader, primary, clip, source, destination, data.Slice(offset, Math.Min(block, data.Length - offset)));
             return;
         }
-        // Split enormous logical frames at a memory boundary. Subsequent passes LOAD the prior result;
-        // primitives and transparent layers are neither removed nor reordered.
+        // 在内存边界处拆分超大逻辑帧，后续 pass 以 LOAD 保留已有结果；图元与透明图层顺序不变。
         if (vertices.Count > 0 && (vertices.Count > MaxRecordedFloatCount - data.Length || batches.Count >= MaxRecordedBatches)) Submit();
         uint stride = shader.Instanced ? 64u : 32u;
         uint first = checked((uint)vertices.Count * 4);

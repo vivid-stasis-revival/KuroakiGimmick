@@ -1,3 +1,5 @@
+// 从渲染像素检查 proxy 底部裁剪与变换是否一致。
+
 using KuroakiGimmick.Core;
 
 namespace KuroakiGimmick.UI;
@@ -20,7 +22,10 @@ public sealed partial class Viewer
             int i = (y * 320 + x) * 4;
             return pixels[i] is > 20 and < 120 && pixels[i] == pixels[i + 1] && pixels[i] == pixels[i + 2];
         }
-        void Check(bool value, string message) { if (!value) throw new InvalidOperationException(message); }
+        void Check(bool value, string message)
+        {
+            if (!value) throw new InvalidOperationException(message);
+        }
         foreach (string obj in new[] { "obj_base_gimmick", "obj_custom_gimmick" })
         {
             var plain = Frame(obj, "", proxy: false);

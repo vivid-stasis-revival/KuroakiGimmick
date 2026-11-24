@@ -1,14 +1,13 @@
+// inspector 字段的就地编辑，取代原先那个铺满屏幕的模态输入框。焦点用字段 key 标识，插入点与选区都是 UTF-16 下标。
+// 绘制、命中测试和横向滚动共用同一套前缀量宽（Fonts.Measure 与 Fonts.Text 走同一条字体回退链），
+// 所以光标画在哪一条缝上、鼠标点下去落在哪个字之间，是同一个坐标系算出来的。
+// 模态并没有删掉：值超过 InlineMax 或者本身就是多行文本时仍然回退到模态，单行字段撑不下那些内容。
+
 using System.Runtime.InteropServices;
 using KuroakiGimmick.Graphics;
 using KuroakiGimmick.Native;
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// inspector 字段的就地编辑，取代原先那个铺满屏幕的模态输入框。焦点用字段 key 标识，插入点与选区都是 UTF-16 下标。
-/// 绘制、命中测试和横向滚动共用同一套前缀量宽（Fonts.Measure 与 Fonts.Text 走同一条字体回退链），
-/// 所以光标画在哪一条缝上、鼠标点下去落在哪个字之间，是同一个坐标系算出来的。
-/// 模态并没有删掉：值超过 InlineMax 或者本身就是多行文本时仍然回退到模态，单行字段撑不下那些内容。
-/// </summary>
 public sealed partial class Viewer
 {
     /// <summary>当前持有焦点的字段 key，null 表示没有任何就地编辑在进行。</summary>
@@ -44,9 +43,15 @@ public sealed partial class Viewer
     {
         if (modalActive || menuOpen) return;
         inlineEscapeNewlines = escapeNewlines;
-        inlineField = key; inlineValue = inlineOriginal = value; inlineAccept = accept;
-        inlineError = ""; inlineTrim = !preserveWhitespace; inlineSelecting = false; inlineScroll = 0;
-        inlineAnchor = 0; inlineCaret = value.Length;
+        inlineField = key;
+        inlineValue = inlineOriginal = value;
+        inlineAccept = accept;
+        inlineError = "";
+        inlineTrim = !preserveWhitespace;
+        inlineSelecting = false;
+        inlineScroll = 0;
+        inlineAnchor = 0;
+        inlineCaret = value.Length;
         inlineBlinkFrom = uptime.Elapsed.TotalSeconds;
         if (inlineWindow != 0 && inlineWindow != ActiveUiWindow) Sdl.SDL_StopTextInput(inlineWindow);
         inlineWindow = ActiveUiWindow;
@@ -58,7 +63,11 @@ public sealed partial class Viewer
     void CloseInline()
     {
         if (!InlineActive) return;
-        inlineField = null; inlineAccept = null; inlineSelecting = false; inlineVisible = false; inlineError = "";
+        inlineField = null;
+        inlineAccept = null;
+        inlineSelecting = false;
+        inlineVisible = false;
+        inlineError = "";
         // 模态自己也在用文本输入，它还开着的时候不能顺手把输入法关掉。
         if (!modalActive && inlineWindow != 0) Sdl.SDL_StopTextInput(inlineWindow);
         inlineWindow = 0;
@@ -70,15 +79,28 @@ public sealed partial class Viewer
     /// </summary>
     void AcceptInline()
     {
-        if (inlineAccept is not { } accept) { CloseInline(); return; }
+        if (inlineAccept is not { } accept)
+        {
+            CloseInline();
+            return;
+        }
         string value = inlineTrim ? inlineValue.Trim() : inlineValue;
         string original = inlineTrim ? inlineOriginal.Trim() : inlineOriginal;
-        // UI fields may intentionally display a shortened numeric representation (for example G16).
-        // Merely focusing and committing that unchanged text must not feed the shortened string back into
-        // the document and silently replace the higher-precision value that was only hidden for display.
-        if (value == original) { CloseInline(); return; }
-        try { accept(value); CloseInline(); }
-        catch (Exception e) { inlineError = e.Message; }
+        // 字段可按 G16 等显示格式缩短数值。仅聚焦并提交原显示文本时须保留源值，避免把未显示的小数位覆盖掉。
+        if (value == original)
+        {
+            CloseInline();
+            return;
+        }
+        try
+        {
+            accept(value);
+            CloseInline();
+        }
+        catch (Exception e)
+        {
+            inlineError = e.Message;
+        }
     }
 
     /// <summary>提交当前字段并跳到相邻字段。只在本帧真正画出来的字段之间循环 —— 跳到一个滚出视口的字段没有意义。</summary>
@@ -93,7 +115,11 @@ public sealed partial class Viewer
     }
 
     /// <summary>内容变过之后清掉旧错误，并让光标重新常亮。</summary>
-    void InlineTouched() { inlineError = ""; inlineBlinkFrom = uptime.Elapsed.TotalSeconds; }
+    void InlineTouched()
+    {
+        inlineError = "";
+        inlineBlinkFrom = uptime.Elapsed.TotalSeconds;
+    }
 
     /// <summary>移动插入点。extend 为真时保留锚点形成选区，否则锚点跟着走、选区消失。</summary>
     void InlineMove(int index, bool extend)
@@ -109,7 +135,8 @@ public sealed partial class Viewer
         if (inlineCaret == inlineAnchor) return false;
         int low = InlineLow;
         inlineValue = inlineValue[..low] + inlineValue[InlineHigh..];
-        inlineCaret = inlineAnchor = low; InlineTouched();
+        inlineCaret = inlineAnchor = low;
+        InlineTouched();
         return true;
     }
 
@@ -117,11 +144,15 @@ public sealed partial class Viewer
     void InlineInsert(string text)
     {
         if (text.Length == 0) return;
-        // Text content is edited in source notation; pasted line breaks must survive the single-line field.
+        // 字幕编辑采用源码表示，粘贴的换行须能经过单行输入字段保留下来。
         text = text.Replace("\r\n", "\n").Replace('\r', '\n').Replace("\n", inlineEscapeNewlines ? "{n}" : " ");
         InlineDeleteSelection();
         int room = InlineMax - inlineValue.Length;
-        if (room <= 0) { inlineError = L.Format($"Field limit is {InlineMax} characters."); return; }
+        if (room <= 0)
+        {
+            inlineError = L.Format($"Field limit is {InlineMax} characters.");
+            return;
+        }
         if (text.Length > room)
         {
             text = text[..room];
@@ -163,7 +194,8 @@ public sealed partial class Viewer
             int next = InlineRight(i);
             float advance = fonts.Measure(inlineValue[i..next], InlineSize, true);
             if (local < width + advance * .5f) return i;
-            width += advance; i = next;
+            width += advance;
+            i = next;
         }
         return inlineValue.Length;
     }
@@ -172,8 +204,14 @@ public sealed partial class Viewer
     static string InlineClipboard()
     {
         nint ptr = Sdl.SDL_GetClipboardText();
-        try { return Marshal.PtrToStringUTF8(ptr) ?? ""; }
-        finally { Sdl.SDL_free(ptr); }
+        try
+        {
+            return Marshal.PtrToStringUTF8(ptr) ?? "";
+        }
+        finally
+        {
+            Sdl.SDL_free(ptr);
+        }
     }
 
     /// <summary>
@@ -182,39 +220,94 @@ public sealed partial class Viewer
     /// </summary>
     bool HandleInlineInput(Sdl.Event e)
     {
-        if (e.Type == 0x303) { InlineInsert(Marshal.PtrToStringUTF8(e.TextData) ?? ""); return true; }
-        if (e.Type == 0x401 && e.Button == 1)
+        if (e.Type == 0x303)
         {
-            mouseX = e.X; mouseY = e.Y;
-            if (!inlineVisible || !inlineBoxRect.Contains(e.X, e.Y)) { AcceptInline(); return false; }
-            // 双击整值全选；单击定位插入点并开始框选，拖到哪里选到哪里。
-            if (e.Clicks >= 2) { inlineAnchor = 0; inlineCaret = inlineValue.Length; }
-            else { InlineMove(InlineIndexAt(e.X), false); inlineSelecting = true; }
-            inlineBlinkFrom = uptime.Elapsed.TotalSeconds; click = false;
+            InlineInsert(Marshal.PtrToStringUTF8(e.TextData) ?? "");
             return true;
         }
-        if (e.Type == 0x400 && inlineSelecting) { mouseX = e.X; mouseY = e.Y; InlineMove(InlineIndexAt(e.X), true); return true; }
-        if (e.Type == 0x402 && e.Button == 1 && inlineSelecting) { mouseX = e.X; mouseY = e.Y; inlineSelecting = false; return true; }
+        if (e.Type == 0x401 && e.Button == 1)
+        {
+            mouseX = e.X;
+            mouseY = e.Y;
+            if (!inlineVisible || !inlineBoxRect.Contains(e.X, e.Y))
+            {
+                AcceptInline();
+                return false;
+            }
+            // 双击整值全选；单击定位插入点并开始框选，拖到哪里选到哪里。
+            if (e.Clicks >= 2)
+            {
+                inlineAnchor = 0;
+                inlineCaret = inlineValue.Length;
+            }
+            else
+            {
+                InlineMove(InlineIndexAt(e.X), false);
+                inlineSelecting = true;
+            }
+            inlineBlinkFrom = uptime.Elapsed.TotalSeconds;
+            click = false;
+            return true;
+        }
+        if (e.Type == 0x400 && inlineSelecting)
+        {
+            mouseX = e.X;
+            mouseY = e.Y;
+            InlineMove(InlineIndexAt(e.X), true);
+            return true;
+        }
+        if (e.Type == 0x402 && e.Button == 1 && inlineSelecting)
+        {
+            mouseX = e.X;
+            mouseY = e.Y;
+            inlineSelecting = false;
+            return true;
+        }
         if (e.Type != 0x300) return false;
         bool command = (e.Modifiers & 0x0CC0) != 0, shift = (e.Modifiers & 3) != 0, alt = (e.Modifiers & 0x0300) != 0;
         bool selected = inlineCaret != inlineAnchor;
         switch (e.Scan)
         {
-            case 41: CloseInline(); break;                                              // Esc：放弃这次编辑
-            case 40 or 88: AcceptInline(); break;                                       // Enter / 小键盘 Enter：提交
-            case 43: InlineTab(shift); break;                                           // Tab：提交并跳到相邻字段
-            case 4 when command: inlineAnchor = 0; inlineCaret = inlineValue.Length; break;
-            case 6 when command: if (selected) Sdl.SDL_SetClipboardText(InlineSelectedText); break;
-            case 27 when command: if (selected) { Sdl.SDL_SetClipboardText(InlineSelectedText); InlineDeleteSelection(); } break;
-            case 25 when command: InlineInsert(InlineClipboard()); break;
+            case 41:
+                CloseInline();
+                break;                                              // Esc：放弃这次编辑
+            case 40 or 88:
+                AcceptInline();
+                break;                                       // Enter / 小键盘 Enter：提交
+            case 43:
+                InlineTab(shift);
+                break;                                           // Tab：提交并跳到相邻字段
+            case 4 when command:
+                inlineAnchor = 0;
+                inlineCaret = inlineValue.Length;
+                break;
+            case 6 when command:
+                if (selected) Sdl.SDL_SetClipboardText(InlineSelectedText);
+                break;
+            case 27 when command:
+                if (selected)
+                {
+                    Sdl.SDL_SetClipboardText(InlineSelectedText);
+                    InlineDeleteSelection();
+                }
+                break;
+            case 25 when command:
+                InlineInsert(InlineClipboard());
+                break;
             // 字段里的 Ctrl/Cmd+Z 撤销的是本次输入，不是整篇文档 —— 焦点在输入框里时按 Z 谁也不会指望文档被回滚。
-            case 29 when command: inlineValue = inlineOriginal; inlineAnchor = 0; inlineCaret = inlineValue.Length; InlineTouched(); break;
+            case 29 when command:
+                inlineValue = inlineOriginal;
+                inlineAnchor = 0;
+                inlineCaret = inlineValue.Length;
+                InlineTouched();
+                break;
             case 42:                                                                    // Backspace：往左删
                 if (!InlineDeleteSelection() && inlineCaret > 0)
                 {
                     int left = InlineLeft(inlineCaret);
                     inlineValue = inlineValue[..left] + inlineValue[inlineCaret..];
-                    inlineCaret = inlineAnchor = left; InlineTouched();
+                    inlineCaret = inlineAnchor = left;
+                    InlineTouched();
                 }
                 break;
             case 76:                                                                    // Delete：往右删
@@ -225,10 +318,18 @@ public sealed partial class Viewer
                 }
                 break;
             // 有选区时不带 Shift 的左右键收拢到选区的那一端，而不是从插入点再走一格。
-            case 80: InlineMove(!shift && selected ? InlineLow : command ? 0 : alt ? InlineWordLeft(inlineCaret) : InlineLeft(inlineCaret), shift); break;
-            case 79: InlineMove(!shift && selected ? InlineHigh : command ? inlineValue.Length : alt ? InlineWordRight(inlineCaret) : InlineRight(inlineCaret), shift); break;
-            case 74: InlineMove(0, shift); break;                                       // Home
-            case 77: InlineMove(inlineValue.Length, shift); break;                      // End
+            case 80:
+                InlineMove(!shift && selected ? InlineLow : command ? 0 : alt ? InlineWordLeft(inlineCaret) : InlineLeft(inlineCaret), shift);
+                break;
+            case 79:
+                InlineMove(!shift && selected ? InlineHigh : command ? inlineValue.Length : alt ? InlineWordRight(inlineCaret) : InlineRight(inlineCaret), shift);
+                break;
+            case 74:
+                InlineMove(0, shift);
+                break;                                       // Home
+            case 77:
+                InlineMove(inlineValue.Length, shift);
+                break;                      // End
         }
         return true;
     }
@@ -243,7 +344,11 @@ public sealed partial class Viewer
         if (enabled) inlineFields.Add((key, name, value, accept, preserveWhitespace, escapeNewlines));
         Text(name, x, y + 7, labelSize, muted, max: width * .38f);
         var box = new Rect(x + width * .4f, y, width * .6f, 27);
-        if (inlineField == key && enabled) { DrawInlineEditor(box); return; }
+        if (inlineField == key && enabled)
+        {
+            DrawInlineEditor(box);
+            return;
+        }
         // 按实际字宽省略，而不是数字符：先粗切 64 个字符（再宽的字段也放不下更多），再按宽度精修，
         // 否则一个 1024 字符的值会让逐字量宽退化成每帧 O(n²)。
         string shown = value.Replace('\n', ' ');
@@ -257,7 +362,8 @@ public sealed partial class Viewer
     /// <summary>画聚焦状态：选区高亮、文本、插入点光标。文本按 inlineScroll 横向平移并裁剪，长值不会溢出字段。</summary>
     void DrawInlineEditor(Rect box)
     {
-        inlineVisible = true; inlineBoxRect = box;
+        inlineVisible = true;
+        inlineBoxRect = box;
         var text = new Rect(box.X + 9, box.Y + 6, Math.Max(8, box.W - 18), 16);
         inlineTextRect = text;
         float caret = InlineWidth(inlineCaret), total = InlineWidth(inlineValue.Length);
@@ -298,7 +404,11 @@ public sealed partial class Viewer
                 if (space > 0) take = space;
             }
             string line = rest[..take].Trim();
-            if (line.Length == 0) { take = Math.Min(rest.Length, Math.Max(1, take)); line = rest[..take]; }
+            if (line.Length == 0)
+            {
+                take = Math.Min(rest.Length, Math.Max(1, take));
+                line = rest[..take];
+            }
             lines.Add(line);
             rest = rest[take..].TrimStart();
         }
@@ -307,7 +417,8 @@ public sealed partial class Viewer
         float tipY = box.Y + 28;
         if (tipY + tipHeight > editorInspectorRect.Y + editorInspectorRect.H) tipY = Math.Max(editorInspectorRect.Y, box.Y - tipHeight - 2);
         var tip = new Rect(tipX, tipY, tipWidth, tipHeight);
-        Canvas.Fill(tip, Color.Hex(0x2A0E16)); Canvas.Border(tip, red);
+        Canvas.Fill(tip, Color.Hex(0x2A0E16));
+        Canvas.Border(tip, red);
         for (int i = 0; i < lines.Count; i++) Text(lines[i], tip.X + pad, tip.Y + pad + i * lineHeight, errorSize, red, max: tip.W - pad * 2);
     }
 }

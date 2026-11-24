@@ -1,3 +1,5 @@
+// 交互层状态协调器。加载结果通过主线程队列提交，GPU 操作只在窗口线程执行；设置、输入与绘制分文件维护。
+
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
@@ -8,9 +10,6 @@ using KuroakiGimmick.Native;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// 交互层状态协调器。加载结果通过主线程队列提交，GPU 操作只在窗口线程执行；设置、输入与绘制分文件维护。
-/// </summary>
 public sealed partial class Viewer
 {
     void SetUiLanguage(string language, bool persist = true)
@@ -19,7 +18,7 @@ public sealed partial class Viewer
         L.SetLanguage(preferences.UiLanguage);
         fonts.SetInterfaceLanguage(L.Language);
         RequestNativeMenuRefresh();
-        // Cached help and track labels must be measured again in the selected language.
+        // 切换语言后须重新测量已缓存的帮助与轨道标签。
         cachedHelpKey = manualCacheKey = referenceLayoutKey = "";
         layoutRevision = -1;
         message = L.Get("Interface language updated.");
@@ -62,12 +61,17 @@ public sealed partial class Viewer
     void RememberExportDestination(string kind, string path)
     {
         preferences.RememberExportDestination(kind, path);
-        try { preferences.Persist(settingsPath); }
+        try
+        {
+            preferences.Persist(settingsPath);
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        { message = L.Get("Settings could not be saved: ") + ex.Message; }
+        {
+            message = L.Get("Settings could not be saved: ") + ex.Message;
+        }
     }
 
-    // Settings navigation is UI-local. Changing pages never rebuilds the current Session.
+    // 设置页导航仅影响界面，切换页面不重建当前 Session。
     string settingsSection = "general";
 
     void DrawSettings(int width, int height)
@@ -75,7 +79,7 @@ public sealed partial class Viewer
         settingsInput = true;
         try
         {
-            // Keep a comfortable gap from the viewport edge. Focused pages remain usable in small windows.
+            // 与视口边缘保留间距，使小窗口中单页设置仍可操作。
             float pw = MathF.Min(1230, width - 24);
             float ph = MathF.Min(840, height - 24);
             var r = new Rect((width - pw) / 2, (height - ph) / 2 + (1 - settingsAlpha) * 10, pw, ph);
@@ -121,19 +125,35 @@ public sealed partial class Viewer
             }
             else
             {
-                // Sidebar navigation has real destinations rather than decorative highlighting.
-                // Small windows use one focused panel instead of clipping the dashboard columns.
+                // 侧栏切换实际设置页；小窗口只显示当前面板，避免多列仪表盘被裁掉。
                 var focus = new Rect(x, y, w, MathF.Max(310, bottom - y - 4));
                 switch (settingsSection)
                 {
-                    case "audio": DrawSettingsAudio(focus); break;
-                    case "display": DrawSettingsDisplay(new(x, y, w, 190)); DrawSettingsWorkflow(new(x, y + 202, w, 135)); break;
-                    case "editor": DrawSettingsEditor(focus); break;
-                    case "vsui": DrawSettingsVsUi(focus); break;
-                    case "performance": DrawSettingsPerformance(focus, compact: focus.H < 430); break;
-                    case "export": DrawSettingsExport(focus); break;
-                    case "workspace": DrawSettingsWorkspace(focus); break;
-                    default: DrawSettingsInterface(focus); break;
+                    case "audio":
+                        DrawSettingsAudio(focus);
+                        break;
+                    case "display":
+                        DrawSettingsDisplay(new(x, y, w, 190));
+                        DrawSettingsWorkflow(new(x, y + 202, w, 135));
+                        break;
+                    case "editor":
+                        DrawSettingsEditor(focus);
+                        break;
+                    case "vsui":
+                        DrawSettingsVsUi(focus);
+                        break;
+                    case "performance":
+                        DrawSettingsPerformance(focus, compact: focus.H < 430);
+                        break;
+                    case "export":
+                        DrawSettingsExport(focus);
+                        break;
+                    case "workspace":
+                        DrawSettingsWorkspace(focus);
+                        break;
+                    default:
+                        DrawSettingsInterface(focus);
+                        break;
                 }
             }
 
@@ -144,7 +164,9 @@ public sealed partial class Viewer
                 SetDockingEnabled(false);
                 preferences.UiAnimations = true;
                 preferences.ModalValueEditor = false;
-                preferences.GroupGimmickTracks = true; ResetGimmickTracks(); layoutRevision = -1;
+                preferences.GroupGimmickTracks = true;
+                ResetGimmickTracks();
+                layoutRevision = -1;
                 preferences.ShowExpandedGimmickSummary = false;
                 preferences.SplitOverlappingTimelineClips = true;
                 preferences.UnlimitedChartSize = false;

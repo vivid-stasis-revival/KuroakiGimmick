@@ -1,3 +1,5 @@
+// 检查 VSM 源行索引在编辑、替换与外部列表修改后的有效性。
+
 using System.Diagnostics;
 using KuroakiGimmick.Core.Editing;
 
@@ -63,7 +65,8 @@ internal static class VsmLookupChecks
         Check(doc.SourceLine(removedId) == doc.Lines.FindIndex(line => line.Event?.Id == removedId) + 1, "removed or duplicate ID after replacement");
         doc.Lines[replaced] = new(" \t", "\n", null);
         Verify(doc, "same-count preserved-to-blank replacement");
-        doc.Lines.RemoveAt(0); doc.Lines.Add(new("// appended", "\n", null));
+        doc.Lines.RemoveAt(0);
+        doc.Lines.Add(new("// appended", "\n", null));
         Verify(doc, "same-count remove and append");
         doc.Lines.Clear();
         Verify(doc, "direct clear");
@@ -100,8 +103,7 @@ internal static class VsmLookupChecks
             var clip = new VsmDocument.Clip(ids[i] = Guid.NewGuid(), i, 1, "linear", "0", "1", "prx", 0);
             large.Lines.Add(new(VsmDocument.Compose(clip), "\n", clip));
         }
-        // A legal late header exposes full-list scanning inside every Replace,
-        // even after ID lookup itself has been indexed.
+        // 将合法头字段置于后部，以暴露 Replace 在 ID 查找已索引后仍逐次扫描整表的问题。
         large.Lines.Add(new("!proxies:1", "\n", null));
         Check(large.SourceLine(ids[^1]) == count && large.PreservedLineCount == 1, "large index built");
         long allocated = GC.GetAllocatedBytesForCurrentThread();

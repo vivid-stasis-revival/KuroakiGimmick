@@ -1,14 +1,10 @@
+// 在有界离线环境执行 MPF 生命周期，将输出采样为可重放的轨道。
+
 using System.Globalization;
 
 namespace KuroakiGimmick.Core;
 
-/// <summary>
-/// Deterministic, bounded Custom Gimmicks 1.14.2 MPF preview. Programs run on the
-/// fixed 60 Hz preview clock into immutable sample tracks; seeking, snapshots,
-/// parallel export and Rust base-track evaluation cannot advance script state.
-/// Score and input queries use an explicit offline baseline. Script judgment
-/// changes share one state; they do not represent live player input or autoplay.
-/// </summary>
+/// <summary>在固定 60 Hz 时钟上有界执行 Custom Gimmicks 1.14.2 MPF 并保存只读轨道。跳转、快照、并行导出与 Rust 基础轨道求值只读取采样结果。计分与输入使用显式离线基准，脚本间共享判定更改。</summary>
 internal sealed class MpfScriptTimeline
 {
     sealed record Write(double Time, double Value, double? TweenRegistered = null);
@@ -82,7 +78,9 @@ internal sealed class MpfScriptTimeline
     }
     internal MpfScriptTimeline ForkForRender(Timeline owner)
     {
-        var copy = (MpfScriptTimeline)MemberwiseClone(); copy.timeline = owner; return copy;
+        var copy = (MpfScriptTimeline)MemberwiseClone();
+        copy.timeline = owner;
+        return copy;
     }
 
     bool WinsAgainstNative(string name, int proxy, double time, Write write)
@@ -90,15 +88,14 @@ internal sealed class MpfScriptTimeline
         double tick = Math.Floor(time * 60 + 1e-8) / 60;
         double nativeWrite = timeline.NativeTrackWriteTime(name, proxy, tick);
         if (nativeWrite < write.Time - 1e-9) return true;
-        // updateMods registers VSM tweens before MPF executes. Both then run in registration
-        // order, so a later MPF tween wins ties, but an older future tween does not.
+        // updateMods 先注册 VSM 缓动再执行 MPF，随后按注册顺序运行。同刻时新注册的 MPF 缓动可覆盖已有写入，较早注册的未来缓动不能。
         return write.TweenRegistered is double registered && nativeWrite <= write.Time + 1e-9
             && Math.Ceiling(timeline.NativeTrackStartTime(name, proxy, tick) * 60 - 1e-8) / 60 <= registered + 1e-9;
     }
     double ValueAt(string name, int proxy, double time)
     {
         if (writes.TryGetValue((name, proxy), out var list) && list.Count > 0 && list[^1].Time == currentTime)
-            return list[^1].Value; // earlier direct writes in this frame are already visible
+            return list[^1].Value; // 本帧更早的直接写入此时已经可见。
         double previousTick = (currentTick - 1) / 60.0;
         return TryValue(name, previousTick, proxy, out double value) ? value : timeline.NativeRawValue(name, previousTick, proxy);
     }
@@ -142,10 +139,16 @@ internal sealed class MpfScriptTimeline
     {
         var due = new List<DeferredSet>();
         while (pendingSets.TryPeek(out var set, out var priority) && priority.Beat <= currentBeat + 1e-8)
-        { pendingSets.Dequeue(); due.Add(set); }
+        {
+            pendingSets.Dequeue();
+            due.Add(set);
+        }
         foreach (var set in due.OrderBy(set => set.Order)) WriteMod(set.Name, set.Proxy, set.Value);
         while (pendingTweens.TryPeek(out var tween, out var priority) && priority.Time <= currentTime + 1e-8)
-        { pendingTweens.Dequeue(); activeTweens.Add(tween.Order, tween); }
+        {
+            pendingTweens.Dequeue();
+            activeTweens.Add(tween.Order, tween);
+        }
         List<int>? completed = null;
         foreach (var tween in activeTweens.Values)
         {
@@ -176,175 +179,267 @@ internal sealed class MpfScriptTimeline
             arg is double number ? number.ToString("G", CultureInfo.InvariantCulture) : arg?.ToString() ?? "undefined";
         switch (function)
         {
-            case "sin": Count(function,a,1,1); return Math.Sin(Num(a[0]));
-            case "cos": Count(function,a,1,1); return Math.Cos(Num(a[0]));
-            case "tan": Count(function,a,1,1); return Math.Tan(Num(a[0]));
-            case "abs": Count(function,a,1,1); return Math.Abs(Num(a[0]));
-            case "floor": Count(function,a,1,1); return Math.Floor(Num(a[0]));
-            case "ceil": Count(function,a,1,1); return Math.Ceiling(Num(a[0]));
-            case "min": Count(function,a,2,2); return Math.Min(Num(a[0]), Num(a[1]));
-            case "max": Count(function,a,2,2); return Math.Max(Num(a[0]), Num(a[1]));
-            case "clamp": Count(function,a,3,3); return Math.Clamp(Num(a[0]), Num(a[1]), Num(a[2]));
-            case "to_str": Count(function,a,1,1); return Format(a[0]);
+            case "sin":
+                Count(function, a, 1, 1);
+                return Math.Sin(Num(a[0]));
+            case "cos":
+                Count(function, a, 1, 1);
+                return Math.Cos(Num(a[0]));
+            case "tan":
+                Count(function, a, 1, 1);
+                return Math.Tan(Num(a[0]));
+            case "abs":
+                Count(function, a, 1, 1);
+                return Math.Abs(Num(a[0]));
+            case "floor":
+                Count(function, a, 1, 1);
+                return Math.Floor(Num(a[0]));
+            case "ceil":
+                Count(function, a, 1, 1);
+                return Math.Ceiling(Num(a[0]));
+            case "min":
+                Count(function, a, 2, 2);
+                return Math.Min(Num(a[0]), Num(a[1]));
+            case "max":
+                Count(function, a, 2, 2);
+                return Math.Max(Num(a[0]), Num(a[1]));
+            case "clamp":
+                Count(function, a, 3, 3);
+                return Math.Clamp(Num(a[0]), Num(a[1]), Num(a[2]));
+            case "to_str":
+                Count(function, a, 1, 1);
+                return Format(a[0]);
             case "str_cat":
-            {
-                Count(function,a,2,2); string left = Format(a[0]), right = Format(a[1]);
-                script.Context.Allocate(checked(left.Length + right.Length)); return left + right;
-            }
+                {
+                    Count(function, a, 2, 2);
+                    string left = Format(a[0]), right = Format(a[1]);
+                    script.Context.Allocate(checked(left.Length + right.Length));
+                    return left + right;
+                }
             case "array_create":
-            {
-                Count(function,a,1,1); double count = Num(a[0]);
-                if (count < 0 || count > 100_000 || Math.Truncate(count) != count) throw new InvalidDataException("IndexError: array size is out of range.");
-                script.Context.Allocate((int)count);
-                return Enumerable.Repeat<object?>(0d, (int)count).ToList();
-            }
-            case "array_length": Count(function,a,1,1); return (double)ArrayArg(a,0).Count;
-            case "array_contains": Count(function,a,2,2); return ArrayArg(a,0).Contains(a[1]) ? 1d : 0d;
+                {
+                    Count(function, a, 1, 1);
+                    double count = Num(a[0]);
+                    if (count < 0 || count > 100_000 || Math.Truncate(count) != count) throw new InvalidDataException("IndexError: array size is out of range.");
+                    script.Context.Allocate((int)count);
+                    return Enumerable.Repeat<object?>(0d, (int)count).ToList();
+                }
+            case "array_length":
+                Count(function, a, 1, 1);
+                return (double)ArrayArg(a, 0).Count;
+            case "array_contains":
+                Count(function, a, 2, 2);
+                return ArrayArg(a, 0).Contains(a[1]) ? 1d : 0d;
             case "array_push":
-            {
-                Count(function,a,2,2); var array = ArrayArg(a,0);
-                if (array.Count >= 100_000) throw new InvalidDataException("IndexError: array exceeds 100000 elements.");
-                script.Context.Allocate(1); array.Add(a[1]); return null; // 1.14.2: undefined, with in-place mutation.
-            }
+                {
+                    Count(function, a, 2, 2);
+                    var array = ArrayArg(a, 0);
+                    if (array.Count >= 100_000) throw new InvalidDataException("IndexError: array exceeds 100000 elements.");
+                    script.Context.Allocate(1);
+                    array.Add(a[1]);
+                    return null; // 1.14.2 原地修改数组并返回 undefined。
+                }
             case "array_insert":
-            {
-                Count(function,a,3,3); var array = ArrayArg(a,0);
-                double raw = Num(a[2]);
-                if (raw < 0 || raw > array.Count || Math.Truncate(raw) != raw || array.Count >= 100_000)
-                    throw new InvalidDataException("IndexError: cannot insert into array.");
-                script.Context.Allocate(1); array.Insert((int)raw, a[1]); return array;
-            }
+                {
+                    Count(function, a, 3, 3);
+                    var array = ArrayArg(a, 0);
+                    double raw = Num(a[2]);
+                    if (raw < 0 || raw > array.Count || Math.Truncate(raw) != raw || array.Count >= 100_000)
+                        throw new InvalidDataException("IndexError: cannot insert into array.");
+                    script.Context.Allocate(1);
+                    array.Insert((int)raw, a[1]);
+                    return array;
+                }
             case "array_pop":
-            {
-                Count(function,a,1,1); var array = ArrayArg(a,0);
-                if (array.Count == 0) throw new InvalidDataException("IndexError: array is empty.");
-                object? result = array[^1]; array.RemoveAt(array.Count - 1); return result;
-            }
+                {
+                    Count(function, a, 1, 1);
+                    var array = ArrayArg(a, 0);
+                    if (array.Count == 0) throw new InvalidDataException("IndexError: array is empty.");
+                    object? result = array[^1];
+                    array.RemoveAt(array.Count - 1);
+                    return result;
+                }
             case "array_sort":
-            {
-                Count(function,a,2,2); var array = ArrayArg(a,0);
-                bool ascending = Num(a[1]) > 0;
-                array.Sort((x,y) => x is double n1 && y is double n2
-                    ? n1.CompareTo(n2) * (ascending ? 1 : -1)
-                    : string.Compare(Format(x), Format(y), StringComparison.Ordinal) * (ascending ? 1 : -1));
-                return array;
-            }
+                {
+                    Count(function, a, 2, 2);
+                    var array = ArrayArg(a, 0);
+                    bool ascending = Num(a[1]) > 0;
+                    array.Sort((x, y) => x is double n1 && y is double n2
+                        ? n1.CompareTo(n2) * (ascending ? 1 : -1)
+                        : string.Compare(Format(x), Format(y), StringComparison.Ordinal) * (ascending ? 1 : -1));
+                    return array;
+                }
             case "struct_create":
-                Count(function,a,0,0); script.Context.Allocate(1);
+                Count(function, a, 0, 0);
+                script.Context.Allocate(1);
                 return new Dictionary<string, object?>(StringComparer.Ordinal);
             case "struct_get":
-                Count(function,a,2,2); return StructArg(a[0]).GetValueOrDefault(FieldName(a[1]));
+                Count(function, a, 2, 2);
+                return StructArg(a[0]).GetValueOrDefault(FieldName(a[1]));
             case "struct_exists":
-                Count(function,a,2,2); return StructArg(a[0]).ContainsKey(FieldName(a[1])) ? 1d : 0d;
+                Count(function, a, 2, 2);
+                return StructArg(a[0]).ContainsKey(FieldName(a[1])) ? 1d : 0d;
             case "struct_set":
-            {
-                Count(function,a,3,3); var fields = StructArg(a[0]); string key = FieldName(a[1]);
-                if (!fields.ContainsKey(key)) script.Context.Allocate(checked(key.Length + 1));
-                fields[key] = a[2]; return null;
-            }
+                {
+                    Count(function, a, 3, 3);
+                    var fields = StructArg(a[0]);
+                    string key = FieldName(a[1]);
+                    if (!fields.ContainsKey(key)) script.Context.Allocate(checked(key.Length + 1));
+                    fields[key] = a[2];
+                    return null;
+                }
             case "struct_get_names":
-            {
-                Count(function,a,1,1); var fields = StructArg(a[0]);
-                script.Context.Allocate(fields.Count);
-                return fields.Keys.Cast<object?>().ToList();
-            }
-            case "random": Count(function,a,1,1); WarnRandom(); return random.NextDouble() * Num(a[0]);
+                {
+                    Count(function, a, 1, 1);
+                    var fields = StructArg(a[0]);
+                    script.Context.Allocate(fields.Count);
+                    return fields.Keys.Cast<object?>().ToList();
+                }
+            case "random":
+                Count(function, a, 1, 1);
+                WarnRandom();
+                return random.NextDouble() * Num(a[0]);
             case "irandom":
-            {
-                Count(function,a,1,1); double upper = Num(a[0]);
-                if (upper < 0 || upper > int.MaxValue - 1 || Math.Truncate(upper) != upper)
-                    throw new InvalidDataException("ValueError: invalid irandom upper bound.");
-                WarnRandom(); return (double)random.Next((int)upper + 1);
-            }
+                {
+                    Count(function, a, 1, 1);
+                    double upper = Num(a[0]);
+                    if (upper < 0 || upper > int.MaxValue - 1 || Math.Truncate(upper) != upper)
+                        throw new InvalidDataException("ValueError: invalid irandom upper bound.");
+                    WarnRandom();
+                    return (double)random.Next((int)upper + 1);
+                }
             case "random_set_seed":
-                Count(function,a,1,1); random = new(unchecked((int)Num(a[0]))); return 0d;
+                Count(function, a, 1, 1);
+                random = new(unchecked((int)Num(a[0])));
+                return 0d;
             case "ease":
-                Count(function,a,4,4);
+                Count(function, a, 4, 4);
                 if (!Easings.IsKnown(Name(a[0]))) throw new InvalidDataException("NameError: unknown easing.");
-                return Num(a[1]) + (Num(a[2])-Num(a[1])) * Easings.Eval(Name(a[0]), Num(a[3]));
+                return Num(a[1]) + (Num(a[2]) - Num(a[1])) * Easings.Eval(Name(a[0]), Num(a[3]));
             case "register_mod":
-            {
-                Count(function,a,2,2);
-                if (phase != "init") throw new InvalidDataException("PermissionError: register_mod is Init only.");
-                string mod = Name(a[0]); WriteMod(mod, -1, Num(a[1])); return 0d;
-            }
+                {
+                    Count(function, a, 2, 2);
+                    if (phase != "init") throw new InvalidDataException("PermissionError: register_mod is Init only.");
+                    string mod = Name(a[0]);
+                    WriteMod(mod, -1, Num(a[1]));
+                    return 0d;
+                }
             case "set_mod_val":
-                Count(function,a,2,3); WriteMod(Name(a[0]), Proxy(a,2), Num(a[1])); return 0d;
+                Count(function, a, 2, 3);
+                WriteMod(Name(a[0]), Proxy(a, 2), Num(a[1]));
+                return 0d;
             case "get_mod_val":
-                Count(function,a,1,2); return ValueAt(Name(a[0]), Proxy(a,1), currentTime);
+                Count(function, a, 1, 2);
+                return ValueAt(Name(a[0]), Proxy(a, 1), currentTime);
             case "set_mod_val_at":
-                Count(function,a,3,4); ScheduleSet(Name(a[0]), Proxy(a,3), Num(a[1]), Num(a[2])); return 0d;
+                Count(function, a, 3, 4);
+                ScheduleSet(Name(a[0]), Proxy(a, 3), Num(a[1]), Num(a[2]));
+                return 0d;
             case "tween_mod_val":
-                Count(function,a,5,6);
-                ScheduleTween(Name(a[0]),Proxy(a,5),currentBeat,Num(a[1]),Name(a[2]),Num(a[3]),Num(a[4])); return 0d;
+                Count(function, a, 5, 6);
+                ScheduleTween(Name(a[0]), Proxy(a, 5), currentBeat, Num(a[1]), Name(a[2]), Num(a[3]), Num(a[4]));
+                return 0d;
             case "tween_mod_val_at":
-                Count(function,a,6,7);
-                ScheduleTween(Name(a[0]),Proxy(a,6),Num(a[1]),Num(a[2]),Name(a[3]),Num(a[4]),Num(a[5])); return 0d;
+                Count(function, a, 6, 7);
+                ScheduleTween(Name(a[0]), Proxy(a, 6), Num(a[1]), Num(a[2]), Name(a[3]), Num(a[4]), Num(a[5]));
+                return 0d;
             case "write_log":
             case "short_msg":
-                Count(function,a,1,1);
+                Count(function, a, 1, 1);
                 if (script.DebugMessages++ < 8)
                     chart.Diagnostics.Add(new(script.Path, 0, "MPF " + function + ": " + Format(a[0])));
                 return 0d;
             case "get_judge_cnt":
-            {
-                Count(function, a, 1, 1);
-                int kind = JudgeKind(a[0]); WarnOfflineState(script);
-                return game.Judge(kind);
-            }
-            case "get_combo": case "get_max_combo": case "get_score_ex":
-                Count(function, a, 0, 0); WarnOfflineState(script);
+                {
+                    Count(function, a, 1, 1);
+                    int kind = JudgeKind(a[0]);
+                    WarnOfflineState(script);
+                    return game.Judge(kind);
+                }
+            case "get_combo":
+            case "get_max_combo":
+            case "get_score_ex":
+                Count(function, a, 0, 0);
+                WarnOfflineState(script);
                 return function == "get_combo" ? game.Combo : function == "get_max_combo" ? game.MaxCombo : game.ExScore;
             case "get_score":
-                Count(function, a, 1, 1); WarnOfflineState(script);
+                Count(function, a, 1, 1);
+                WarnOfflineState(script);
                 return Num(a[0]) != 0 ? game.MinusScore : game.Score;
             case "add_judge_cnt":
-            {
-                Count(function, a, 2, 3); int kind = JudgeKind(a[0]); double count = Num(a[1]);
-                if (count != Math.Floor(count)) throw new InvalidDataException("ValueError: judge count must be an integer.");
-                bool early = a.Length > 2 && Num(a[2]) != 0;
-                WarnOfflineState(script); game.Add(kind, count, early); return 0d;
-            }
-            case "set_judge_timing":
-                Count(function, a, 2, 2); game.Timings[JudgeKind(a[0])] = Num(a[1]); WarnOfflineState(script); return 0d;
-            case "reset_judge_timing":
-                Count(function, a, 0, 0); game.ResetTimings(); WarnOfflineState(script); return 0d;
-            case "input_lane_check_pressed": case "input_lane_check_released": case "input_lane_check":
-                Count(function, a, 1, 1); InputIndex(a[0], 6); return OfflineInput(script, false);
-            case "input_keyboard_check_key":
-                Count(function, a, 2, 2); InputIndex(a[0], 2); InputIndex(a[1], 255); return OfflineInput(script, false);
-            case "input_check_mouse":
-                Count(function, a, 2, 2); InputIndex(a[0], 2); InputIndex(a[1], 3); return OfflineInput(script, false);
-            case "mouse_wheel_up": case "mouse_wheel_down": case "get_mouse_pos":
-                Count(function, a, 0, 0); return OfflineInput(script, function == "get_mouse_pos");
-            case "get_game_var_global":
-                Count(function, a, 1, 1); WarnOfflineState(script); return game.Global(Name(a[0]));
-            case "get_game_var_instance":
-            {
-                Count(function, a, 3, 3);
-                string instance = Name(a[0]), variable = Name(a[1]);
-                if (instance != "cc" || Num(a[2]) != 0)
-                    throw new NotSupportedException("MPF offline preview has no instance '" + instance + "'.");
-                if (variable.StartsWith("mod_", StringComparison.Ordinal)) return ValueAt(variable[4..], -1, currentTime);
-                // These are chart state, not judgment counters. Native callbacks execute
-                // after MPF, so a speed change becomes visible on the following tick.
-                switch (variable)
                 {
-                    case "song_speed": return timeline.MusicPlayback.RateAt((currentTick - 1) / 60.0);
-                    case "currentbeataccurate": return currentBeat;
-                    case "currentms": return currentTime * 1000;
-                    case "cpos": return currentTime;
+                    Count(function, a, 2, 3);
+                    int kind = JudgeKind(a[0]);
+                    double count = Num(a[1]);
+                    if (count != Math.Floor(count)) throw new InvalidDataException("ValueError: judge count must be an integer.");
+                    bool early = a.Length > 2 && Num(a[2]) != 0;
+                    WarnOfflineState(script);
+                    game.Add(kind, count, early);
+                    return 0d;
                 }
+            case "set_judge_timing":
+                Count(function, a, 2, 2);
+                game.Timings[JudgeKind(a[0])] = Num(a[1]);
                 WarnOfflineState(script);
-                return variable switch
+                return 0d;
+            case "reset_judge_timing":
+                Count(function, a, 0, 0);
+                game.ResetTimings();
+                WarnOfflineState(script);
+                return 0d;
+            case "input_lane_check_pressed":
+            case "input_lane_check_released":
+            case "input_lane_check":
+                Count(function, a, 1, 1);
+                InputIndex(a[0], 6);
+                return OfflineInput(script, false);
+            case "input_keyboard_check_key":
+                Count(function, a, 2, 2);
+                InputIndex(a[0], 2);
+                InputIndex(a[1], 255);
+                return OfflineInput(script, false);
+            case "input_check_mouse":
+                Count(function, a, 2, 2);
+                InputIndex(a[0], 2);
+                InputIndex(a[1], 3);
+                return OfflineInput(script, false);
+            case "mouse_wheel_up":
+            case "mouse_wheel_down":
+            case "get_mouse_pos":
+                Count(function, a, 0, 0);
+                return OfflineInput(script, function == "get_mouse_pos");
+            case "get_game_var_global":
+                Count(function, a, 1, 1);
+                WarnOfflineState(script);
+                return game.Global(Name(a[0]));
+            case "get_game_var_instance":
                 {
-                    "pace_total" => game.AccuracySum, "pace_amount" => game.Count,
-                    "sdisp_accscore" => game.Score, "sdisp_exscore" => game.ExScore,
-                    "timings" => CopyTimings(script),
-                    _ => throw new NotSupportedException("MPF offline preview has no cc variable '"+variable+"'.")
-                };
-            }
-            case "call_callback_mod": case "call_callback_mod_at":
+                    Count(function, a, 3, 3);
+                    string instance = Name(a[0]), variable = Name(a[1]);
+                    if (instance != "cc" || Num(a[2]) != 0)
+                        throw new NotSupportedException("MPF offline preview has no instance '" + instance + "'.");
+                    if (variable.StartsWith("mod_", StringComparison.Ordinal)) return ValueAt(variable[4..], -1, currentTime);
+                    // 这些值来自谱面状态。原版回调在 MPF 之后执行，速度变化下一 tick 才可见。
+                    switch (variable)
+                    {
+                        case "song_speed": return timeline.MusicPlayback.RateAt((currentTick - 1) / 60.0);
+                        case "currentbeataccurate": return currentBeat;
+                        case "currentms": return currentTime * 1000;
+                        case "cpos": return currentTime;
+                    }
+                    WarnOfflineState(script);
+                    return variable switch
+                    {
+                        "pace_total" => game.AccuracySum,
+                        "pace_amount" => game.Count,
+                        "sdisp_accscore" => game.Score,
+                        "sdisp_exscore" => game.ExScore,
+                        "timings" => CopyTimings(script),
+                        _ => throw new NotSupportedException("MPF offline preview has no cc variable '" + variable + "'.")
+                    };
+                }
+            case "call_callback_mod":
+            case "call_callback_mod_at":
                 throw new NotSupportedException(function + " requires original-game live state/callbacks; this MPF preview does not simulate it.");
             default: throw new InvalidDataException("NameError: unknown MPF function '" + function + "'.");
         }
@@ -371,11 +466,13 @@ internal sealed class MpfScriptTimeline
             chart.Diagnostics.Add(new(script.Path, 0, "MPF input uses an idle offline snapshot: no held/pressed/released keys, no wheel, mouse at (0,0). Live player input is not recorded."));
         }
         if (!mouse) return 0d;
-        script.Context.Allocate(2); return new List<object?> { 0d, 0d };
+        script.Context.Allocate(2);
+        return new List<object?> { 0d, 0d };
     }
     List<object?> CopyTimings(Script script)
     {
-        script.Context.Allocate(5); return game.Timings.Select(x => (object?)x).ToList();
+        script.Context.Allocate(5);
+        return game.Timings.Select(x => (object?)x).ToList();
     }
 
     void Execute(Script script, string section)
@@ -412,6 +509,7 @@ internal sealed class MpfScriptTimeline
 
     internal static MpfScriptTimeline? Load(Timeline timeline, Chart chart, ViewerProject project)
     {
+        // 1. 根据歌曲和难度定位已引用的 MPF 文件，并保留查找诊断。
         if (chart.PerFrame.Count == 0) return null;
         var sourceFiles = MpfScriptSources.Resolve(project);
         string dir = Path.Combine(sourceFiles.Root ?? "", "cmpf");
@@ -419,10 +517,11 @@ internal sealed class MpfScriptTimeline
         var files = sourceFiles.Files;
         if (!chart.PerFrame.Any(frame => files.ContainsKey(frame.Function))) return null;
         var runtime = new MpfScriptTimeline(timeline, chart);
+        // 2. 解析匹配程序并建立每段 Init、Main、Finish 的生效区间。
         var ranges = new List<ActiveRange>();
         foreach (var source in chart.PerFrame)
         {
-            // CGMK 1.14.1 installs external closures on every object, preserving native names.
+            // CGMK 1.14.1 在每个对象上安装外部闭包，同时保留原版名称。
             if (timeline.Native?.Data?.PerFrameBindings.ContainsKey(source.Function) == true
                 || NativeFunctionTimeline.Supports(timeline.Native?.Data, source.Function)) continue;
             if (!files.TryGetValue(source.Function, out string? file)) continue;
@@ -454,6 +553,7 @@ internal sealed class MpfScriptTimeline
         runtime.ExtendEnd(Math.Max(timeline.End, last + .1));
         try
         {
+            // 3. 按歌曲逻辑时钟推进各区间并记录写入，供之后的随机访问使用。
             for (int tick = 0; tick <= Math.Ceiling(runtime.End * 60); tick++)
             {
                 runtime.currentTick = tick;
@@ -466,8 +566,7 @@ internal sealed class MpfScriptTimeline
                     if (inside && !range.Active)
                     {
                         range.Active = true;
-                        // CGMK mpfRunEntry clears the error latch for each newly entered range.
-                        // Cumulative preview budgets remain in force across resets.
+                        // mpfRunEntry 在进入新区间时清除错误标志。预览的累计资源预算跨区间保留。
                         script.Dead = false;
                         if (script.Language.RefreshOnEachRun)
                         {

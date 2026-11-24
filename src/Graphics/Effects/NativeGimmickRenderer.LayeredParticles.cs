@@ -1,3 +1,5 @@
+// 按阶段绘制 Plaudite 粒子、斩击和结尾画面。
+
 using KuroakiGimmick.Core;
 using System.Numerics;
 
@@ -12,10 +14,17 @@ public sealed partial class NativeGimmickRenderer
         if (!session.NativeGimmick.HasBehavior("jacket-particles")) return null;
         Prepare(session);
         if (!ReferenceEquals(plauditeTimeline, session.Timeline))
-        { plauditeTimeline = session.Timeline; plauditeObjects = new(session.Timeline); }
+        {
+            plauditeTimeline = session.Timeline;
+            plauditeObjects = new(session.Timeline);
+        }
         return plauditeObjects;
     }
 
+    /// <summary>在指定的斩击阶段绘制 Plaudite 的斩线。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <param name="neutral">是否绘制中性色斩线。</param>
     public void DrawLayeredParticlesSlashes(Session session, double time, bool neutral)
     {
         if (PreparePlaudite(session) == null) return;
@@ -33,6 +42,10 @@ public sealed partial class NativeGimmickRenderer
         canvas.Blend(BlendFactor.SourceAlpha, BlendFactor.InverseSourceAlpha);
     }
 
+    /// <summary>依据前后层选择绘制当前可见的粒子。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <param name="front">是否绘制前层粒子。</param>
     public void DrawLayeredParticlesParticles(Session session, double time, bool front)
     {
         if (PreparePlaudite(session) is not { } state || current == null) return;
@@ -54,12 +67,15 @@ public sealed partial class NativeGimmickRenderer
             var color = colorState.Red ? Color.GameMaker(255) : Color.Hsv(particle.Hue, particle.Saturation);
             if (Image("pt_diamonddust", particle.Frame) is { } image)
                 canvas.Quad(image, new(x - 4, y - 4, 9, 9), color.Alpha(1 - age / particle.Life));
-            // Source Draw explicitly supplies this alpha, independently of image_alpha.
+            // 源 Draw 显式传入这个 alpha，独立于 image_alpha。
             if (inverseAlpha > 0 && Image("pt_invertdiamond", particle.Frame) is { } inverse)
                 canvas.Quad(inverse, new(x - 4, y - 4, 9, 9), Color.White.Alpha(inverseAlpha));
         }
     }
 
+    /// <summary>绘制分层粒子组件的结尾场景。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void DrawLayeredParticlesFinal(Session session, double time)
     {
         if (PreparePlaudite(session) is not { } state || time < state.EndingTime) return;
@@ -68,6 +84,9 @@ public sealed partial class NativeGimmickRenderer
         if (age < 2) canvas.Line(-8, 109, 328, 65, (float)(12 * Math.Pow(1 - age / 2, 2)), Color.GameMaker(0));
     }
 
+    /// <summary>在 GUI 阶段绘制分层粒子演出的结尾覆盖层。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void DrawLayeredParticlesEndingGui(Session session, double time)
     {
         if (PreparePlaudite(session) == null) return;
@@ -77,14 +96,14 @@ public sealed partial class NativeGimmickRenderer
             DrawSequenceSprite(session, "sp_plaudite_finalplay1", 0, 114 - 45 * eased, 6 * eased, 1, 1, alpha, time);
             DrawSequenceSprite(session, "sp_plaudite_finalplay2", 0, 114 + 37 * eased, 82 - 5 * eased, 1, 1, alpha, time);
         }
-        double transition = Math.Max(session.NativeGimmick.Behavior("jacket-particles")!.Number("transitionTime",0), session.Timeline.SequenceTriggerTime("setup_co_end")) + 1;
+        double transition = Math.Max(session.NativeGimmick.Behavior("jacket-particles")!.Number("transitionTime", 0), session.Timeline.SequenceTriggerTime("setup_co_end")) + 1;
         if (time >= transition && Image("sp_transition_diamond") is { } diamond)
         {
             double age = Math.Clamp(time - transition, 0, 1);
             double scale = Easings.Eval("outQuad", age), rotation = Easings.Eval("outExpo", age) * -2 * Math.PI;
             var matrix = Matrix3x2.CreateTranslation(-1, -1) * Matrix3x2.CreateScale((float)(1 + 319 * scale), (float)(1 + 179 * scale))
                 * Matrix3x2.CreateRotation((float)rotation) * Matrix3x2.CreateTranslation(160, 90);
-            // Source Draw uses its own alpha=1; TweenEasyFade writes the unused image_alpha.
+            // 源 Draw 固定传入 alpha=1；TweenEasyFade 写入的 image_alpha 在此未被读取。
             canvas.Polygon(diamond, Vector2.Transform(Vector2.Zero, matrix), Vector2.Transform(new(2, 0), matrix),
                 Vector2.Transform(new(0, 2), matrix), Vector2.Transform(new(2, 2), matrix), Color.White);
         }

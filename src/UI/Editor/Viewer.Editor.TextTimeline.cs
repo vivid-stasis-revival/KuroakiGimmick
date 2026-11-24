@@ -1,12 +1,11 @@
+// 时间轴上的文本事件条块。与 image 组不同，这里只做选中、不支持拖动改时间——
+// 改时间统一走检视面板的字段，避免在多条并列属性上拖出彼此不一致的区间。
+
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Graphics;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// 时间轴上的文本事件条块。与 image 组不同，这里只做选中、不支持拖动改时间——
-/// 改时间统一走检视面板的字段，避免在多条并列属性上拖出彼此不一致的区间。
-/// </summary>
 public sealed partial class Viewer
 {
     /// <summary>
@@ -27,7 +26,8 @@ public sealed partial class Viewer
         foreach (var entry in timelineVisibleText)
         {
             var group = entry.Value;
-            var clip = group.Clip; float x = BeatX(clip.Beat), width = Math.Max(10, BeatX(group.End) - x);
+            var clip = group.Clip;
+            float x = BeatX(clip.Beat), width = Math.Max(10, BeatX(group.End) - x);
             bool raw = group.Raw;
             bool selected = selectedTextId == id && (textAnimation == clip.Id ||
                 textInspector && textAnimation == null && clip.Duration == 0 && Math.Abs(textAt - clip.Beat) < 1e-9);
@@ -39,16 +39,25 @@ public sealed partial class Viewer
             if (interactive && click && box.Contains(mouseX, mouseY) && editorTracksRect.Contains(mouseX, mouseY))
             {
                 SelectText(id);
-                if (raw) { textInspector = false; expandedTextTracks.Add(id); layoutRevision = -1; selectedClip = clip.Id; }
+                if (raw)
+                {
+                    textInspector = false;
+                    expandedTextTracks.Add(id);
+                    layoutRevision = -1;
+                    selectedClip = clip.Id;
+                }
                 else if (clip.Duration > 0) SelectTextAnimation(clip, true);
-                else { textAt = clip.Beat; transport.Seek(Current.Timeline.Bpm.Time(textAt)); }
+                else
+                {
+                    textAt = clip.Beat;
+                    transport.Seek(Current.Timeline.Bpm.Time(textAt));
+                }
                 click = false;
             }
         }
     }
 
-    // Content occupies the upper half of the row; motion stays independently clickable below it.
-    // Cues are sorted. Include the one starting before the viewport, since its text is still active.
+    // 上半行显示字幕，下半行独立命中动画；已排序提示中须包含起点在视口左侧但内容仍生效的那条。
     void DrawTextContentCues(string id, float y, bool interactive)
     {
         EnsureTexts();
@@ -73,7 +82,9 @@ public sealed partial class Viewer
             if (interactive && click && box.Contains(mouseX, mouseY) && editorTracksRect.Contains(mouseX, mouseY))
             {
                 SelectText(id);
-                textAnimation = null; textAt = cue.Beat; inspectorScroll = 0;
+                textAnimation = null;
+                textAt = cue.Beat;
+                inspectorScroll = 0;
                 transport.Seek(Current.Timeline.Bpm.Time(textAt));
                 click = false;
             }

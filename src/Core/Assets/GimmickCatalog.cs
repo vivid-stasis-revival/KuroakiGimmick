@@ -1,3 +1,5 @@
+// 为对象定义解析显式、曲目、共享和内置来源。
+
 using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -40,6 +42,14 @@ public static class GimmickCatalog
     /// 文件存在即视为权威：读取或解析失败要向上抛出，不能悄悄退到下一级配置。
     /// 只有按 profile 别名扫描共享目录时才跳过损坏文件，因为那是在遍历与本次查找无关的定义。
     /// </summary>
+    /// <param name="objectName">来源演出对象名。</param>
+    /// <param name="songRoot">可选的歌曲根目录。</param>
+    /// <param name="explicitPath">显式指定的定义文件路径。</param>
+    /// <param name="profile">演出配置键。</param>
+    /// <param name="assetsRoot">应用素材的根目录。</param>
+    /// <returns>匹配到的定义来源，未命中时为 null。</returns>
+    /// <exception cref="FileNotFoundException">显式指定的对象定义文件不存在。</exception>
+    /// <exception cref="InvalidDataException">使用了无法解析的配置别名。</exception>
     public static GimmickDefinitionSource? Resolve(string objectName, string? songRoot = null, string? explicitPath = null,
         string profile = "auto", string? assetsRoot = null)
     {
@@ -99,10 +109,7 @@ public static class GimmickCatalog
                 return FileSource(ResourceFiles.ContainedFile(shared, objectName + "/manifest.json"), "shared");
             }
         }
-        // Base/Custom gimmicks have first-class renderers and do not require a
-        // native object manifest. Reaching an empty embedded catalog for one of
-        // these objects is not a resource failure (even in unpacked CLI builds).
-        // Explicit/song/shared manifests above still take precedence.
+        // Base 和 Custom 有专用渲染器，无需原版对象清单；即使解包运行且内嵌目录为空也能加载。上方显式、曲目与共享清单仍优先。
         if (!alias && (objectName == "obj_base_gimmick" || objectName == "obj_custom_gimmick"))
             return null;
         foreach (var item in builtIns.Value)
@@ -124,6 +131,12 @@ public static class GimmickCatalog
     /// 去重或等到 GPU 初始化后再补，否则 ID 129 之后的事件会在加载时被误解码。
     /// assetsRoot 只用于隔离测试，不修改全局目录或用户文件。
     /// </summary>
+    /// <param name="objectName">来源演出对象名。</param>
+    /// <param name="songRoot">可选的歌曲根目录。</param>
+    /// <param name="explicitPath">显式指定的定义文件路径。</param>
+    /// <param name="profile">演出配置键。</param>
+    /// <param name="assetsRoot">应用素材的根目录。</param>
+    /// <returns>定义中额外登记的 mod 名称。</returns>
     public static string[] ReadExtraMods(string objectName, string? songRoot = null, string? explicitPath = null, string profile = "auto",
         string? assetsRoot = null)
     {

@@ -1,10 +1,12 @@
+// 将单个工程的旧历史移入应用数据目录，在校验副本后清理对应源条目。
+
 using System.Security.Cryptography;
 
 namespace KuroakiGimmick.Core;
 
 internal static partial class ProjectBackups
 {
-    // Only this project's history moves. Working files and pending save transactions stay portable.
+    // 仅迁移指定工程的历史，工作文件与待完成的保存事务仍随工程移动。
     internal static void MigrateHistory(string path)
     {
         string hidden = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path))!, ".kuroaki");
@@ -12,7 +14,9 @@ internal static partial class ProjectBackups
         {
             string parent = Path.Combine(hidden, kind), source = Path.Combine(parent, Path.GetFileName(path));
             if (!Directory.Exists(source)) continue;
-            RejectLink(hidden); RejectLink(parent); RejectLink(source);
+            RejectLink(hidden);
+            RejectLink(parent);
+            RejectLink(source);
             string destination = Path.Combine(StorageRoot(path), kind, Path.GetFileName(path));
             foreach (string entry in Directory.GetFileSystemEntries(source))
             {
@@ -40,7 +44,7 @@ internal static partial class ProjectBackups
             throw new IOException("Refusing to migrate linked history: " + path);
     }
 
-    // Include empty directories as well as file hashes. Enumeration never traverses links.
+    // 除文件哈希外还要核对空目录；枚举期间禁止沿链接进入其他目录。
     static Dictionary<string, string?> Snapshot(string root)
     {
         RejectLink(root);
@@ -51,7 +55,11 @@ internal static partial class ProjectBackups
             {
                 RejectLink(entry);
                 string relative = Path.GetRelativePath(root, entry);
-                if (Directory.Exists(entry)) { result.Add(relative, null); Visit(entry); }
+                if (Directory.Exists(entry))
+                {
+                    result.Add(relative, null);
+                    Visit(entry);
+                }
                 else result.Add(relative, FileHash(entry));
             }
         }
@@ -100,14 +108,17 @@ internal static partial class ProjectBackups
                 }
                 if (!Matches(staging, snapshot) || !Matches(source, snapshot))
                     throw new IOException("History changed or failed verification; original retained: " + source);
-                // This rename stays within the application-data volume.
+                // 此处在同一应用数据卷内重命名已完成的历史快照。
                 Directory.Move(staging, target);
             }
-            finally { if (Directory.Exists(staging)) Directory.Delete(staging, true); }
+            finally
+            {
+                if (Directory.Exists(staging)) Directory.Delete(staging, true);
+            }
         }
         if (!Matches(source, snapshot) || !Matches(target, snapshot))
             throw new IOException("History verification failed; original retained: " + source);
-        // Non-recursive removal leaves any concurrently added files intact.
+        // 仅删除空目录，使并发新增的文件留在原处。
         foreach (var (relative, hash) in snapshot.Where(pair => pair.Value != null))
         {
             string original = Path.Combine(source, relative);

@@ -1,14 +1,13 @@
+// SDL_GPU 的设备选择策略与 swapchain 绑定。
+// macOS 用 Metal；Windows 优先 Direct3D 12，不可用时回退 Vulkan。
+// 刻意不使用 OpenGL。
+// Windows 上的 Vulkan 必须是硬件加速：软件实现会被主动销毁并拒绝，宁可启动失败也不当 CPU 幻灯片。
+
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
 namespace KuroakiGimmick.Native;
 
-/// <summary>
-/// SDL_GPU 的设备选择策略与 swapchain 绑定。
-/// macOS 用 Metal；Windows 优先 Direct3D 12，不可用时回退 Vulkan。
-/// 刻意不使用 OpenGL。
-/// Windows 上的 Vulkan 必须是硬件加速：软件实现会被主动销毁并拒绝，宁可启动失败也不当 CPU 幻灯片。
-/// </summary>
 public static partial class Sdl
 {
     // -------------------------------------------------------------------------
@@ -22,12 +21,19 @@ public static partial class Sdl
     [Flags]
     public enum GpuShaderFormat : uint
     {
-        Invalid  = 0,
-        Private  = 1u << 0,
-        SpirV    = 1u << 1,
-        Dxbc     = 1u << 2,
-        Dxil     = 1u << 3,
-        Msl      = 1u << 4,
+        /// <summary>未指定可用格式。</summary>
+        Invalid = 0,
+        /// <summary>驱动专用的私有格式。</summary>
+        Private = 1u << 0,
+        /// <summary>SPIR-V 中间表示。</summary>
+        SpirV = 1u << 1,
+        /// <summary>Direct3D DXBC 字节码。</summary>
+        Dxbc = 1u << 2,
+        /// <summary>Direct3D DXIL 中间表示。</summary>
+        Dxil = 1u << 3,
+        /// <summary>Metal Shading Language 源码。</summary>
+        Msl = 1u << 4,
+        /// <summary>预编译 Metal 库。</summary>
         MetalLib = 1u << 5
     }
 
@@ -36,9 +42,13 @@ public static partial class Sdl
     /// </summary>
     public enum GpuSwapchainComposition
     {
+        /// <summary>标准动态范围输出。</summary>
         Sdr = 0,
+        /// <summary>使用线性输入颜色的标准动态范围输出。</summary>
         SdrLinear = 1,
+        /// <summary>扩展线性高动态范围输出。</summary>
         HdrExtendedLinear = 2,
+        /// <summary>采用 ST 2084 传递函数的 HDR10 输出。</summary>
         Hdr10St2084 = 3
     }
 
@@ -47,8 +57,11 @@ public static partial class Sdl
     /// </summary>
     public enum GpuPresentMode
     {
+        /// <summary>等待垂直同步呈现。</summary>
         VSync = 0,
+        /// <summary>允许立即呈现。</summary>
         Immediate = 1,
+        /// <summary>每次刷新呈现最新可用帧。</summary>
         Mailbox = 2
     }
 
@@ -66,6 +79,7 @@ public static partial class Sdl
     /// loader 明明装着也只会得到一句 "SDL_HINT_GPU_DRIVER vulkan unsupported!"。这里按常见位置探一遍
     /// 并写进 SDL_VULKAN_LIBRARY；用户自己设过就不动，显式配置优先于我们的猜测。
     /// </summary>
+    /// <param name="driver">要求使用的 GPU 后端名。</param>
     public static void ForceGpuDriver(string driver)
     {
         ForcedGpuDriver = driver;
@@ -87,6 +101,10 @@ public static partial class Sdl
         }
     }
 
+    /// <summary>按正常优先级设置或清除 SDL 提示值。</summary>
+    /// <param name="name">要设置的 SDL hint 名称。</param>
+    /// <param name="value">要写入的值。</param>
+    /// <returns>操作成功时为 true，失败时为 false。</returns>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool SDL_SetHint(
@@ -97,6 +115,8 @@ public static partial class Sdl
     /// 本项目为某个后端唯一能生成的 shader 字节码格式。候选表和建成设备后的校验共用这一份映射，
     /// 免得两处各写一份、加后端时漏改一边。
     /// </summary>
+    /// <param name="driver">GPU 驱动名。</param>
+    /// <returns>与该驱动对应的 shader 格式标志。</returns>
     public static GpuShaderFormat ShaderFormatFor(string driver) => driver.ToLowerInvariant() switch
     {
         "metal" => GpuShaderFormat.Msl,
@@ -168,12 +188,21 @@ public static partial class Sdl
             "Windows/Direct3D 12/Vulkan, and Linux/Vulkan.");
     }
 
+    /// <summary>检查候选 GPU 驱动是否支持传入的 shader 格式集合中的格式。</summary>
+    /// <param name="formatFlags">应用可提供的 shader 格式位掩码。</param>
+    /// <param name="name">候选 GPU 驱动名，null 表示让 SDL 选择。</param>
+    /// <returns>存在支持所给格式的候选驱动时为 true。</returns>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool SDL_GPUSupportsShaderFormats(
         GpuShaderFormat formatFlags,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string? name);
 
+    /// <summary>从可提供的 shader 格式和驱动偏好创建 GPU 设备。</summary>
+    /// <param name="formatFlags">应用可提供的 shader 格式位掩码。</param>
+    /// <param name="debugMode">是否启用设备调试模式。</param>
+    /// <param name="name">候选 GPU 驱动名，null 表示让 SDL 选择。</param>
+    /// <returns>成功时返回原生句柄，失败时为 0。</returns>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     public static extern nint SDL_CreateGPUDevice(
         GpuShaderFormat formatFlags,
@@ -182,12 +211,21 @@ public static partial class Sdl
 
     // Vulkan 走基于 properties 的创建路径，这样由 SDL 自己拒绝软件实现，
     // 而不是悄悄选中 SwiftShader / Lavapipe / Dozen+WARP。
+    /// <summary>创建 SDL 属性集合。</summary>
+    /// <returns>新属性集合 ID，失败时为 0。</returns>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     public static extern uint SDL_CreateProperties();
 
+    /// <summary>释放属性集合。</summary>
+    /// <param name="props">SDL 属性集合 ID。</param>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     public static extern void SDL_DestroyProperties(uint props);
 
+    /// <summary>写入布尔类型的 SDL 属性。</summary>
+    /// <param name="props">SDL 属性集合 ID。</param>
+    /// <param name="name">要访问的属性名。</param>
+    /// <param name="value">要写入的值。</param>
+    /// <returns>操作成功时为 true，失败时为 false。</returns>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool SDL_SetBooleanProperty(
@@ -195,6 +233,11 @@ public static partial class Sdl
         [MarshalAs(UnmanagedType.LPUTF8Str)] string name,
         [MarshalAs(UnmanagedType.I1)] bool value);
 
+    /// <summary>写入字符串类型的 SDL 属性。</summary>
+    /// <param name="props">SDL 属性集合 ID。</param>
+    /// <param name="name">要访问的属性名。</param>
+    /// <param name="value">要写入的值。</param>
+    /// <returns>操作成功时为 true，失败时为 false。</returns>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool SDL_SetStringProperty(
@@ -202,49 +245,84 @@ public static partial class Sdl
         [MarshalAs(UnmanagedType.LPUTF8Str)] string name,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string? value);
 
+    /// <summary>按 SDL 属性集合中的配置创建设备。</summary>
+    /// <param name="props">SDL 属性集合 ID。</param>
+    /// <returns>成功时返回原生句柄，失败时为 0。</returns>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     public static extern nint SDL_CreateGPUDeviceWithProperties(uint props);
 
+    /// <summary>销毁 GPU 设备。</summary>
+    /// <param name="device">所属的 SDL GPU 设备句柄。</param>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     public static extern void SDL_DestroyGPUDevice(
         nint device);
 
+    /// <summary>查询实际创建该设备的 GPU 驱动名。</summary>
+    /// <param name="device">所属的 SDL GPU 设备句柄。</param>
+    /// <returns>设备驱动名的 UTF-8 地址，失败时为 0。</returns>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     public static extern nint SDL_GetGPUDeviceDriver(
         nint device);
 
+    /// <summary>查询当前 GPU 设备可用的 shader 格式标志。</summary>
+    /// <param name="device">所属的 SDL GPU 设备句柄。</param>
+    /// <returns>设备支持的 shader 格式位掩码。</returns>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     public static extern GpuShaderFormat SDL_GetGPUShaderFormats(
         nint device);
 
     // SDL 3.4+ 才有的设备元数据。调用点在运行期做了保护，因此同一份托管构建
     // 仍能配合没有导出这个符号的旧版 SDL3.dll 运行。
+    /// <summary>取得与 GPU 设备关联的属性集合。</summary>
+    /// <param name="device">所属的 SDL GPU 设备句柄。</param>
+    /// <returns>设备属性集合 ID，失败时为 0。</returns>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     public static extern uint SDL_GetGPUDeviceProperties(nint device);
 
+    /// <summary>读取字符串属性，缺失或类型不符时取默认值。</summary>
+    /// <param name="props">SDL 属性集合 ID。</param>
+    /// <param name="name">要访问的属性名。</param>
+    /// <param name="defaultValue">获取不到字符串属性时使用的回退值。</param>
+    /// <returns>属性的 UTF-8 地址或传入的默认值。</returns>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     public static extern nint SDL_GetStringProperty(
         uint props,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string name,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string? defaultValue);
 
+    /// <summary>将窗口交给设备管理，以便向该窗口的交换链呈现画面。</summary>
+    /// <param name="device">所属的 SDL GPU 设备句柄。</param>
+    /// <param name="window">目标 SDL 窗口句柄。</param>
+    /// <returns>操作成功时为 true，失败时为 false。</returns>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool SDL_ClaimWindowForGPUDevice(
         nint device,
         nint window);
 
+    /// <summary>解除 GPU 设备对窗口交换链的管理。</summary>
+    /// <param name="device">所属的 SDL GPU 设备句柄。</param>
+    /// <param name="window">目标 SDL 窗口句柄。</param>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     public static extern void SDL_ReleaseWindowFromGPUDevice(
         nint device,
         nint window);
 
+    /// <summary>设置设备允许并行在途的帧数。</summary>
+    /// <param name="device">所属的 SDL GPU 设备句柄。</param>
+    /// <param name="allowedFramesInFlight">允许同时在途的帧数。</param>
+    /// <returns>操作成功时为 true，失败时为 false。</returns>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool SDL_SetGPUAllowedFramesInFlight(
         nint device,
         uint allowedFramesInFlight);
 
+    /// <summary>检查窗口是否支持指定的 GPU 呈现模式。</summary>
+    /// <param name="device">所属的 SDL GPU 设备句柄。</param>
+    /// <param name="window">目标 SDL 窗口句柄。</param>
+    /// <param name="presentMode">交换链呈现模式。</param>
+    /// <returns>该窗口支持所给模式时为 true。</returns>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool SDL_WindowSupportsGPUPresentMode(
@@ -252,6 +330,12 @@ public static partial class Sdl
         nint window,
         GpuPresentMode presentMode);
 
+    /// <summary>配置窗口交换链的合成格式与呈现模式。</summary>
+    /// <param name="device">所属的 SDL GPU 设备句柄。</param>
+    /// <param name="window">目标 SDL 窗口句柄。</param>
+    /// <param name="swapchainComposition">交换链的颜色合成方式。</param>
+    /// <param name="presentMode">交换链呈现模式。</param>
+    /// <returns>操作成功时为 true，失败时为 false。</returns>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool SDL_SetGPUSwapchainParameters(
@@ -260,6 +344,10 @@ public static partial class Sdl
         GpuSwapchainComposition swapchainComposition,
         GpuPresentMode presentMode);
 
+    /// <summary>取得窗口交换链纹理的像素格式。</summary>
+    /// <param name="device">所属的 SDL GPU 设备句柄。</param>
+    /// <param name="window">目标 SDL 窗口句柄。</param>
+    /// <returns>交换链纹理的 SDL_GPUTextureFormat。</returns>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     public static extern uint SDL_GetGPUSwapchainTextureFormat(
         nint device,
@@ -269,10 +357,20 @@ public static partial class Sdl
     // GPU 命令缓冲 / 呈现
     // -------------------------------------------------------------------------
 
+    /// <summary>从设备获取用于记录命令的缓冲区。</summary>
+    /// <param name="device">所属的 SDL GPU 设备句柄。</param>
+    /// <returns>成功时返回原生句柄，失败时为 0。</returns>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     public static extern nint SDL_AcquireGPUCommandBuffer(
         nint device);
 
+    /// <summary>等待并获取本次提交可使用的交换链纹理。</summary>
+    /// <param name="commandBuffer">用于本次操作的 GPU 命令缓冲区。</param>
+    /// <param name="window">目标 SDL 窗口句柄。</param>
+    /// <param name="swapchainTexture">接收交换链纹理句柄，没有可用纹理时可能为 0。</param>
+    /// <param name="width">接收交换链纹理宽度，单位为像素。</param>
+    /// <param name="height">接收交换链纹理高度，单位为像素。</param>
+    /// <returns>操作成功时为 true，失败时为 false。</returns>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool SDL_WaitAndAcquireGPUSwapchainTexture(
@@ -282,6 +380,13 @@ public static partial class Sdl
         out uint width,
         out uint height);
 
+    /// <summary>尝试获取本次提交可使用的交换链纹理。</summary>
+    /// <param name="commandBuffer">用于本次操作的 GPU 命令缓冲区。</param>
+    /// <param name="window">目标 SDL 窗口句柄。</param>
+    /// <param name="swapchainTexture">接收交换链纹理句柄，没有可用纹理时可能为 0。</param>
+    /// <param name="width">接收交换链纹理宽度，单位为像素。</param>
+    /// <param name="height">接收交换链纹理高度，单位为像素。</param>
+    /// <returns>操作成功时为 true，失败时为 false。</returns>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool SDL_AcquireGPUSwapchainTexture(
@@ -291,20 +396,33 @@ public static partial class Sdl
         out uint width,
         out uint height);
 
+    /// <summary>提交已记录的 GPU 命令，结束该命令缓冲区的使用。</summary>
+    /// <param name="commandBuffer">用于本次操作的 GPU 命令缓冲区。</param>
+    /// <returns>操作成功时为 true，失败时为 false。</returns>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool SDL_SubmitGPUCommandBuffer(
         nint commandBuffer);
 
+    /// <summary>取消尚未提交的命令缓冲区。</summary>
+    /// <param name="commandBuffer">用于本次操作的 GPU 命令缓冲区。</param>
+    /// <returns>操作成功时为 true，失败时为 false。</returns>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool SDL_CancelGPUCommandBuffer(
         nint commandBuffer);
 
+    /// <summary>等待窗口交换链可用于获取纹理。</summary>
+    /// <param name="device">所属的 SDL GPU 设备句柄。</param>
+    /// <param name="window">目标 SDL 窗口句柄。</param>
+    /// <returns>操作成功时为 true，失败时为 false。</returns>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool SDL_WaitForGPUSwapchain(nint device, nint window);
 
+    /// <summary>等待设备中此前提交的 GPU 工作完成。</summary>
+    /// <param name="device">所属的 SDL GPU 设备句柄。</param>
+    /// <returns>操作成功时为 true，失败时为 false。</returns>
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool SDL_WaitForGPUIdle(
@@ -319,6 +437,9 @@ public static partial class Sdl
     /// macOS：Metal。
     /// Windows：先 Direct3D 12，不可用再 Vulkan。
     /// </summary>
+    /// <param name="debugMode">是否请求调试设备。</param>
+    /// <param name="shaderFormats">应用可提供的 shader 格式。</param>
+    /// <returns>按后端选择策略创建的 GPU 设备句柄。</returns>
     public static nint CreatePlatformGpuDevice(
         bool debugMode = false,
         GpuShaderFormat shaderFormats = GpuShaderFormat.Invalid)
@@ -334,6 +455,11 @@ public static partial class Sdl
     /// 创建 SDL_GPU 设备并把窗口 claim 上去。Windows 上，D3D12 的探测/创建/claim 任一步失败，
     /// 都会继续走 Vulkan 候选；失败的设备在换下一个候选之前一定会被销毁，不会泄漏。
     /// </summary>
+    /// <param name="window">要绑定的 SDL 窗口。</param>
+    /// <param name="debugMode">是否请求调试设备。</param>
+    /// <param name="shaderFormats">应用可提供的 shader 格式。</param>
+    /// <returns>通过窗口绑定检查的 GPU 设备句柄。</returns>
+    /// <exception cref="ArgumentException">传入的 SDL 窗口句柄为零。</exception>
     public static nint CreatePlatformGpuDeviceForWindow(
         nint window,
         bool debugMode = false,
@@ -603,6 +729,8 @@ public static partial class Sdl
     /// <summary>
     /// 释放窗口并销毁其 GPU 设备。次序不可调换：先等 GPU 空闲，再解绑窗口，最后销毁设备。
     /// </summary>
+    /// <param name="device">待销毁的 GPU 设备句柄。</param>
+    /// <param name="window">与设备关联的窗口句柄。</param>
     public static void DestroyGpuDeviceForWindow(
         nint device,
         nint window)
@@ -622,6 +750,8 @@ public static partial class Sdl
     /// 实际启用的 SDL_GPU 后端名，例如 "metal"、"direct3d12" 或 "vulkan"。
     /// 这是 SDL 报告的真实后端，不是 PlatformGpuDriver 那个首选值，回退发生后两者会不同。
     /// </summary>
+    /// <param name="device">SDL GPU 设备句柄。</param>
+    /// <returns>后端名；空句柄返回 none。</returns>
     public static string GetGpuDriverName(nint device)
     {
         if (device == 0)

@@ -1,11 +1,10 @@
+// 场景合成协调器。对象背景、资源图层、轨道、固定 HUD 与后处理按显式边界组织；预览和视频导出共用此入口。
+
 using System.Numerics;
 using KuroakiGimmick.Core;
 
 namespace KuroakiGimmick.Graphics;
 
-/// <summary>
-/// 场景合成协调器。对象背景、资源图层、轨道、固定 HUD 与后处理按显式边界组织；预览和视频导出共用此入口。
-/// </summary>
 public sealed partial class SceneRenderer
 {
     /// <summary>会话换了图片集合才整批丢弃缓存；释放 GPU 纹理前必须先 Flush，否则仍在队列里的批次会引用已销毁的纹理。</summary>
@@ -62,11 +61,11 @@ public sealed partial class SceneRenderer
         // 原版的 bm_dest_color / bm_zero。用封面在每个粒子像素**当前**屏幕位置上的颜色去染色，
         // 移动中的爆发粒子也一样。画完必须恢复常规 source-alpha 混合。
         canvas.Blend(BlendFactor.DestinationColor, BlendFactor.Zero);
-        var tint = session.DistortBgEnabled? Color.Hex((uint) Math.Clamp(session.Timeline.Get("ditortedBG_col_rgb", time), 0,
+        var tint = session.DistortBgEnabled ? Color.Hex((uint)Math.Clamp(session.Timeline.Get("ditortedBG_col_rgb", time), 0,
             16777215)) : Color.White;
         int frames = path == jackets.DefaultPath && jackets.Animated ? Math.Max(1, jackets.AnimatedFrames) : 1;
         int frame = frames <= 1 ? 0 : (int)Math.Floor(Math.Max(0, time) * 60) % frames;
-        canvas.Quad(jacketTexture, jackets.CustomLayout? new(0, 0, 320, 180) : new(-50, -50, 420, 268), tint,
+        canvas.Quad(jacketTexture, jackets.CustomLayout ? new(0, 0, 320, 180) : new(-50, -50, 420, 268), tint,
             new(frame / (float)frames, 0, 1f / frames, 1));
         canvas.Blend(BlendFactor.SourceAlpha, BlendFactor.InverseSourceAlpha);
     }
@@ -89,12 +88,12 @@ public sealed partial class SceneRenderer
             return null;
         }
         canvas.Flush();
-        long bytes = (long) asset.Width * asset.Height * 4;
+        long bytes = (long)asset.Width * asset.Height * 4;
         while (textureBytes + bytes > 128 * 1024 * 1024 && textureLru.First != null)
         {
             string oldest = textureLru.First.Value;
             var old = customTextures[oldest];
-            textureBytes -= (long) old.Width * old.Height * 4;
+            textureBytes -= (long)old.Width * old.Height * 4;
             old.Dispose();
             customTextures.Remove(oldest);
             textureLru.RemoveFirst();
@@ -103,7 +102,7 @@ public sealed partial class SceneRenderer
         {
             var tex = Texture.Load(canvas.Gpu, path);
             customTextures[path] = tex;
-            textureBytes += (long) tex.Width * tex.Height * 4;
+            textureBytes += (long)tex.Width * tex.Height * 4;
             textureLru.AddLast(path);
             return tex;
         }
@@ -135,7 +134,7 @@ public sealed partial class SceneRenderer
             }
             var m = pose.Matrix;
             canvas.Polygon(texture, Vector2.Transform(new(-.5f, -.5f), m), Vector2.Transform(new(.5f, -.5f), m), Vector2.Transform(new(-.5f,
-                .5f), m), Vector2.Transform(new(.5f, .5f), m), Color.Hex(pose.Rgb).Alpha(pose.Alpha), new(pose.Frame / (float) item.Frames, 0,
+                .5f), m), Vector2.Transform(new(.5f, .5f), m), Color.Hex(pose.Rgb).Alpha(pose.Alpha), new(pose.Frame / (float)item.Frames, 0,
                 1f / item.Frames, 1));
         }
     }

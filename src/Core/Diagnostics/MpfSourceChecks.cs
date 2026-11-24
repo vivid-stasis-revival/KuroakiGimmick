@@ -3,7 +3,7 @@ using KuroakiGimmick.Core.Editing;
 
 namespace KuroakiGimmick.Core;
 
-/// <summary>Portable synthetic fixtures for source identity, SaveCopy and export dependency discovery.</summary>
+/// <summary>用可移植的合成文件验证源文件身份、SaveCopy 和导出依赖发现。</summary>
 internal static class MpfSourceChecks
 {
     internal static int Run()
@@ -22,8 +22,7 @@ internal static class MpfSourceChecks
             string vsm = Path.Combine(root, "ENCORE.vsm");
             const string text = "!obj:obj_custom_gimmick\nmpf\n0,4,wave\n";
             File.WriteAllText(vsm, text);
-            // A synthetic script fixture has no licensed jacket catalog. Keep the normal
-            // jacket path explicit so this Session also works in a clean CI checkout.
+            // 合成脚本用例不包含私有曲绘目录，显式选择普通曲绘使干净 CI 环境也能创建 Session。
             File.WriteAllText(Path.Combine(root, "cgmk_config.json"), "{\"JACKET_MANAGE_MODE\":\"normal\"}");
             string global = Path.Combine(scripts, "GLOBAL.wave.vsmpf");
             string local = Path.Combine(scripts, "encore.wave.vsmpf");
@@ -68,12 +67,16 @@ internal static class MpfSourceChecks
             var limited = MpfScriptSources.FindFiles(crowded, "ENCORE");
             Check(limited.Files.Count == 0 && limited.Errors.Count == 1, "oversized directory reports error without partial selection");
             string blocked = Path.Combine(temp, "blocked");
-            Directory.CreateDirectory(blocked); File.WriteAllText(Path.Combine(blocked, "cmpf"), "not a directory");
+            Directory.CreateDirectory(blocked);
+            File.WriteAllText(Path.Combine(blocked, "cmpf"), "not a directory");
             var unavailable = MpfScriptSources.FindFiles(blocked, "ENCORE");
             Check(unavailable.Files.Count == 0 && unavailable.Errors.Count == 1, "invalid resource directory reports an error without crashing discovery");
             Console.WriteLine("PASS CGMK MPF source/export: " + checks + " checks");
             return 0;
         }
-        finally { if (Directory.Exists(temp)) Directory.Delete(temp, true); }
+        finally
+        {
+            if (Directory.Exists(temp)) Directory.Delete(temp, true);
+        }
     }
 }

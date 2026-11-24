@@ -8,6 +8,8 @@ public sealed class GimmickDrawScheduler
 {
     private readonly GimmickDefinition definition;
     private readonly double maximumLifetime;
+    /// <summary>使用声明式对象定义建立绘制命令调度器。</summary>
+    /// <param name="definition">当前对象的声明式演出定义。</param>
     public GimmickDrawScheduler(GimmickDefinition definition)
     {
         this.definition = definition;
@@ -19,6 +21,11 @@ public sealed class GimmickDrawScheduler
     /// 取该时刻该阶段应绘制的命令。time 单位秒；常驻覆盖层的 Age 直接用 time，回调项的 Age 是距触发的秒数。
     /// 这里用的是 GimmickDrawing.Lifetime（可见绘制寿命），与决定时间轴尾部的 CallbackLifetimes 不是同一个量。
     /// </summary>
+    /// <param name="timeline">用于采样轨道和回调的时间轴。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <param name="stage">调度绘制项的合成阶段。</param>
+    /// <param name="notes">是否包含音符绘制。</param>
+    /// <returns>当前阶段可见且按层次排序的绘制命令。</returns>
     public IReadOnlyList<GimmickDrawCommand> At(Timeline timeline, double time, string stage, bool notes)
     {
         var commands = new List<GimmickDrawCommand>();

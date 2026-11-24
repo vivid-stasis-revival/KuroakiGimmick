@@ -17,6 +17,8 @@ public static class ImageClipboard
     /// 复制成功返回 null，否则返回可显示的失败原因。图片先落到临时文件再交给系统工具 ——
     /// 这两个平台的剪贴板 API 都不接受管道进来的字节。
     /// </summary>
+    /// <param name="png">PNG 编码图像数据。</param>
+    /// <returns>复制成功时为 null，失败时为错误说明。</returns>
     public static string? CopyPng(byte[] png)
     {
         if (!Supported)
@@ -42,7 +44,12 @@ public static class ImageClipboard
             // 剪贴板持有的是数据而不是文件句柄，等它退出之后删临时文件是安全的。
             if (!process.WaitForExit(15000))
             {
-                try { process.Kill(true); } catch (InvalidOperationException) { /* 已退出 */ }
+                try
+                {
+                    process.Kill(true);
+                }
+                catch (InvalidOperationException)
+                { /* 已退出 */ }
                 return "The system clipboard helper timed out.";
             }
             return process.ExitCode == 0 ? null
@@ -55,8 +62,12 @@ public static class ImageClipboard
         }
         finally
         {
-            try { if (File.Exists(temp)) File.Delete(temp); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* 临时文件留着也无妨 */ }
+            try
+            {
+                if (File.Exists(temp)) File.Delete(temp);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            { /* 临时文件留着也无妨 */ }
         }
     }
 

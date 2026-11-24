@@ -1,3 +1,5 @@
+// 检查连续渲染帧中 proxy 标签的位置与可见性。
+
 using System.Numerics;
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Core.Editing;
@@ -17,8 +19,7 @@ public sealed partial class Viewer
         30,2,inOutSine,-25,0,prrzb,0
         """;
 
-    // Proxy test B24..32: the top edge repeatedly crosses the viewport while rotating.
-    // Single screenshots missed the label alternating between its two clipped endpoints.
+    // 在测试谱第 24 至 32 拍旋转时，上边反复经过视口边界；单帧截图会漏掉标签在两个裁剪端点之间跳动。
     void SmokeProxyLabelMotion()
     {
         var chart = new Chart();
@@ -57,30 +58,42 @@ public sealed partial class Viewer
     {
         Current = new Session(new ViewerProject { Bpm = 120, Profile = "core", RoomPreset = "none", GameUiEnabled = false },
             editedVsm: ProxyLabelRotationVsm);
-        editor = new EditorDocument(Current); renderedRevision = editor.Revision; layoutRevision = -1;
+        editor = new EditorDocument(Current);
+        renderedRevision = editor.Revision;
+        layoutRevision = -1;
         editorMode = true;
-        SetClipSelection(null); newProxy = 0; prGridSelection = null;
-        prGridMode = 1; prGridShowIds = true;
+        SetClipSelection(null);
+        newProxy = 0;
+        prGridSelection = null;
+        prGridMode = 1;
+        prGridShowIds = true;
         prGridSolo = prGridShowCrop = prGridHudExpanded = false;
-        prGridHudOffsetX = float.NaN; prGridHudOffsetY = 8;
-        mouseX = mouseY = 0; transport.SetPlaying(false); transport.SetDuration(18);
+        prGridHudOffsetX = float.NaN;
+        prGridHudOffsetY = 8;
+        mouseX = mouseY = 0;
+        transport.SetPlaying(false);
+        transport.SetDuration(18);
         string original = editor.Vsm.Text;
-        var positions = new Vector2[61]; float largestStep = 0;
-        // Draw real UI frames across both screenshot times (13.41 and 13.45), at a wide
-        // preview size so collisions with the parameter panel cannot mask anchor jitter.
+        var positions = new Vector2[61];
+        float largestStep = 0;
+        // 在 13.41 和 13.45 秒两侧连续绘制真实界面帧，使用足够宽的预览，避免参数面板碰撞掩盖锚点抖动。
         for (int i = 0; i < positions.Length; i++)
         {
-            SetTime(13.2 + i / 120.0); Draw(2400, 1400);
+            SetTime(13.2 + i / 120.0);
+            Draw(2400, 1400);
             if (prGridLabels.Count != 1 || prGridLabels[0].Target != 0)
                 throw new InvalidOperationException("P0 label flashed off during continuous rotation.");
-            var rect = prGridLabels[0].Bounds; positions[i] = new(rect.X, rect.Y);
+            var rect = prGridLabels[0].Bounds;
+            positions[i] = new(rect.X, rect.Y);
             if (i == 0) continue;
-            float step = Vector2.Distance(positions[i], positions[i - 1]); largestStep = Math.Max(step, largestStep);
+            float step = Vector2.Distance(positions[i], positions[i - 1]);
+            largestStep = Math.Max(step, largestStep);
             if (step > 8) throw new InvalidOperationException($"P0 UI label jumped {step:F2} pixels in one frame.");
         }
         for (int i = positions.Length - 1; i >= 0; i--)
         {
-            SetTime(13.2 + i / 120.0); Draw(2400, 1400);
+            SetTime(13.2 + i / 120.0);
+            Draw(2400, 1400);
             var rect = prGridLabels.Single(l => l.Target == 0).Bounds;
             if (Vector2.Distance(positions[i], new(rect.X, rect.Y)) > .01)
                 throw new InvalidOperationException("Proxy label UI position depends on playback direction.");

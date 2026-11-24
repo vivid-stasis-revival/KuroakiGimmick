@@ -33,7 +33,13 @@ public static class RoomAssociations
         return catalog;
     }
 
+    /// <summary>按歌曲名查找房间预设，未关联时采用 gameplay。</summary>
+    /// <param name="songName">歌曲名。</param>
+    /// <returns>关联预设，缺省为 gameplay。</returns>
     public static string PresetFor(string songName) => Data.Value.Presets.GetValueOrDefault(songName, "gameplay");
+    /// <summary>检查歌曲是否已明确列入无关联集合。</summary>
+    /// <param name="songName">歌曲名。</param>
+    /// <returns>歌曲被显式列入无关联集合时为 true。</returns>
     public static bool IsUnassociated(string songName) => Data.Value.Unassociated.Contains(songName, StringComparer.Ordinal);
 
     // 隔离的兼容性测试读取另一个资源根目录，不替换共享的 Lazy 实例。

@@ -1,3 +1,5 @@
+// 将声明式对象定义解析为会话可用的精灵、纹理、shader 和资源诊断。
+
 using System.Text.Json;
 
 namespace KuroakiGimmick.Core;
@@ -8,24 +10,38 @@ namespace KuroakiGimmick.Core;
 /// </summary>
 public sealed class NativeGimmickProfile
 {
+    /// <summary>校验并应用上下文规则后的对象定义。</summary>
     public GimmickDefinition? Data { get; private set; }
+    /// <summary>当前对象定义的清单位置。</summary>
     public string? Manifest { get; private set; }
+    /// <summary>定义的来源信息。</summary>
     public string? DefinitionSource { get; private set; }
+    /// <summary>解析原版演出资源时使用的根目录。</summary>
     public string AssetsRoot { get; private set; } = Paths.Assets;
+    /// <summary>用于匹配对象规则的歌曲身份和工程上下文。</summary>
     public NativeSongContext SongContext { get; private set; } = new(null, "unspecified");
+    /// <summary>加载时记录的定义格式迁移说明。</summary>
     public List<string> DefinitionMigrations { get; } = [];
     /// <summary>
     /// 字段缺失时回退到 CompleteObject，与显式 false 不等价。
     /// 旧 v1 完整原生对象因此继续走真实 FX_red / colour-balance 链路，而不是额外叠一层红色矩形。
     /// </summary>
     public bool UseNativeColorControls => Data is { } definition && (definition.UseNativeColorControls ?? definition.CompleteObject);
+    /// <summary>所选资源包清单的位置。</summary>
     public string? ResourceManifest { get; private set; }
+    /// <summary>资源包声明或选定的房间名。</summary>
     public string? ResourceRoom { get; private set; }
+    /// <summary>资源包是否已完成加载。</summary>
     public bool ResourcePackLoaded { get; private set; }
+    /// <summary>当前对象可访问的具名精灵及其帧。</summary>
     public Dictionary<string, GimmickSprite> Sprites { get; } = new(StringComparer.Ordinal);
+    /// <summary>已解析的纹理键及其文件路径。</summary>
     public Dictionary<string, string> TextureFiles { get; } = new(StringComparer.Ordinal);
+    /// <summary>当前对象可用的 shader 资源映射。</summary>
     public Dictionary<string, string> Shaders { get; } = new(StringComparer.Ordinal);
+    /// <summary>当前定义解析得到的其他资源记录。</summary>
     public Dictionary<string, string> Resources { get; } = new(StringComparer.Ordinal);
+    /// <summary>按组件键收集的资源或能力问题。</summary>
     public Dictionary<string, string> Issues { get; } = new(StringComparer.Ordinal);
     /// <summary>已加载的定义没有已知资源/运行期错误；不代表已经核验与原游戏的视觉一致性。</summary>
     public bool ResourcesReady => Data != null && Issues.Count == 0;
@@ -39,21 +55,42 @@ public sealed class NativeGimmickProfile
     private readonly HashSet<GimmickShaderMode> invalidModes = [];
     private readonly Dictionary<string, JsonElement> parameters = new(StringComparer.Ordinal);
     private Chart? chart;
+    /// <summary>检查定义中是否存在使用指定合成阶段的绘制项。</summary>
+    /// <param name="stage">调度绘制项的合成阶段。</param>
+    /// <returns>声明中存在该阶段的绘制项时为 true。</returns>
     public bool HasStage(string stage) => Data != null && (Data.Overlays.Any(drawing => drawing.Stage == stage)
         || Data.Callbacks.Values.Any(drawings => drawings.Any(drawing => drawing.Stage == stage)));
+    /// <summary>检查指定 mod 是否包含在已支持的集合内。</summary>
+    /// <param name="mod">要采样的 mod 名称。</param>
+    /// <returns>已登记对该控制的支持时为 true。</returns>
     public bool Supports(string mod) => supported.Contains(mod);
-    public bool HasBehavior(string type) => Data?.HasBehavior(type)==true;
+    /// <summary>检查已加载的定义是否声明指定组件。</summary>
+    /// <param name="type">组件类型键。</param>
+    /// <returns>存在匹配组件时为 true。</returns>
+    public bool HasBehavior(string type) => Data?.HasBehavior(type) == true;
+    /// <summary>返回匹配的组件配置，缺少定义或组件时为 null。</summary>
+    /// <param name="type">组件类型键。</param>
+    /// <returns>匹配的首个组件，无匹配时为 null。</returns>
     public GimmickBehaviorDefinition? Behavior(string type) => Data?.Behavior(type);
+    /// <summary>检查指定 shader 模式是否被标记为不可用。</summary>
+    /// <param name="mode">指定 shader 与输入绑定的 pass 配置。</param>
+    /// <returns>模式未被列为无效时为 true。</returns>
     public bool IsModeAvailable(GimmickShaderMode mode) => !invalidModes.Contains(mode);
 
-    /// <summary>Resource definitions are read-only after loading; each render worker owns its runtime errors.</summary>
+    /// <summary>加载后共享只读资源定义，各导出工作线程独立记录运行错误。</summary>
     internal NativeGimmickProfile ForkForRender(Chart owner)
     {
         var copy = new NativeGimmickProfile
         {
-            Data = Data, Manifest = Manifest, DefinitionSource = DefinitionSource, AssetsRoot = AssetsRoot,
-            SongContext = SongContext, ResourceManifest = ResourceManifest, ResourceRoom = ResourceRoom,
-            ResourcePackLoaded = ResourcePackLoaded, chart = owner
+            Data = Data,
+            Manifest = Manifest,
+            DefinitionSource = DefinitionSource,
+            AssetsRoot = AssetsRoot,
+            SongContext = SongContext,
+            ResourceManifest = ResourceManifest,
+            ResourceRoom = ResourceRoom,
+            ResourcePackLoaded = ResourcePackLoaded,
+            chart = owner
         };
         copy.DefinitionMigrations.AddRange(DefinitionMigrations);
         foreach (var pair in Sprites) copy.Sprites.Add(pair.Key, pair.Value);
@@ -61,12 +98,15 @@ public sealed class NativeGimmickProfile
         foreach (var pair in Shaders) copy.Shaders.Add(pair.Key, pair.Value);
         foreach (var pair in Resources) copy.Resources.Add(pair.Key, pair.Value);
         foreach (var pair in Issues) copy.Issues.Add(pair.Key, pair.Value);
-        copy.supported.UnionWith(supported); copy.invalidModes.UnionWith(invalidModes);
+        copy.supported.UnionWith(supported);
+        copy.invalidModes.UnionWith(invalidModes);
         foreach (var pair in parameters) copy.parameters.Add(pair.Key, pair.Value);
         return copy;
     }
 
     /// <summary>去重相同的运行期错误，避免每帧编译失败或贴图缺失淹没报告。</summary>
+    /// <param name="component">出错的组件键。</param>
+    /// <param name="message">记录的问题说明。</param>
     public void Fail(string component, string message)
     {
         if (Issues.TryGetValue(component, out string? previous) && previous == message)
@@ -78,13 +118,23 @@ public sealed class NativeGimmickProfile
         Console.Error.WriteLine("Object resource error [" + component + "]: " + message);
     }
 
+    /// <summary>通过对象目录获取额外注册的 mod 名称。</summary>
+    /// <param name="objectName">来源演出对象名。</param>
+    /// <returns>来源对象额外声明的 mod 名称。</returns>
     public static string[] ReadExtraMods(string objectName) => GimmickCatalog.ReadExtraMods(objectName);
+    /// <summary>为谱面加载对象定义及其资源并记录组件诊断。</summary>
+    /// <param name="chart">提供音符、演出事件及诊断的谱面。</param>
+    /// <returns>结合默认工程配置解析的对象及资源。</returns>
     public static NativeGimmickProfile Load(Chart chart) => Load(new ViewerProject(), chart);
     /// <summary>
     /// 解析定义、资源 manifest、图片尺寸与 shader 文本。此处不创建任何 GPU 纹理，CPU profile 不持有 GPU 指针。
     /// 除定义本身无法读取外一律不中断：每个精灵/纹理/shader/shader mode 的失败按组件记入 Issues，
     /// 其余有效资源继续加载并可预览。整个加载共用一份解码预算。
     /// </summary>
+    /// <param name="project">当前工程的路径与呈现配置。</param>
+    /// <param name="chart">提供音符、演出事件及诊断的谱面。</param>
+    /// <param name="assetsRoot">应用素材的根目录。</param>
+    /// <returns>包含对象定义、已解析资源与诊断的配置。</returns>
     public static NativeGimmickProfile Load(ViewerProject project, Chart chart, string? assetsRoot = null)
     {
         var result = new NativeGimmickProfile
@@ -118,14 +168,14 @@ public sealed class NativeGimmickProfile
             GimmickValidation.Validate(definition);
             result.SongContext = NativeSongContext.Resolve(project, songRoot);
             definition = result.SongContext.ApplyDefinition(definition);
-            foreach(var behavior in definition.Behaviors)
-                foreach(var (role,name) in behavior.Mods)
-                    if(role!=name)
+            foreach (var behavior in definition.Behaviors)
+                foreach (var (role, name) in behavior.Mods)
+                    if (role != name)
                     {
-                        if(definition.ModAliases.TryGetValue(role,out var existing)&&existing!=name)
-                            throw new InvalidDataException("Ambiguous component mod role: "+role);
-                        definition.ModAliases[role]=name;
-                        if(!definition.Defaults.ContainsKey(name)&&definition.Defaults.TryGetValue(role,out var initial))definition.Defaults[name]=initial;
+                        if (definition.ModAliases.TryGetValue(role, out var existing) && existing != name)
+                            throw new InvalidDataException("Ambiguous component mod role: " + role);
+                        definition.ModAliases[role] = name;
+                        if (!definition.Defaults.ContainsKey(name) && definition.Defaults.TryGetValue(role, out var initial)) definition.Defaults[name] = initial;
                     }
             GimmickValidation.Validate(definition);
             result.ResourceRoom = project.NativeRoom ?? definition.SourceRoom;
@@ -253,13 +303,13 @@ public sealed class NativeGimmickProfile
                 result.Fail(name, "Missing required sprite entry: " + name);
             }
         }
-        foreach(var behavior in definition.Behaviors)
-            foreach(var (role,name) in behavior.Sprites)
-                if(role!=name && result.Sprites.TryGetValue(name,out var sprite))
+        foreach (var behavior in definition.Behaviors)
+            foreach (var (role, name) in behavior.Sprites)
+                if (role != name && result.Sprites.TryGetValue(name, out var sprite))
                 {
-                    if(result.Sprites.TryGetValue(role,out var existing)&&!ReferenceEquals(existing,sprite))
-                        throw new InvalidDataException("Ambiguous component sprite role: "+role);
-                    result.Sprites[role]=sprite;
+                    if (result.Sprites.TryGetValue(role, out var existing) && !ReferenceEquals(existing, sprite))
+                        throw new InvalidDataException("Ambiguous component sprite role: " + role);
+                    result.Sprites[role] = sprite;
                 }
         foreach (var (name, texture) in definition.Textures)
         {
@@ -346,11 +396,14 @@ public sealed class NativeGimmickProfile
         {
             try
             {
-                string file=ResourceFiles.ContainedFile(definitionRoot,action.Path!);
-                if(ChartLoadLimits.Exceeds(new FileInfo(file).Length, 128*1024*1024))throw new InvalidDataException("Interlude audio exceeds 128 MiB.");
-                result.Resources["interlude-audio/"+action.Path]=file;
+                string file = ResourceFiles.ContainedFile(definitionRoot, action.Path!);
+                if (ChartLoadLimits.Exceeds(new FileInfo(file).Length, 128 * 1024 * 1024)) throw new InvalidDataException("Interlude audio exceeds 128 MiB.");
+                result.Resources["interlude-audio/" + action.Path] = file;
             }
-            catch(Exception ex) when(ResourceFiles.IsResourceError(ex)){result.Fail("interlude-audio/"+action.Path,ex.Message);}
+            catch (Exception ex) when (ResourceFiles.IsResourceError(ex))
+            {
+                result.Fail("interlude-audio/" + action.Path, ex.Message);
+            }
         }
         foreach (var cue in definition.Sequence?.AudioCues ?? [])
         {
@@ -360,7 +413,10 @@ public sealed class NativeGimmickProfile
                 if (ChartLoadLimits.Exceeds(new FileInfo(file).Length, 128 * 1024 * 1024)) throw new InvalidDataException("Voice resource exceeds 128 MiB.");
                 result.Resources["audio/" + cue.Path] = file;
             }
-            catch (Exception ex) when (ResourceFiles.IsResourceError(ex)) { result.Fail("audio/" + cue.Path, ex.Message); }
+            catch (Exception ex) when (ResourceFiles.IsResourceError(ex))
+            {
+                result.Fail("audio/" + cue.Path, ex.Message);
+            }
         }
         if (definition.Sequence?.Story.Any(cue => cue.FormatPlayerName || cue.Speaker == "DO_ST") == true
             && string.IsNullOrWhiteSpace(project.NativeStoryContext?.PlayerName))
@@ -373,6 +429,10 @@ public sealed class NativeGimmickProfile
     }
 
     /// <summary>读取可选资源参数的数值；index &gt;= 0 时取数组分量。缺失或非有限值都抛错，不替换成 0。</summary>
+    /// <param name="name">资源参数名称。</param>
+    /// <param name="index">要读取的分量索引，默认 -1。</param>
+    /// <returns>解析得到的资源参数数值。</returns>
+    /// <exception cref="InvalidDataException">参数未加载、分量索引无效或取不到所要求的数值。</exception>
     public double ParameterNumber(string name, int index = -1)
     {
         if (!parameters.TryGetValue(name, out var value))
@@ -400,9 +460,9 @@ public sealed class NativeGimmickProfile
     private void IndexSupportedMods(GimmickDefinition definition)
     {
         supported.UnionWith(NativeGimmickCapabilities.Mods(definition));
-        supported.UnionWith(definition.FunctionPrograms.Values.SelectMany(program=>program.Inputs));
+        supported.UnionWith(definition.FunctionPrograms.Values.SelectMany(program => program.Inputs));
         supported.UnionWith(definition.Signals.Keys);
-        foreach(var rule in definition.SkinRules)if(rule.Mod!=null)supported.Add(rule.Mod);
+        foreach (var rule in definition.SkinRules) if (rule.Mod != null) supported.Add(rule.Mod);
         if (definition.Sequence is { } sequence)
         {
             supported.UnionWith(sequence.Mods.Values);
@@ -420,18 +480,18 @@ public sealed class NativeGimmickProfile
         supported.UnionWith(definition.Callbacks.Keys);
         supported.UnionWith(definition.CallbackCancels.Keys);
         supported.UnionWith(definition.SideCallbacks.Keys);
-        supported.UnionWith(definition.TextOverlays.SelectMany(text => new[]{text.IndexMod,text.AlphaMod}).OfType<string>());
+        supported.UnionWith(definition.TextOverlays.SelectMany(text => new[] { text.IndexMod, text.AlphaMod }).OfType<string>());
         supported.UnionWith(definition.ModAliases.Keys);
         supported.UnionWith(definition.ModAliases.Values);
         supported.UnionWith(definition.ValueBindings.Keys);
-        foreach(var scalar in definition.ValueBindings.Values) ScalarMods(scalar);
+        foreach (var scalar in definition.ValueBindings.Values) ScalarMods(scalar);
         supported.UnionWith(definition.CallbackFades.Keys);
         foreach (var outputs in definition.PerFrameBindings.Values)
         {
             supported.UnionWith(outputs.Keys);
         }
         IEnumerable<GimmickDrawing> drawings = definition.Overlays.Concat(definition.Callbacks.Values.SelectMany(items => items))
-            .Concat(definition.MaskLayers).Concat(definition.RoomLayers.SelectMany(layer=>layer.Drawings));
+            .Concat(definition.MaskLayers).Concat(definition.RoomLayers.SelectMany(layer => layer.Drawings));
         if (definition.Background is { } background) drawings = drawings.Append(background.Drawing);
         foreach (var drawing in drawings)
         {
@@ -441,7 +501,7 @@ public sealed class NativeGimmickProfile
             }
             if (drawing.FrameMod != null) supported.Add(drawing.FrameMod);
             foreach (var scalar in drawing.Bindings.Values) ScalarMods(scalar);
-            if(drawing.HsvTint is { } tint)ScalarMods(tint.Hue);
+            if (drawing.HsvTint is { } tint) ScalarMods(tint.Hue);
         }
         foreach (var layer in definition.RoomLayers)
         {

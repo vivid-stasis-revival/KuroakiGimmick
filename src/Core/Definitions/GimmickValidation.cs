@@ -1,3 +1,5 @@
+// 在对象定义进入执行和绘制路径之前检查结构、数值与资源引用。
+
 using System.Diagnostics.CodeAnalysis;
 
 namespace KuroakiGimmick.Core;
@@ -12,56 +14,57 @@ public static class GimmickValidation
     /// 加载时一次性校验结构、数值范围和引用图；任一项不满足立即抛 InvalidDataException，不做静默裁剪。
     /// 必须在建立时间轴和创建 GPU 资源之前调用，否则坏配置会在逐帧求值阶段才暴露。
     /// </summary>
+    /// <param name="definition">当前对象的声明式演出定义。</param>
     public static void Validate(GimmickDefinition definition)
     {
-        Require(definition.Behaviors!=null && definition.Behaviors.Count<=32 && definition.Behaviors.All(c=>c!=null)
-            && definition.Behaviors.Select(c=>c.Type).Distinct(StringComparer.Ordinal).Count()==definition.Behaviors.Count,"Invalid or duplicate runtime components.");
-        foreach(var component in definition.Behaviors)
+        Require(definition.Behaviors != null && definition.Behaviors.Count <= 32 && definition.Behaviors.All(c => c != null)
+            && definition.Behaviors.Select(c => c.Type).Distinct(StringComparer.Ordinal).Count() == definition.Behaviors.Count, "Invalid or duplicate runtime components.");
+        foreach (var component in definition.Behaviors)
         {
-            Require(NativeGimmickCapabilities.Types.Contains(component.Type),"Unknown runtime component: "+component.Type);
-            Require(component.Mods!=null && component.Mods.Count<=64 && component.Mods.All(p=>NativeGimmickCapabilities.Roles(component.Type).Contains(p.Key)
-                && !string.IsNullOrWhiteSpace(p.Value)),"Unknown component mod role: "+component.Type);
-            Require(component.Sprites!=null && component.Sprites.Count<=64 && component.Sprites.All(p=>!string.IsNullOrWhiteSpace(p.Key)
-                && definition.Sprites.ContainsKey(p.Value)),"Invalid component sprite binding: "+component.Type);
-            Require(component.SpriteLists!=null && component.SpriteLists.Count<=16 && component.SpriteLists.All(p=>!string.IsNullOrWhiteSpace(p.Key)
-                && p.Value!=null && p.Value.Length is >0 and <=256 && p.Value.All(definition.Sprites.ContainsKey)),"Invalid component sprite lists.");
-            Require(component.Parameters!=null && component.Parameters.Count<=64 && component.Parameters.All(p=>!string.IsNullOrWhiteSpace(p.Key)
+            Require(NativeGimmickCapabilities.Types.Contains(component.Type), "Unknown runtime component: " + component.Type);
+            Require(component.Mods != null && component.Mods.Count <= 64 && component.Mods.All(p => NativeGimmickCapabilities.Roles(component.Type).Contains(p.Key)
+                && !string.IsNullOrWhiteSpace(p.Value)), "Unknown component mod role: " + component.Type);
+            Require(component.Sprites != null && component.Sprites.Count <= 64 && component.Sprites.All(p => !string.IsNullOrWhiteSpace(p.Key)
+                && definition.Sprites.ContainsKey(p.Value)), "Invalid component sprite binding: " + component.Type);
+            Require(component.SpriteLists != null && component.SpriteLists.Count <= 16 && component.SpriteLists.All(p => !string.IsNullOrWhiteSpace(p.Key)
+                && p.Value != null && p.Value.Length is > 0 and <= 256 && p.Value.All(definition.Sprites.ContainsKey)), "Invalid component sprite lists.");
+            Require(component.Parameters != null && component.Parameters.Count <= 64 && component.Parameters.All(p => !string.IsNullOrWhiteSpace(p.Key)
                 && (p.Value.ValueKind is System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False or System.Text.Json.JsonValueKind.String
-                    || p.Value.ValueKind==System.Text.Json.JsonValueKind.Number && p.Value.TryGetDouble(out var n)&&double.IsFinite(n))),"Invalid component parameters.");
-            foreach(var (name,value) in component.Parameters)
-                Require(NativeGimmickCapabilities.ParameterType(component.Type,name) switch
+                    || p.Value.ValueKind == System.Text.Json.JsonValueKind.Number && p.Value.TryGetDouble(out var n) && double.IsFinite(n))), "Invalid component parameters.");
+            foreach (var (name, value) in component.Parameters)
+                Require(NativeGimmickCapabilities.ParameterType(component.Type, name) switch
                 {
-                    "number"=>value.ValueKind==System.Text.Json.JsonValueKind.Number,
-                    "string"=>value.ValueKind==System.Text.Json.JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString()),
-                    "bool"=>value.ValueKind is System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False,
-                    _=>false
-                },"Unknown or incorrectly typed component parameter: "+component.Type+"/"+name);
-            if(component.Type=="multiply-jacket")Require(component.Mods.ContainsKey("frame")
-                &&(component.Sprites.ContainsKey("atlas")||component.SpriteLists.ContainsKey("variants"))
-                &&component.Number("width",320)>0&&component.Number("height",180)>0,"Invalid multiply-jacket configuration.");
+                    "number" => value.ValueKind == System.Text.Json.JsonValueKind.Number,
+                    "string" => value.ValueKind == System.Text.Json.JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString()),
+                    "bool" => value.ValueKind is System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False,
+                    _ => false
+                }, "Unknown or incorrectly typed component parameter: " + component.Type + "/" + name);
+            if (component.Type == "multiply-jacket") Require(component.Mods.ContainsKey("frame")
+                && (component.Sprites.ContainsKey("atlas") || component.SpriteLists.ContainsKey("variants"))
+                && component.Number("width", 320) > 0 && component.Number("height", 180) > 0, "Invalid multiply-jacket configuration.");
         }
-        Require(definition.Signals!=null && definition.Signals.Count<=128 && definition.Signals.All(p=>!string.IsNullOrWhiteSpace(p.Key)
-            && p.Value!=null && !string.IsNullOrWhiteSpace(p.Value.Signal) && p.Value.Operation is "signal" or "random-write"
-            && Finite(p.Value.Lifetime,p.Value.RandomScale) && p.Value.Lifetime is >=0 and <=3600 && p.Value.RandomScale is >=0 and <=1000000
-            && (p.Value.Operation!="random-write"||!string.IsNullOrWhiteSpace(p.Value.Target))
-            && (p.Value.AbsoluteEnd==null||double.IsFinite(p.Value.AbsoluteEnd.Value)&&p.Value.AbsoluteEnd>=0)
-            && (p.Value.MinimumExclusive==null||double.IsFinite(p.Value.MinimumExclusive.Value))),"Invalid signal routes.");
-        Require(definition.ContextRules!=null && definition.ContextRules.Count<=32 && definition.ContextRules.All(r=>r!=null&&r.All!=null&&r.All.Count is >0 and <=16
-            && r.All.All(c=>c!=null&&!string.IsNullOrWhiteSpace(c.Key)&&c.Value.ValueKind is not (System.Text.Json.JsonValueKind.Undefined or System.Text.Json.JsonValueKind.Object or System.Text.Json.JsonValueKind.Array))
-            && r.Patch.ValueKind==System.Text.Json.JsonValueKind.Object && r.Patch.GetRawText().Length<=1048576),"Invalid context rules.");
-        Require(definition.SkinRules!=null && definition.SkinRules.Count<=32 && definition.SkinRules.All(r=>r!=null&&!string.IsNullOrWhiteSpace(r.Skin)
-            && ModName(r.Mod)&&double.IsFinite(r.Threshold)&&(r.Start==null||double.IsFinite(r.Start.Value))&&(r.End==null||double.IsFinite(r.End.Value))
-            && (r.Start==null||r.End==null||r.Start<=r.End)),"Invalid note-skin rules.");
-        if(definition.CompositeLifecycle is { } lifecycle)ValidateLifecycle(lifecycle);
-        Require(definition.FunctionPrograms!=null && definition.FunctionPrograms.Count<=32 && definition.FunctionPrograms.All(p=>!string.IsNullOrWhiteSpace(p.Key)
-            && p.Value!=null && NativeFunctionTimeline.Kernels.Contains(p.Value.Kernel) && p.Value.Inputs!=null && p.Value.Inputs.Length<=64
-            && p.Value.Inputs.All(s=>!string.IsNullOrWhiteSpace(s)) && p.Value.Parameters!=null && p.Value.Parameters.Count<=64
-            && p.Value.Parameters.All(v=>!string.IsNullOrWhiteSpace(v.Key)&&double.IsFinite(v.Value)) && p.Value.Windows!=null&&p.Value.Windows.Count<=32
-            && p.Value.Windows.All(w=>w!=null&&Finite(w.Start,w.End)&&w.Start<w.End&&w.Outputs!=null&&w.Outputs.Length is >0 and <=32
-                && w.Outputs.All(n=>!string.IsNullOrWhiteSpace(n)))),"Invalid per-frame programs.");
-        Require(definition.PlayfieldLayerDepth==null || double.IsFinite(definition.PlayfieldLayerDepth.Value),"Invalid playfield layer depth.");
-        Require(definition.UnavailableCallbacks!=null && definition.UnavailableCallbacks.Count<=128 && definition.UnavailableCallbacks.All(p=>!string.IsNullOrWhiteSpace(p.Key)
-            && !string.IsNullOrWhiteSpace(p.Value)),"Invalid callback dependency diagnostics.");
+        Require(definition.Signals != null && definition.Signals.Count <= 128 && definition.Signals.All(p => !string.IsNullOrWhiteSpace(p.Key)
+            && p.Value != null && !string.IsNullOrWhiteSpace(p.Value.Signal) && p.Value.Operation is "signal" or "random-write"
+            && Finite(p.Value.Lifetime, p.Value.RandomScale) && p.Value.Lifetime is >= 0 and <= 3600 && p.Value.RandomScale is >= 0 and <= 1000000
+            && (p.Value.Operation != "random-write" || !string.IsNullOrWhiteSpace(p.Value.Target))
+            && (p.Value.AbsoluteEnd == null || double.IsFinite(p.Value.AbsoluteEnd.Value) && p.Value.AbsoluteEnd >= 0)
+            && (p.Value.MinimumExclusive == null || double.IsFinite(p.Value.MinimumExclusive.Value))), "Invalid signal routes.");
+        Require(definition.ContextRules != null && definition.ContextRules.Count <= 32 && definition.ContextRules.All(r => r != null && r.All != null && r.All.Count is > 0 and <= 16
+            && r.All.All(c => c != null && !string.IsNullOrWhiteSpace(c.Key) && c.Value.ValueKind is not (System.Text.Json.JsonValueKind.Undefined or System.Text.Json.JsonValueKind.Object or System.Text.Json.JsonValueKind.Array))
+            && r.Patch.ValueKind == System.Text.Json.JsonValueKind.Object && r.Patch.GetRawText().Length <= 1048576), "Invalid context rules.");
+        Require(definition.SkinRules != null && definition.SkinRules.Count <= 32 && definition.SkinRules.All(r => r != null && !string.IsNullOrWhiteSpace(r.Skin)
+            && ModName(r.Mod) && double.IsFinite(r.Threshold) && (r.Start == null || double.IsFinite(r.Start.Value)) && (r.End == null || double.IsFinite(r.End.Value))
+            && (r.Start == null || r.End == null || r.Start <= r.End)), "Invalid note-skin rules.");
+        if (definition.CompositeLifecycle is { } lifecycle) ValidateLifecycle(lifecycle);
+        Require(definition.FunctionPrograms != null && definition.FunctionPrograms.Count <= 32 && definition.FunctionPrograms.All(p => !string.IsNullOrWhiteSpace(p.Key)
+            && p.Value != null && NativeFunctionTimeline.Kernels.Contains(p.Value.Kernel) && p.Value.Inputs != null && p.Value.Inputs.Length <= 64
+            && p.Value.Inputs.All(s => !string.IsNullOrWhiteSpace(s)) && p.Value.Parameters != null && p.Value.Parameters.Count <= 64
+            && p.Value.Parameters.All(v => !string.IsNullOrWhiteSpace(v.Key) && double.IsFinite(v.Value)) && p.Value.Windows != null && p.Value.Windows.Count <= 32
+            && p.Value.Windows.All(w => w != null && Finite(w.Start, w.End) && w.Start < w.End && w.Outputs != null && w.Outputs.Length is > 0 and <= 32
+                && w.Outputs.All(n => !string.IsNullOrWhiteSpace(n)))), "Invalid per-frame programs.");
+        Require(definition.PlayfieldLayerDepth == null || double.IsFinite(definition.PlayfieldLayerDepth.Value), "Invalid playfield layer depth.");
+        Require(definition.UnavailableCallbacks != null && definition.UnavailableCallbacks.Count <= 128 && definition.UnavailableCallbacks.All(p => !string.IsNullOrWhiteSpace(p.Key)
+            && !string.IsNullOrWhiteSpace(p.Value)), "Invalid callback dependency diagnostics.");
         Require(definition.ParameterObjectPath != null, "ParameterObjectPath must not be null.");
         Require(definition.HudAfterPostWhenPositive == null || !string.IsNullOrWhiteSpace(definition.HudAfterPostWhenPositive),
             "Invalid dynamic source HUD gate.");
@@ -144,16 +147,16 @@ public static class GimmickValidation
         foreach (var text in definition.TextOverlays)
             Require(text != null && text.Frames != null && text.Frames.Length is > 0 and <= 2048
                 && text.Frames.All(s => s != null && s.Length <= 32768) && text.Frames.Sum(s => (long)s.Length) <= 1048576
-                && ModName(text.IndexMod) && ModName(text.AlphaMod) && Finite(text.X,text.Y,text.Alpha,text.Scale)
-                && text.Scale is > 0 and <= 100 && (text.BottomColorBgr==null || text.BottomColorBgr<=0xffffff)
+                && ModName(text.IndexMod) && ModName(text.AlphaMod) && Finite(text.X, text.Y, text.Alpha, text.Scale)
+                && text.Scale is > 0 and <= 100 && (text.BottomColorBgr == null || text.BottomColorBgr <= 0xffffff)
                 && Math.Abs(text.X) <= 100000 && Math.Abs(text.Y) <= 100000 && text.Alpha >= 0 && text.Alpha <= 1
                 && text.ColorBgr <= 0xffffff && text.OutlineColorBgr <= 0xffffff, "Invalid source text overlay.");
         ValidateBpm(definition.FixedBpm);
-        Require(definition.OffsetOverrideMs==null || double.IsFinite(definition.OffsetOverrideMs.Value)
-            && Math.Abs(definition.OffsetOverrideMs.Value)<=3600000,"Invalid native chart offset.");
+        Require(definition.OffsetOverrideMs == null || double.IsFinite(definition.OffsetOverrideMs.Value)
+            && Math.Abs(definition.OffsetOverrideMs.Value) <= 3600000, "Invalid native chart offset.");
         Require(definition.SceneComposite is null or "desktop" or "filter-chain",
             "Unknown native scene compositor.");
-        Require(definition.CompositeSource is "application" or "final","Unknown native composite source.");
+        Require(definition.CompositeSource is "application" or "final", "Unknown native composite source.");
         Require(definition.BpmOverride != null && definition.BpmOverride.Count <= 4096,
             "Invalid native BPM override count.");
         double previousBeat = 0;
@@ -168,11 +171,11 @@ public static class GimmickValidation
             "Native BPM override must start at zero.");
         bool HasSprite(string name) => !string.IsNullOrWhiteSpace(name) && (definition.Sprites.ContainsKey(name)
             || definition.RequiredSprites.ContainsKey(name));
-        if(definition.Desktop is { } desktop)
-            Require(HasSprite(desktop.Desktop)&&HasSprite(desktop.WindowFrame)
-                && (desktop.Cameo==null||HasSprite(desktop.Cameo)) && (desktop.Static==null||HasSprite(desktop.Static))
-                && desktop.WindowTitles!=null && desktop.WindowTitles.Length is >0 and <=256
-                && desktop.WindowTitles.All(t=>t!=null && t.Length<=2048),"Invalid native desktop resources.");
+        if (definition.Desktop is { } desktop)
+            Require(HasSprite(desktop.Desktop) && HasSprite(desktop.WindowFrame)
+                && (desktop.Cameo == null || HasSprite(desktop.Cameo)) && (desktop.Static == null || HasSprite(desktop.Static))
+                && desktop.WindowTitles != null && desktop.WindowTitles.Length is > 0 and <= 256
+                && desktop.WindowTitles.All(t => t != null && t.Length <= 2048), "Invalid native desktop resources.");
         Require(definition.CompositePasses != null && definition.CompositePasses.Count <= 16, "Invalid source composite pass count.");
         if (definition.Console is { } stopmotion)
         {
@@ -208,8 +211,8 @@ public static class GimmickValidation
             definition.MaskLayers != null && definition.MaskLayers.Count <= 32, "Invalid room or mask layer count.");
         foreach (var roomLayer in definition.RoomLayers)
         {
-            Require(roomLayer!=null&&roomLayer.Drawings!=null&&roomLayer.Drawings.Count<=64&&ModName(roomLayer.FrameSelectionEvent),"Invalid room component drawings or frame-selection event.");
-            foreach(var drawing in roomLayer.Drawings)ValidateDrawing(drawing,HasSprite);
+            Require(roomLayer != null && roomLayer.Drawings != null && roomLayer.Drawings.Count <= 64 && ModName(roomLayer.FrameSelectionEvent), "Invalid room component drawings or frame-selection event.");
+            foreach (var drawing in roomLayer.Drawings) ValidateDrawing(drawing, HasSprite);
             Require(roomLayer != null && (!roomLayer.FilterOnly || roomLayer.Sprite == null && roomLayer.Effect != null),
                 "Filter-only room layers require an effect and no sprite.");
             Require(roomLayer != null && Finite(roomLayer.Alpha, roomLayer.ScrollY, roomLayer.ScrollX, roomLayer.OffsetX, roomLayer.OffsetY, roomLayer.FramesPerSecond) &&
@@ -263,12 +266,12 @@ public static class GimmickValidation
                 Require(scalar.Parameter == null, "Per-frame bindings cannot depend on optional resource parameters.");
             }
         }
-        Require(definition.ValueBindings != null && definition.ValueBindings.Count <= 128,"Invalid value bindings.");
-        foreach(var (name,scalar) in definition.ValueBindings)
+        Require(definition.ValueBindings != null && definition.ValueBindings.Count <= 128, "Invalid value bindings.");
+        foreach (var (name, scalar) in definition.ValueBindings)
         {
-            Require(!string.IsNullOrWhiteSpace(name),"Missing value binding name.");
+            Require(!string.IsNullOrWhiteSpace(name), "Missing value binding name.");
             ValidateScalar(scalar);
-            Require(scalar.Parameter==null,"Value bindings cannot depend on optional resource parameters.");
+            Require(scalar.Parameter == null, "Value bindings cannot depend on optional resource parameters.");
         }
         ValidateReferenceGraph(definition);
         foreach (var texture in definition.Textures.Values)
@@ -315,13 +318,17 @@ public static class GimmickValidation
         }
     }
 
+    /// <summary>校验生命周期定义中使用的创建与销毁回调。</summary>
+    /// <param name="lifecycle">控制创建和销毁的生命周期规则。</param>
     public static void ValidateLifecycle(GimmickLifecycleDefinition lifecycle)
     {
-        Require(lifecycle.Create!=null&&lifecycle.Destroy!=null&&lifecycle.Create.Length<=64&&lifecycle.Destroy.Length<=64
-            && lifecycle.Create.Concat(lifecycle.Destroy).All(s=>!string.IsNullOrWhiteSpace(s)),"Invalid lifecycle events.");
+        Require(lifecycle.Create != null && lifecycle.Destroy != null && lifecycle.Create.Length <= 64 && lifecycle.Destroy.Length <= 64
+            && lifecycle.Create.Concat(lifecycle.Destroy).All(s => !string.IsNullOrWhiteSpace(s)), "Invalid lifecycle events.");
     }
 
     /// <summary>枚举所有 shader pass 及其组件名；组件名同时是逐组件错误记录的键，改名会改变诊断标识。</summary>
+    /// <param name="definition">当前对象的声明式演出定义。</param>
+    /// <returns>组件名与其关联的 shader 模式。</returns>
     public static IEnumerable<(string Component, GimmickShaderMode Mode)> ShaderModes(GimmickDefinition definition)
     {
         foreach (var (index, mode) in definition.PostModes)
@@ -338,8 +345,8 @@ public static class GimmickValidation
         {
             yield return ("background/" + background.Shader, background);
         }
-        if(definition.Desktop?.WindowShader is { } windowShader)
-            yield return ("desktop-window/"+windowShader.Shader,windowShader);
+        if (definition.Desktop?.WindowShader is { } windowShader)
+            yield return ("desktop-window/" + windowShader.Shader, windowShader);
         if (definition.Sequence?.CgEffect is { } cg)
             yield return ("sequence-cg/" + cg.Shader, cg);
     }
@@ -348,6 +355,7 @@ public static class GimmickValidation
     /// 校验 manifest 声明的精灵几何：尺寸 1..4096、原点必须落在尺寸之内、帧数 1..64、Scope 限 pack/definition/shared。
     /// 这里只看声明值；解码后的纹理像素尺寸由加载阶段另行比对。
     /// </summary>
+    /// <param name="sprite">精灵的来源帧与尺寸定义。</param>
     public static void ValidateSprite(GimmickSprite? sprite)
     {
         Require(sprite != null && sprite.Width is >= 1 and <= 4096 && sprite.Height is >= 1 and <= 4096 && sprite.Frames != null
@@ -364,14 +372,14 @@ public static class GimmickValidation
             drawing.Lifetime) && drawing.Lifetime is > 0 and <= 60 && drawing.FramesPerSecond is >= 0 and <= 1000 && drawing.Frame >= 0
             && (drawing.EventValue == null || double.IsFinite(drawing.EventValue.Value))
             && drawing.ColorBgr <= 0xFFFFFF && ModName(drawing.AlphaMod) && ModName(drawing.FrameMod), "Invalid drawing sprite, stage or transform.");
-        Require(Finite(drawing.MinimumAlpha,drawing.MinimumAbsScale) && drawing.MinimumAlpha>=0 && drawing.MinimumAlpha<=1
-            && drawing.MinimumAbsScale>=0,"Invalid drawing visibility thresholds.");
+        Require(Finite(drawing.MinimumAlpha, drawing.MinimumAbsScale) && drawing.MinimumAlpha >= 0 && drawing.MinimumAlpha <= 1
+            && drawing.MinimumAbsScale >= 0, "Invalid drawing visibility thresholds.");
         ValidateBindings(drawing.Bindings, "x", "y", "scaleX", "scaleY", "angle", "alpha", "frame", "color");
-        if(drawing.Lifecycle is { } lifecycle)ValidateLifecycle(lifecycle);
-        if(drawing.HsvTint is { } tint)
+        if (drawing.Lifecycle is { } lifecycle) ValidateLifecycle(lifecycle);
+        if (drawing.HsvTint is { } tint)
         {
             ValidateScalar(tint.Hue);
-            Require(Finite(tint.Saturation,tint.Brightness)&&tint.Saturation is >=0 and <=1&&tint.Brightness is >=0 and <=1,"Invalid HSV tint.");
+            Require(Finite(tint.Saturation, tint.Brightness) && tint.Saturation is >= 0 and <= 1 && tint.Brightness is >= 0 and <= 1, "Invalid HSV tint.");
         }
         foreach (var range in drawing.SuppressRanges)
         {
@@ -395,13 +403,13 @@ public static class GimmickValidation
     private static void ValidateScalar(GimmickScalar? scalar)
     {
         Require(scalar != null && scalar.MultiplyMods != null && scalar.MultiplyMods.Length <= 8
-            && scalar.MultiplyMods.All(name=>!string.IsNullOrWhiteSpace(name))
-            && (scalar.Minimum==null || double.IsFinite(scalar.Minimum.Value))
-            && (scalar.Maximum==null || double.IsFinite(scalar.Maximum.Value))
-            && (scalar.Minimum==null || scalar.Maximum==null || scalar.Minimum<=scalar.Maximum),"Invalid scalar products or bounds.");
+            && scalar.MultiplyMods.All(name => !string.IsNullOrWhiteSpace(name))
+            && (scalar.Minimum == null || double.IsFinite(scalar.Minimum.Value))
+            && (scalar.Maximum == null || double.IsFinite(scalar.Maximum.Value))
+            && (scalar.Minimum == null || scalar.Maximum == null || scalar.Minimum <= scalar.Maximum), "Invalid scalar products or bounds.");
         Require(scalar != null && scalar.Mods != null && scalar.Mods.Length <= 8 && scalar.Mods.All(mod => !string.IsNullOrWhiteSpace(mod))
             && scalar.Wave is null or "sin" or "cos" && ModName(scalar.MultiplyMod) && ModName(scalar.Parameter) && Finite(scalar.Constant, scalar.TimeScale, scalar.TimeOffset, scalar.BeatScale, scalar.Scale)
-            && Math.Abs(scalar.TimeOffset)<=60
+            && Math.Abs(scalar.TimeOffset) <= 60
             && scalar.ParameterIndex is >= -1 and <= 3 && (scalar.ParameterMinimumExclusive == null
             || double.IsFinite(scalar.ParameterMinimumExclusive.Value)) && (scalar.Wrap == null || double.IsFinite(scalar.Wrap.Value)
             && scalar.Wrap > 0), "Invalid scalar binding.");
@@ -475,7 +483,7 @@ public static class GimmickValidation
         {
             Edge(from, to);
         }
-        Require(definition.ValueBindings!=null,"Missing value bindings.");
+        Require(definition.ValueBindings != null, "Missing value bindings.");
         foreach (var bindings in definition.PerFrameBindings.Values.Append(definition.ValueBindings))
         {
             foreach (var (output, scalar) in bindings)
@@ -488,7 +496,7 @@ public static class GimmickValidation
                 {
                     Edge(output, scalar.MultiplyMod);
                 }
-                foreach(string input in scalar.MultiplyMods) Edge(output,input);
+                foreach (string input in scalar.MultiplyMods) Edge(output, input);
             }
         }
         var states = new Dictionary<string, int>(StringComparer.Ordinal);

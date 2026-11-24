@@ -1,3 +1,5 @@
+// 将内置字体按目标像素尺寸栅格化，并管理字形缓存与图集。
+
 using System.Runtime.InteropServices;
 using System.Text;
 using StbTrueTypeSharp;
@@ -24,7 +26,9 @@ public sealed class UiFont : IDisposable
     /// <summary>图集内的源矩形与相对文本行顶的偏移，单位都是栅格像素；步进另以 em 归一化保存。</summary>
     public sealed class Glyph
     {
+        /// <summary>字形在字体图集中的矩形，依次为左边界、上边界、宽和高。</summary>
         public int X, Y, W, H;
+        /// <summary>字形相对于排版原点的横纵偏移。</summary>
         public float OffsetX, OffsetY;
     }
 
@@ -40,6 +44,7 @@ public sealed class UiFont : IDisposable
         public unsafe Face(byte[] data)
         {
             pin = GCHandle.Alloc(data, GCHandleType.Pinned);
+            // SAFETY: 字体解析器在后续字形查询中仍读取原字节；Face 持有固定句柄，释放字体时才解除固定。
             var head = (byte*)pin.AddrOfPinnedObject();
             if (StbTrueType.stbtt_InitFont(Info, head, 0) == 0)
             {
@@ -80,6 +85,8 @@ public sealed class UiFont : IDisposable
     public float AscentEm => regular.AscentEm;
 
     /// <summary>栅格化与打包全在 CPU 上完成，构造时不需要 GPU；纹理推迟到第一次 <see cref="Atlas"/> 才建。</summary>
+    /// <param name="regularFont">常规字重的字体文件数据。</param>
+    /// <param name="semiBoldFont">半粗体字重的字体文件数据。</param>
     public UiFont(byte[] regularFont, byte[] semiBoldFont)
     {
         regular = new(regularFont);
@@ -106,6 +113,8 @@ public sealed class UiFont : IDisposable
     }
 
     /// <summary>从内嵌资源装载两个字重。字体随程序集发布，不依赖本地 Assets 目录或系统字体。</summary>
+    /// <returns>从内置资源加载的界面字体。</returns>
+    /// <exception cref="InvalidDataException">程序集中缺少指定的内嵌字体。</exception>
     public static UiFont Load()
     {
         return new(Read("NotoSansSC-Regular.ttf"), Read("NotoSansSC-SemiBold.ttf"));
@@ -126,6 +135,9 @@ public sealed class UiFont : IDisposable
         (uint)codepoint | ((long)pixelSize << 24) | (bold ? 1L << 40 : 0);
 
     /// <summary>某个码位在该字重下的步进，按 em 归一化；字体没有这个字时返回 0。</summary>
+    /// <param name="rune">要查找的 Unicode 标量。</param>
+    /// <param name="bold">是否使用粗体字重。</param>
+    /// <returns>以 em 为单位的字形推进量。</returns>
     public unsafe float AdvanceEm(Rune rune, bool bold)
     {
         var face = bold ? semiBold : regular;
@@ -139,6 +151,10 @@ public sealed class UiFont : IDisposable
         return advance * face.EmScale;
     }
 
+    /// <summary>检查所选字重是否含指定 Unicode 标量的字形。</summary>
+    /// <param name="rune">要查找的 Unicode 标量。</param>
+    /// <param name="bold">是否使用粗体字重。</param>
+    /// <returns>所选字体含指定字形时为 true。</returns>
     public bool Covers(Rune rune, bool bold) =>
         StbTrueType.stbtt_FindGlyphIndex((bold ? semiBold : regular).Info, rune.Value) != 0;
 
@@ -147,6 +163,11 @@ public sealed class UiFont : IDisposable
     /// 调用方应当只推进步进。图集当帧装满时同样返回 false：宁可这一帧少画一个字，
     /// 也不能中途重排图集，那会让本帧已经提交的字形指向错误的位置。
     /// </summary>
+    /// <param name="rune">要查找的 Unicode 标量。</param>
+    /// <param name="pixelSize">用于栅格化的像素字号。</param>
+    /// <param name="bold">是否使用粗体字重。</param>
+    /// <param name="glyph">输出图集中的字形信息。</param>
+    /// <returns>成功取得字形时为 true。</returns>
     public unsafe bool TryGlyph(Rune rune, int pixelSize, bool bold, out Glyph glyph)
     {
         glyph = null!;
@@ -184,6 +205,7 @@ public sealed class UiFont : IDisposable
         }
         // stbtt 输出 8 位覆盖率。逐行写进图集的 alpha 通道，RGB 已经是白色。
         var coverage = new byte[w * h];
+        // SAFETY: 栅格化期间固定 coverage 数组，输出按当前字形的像素宽高及行距写入。
         fixed (byte* target = coverage)
         {
             StbTrueType.stbtt_MakeGlyphBitmap(face.Info, target, w, h, w, scale, scale, index);
@@ -240,6 +262,8 @@ public sealed class UiFont : IDisposable
     /// 把本帧新补的字形传上 GPU，并返回图集纹理。必须在窗口线程、绘制这些字形之前调用。
     /// 上一帧装满过就在这里整体作废：此时上一帧的几何已经提交完毕，重排不会影响任何在途绘制。
     /// </summary>
+    /// <param name="gpu">持有渲染资源的 GPU 设备。</param>
+    /// <returns>供该设备采样的当前字形图集纹理。</returns>
     public Texture Atlas(GpuDevice gpu)
     {
         if (exhausted)
@@ -261,6 +285,7 @@ public sealed class UiFont : IDisposable
         return atlas;
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
         atlas?.Dispose();

@@ -1,3 +1,5 @@
+// 维护来源 mod 标识、别名及轨道的基础默认值。
+
 using System.Text.Json;
 
 namespace KuroakiGimmick.Core;
@@ -13,7 +15,7 @@ public static class ModCatalog
         Supported.Add("lr_slash_color");
         foreach (string name in "lr_sides_blue lr_sides_red lr_sides_rev_blue lr_sides_rev_red df_countdown sc_firework sc_firework_color chorus_greenleft_overlay set_resolution".Split(' ')) Supported.Add(name);
         Supported.Add("fx_film");
-        foreach(string name in new[]{"fx_twirl","sg_endblip","sg_endblip_destroy","df_sideline2"}) Supported.Add(name);
+        foreach (string name in new[] { "fx_twirl", "sg_endblip", "sg_endblip_destroy", "df_sideline2" }) Supported.Add(name);
         Supported.Add("playspeed");
         Supported.Add("!playspeed");
         Supported.Add("!jumpto_beat");
@@ -85,9 +87,9 @@ public static class ModCatalog
     public static readonly string[] Globals = ("unknown prx prxb prxc pry pryb pryc prsx pra przm przmb przx przy prrx prry prrz prrzb shxs shxp shxa shys shyp shya scrollspeed noterot velocity spinradius spiny spinx driven beat wave hom boost_distance boost_time yoffset notealp przmc prxd pryd prct prcb prcl prcr prvib shct shft shcb shfb shcl shfl shcr shfr scrollind0 scrollind1 scrollind2 scrollind3 scrollind4 scrollind5 scrollind6 drawdist pburstleft pburstright particlexpower particleypower uialpha fx_contrast fx_chroma_distort fx_film fx_glow fx_particleglow pburstspeed freeze drawuntil").Split(' ');
     /// <summary>二进制缓动表：下标就是 VSB 里的缓动编号，同样不能排序或去重。</summary>
     public static readonly string[] BinaryEases = "unknown linear outElastic inExpo outExpo inOutExpo inQuad outQuad inOutQuad inCubic outCubic inOutCubic outBack inSine outSine inOutSine outQuart inOutCirc inCirc outCirc".Split(' ');
+    /// <summary>当前基础协议已登记的 mod 名称。</summary>
     public static readonly HashSet<string> Supported = new(("df_whitebg custom_jacket plaudite_jacket pburstspeed plaudite_pburst prx prxb prxc prxd pry pryb pryc pryd prsx pra przm przmb przmc przx przy prrx prry prrz prrzb prct prcb prcl prcr shxs shxp shxa shys shyp shya shct shft shcb shfb shcl shfl shcr shfr scrollspeed noterot velocity spinradius spiny spinx driven beat wave hom boost_distance boost_time yoffset xoffset notealp scrollind0 scrollind1 scrollind2 scrollind3 scrollind4 scrollind5 scrollind6 uialpha drawuntil holdoverlayalpha particle_alpha particlexpower particleypower slash_anycol set_slash_col col_convertion uhnoise vdistort bloom glitchamp glitchoffset barrelabx barrelaby posx posy fx_glow fx_particleglow fx_underwater fx_posterize fx_posterize_vis " + "gray barrel barrel2 hdistort fish vig abx aby aberamp cover1 cover2 cover3 wflash rainbow noteoverlayalp bgalph fxdist1 fxdist2 parttimer").Split(' '));
-    // K/G compatibility aliases for music control. Keep the source name intact for
-    // editing/export, and do not strip '!' from unrelated or unknown mod names.
+    // 音乐控制别名仅用于执行；编辑与导出保留源名，不从无关或未知 mod 名中去掉感叹号。
     internal static string MusicControlName(string name) => name switch
     {
         "!playspeed" => "playspeed",
@@ -98,11 +100,15 @@ public static class ModCatalog
     /// 把二进制 mod ID 还原成名字。0..127 查 Globals；129 起按 id-129 查对象扩展表，表位置即编号。
     /// 无法识别时返回 global_N 或 obj:mod_N 占位，保留事件让报告能指出具体编号，不丢弃未知 mod。
     /// </summary>
+    /// <param name="id">二进制 mod 编号。</param>
+    /// <param name="obj">来源对象名。</param>
+    /// <param name="extraMods">对象额外注册的控制名。</param>
+    /// <returns>解析出的 mod 名。</returns>
     public static string Decode(int id, string obj, IReadOnlyList<string>? extraMods = null)
     {
         if (id < 128)
         {
-            return id >= 0 && id < Globals.Length? Globals[id] : $"global_{id}";
+            return id >= 0 && id < Globals.Length ? Globals[id] : $"global_{id}";
         }
         if (id >= 129 && extraMods != null && id - 129 < extraMods.Count && !string.IsNullOrWhiteSpace(extraMods[id - 129]))
         {
@@ -115,6 +121,10 @@ public static class ModCatalog
     /// 尚无事件时该 mod 的初值。回退优先级：自定义图片 → 自定义文本 → 逐轨道特例 → 名称表；
     /// 这些数值来自原版初始化，改动会让第一条 tween 的起点漂移。
     /// </summary>
+    /// <param name="name">轨道名。</param>
+    /// <param name="proxy">目标 proxy 编号。</param>
+    /// <param name="scroll">工程滚动倍率。</param>
+    /// <returns>事件首次写入前的初始值。</returns>
     public static double Default(string name, int proxy, double scroll = 3)
     {
         if (CustomImages.TryMod(name, out var kind, out _))

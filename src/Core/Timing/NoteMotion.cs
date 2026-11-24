@@ -1,3 +1,5 @@
+// 实现谱面滚动、律动和逐轨偏移共用的音符运动公式。
+
 namespace KuroakiGimmick.Core;
 
 /// <summary>
@@ -7,9 +9,23 @@ namespace KuroakiGimmick.Core;
 public static class NoteMotion
 {
     /// <summary>原版滚动倍率：scrollspeed × scrollindN × velocity。velocity 不做额外缩放。</summary>
+    /// <param name="scrollSpeed">全局流速。</param>
+    /// <param name="laneScroll">轨道流速乘数。</param>
+    /// <param name="velocity">velocity 轨道值。</param>
+    /// <returns>完整的滚动速度乘数。</returns>
     public static double ScrollMultiplier(double scrollSpeed, double laneScroll, double velocity) => scrollSpeed * laneScroll * velocity;
 
-    /// <summary>Conservative future cutoff, in milliseconds. Past the boost transition, Y is linear plus bounded wave/boost terms.</summary>
+    /// <summary>保守估计未来音符的可见截止时间，单位为毫秒。越过 boost 过渡后，纵坐标由线性项和有界的 wave、boost 项组成。</summary>
+    /// <param name="alignment">判定对齐偏移。</param>
+    /// <param name="yOffset">纵向偏移轨道值。</param>
+    /// <param name="driven">driven 轨道值。</param>
+    /// <param name="beatsPerSecond">每秒拍数。</param>
+    /// <param name="scroll">综合滚动倍率。</param>
+    /// <param name="wave">波形强度。</param>
+    /// <param name="boostTime">加速过渡时间。</param>
+    /// <param name="boostDistance">加速位移。</param>
+    /// <param name="custom">是否应用 Custom boost 规则。</param>
+    /// <returns>保守可见性截止距离，单位为毫秒；无法取有限界时为正无穷。</returns>
     public static double FutureDistance(double alignment, double yOffset, double driven, double beatsPerSecond,
         double scroll, double wave, double boostTime, double boostDistance, bool custom)
     {
@@ -17,16 +33,26 @@ public static class NoteMotion
         double center = alignment + 144 + yOffset * .1 * scroll - driven * beatsPerSecond * 22 * scroll;
         double radius = Math.Abs(wave * .2) + Math.Abs(boostDistance);
         double distance = (scroll > 0 ? center + 25 + radius : 205 - center + radius) / (.1 * Math.Abs(scroll));
-        // Custom boost is cubic only before bt; afterwards its magnitude is bounded by |bd|.
+        // Custom boost 在 bt 之前按三次曲线计算，此后其幅值以 bd 的绝对值为界。
         distance = Math.Max(distance, custom ? Math.Max(0, boostTime) : 0);
         return double.IsFinite(distance) ? distance + 1e-6 : double.PositiveInfinity;
     }
 
     /// <summary>横向偏移。以两拍为周期、0.3 拍相位提前的原版律动包络；distance 单位毫秒，结果在 320×180 逻辑空间。</summary>
+    /// <param name="t">用于采样轨道和回调的时间轴。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <param name="lane">音符的轨道编号。</param>
+    /// <param name="distance">距判定时刻的毫秒数。</param>
+    /// <returns>逻辑空间中的横向偏移。</returns>
     public static double X(Timeline t, double time, int lane, double distance)
         => XFromValues(t.Bpm.Beat(time), distance, t.Get("xoffset", time) + t.Get("xoffsetind" + lane, time), t.Get("beat", time));
 
     /// <summary>已求值参数版横向偏移；渲染热路径按 lane 缓存 mod 后调用，避免逐 Note 重复查时间轴。</summary>
+    /// <param name="beatAtTime">当前歌曲拍数。</param>
+    /// <param name="distance">距判定时刻的毫秒数。</param>
+    /// <param name="xOffset">已求值的横向偏移。</param>
+    /// <param name="beatMotion">beat 轨道的运动强度。</param>
+    /// <returns>逻辑空间中的横向偏移。</returns>
     public static double XFromValues(double beatAtTime, double distance, double xOffset, double beatMotion)
     {
         if (beatMotion == 0 && double.IsFinite(beatAtTime) && double.IsFinite(distance)) return xOffset;
@@ -47,6 +73,13 @@ public static class NoteMotion
     /// 一起乘在完整滚动项上；把这部分集中在这里，避免普通谱面与 Custom 预览再次各自演化出一套速度语义。
     /// boost 的 Custom 扩展规则仍由各调用方保留。
     /// </summary>
+    /// <param name="distance">距判定时刻的毫秒数。</param>
+    /// <param name="yOffset">纵向偏移轨道值。</param>
+    /// <param name="driven">driven 轨道值。</param>
+    /// <param name="beatsPerSecond">每秒拍数。</param>
+    /// <param name="scroll">综合滚动倍率。</param>
+    /// <param name="wave">波形强度。</param>
+    /// <returns>按公共滚动项得到的逻辑纵坐标。</returns>
     public static double YFromScroll(double distance, double yOffset, double driven, double beatsPerSecond, double scroll, double wave)
     {
         return 144 - (((distance - yOffset) * .1) + driven * beatsPerSecond * 22) * scroll
@@ -54,6 +87,11 @@ public static class NoteMotion
     }
 
     /// <summary>纵向位置。144 是判定线的 y，0.1 是毫秒到逻辑像素的原版系数；这些数值不是可调参数。</summary>
+    /// <param name="t">用于采样轨道和回调的时间轴。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <param name="lane">音符的轨道编号。</param>
+    /// <param name="distance">距判定时刻的毫秒数。</param>
+    /// <returns>叠加轨道 boost 后的逻辑纵坐标。</returns>
     public static double Y(Timeline t, double time, int lane, double distance)
     {
         double M(string n) => t.Get(n, time);

@@ -1,3 +1,5 @@
+// 将视频帧分配给独立 GPU 工作线程，并通过有界队列按帧序交给编码端。
+
 using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
@@ -5,7 +7,7 @@ using KuroakiGimmick.Graphics;
 
 namespace KuroakiGimmick.Core;
 
-/// <summary>Dedicated render threads, independent GPU contexts, and bounded ordered frame delivery.</summary>
+/// <summary>专用渲染线程各自持有 GPU 上下文，并通过有容量限制的队列按帧序交付画面。</summary>
 internal sealed class ParallelExportRenderer : IDisposable
 {
     readonly Channel<byte[]>[] queues;
@@ -22,6 +24,7 @@ internal sealed class ParallelExportRenderer : IDisposable
     internal ParallelExportRenderer(Func<Session> createSession, string driver, ExportOptions options,
         ChartPlaybackRoute route, bool presentationRoute, int totalFrames, CancellationToken cancellation)
     {
+        // 1. 依据帧大小与线程数分配有界队列，使慢速编码器能对渲染端施加背压。
         this.totalFrames = totalFrames;
         frameBytes = checked(options.Width * options.Height * 4);
         int count = Math.Min(options.RenderWorkers, totalFrames);
@@ -32,6 +35,7 @@ internal sealed class ParallelExportRenderer : IDisposable
         workers = Enumerable.Repeat(Task.CompletedTask, count).ToArray();
         try
         {
+            // 2. 每个工作任务独占 GPU 上下文，任务内部通过关联令牌响应取消。
             for (int i = 0; i < count; i++)
             {
                 int worker = i;
@@ -41,11 +45,14 @@ internal sealed class ParallelExportRenderer : IDisposable
         }
         catch
         {
-            stop.Cancel(); Task.WaitAll(workers);
+            stop.Cancel();
+            Task.WaitAll(workers);
             foreach (var queue in queues)
                 while (queue.Reader.TryRead(out var frame)) ArrayPool<byte>.Shared.Return(frame);
-            stop.Dispose(); throw;
+            stop.Dispose();
+            throw;
         }
+        // 3. 所有工作线程退出后，调用方才能回收尚在队列中的像素缓冲区。
         Completion = Task.WhenAll(workers);
     }
 
@@ -75,31 +82,49 @@ internal sealed class ParallelExportRenderer : IDisposable
                         else renderer.Render(session, time, options.Notes, options.Effects);
                         canvas.Pass(target, renderer.Final.Texture, canvas.Basic);
                         canvas.BeginReadback(readback, target);
-                        while (!readback.Ready) { token.ThrowIfCancellationRequested(); Thread.Sleep(1); }
+                        while (!readback.Ready)
+                        {
+                            token.ThrowIfCancellationRequested();
+                            Thread.Sleep(1);
+                        }
                         byte[]? bytes = ArrayPool<byte>.Shared.Rent(frameBytes);
                         try
                         {
                             if (!readback.TryCopy(bytes)) throw new InvalidOperationException("Export readback was not ready.");
                             token.ThrowIfCancellationRequested();
-                            // Synchronous wait is intentional: every GPU operation stays on this dedicated thread.
+                            // THREADING: 在专用线程同步等待队列空间，使后续 GPU 操作继续在同一线程执行。
                             queues[worker].Writer.WriteAsync(bytes, token).AsTask().GetAwaiter().GetResult();
+                            // LIFETIME: 写入成功后队列接管租借的数组；失败时由本地 finally 归还。
                             bytes = null;
                             Interlocked.Increment(ref rendered);
                         }
-                        finally { if (bytes != null) ArrayPool<byte>.Shared.Return(bytes); }
+                        finally
+                        {
+                            if (bytes != null) ArrayPool<byte>.Shared.Return(bytes);
+                        }
                     }
                 }
             }
-            catch { gpu.AbortPendingCommands(); throw; }
+            catch
+            {
+                gpu.AbortPendingCommands();
+                throw;
+            }
         }
-        catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (stop.IsCancellationRequested)
+        {
+        }
         catch (Exception ex)
         {
+            // 保留首个故障，通知其余线程取消并结束队列，唤醒等待读取或写入的一方。
             Interlocked.CompareExchange(ref failure, ex, null);
             stop.Cancel();
             foreach (var queue in queues) queue.Writer.TryComplete(Failure);
         }
-        finally { queues[worker].Writer.TryComplete(Failure); }
+        finally
+        {
+            queues[worker].Writer.TryComplete(Failure);
+        }
     }
 
     internal async IAsyncEnumerable<byte[]> ReadFrames([EnumeratorCancellation] CancellationToken token)
@@ -117,8 +142,7 @@ internal sealed class ParallelExportRenderer : IDisposable
     {
         if (Interlocked.Exchange(ref disposed, 1) != 0) return;
         stop.Cancel();
-        // Workers own and destroy their GPU resources. Never dispose those resources on the UI thread.
-        // SDL must remain initialized until all worker-owned devices have been destroyed.
+        // LIFETIME: 等各工作线程销毁自身 GPU 设备后再清理队列；此期间 SDL 必须保持初始化。
         Completion.GetAwaiter().GetResult();
         foreach (var queue in queues)
             while (queue.Reader.TryRead(out var frame)) ArrayPool<byte>.Shared.Return(frame);

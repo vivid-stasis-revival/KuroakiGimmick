@@ -15,7 +15,10 @@ internal static class ParallelExportChecks
         {
             var session = new Session(new ViewerProject
             {
-                RoomPreset = "none", Profile = "core", RenderWidth = 320, GameUiEnabled = false
+                RoomPreset = "none",
+                Profile = "core",
+                RenderWidth = 320,
+                GameUiEnabled = false
             }, editedVsm: "!obj:obj_custom_gimmick\n!proxies:1\n0,0,linear,1,1,pra,0\n"
                 + "0,4,linear,0,1,fish,-1\n0,4,linear,0,45,prz,0\n"
                 + (feedback ? "0,0,linear,0.7,0.7,hom,-1\n0.6,0,linear,1,0.1,jumpto_s,-1\n1,0,linear,1,1.25,playspeed,-1\n" : ""));
@@ -53,24 +56,33 @@ internal static class ParallelExportChecks
                         var pixels = reader.Current;
                         try
                         {
-                            // Switch's managed SHA-256 accepts byte arrays; exclude unused ArrayPool capacity.
+                            // Switch 的托管 SHA-256 接收字节数组，计算时须排除 ArrayPool 租借数组中未使用的容量。
                             if (!SHA256.HashData(pixels.AsSpan(0, width * height * 4).ToArray()).AsSpan().SequenceEqual(expected[frame]))
                                 throw new InvalidOperationException($"Parallel frame mismatch: feedback={feedback}, workers={workers}, frame={frame}.");
                         }
-                        finally { ArrayPool<byte>.Shared.Return(pixels); }
+                        finally
+                        {
+                            ArrayPool<byte>.Shared.Return(pixels);
+                        }
                         frame++;
                     }
                     if (frame != count) throw new InvalidOperationException("Parallel export lost frames.");
                 }
-                finally { reader.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
+                finally
+                {
+                    reader.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                }
             }
-            // Cancel with no consumer, exercising bounded-queue backpressure and worker-owned GPU cleanup.
+            // 没有消费者时请求取消，以覆盖有界队列的背压和工作线程的 GPU 清理。
             using (var cancellation = new CancellationTokenSource())
             using (var pool = new ParallelExportRenderer(factory, gpu.Driver, options, route, false, 1000, cancellation.Token))
             {
                 var until = DateTime.UtcNow.AddSeconds(30);
                 while (pool.Rendered < 16 && pool.Failure == null && DateTime.UtcNow < until)
-                { Sdl.SDL_PumpEvents(); Thread.Sleep(1); }
+                {
+                    Sdl.SDL_PumpEvents();
+                    Thread.Sleep(1);
+                }
                 cancellation.Cancel();
                 Wait(pool.Completion);
                 if (pool.Failure != null) throw new InvalidOperationException("Cancellation failed", pool.Failure);
@@ -88,8 +100,16 @@ internal static class ParallelExportChecks
 
     static void Wait(Task task)
     {
-        while (!task.IsCompleted) { Sdl.SDL_PumpEvents(); Thread.Sleep(1); }
+        while (!task.IsCompleted)
+        {
+            Sdl.SDL_PumpEvents();
+            Thread.Sleep(1);
+        }
         task.GetAwaiter().GetResult();
     }
-    static T Wait<T>(Task<T> task) { Wait((Task)task); return task.GetAwaiter().GetResult(); }
+    static T Wait<T>(Task<T> task)
+    {
+        Wait((Task)task);
+        return task.GetAwaiter().GetResult();
+    }
 }

@@ -1,24 +1,29 @@
+// 依据后段回调建立可随机访问的定向尘埃时间轴。
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
 
 namespace KuroakiGimmick.Core;
 
-/// <summary>
-/// Deterministic, seekable implementation of Starcrashers' late diamond-dust callbacks.
-/// Source: obj_starcrashers_gimmick.Create, Particle_Spawners, o_pt_diamonddust_invmask.Step.
-/// The original RNG and global.op_bgparticles setting are not in the GML dump;
-/// the fixed seed and default particle density are explicit replay assumptions.
-/// </summary>
+/// <summary>根据 obj_starcrashers_gimmick.Create、Particle_Spawners 与 o_pt_diamonddust_invmask.Step 重建后段钻尘。来源 GML 未提供原始随机状态及 global.op_bgparticles 设置，预览使用固定种子与默认粒子密度以支持重复跳转。</summary>
 public sealed class DirectionalDustTimeline
 {
+    /// <summary>定向尘埃粒子的生成状态。</summary>
+    /// <param name="Birth">生成 tick。</param>
+    /// <param name="Death">消失 tick。</param>
+    /// <param name="X">起始横坐标。</param>
+    /// <param name="Y">起始纵坐标。</param>
+    /// <param name="Vx">水平速度。</param>
+    /// <param name="Frame">粒子精灵帧号。</param>
     public readonly record struct Dust(int Birth, int Death, float X, float Y, float Vx, int Frame);
+    /// <summary>按出生顺序存放的定向尘埃实例。</summary>
     public List<Dust> Diamonds { get; } = [];
     const int MaxDust = 25000;
     private uint seed = 0xC76E9A21;
     private readonly Timeline timeline;
 
-    // Matches the 60Hz movement domain. Deliberately does not use render frame delta.
+    // 运动使用 60 Hz 逻辑步长，独立于渲染帧间隔。
     private double Next()
     {
         seed ^= seed << 13;
@@ -28,8 +33,16 @@ public sealed class DirectionalDustTimeline
     }
     private int Integer(int low, int high) => low + Math.Min(high - low, (int)(Next() * (high - low + 1)));
 
-    public DirectionalDustTimeline(Session session) : this(session.Timeline, session.Chart, session.Duration) { }
+    /// <summary>根据时间轴事件预计算固定步长的尘埃生成状态。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    public DirectionalDustTimeline(Session session) : this(session.Timeline, session.Chart, session.Duration)
+    {
+    }
 
+    /// <summary>根据时间轴事件预计算固定步长的尘埃生成状态。</summary>
+    /// <param name="timeline">用于采样轨道和回调的时间轴。</param>
+    /// <param name="chart">提供音符、演出事件及诊断的谱面。</param>
+    /// <param name="duration">持续时间，单位为秒。</param>
     public DirectionalDustTimeline(Timeline timeline, Chart chart, double duration)
     {
         this.timeline = timeline;
@@ -41,23 +54,24 @@ public sealed class DirectionalDustTimeline
         {
             int birth = Math.Max(0, (int)Math.Ceiling(timeline.Bpm.Time(evt.Beat) * 60 - 1e-8));
             bool fromLeft = evt.Name == "chorus_satalli_alli_particles";
-            // addExtraMod registers a callback with arguments [start, duration, v1, v2, ease].
-            // GML function(arg0,arg1,arg2,arg3) repeat(arg3) therefore reads the V2/To endpoint.
+            // addExtraMod 的回调参数顺序为起点、时长、v1、v2、ease，因此 repeat(arg3) 读取 V2/To 终值。
             int repeats = double.IsFinite(evt.To) ? (int)Math.Clamp(Math.Round(evt.To, MidpointRounding.ToEven), 0, 2500) : 0;
             for (int n = 0; n < repeats && Diamonds.Count < MaxDust; n++)
             {
-                float y = Integer(5, 75); // one irandom_range() per spawn_particles_directional call
-                // spawn_particles_directional(..., arg4=1, ...): for(i=0; i<=1/op_bgparticles; i++)
-                // Standard op_bgparticles=1 emits TWO instances for each call, not one.
+                float y = Integer(5, 75); // 每次调用 spawn_particles_directional 只取一次 irandom_range()。
+                // 原版从 0 迭代到 1/op_bgparticles 并包含终点，默认值为 1 时每次发射两个实例。
                 for (int duplicate = 0; duplicate < 2 && Diamonds.Count < MaxDust; duplicate++)
                 {
                     float speed = (float)(Next() * 0.5 * 8) * (fromLeft ? 1 : -1);
-                    int frame = Integer(0, 4) % 4; // source irandom(image_number), inclusive upper bound
+                    int frame = Integer(0, 4) % 4; // 原版 irandom(image_number) 包含上界。
                     float x = fromLeft ? -10 : 330;
                     var dust = new Dust(birth, finalTick + 1, x, y, speed, frame);
                     for (int tick = birth; tick <= finalTick; tick++)
                         if (PositionAt(dust, tick).X is >= 120 and <= 200)
-                        { dust = dust with { Death = tick }; break; }
+                        {
+                            dust = dust with { Death = tick };
+                            break;
+                        }
                     Diamonds.Add(dust);
                 }
             }
@@ -65,12 +79,20 @@ public sealed class DirectionalDustTimeline
         Diamonds.Sort(static (a, b) => a.Birth.CompareTo(b.Birth));
     }
 
+    /// <summary>结合星尘初始位置与粒子偏移计算指定 tick 的位置。</summary>
+    /// <param name="dust">待采样的尘埃实例。</param>
+    /// <param name="tick">目标逻辑 tick。</param>
+    /// <returns>该 tick 的逻辑坐标。</returns>
     public (float X, float Y) PositionAt(Dust dust, int tick)
     {
         var offset = timeline.ParticleOffset(tick / 60.0) - timeline.ParticleOffset(Math.Max(0, dust.Birth - 1) / 60.0);
         return (dust.X + dust.Vx * (tick - dust.Birth + 1) + offset.X, dust.Y + offset.Y);
     }
 
+    /// <summary>通过二分查询定位出生 tick 不早于指定值的首项。</summary>
+    /// <param name="dust">按出生 tick 排序的粒子。</param>
+    /// <param name="tick">包含在查询中的最早 tick。</param>
+    /// <returns>首个不早于该 tick 的索引。</returns>
     public static int FirstSince(List<Dust> dust, int tick)
     {
         int lo = 0, hi = dust.Count;

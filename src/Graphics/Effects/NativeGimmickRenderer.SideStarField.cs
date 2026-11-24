@@ -1,3 +1,5 @@
+// 绘制侧边星场、背景与结束闪烁。
+
 using System.Numerics;
 using KuroakiGimmick.Core;
 
@@ -7,6 +9,9 @@ public sealed partial class NativeGimmickRenderer
 {
     Session? stargazersOwner;
     SideStarFieldState? stargazersState;
+    /// <summary>绘制侧边星场组件的背景。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void DrawSideStarFieldBackground(Session session, double time)
     {
         if (!session.NativeGimmick.HasBehavior("side-starfield")) return;
@@ -19,22 +24,26 @@ public sealed partial class NativeGimmickRenderer
             double offset = -60 * GimmickRoomLayerTimeline.IntegratedFrames(session.Timeline, "sg_bg_speed", time);
             double top = GimmickRoomLayerTimeline.Wrap(offset, checks.Height) - checks.Height;
             for (double y = top; y < 180; y += checks.Height)
-                // Step_1 passes the layer ID (checkers), not bg_checkers, to
-                // layer_background_alpha. Do not silently repair that invalid
-                // element lookup into a new .5-alpha visual effect.
+                // Step_1 将图层 ID checkers 而非背景元素 bg_checkers 传入 layer_background_alpha；保留无效查找的表现，不额外加半透明层。
                 canvas.Quad(checks, new(0, (float)y, checks.Width, checks.Height), Color.White);
         }
         canvas.Flush();
     }
+    /// <summary>按生成来源筛选并绘制指定时刻的侧边星体。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <param name="fromSpawner">是否选择由生成器自动创建的实例。</param>
     public void DrawSideStarFieldStars(Session session, double time, bool fromSpawner)
     {
         if (!session.NativeGimmick.HasBehavior("side-starfield")) return;
-        // Depth 101 GUI stars are erased by inherited base Draw GUI's clear when
-        // proxies exist. Callback-created stars use depth 0 and draw after it.
+        // 存在 proxy 时，基础 Draw GUI 的清屏会抹去深度 101 的星体；由回调创建的深度 0 星体在清屏之后绘制。
         if (fromSpawner && session.NativeApplicationProxyEnabled) return;
         Prepare(session);
         if (!ReferenceEquals(stargazersOwner, session))
-        { stargazersOwner = session; stargazersState = new(session.Timeline, session.Chart, session.Duration); }
+        {
+            stargazersOwner = session;
+            stargazersState = new(session.Timeline, session.Chart, session.Duration);
+        }
         foreach (var star in stargazersState!.At(time, fromSpawner))
         {
             if (Image("sp_sg_star", star.Frame) is not { } image || !current!.Sprites.TryGetValue("sp_sg_star", out var sprite)) continue;
@@ -47,6 +56,9 @@ public sealed partial class NativeGimmickRenderer
         }
         canvas.Flush();
     }
+    /// <summary>绘制侧边星场结尾触发的闪烁。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void DrawSideStarFieldEndBlip(Session session, double time)
     {
         if (!session.NativeGimmick.HasBehavior("side-starfield")) return;

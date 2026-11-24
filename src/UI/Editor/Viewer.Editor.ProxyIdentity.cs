@@ -1,3 +1,5 @@
+// 在编辑器预览中标出可见 proxy 的身份并处理标签拾取。
+
 using System.Numerics;
 using KuroakiGimmick.Graphics;
 
@@ -11,33 +13,41 @@ public sealed partial class Viewer
     int prGridSoloTarget = -1;
     readonly List<(int Target, Rect Bounds)> prGridLabels = [];
 
-    // The source rectangle may include a full screen of background/UI. The lane reference
-    // is explicitly separate, so its bounds cannot be mistaken for the complete proxy crop.
+    // 源矩形可能包括整屏背景和 UI，单独绘制轨道参考区，以区分轨道范围和完整 proxy 裁剪区域。
     static Rect ProxyTrackRegion(ProxyGeometry g, double waveX = 0, double waveY = 0) => g.TrackRegion(waveX, waveY);
 
-    /// <summary>Read-only CLI preview setup for reproducing an author's chart at a precise time.</summary>
+    /// <summary>为命令行只读预览设置精确的谱面时刻，以便复现作者看到的画面。</summary>
+    /// <param name="target">预览使用的 proxy 编号。</param>
+    /// <param name="solo">是否独显目标。</param>
+    /// <param name="sourceCrop">是否启用来源裁剪。</param>
+    /// <exception cref="ArgumentOutOfRangeException">指定的 proxy 编号不存在。</exception>
     public void ConfigureProxyPreview(int target, bool solo, bool sourceCrop)
     {
         OpenEditor();
         if (editor == null || target < 0 || target >= EditableProxyCount)
             throw new ArgumentOutOfRangeException(nameof(target), "Choose an existing proxy ID.");
-        SelectProxyFromGuide(target); prGridMode = 1; prGridSolo = solo; prGridShowCrop = sourceCrop;
+        SelectProxyFromGuide(target);
+        prGridMode = 1;
+        prGridSolo = solo;
+        prGridShowCrop = sourceCrop;
     }
 
     void DrawProxyUnavailable(Rect viewport, int target, string reason)
     {
         float width = Math.Min(viewport.W - 16, 480);
         var box = new Rect(viewport.X + (viewport.W - width) / 2, viewport.Y + viewport.H - 38, width, 30);
-        Canvas.Fill(box, Theme.Panel.Alpha(.97)); Canvas.Border(box, Theme.BorderStrong);
+        Canvas.Fill(box, Theme.Panel.Alpha(.97));
+        Canvas.Border(box, Theme.BorderStrong);
         Text($"P{target}: " + reason, box.X + 8, box.Y + 8, 12, Theme.Text, true, box.W - 16);
     }
 
     void SelectProxyFromGuide(int target)
     {
         if (editor == null || target < 0 || target >= EditableProxyCount) return;
-        // A tag selects a proxy, not an old clip on another proxy. Keep the inspector consistent.
+        // 标签选择的是 proxy，应同步检视面板，避免继续显示另一 proxy 的旧事件。
         if (selectedClip is Guid id && EditorFindClip(id)?.Proxy != target) SetClipSelection(null);
-        newProxy = target; selectedWindowEvent = -1;
+        newProxy = target;
+        selectedWindowEvent = -1;
         imageInspector = textInspector = false;
         FocusProxyTrack(target);
     }
@@ -51,35 +61,41 @@ public sealed partial class Viewer
     static Vector2 ProxyIdentityAnchor(ProxyGeometry geometry, Rect source, ReadOnlySpan<Vector2> polygon)
     {
         if (polygon.IsEmpty) return default;
-        // Stay attached to the SAME source corner throughout a rotation. Choosing the
-        // smallest screen Y switches corners at zero rotation and also switches between
-        // clipped endpoints whose nominal Y=0 differs by a few floating-point bits.
+        // 旋转过程始终跟随同一源角点。若按最小屏幕 Y 选择，过零时会切角，在裁剪端点 Y 的细小浮点差异处也会跳变。
         if (!geometry.TryProject(new(source.X, source.Y), out var preferred))
         {
-            // A corner behind the camera has no useful screen position. The visible
-            // bounds provide a finite fallback independent of clipped vertex ordering.
-            var min = polygon[0]; var max = polygon[0];
-            foreach (var point in polygon) { min = Vector2.Min(min, point); max = Vector2.Max(max, point); }
+            // 角点位于相机后方时没有可用屏幕坐标，使用可见边界提供与顶点顺序无关的有限回退值。
+            var min = polygon[0];
+            var max = polygon[0];
+            foreach (var point in polygon)
+            {
+                min = Vector2.Min(min, point);
+                max = Vector2.Max(max, point);
+            }
             preferred = (min + max) / 2;
         }
         Vector2 anchor = polygon[0];
         double best = double.PositiveInfinity;
         for (int i = 0; i < polygon.Length; i++)
         {
-            var a = polygon[i]; var b = polygon[(i + 1) % polygon.Length];
+            var a = polygon[i];
+            var b = polygon[(i + 1) % polygon.Length];
             double dx = (double)b.X - a.X, dy = (double)b.Y - a.Y, lengthSquared = dx * dx + dy * dy;
             double t = lengthSquared > 0 ? Math.Clamp(((preferred.X - (double)a.X) * dx +
                 (preferred.Y - (double)a.Y) * dy) / lengthSquared, 0, 1) : 0;
             var point = new Vector2((float)(a.X + dx * t), (float)(a.Y + dy * t));
             double errorX = (double)point.X - preferred.X, errorY = (double)point.Y - preferred.Y;
             double distance = errorX * errorX + errorY * errorY;
-            if (distance < best) { best = distance; anchor = point; }
+            if (distance < best)
+            {
+                best = distance;
+                anchor = point;
+            }
         }
         return Vector2.Clamp(anchor, Vector2.Zero, new(320, 180));
     }
 
-    /// <summary>Label the lane reference regions. Hidden proxies never impersonate visible tracks.
-    /// Solo mode labels only the selected proxy.</summary>
+    /// <summary>给轨道参考区绘制标签。隐藏的 proxy 不会显示为可见轨道，独显模式只标记当前选择项。</summary>
     void DrawProxyIdentityTags(Rect viewport, double time, int selected)
     {
         if (!prGridShowIds) return;
@@ -89,7 +105,7 @@ public sealed partial class Viewer
         Span<Vector2> polygon = stackalloc Vector2[9];
         Vector2 Pixel(Vector2 p) => new(viewport.X + p.X * viewport.W / 320, viewport.Y + p.Y * viewport.H / 180);
 
-        // Selected first so crowded/overlapping proxies cannot displace its badge.
+        // 先放置选中项，使拥挤或重叠的 proxy 无法挤走该标签。
         int count = Current.Chart.Proxies;
         for (int order = -1; order < count; order++)
         {
@@ -115,7 +131,7 @@ public sealed partial class Viewer
             Rect badge = new(x, y, width, height);
             bool Fits(Rect r) => !Overlaps(r, prGridHudRect) && !prGridLabels.Any(label => Overlaps(r, label.Bounds));
             bool placed = Fits(badge);
-            // A bounded viewport lattice handles fully overlapping proxies without overlapping IDs.
+            // 使用限制在视口内的网格为完全重叠的 proxy 分配互不遮挡的 ID 位置。
             int rows = Math.Max(1, (int)((viewport.H - 24) / (height + 4)));
             int columns = Math.Max(1, (int)((viewport.W - 8) / (width + 6)));
             int startRow = Math.Clamp((int)((y - viewport.Y - 18) / (height + 4)), 0, rows - 1);
@@ -133,8 +149,7 @@ public sealed partial class Viewer
             bool active = target == selected, hovered = badge.Contains(mouseX, mouseY);
             var color = active || hovered ? Theme.AccentSoft : Theme.Text;
             var center = new Vector2(badge.X + width / 2, badge.Y + height / 2);
-            // Only connect when both ends are on the same outside side of the HUD, so a
-            // displaced label cannot draw a leader line through the selected proxy title.
+            // 仅在两端均位于 HUD 同一外侧时绘制引线，避免穿过选中 proxy 的标题。
             bool clear = Math.Max(anchor.X, center.X) < prGridHudRect.X ||
                 Math.Min(anchor.X, center.X) > prGridHudRect.X + prGridHudRect.W ||
                 Math.Max(anchor.Y, center.Y) < prGridHudRect.Y ||
@@ -143,7 +158,8 @@ public sealed partial class Viewer
             if (hovered && !active)
                 for (int i = 0; i < vertices; i++)
                 {
-                    var a = Pixel(polygon[i]); var b = Pixel(polygon[(i + 1) % vertices]);
+                    var a = Pixel(polygon[i]);
+                    var b = Pixel(polygon[(i + 1) % vertices]);
                     Canvas.Line(a.X, a.Y, b.X, b.Y, 1.8f, color);
                 }
             Canvas.Fill(badge, Theme.Panel.Alpha(.97));

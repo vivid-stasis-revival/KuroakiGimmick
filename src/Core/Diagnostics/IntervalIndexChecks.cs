@@ -1,12 +1,15 @@
 namespace KuroakiGimmick.Core;
 
-/// <summary>Headless oracle coverage for the compact interval tree used by notes and editor clips.</summary>
+/// <summary>将紧凑区间树与参考结果比较，覆盖音符和编辑事件的无窗口查询。</summary>
 internal static class IntervalIndexChecks
 {
     internal static void Run()
     {
         var random = new Random(18631);
-        static void Check(bool ok, string message) { if (!ok) throw new InvalidOperationException(message); }
+        static void Check(bool ok, string message)
+        {
+            if (!ok) throw new InvalidOperationException(message);
+        }
         foreach (int size in new[] { 0, 1, 2, 3, 7, 8, 9, 31, 32, 33, 255, 256, 257, 1000 })
         {
             var entries = new IntervalIndex<int>.Entry[size];
@@ -19,7 +22,7 @@ internal static class IntervalIndexChecks
             var index = new IntervalIndex<int>(entries);
             void Compare(double start, double end)
             {
-                // Preserve the existing predicate even for reversed windows and NaN bounds.
+                // 即使查询区间反向或边界为 NaN，也要保留原查询谓词的结果。
                 var expected = entries.OrderBy(e => e.Start).ThenBy(e => e.Order)
                     .Where(e => !(Math.Max(e.Start, e.End) < start) && !(e.Start > end)).ToArray();
                 int count = 0, previous = -1;
@@ -36,19 +39,24 @@ internal static class IntervalIndexChecks
             {
                 for (int q = 0; q < 1000; q++) Compare(random.Next(-150, 600), random.Next(-150, 600));
                 foreach (double bound in new[] { double.NegativeInfinity, -100, 0, 100, 500, double.PositiveInfinity, double.NaN })
-                { Compare(bound, bound); Compare(bound, 0); Compare(0, bound); }
+                {
+                    Compare(bound, bound);
+                    Compare(bound, 0);
+                    Compare(0, bound);
+                }
                 for (int i = 0; i < size; i++) entries[i] = entries[i] with { End = random.Next(-200, 600), Value = i + size };
                 Check(index.TryUpdate(entries), "Unchanged starts must permit incremental replacement.");
             }
             if (size > 0)
             {
                 var before = index.Entries.ToArray();
-                var moved = entries.ToArray(); moved[0] = moved[0] with { Start = moved[0].Start + .25 };
+                var moved = entries.ToArray();
+                moved[0] = moved[0] with { Start = moved[0].Start + .25 };
                 Check(!index.TryUpdate(moved) && before.SequenceEqual(index.Entries), "Rejected start update mutated the index.");
                 Check(!index.TryUpdate([]), "Mismatched replacement count was accepted.");
             }
         }
-        // A long Hold crossing the window must survive pruning even with thousands of later chips.
+        // 即使后面有数千个短音符，跨过可见窗口的长条也不能被索引剪枝漏掉。
         var dense = Enumerable.Range(0, 100_000).Select(i => new IntervalIndex<int>.Entry(i, i, i == 0 ? 200_000 : i, i)).ToArray();
         var tree = new IntervalIndex<int>(dense);
         long checksum = 0;

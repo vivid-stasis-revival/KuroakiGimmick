@@ -1,3 +1,5 @@
+// 将原生菜单命令及启用状态连接到当前工作区。
+
 using KuroakiGimmick.Native;
 
 namespace KuroakiGimmick.UI;
@@ -10,15 +12,21 @@ public sealed partial class Viewer
     {
         if ((macMenu == null && windowsMenu == null) || menuRefreshQueued) return;
         menuRefreshQueued = true;
-        actions.Enqueue(() => { menuRefreshQueued = false; InstallNativeMenu(); });
+        actions.Enqueue(() =>
+{
+    menuRefreshQueued = false;
+    InstallNativeMenu();
+});
     }
 
     void InstallNativeMenu()
     {
         try
         {
-            macMenu?.Dispose(); macMenu = null;
-            windowsMenu?.Dispose(); windowsMenu = null;
+            macMenu?.Dispose();
+            macMenu = null;
+            windowsMenu?.Dispose();
+            windowsMenu = null;
             Action<MenuCommand, string?> callback = (command, path) =>
                 actions.Enqueue(() => RunMenu(command, path));
             if (OperatingSystem.IsMacOS()) macMenu = new MacMenuBar(callback, RecentItems());
@@ -28,7 +36,8 @@ public sealed partial class Viewer
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or InvalidOperationException)
         {
-            macMenu = null; windowsMenu = null;
+            macMenu = null;
+            windowsMenu = null;
             Console.Error.WriteLine("Native menu could not be installed: " + ex.Message);
         }
     }
@@ -79,12 +88,23 @@ public sealed partial class Viewer
     {
         if (macMenu == null && windowsMenu == null) return;
         var state = new HashCode();
-        state.Add(Busy); state.Add(dialogOpen); state.Add(UiBlockingOverlayVisible); state.Add(ImageGestureActive);
+        state.Add(Busy);
+        state.Add(dialogOpen);
+        state.Add(UiBlockingOverlayVisible);
+        state.Add(ImageGestureActive);
         state.Add(InlineActive);
         state.Add(draggedTrackKey);
-        state.Add(Current.IsEmpty); state.Add(editorMode); state.Add(editor?.CanUndo); state.Add(editor?.CanRedo);
-        state.Add(notes); state.Add(effects); state.Add(Current.Project.GameUiEnabled); state.Add(full);
-        state.Add(loopEnabled); state.Add(editorFollow); state.Add(transport.Playing);
+        state.Add(Current.IsEmpty);
+        state.Add(editorMode);
+        state.Add(editor?.CanUndo);
+        state.Add(editor?.CanRedo);
+        state.Add(notes);
+        state.Add(effects);
+        state.Add(Current.Project.GameUiEnabled);
+        state.Add(full);
+        state.Add(loopEnabled);
+        state.Add(editorFollow);
+        state.Add(transport.Playing);
         state.Add(workspaceManager.Current.Hidden.Count);
         int hash = state.ToHashCode();
         if (hash == menuStateHash) return;
@@ -99,7 +119,10 @@ public sealed partial class Viewer
         if (recentPath != null)
         {
             if (!File.Exists(recentPath) && !Directory.Exists(recentPath))
-            { message = L.Get("Recent source is missing: ") + recentPath; return; }
+            {
+                message = L.Get("Recent source is missing: ") + recentPath;
+                return;
+            }
             if (StartupVisible) LoadFromStartup([recentPath]);
             else LoadPaths([recentPath]);
             return;
@@ -107,63 +130,141 @@ public sealed partial class Viewer
         switch (command)
         {
             case MenuCommand.OpenFile:
-                if (StartupVisible) BeginStartupDialog(); else ChooseOpen();
+                if (StartupVisible) BeginStartupDialog();
+                else ChooseOpen();
                 break;
             case MenuCommand.OpenFolder:
                 if (StartupVisible) BeginStartupDialog(folder: true);
                 else Dialog(false, null, paths => LoadPaths(paths), folder: true);
                 break;
             case MenuCommand.Welcome:
-                if (settings) { settings = false; SaveSettings(); }
-                help = false; startup = true; startupTipVisible = false; click = held = false;
+                if (settings)
+                {
+                    settings = false;
+                    SaveSettings();
+                }
+                help = false;
+                startup = true;
+                startupTipVisible = false;
+                click = held = false;
                 break;
-            case MenuCommand.AttachFiles: ChooseOpen(true); break;
-            case MenuCommand.Reload: Reload(); break;
-            case MenuCommand.Save: SaveProject(); break;
+            case MenuCommand.AttachFiles:
+                ChooseOpen(true);
+                break;
+            case MenuCommand.Reload:
+                Reload();
+                break;
+            case MenuCommand.Save:
+                SaveProject();
+                break;
             case MenuCommand.SaveAs:
                 SaveProject(true);
                 break;
-            case MenuCommand.ExportChart: OpenChartExport(); break;
-            case MenuCommand.ExportVideo: ChooseExport(); break;
-            case MenuCommand.InfoCard: OpenInfoCard(); break;
+            case MenuCommand.ExportChart:
+                OpenChartExport();
+                break;
+            case MenuCommand.ExportVideo:
+                ChooseExport();
+                break;
+            case MenuCommand.InfoCard:
+                OpenInfoCard();
+                break;
             case MenuCommand.Quit:
                 if (!GuardUnsaved(() => quit = true)) quit = true;
                 break;
-            case MenuCommand.Undo: editor!.Undo(); layoutRevision = -1; break;
-            case MenuCommand.Redo: editor!.Redo(); layoutRevision = -1; break;
-            case MenuCommand.Cut: CutSelection(); break;
-            case MenuCommand.Copy: CopySelection(); break;
-            case MenuCommand.Paste: PasteClipboard(); break;
-            case MenuCommand.Duplicate: DuplicateSelection(); break;
-            case MenuCommand.Delete: DeleteSelection(); break;
-            case MenuCommand.AddMod: AddMod(); break;
-            case MenuCommand.PlayPause: transport.SetPlaying(!transport.Playing); break;
+            case MenuCommand.Undo:
+                editor!.Undo();
+                layoutRevision = -1;
+                break;
+            case MenuCommand.Redo:
+                editor!.Redo();
+                layoutRevision = -1;
+                break;
+            case MenuCommand.Cut:
+                CutSelection();
+                break;
+            case MenuCommand.Copy:
+                CopySelection();
+                break;
+            case MenuCommand.Paste:
+                PasteClipboard();
+                break;
+            case MenuCommand.Duplicate:
+                DuplicateSelection();
+                break;
+            case MenuCommand.Delete:
+                DeleteSelection();
+                break;
+            case MenuCommand.AddMod:
+                AddMod();
+                break;
+            case MenuCommand.PlayPause:
+                transport.SetPlaying(!transport.Playing);
+                break;
             case MenuCommand.StepBack:
-                transport.SetPlaying(false); transport.Step(-1.0 / fps); break;
+                transport.SetPlaying(false);
+                transport.Step(-1.0 / fps);
+                break;
             case MenuCommand.StepForward:
-                transport.SetPlaying(false); transport.Step(1.0 / fps); break;
-            case MenuCommand.JumpStart: transport.Seek(0); break;
-            case MenuCommand.JumpEnd: transport.Seek(Current.Duration); break;
-            case MenuCommand.Loop: loopEnabled = !loopEnabled; break;
-            case MenuCommand.Follow: editorFollow = !editorFollow; break;
-            case MenuCommand.ToggleEditor: ToggleWorkspace(); break;
-            case MenuCommand.Notes: notes = !notes; break;
-            case MenuCommand.Effects: effects = !effects; break;
-            case MenuCommand.GameUi: Current.Project.GameUiEnabled = !Current.Project.GameUiEnabled; break;
-            case MenuCommand.Fullscreen: ToggleFull(); break;
-            case MenuCommand.Layout: OpenLayout(); break;
-            case MenuCommand.ResetLayout: ResetCurrentWorkspace(); break;
-            case MenuCommand.RestoreHiddenPanels: RestoreHiddenPanels(); break;
+                transport.SetPlaying(false);
+                transport.Step(1.0 / fps);
+                break;
+            case MenuCommand.JumpStart:
+                transport.Seek(0);
+                break;
+            case MenuCommand.JumpEnd:
+                transport.Seek(Current.Duration);
+                break;
+            case MenuCommand.Loop:
+                loopEnabled = !loopEnabled;
+                break;
+            case MenuCommand.Follow:
+                editorFollow = !editorFollow;
+                break;
+            case MenuCommand.ToggleEditor:
+                ToggleWorkspace();
+                break;
+            case MenuCommand.Notes:
+                notes = !notes;
+                break;
+            case MenuCommand.Effects:
+                effects = !effects;
+                break;
+            case MenuCommand.GameUi:
+                Current.Project.GameUiEnabled = !Current.Project.GameUiEnabled;
+                break;
+            case MenuCommand.Fullscreen:
+                ToggleFull();
+                break;
+            case MenuCommand.Layout:
+                OpenLayout();
+                break;
+            case MenuCommand.ResetLayout:
+                ResetCurrentWorkspace();
+                break;
+            case MenuCommand.RestoreHiddenPanels:
+                RestoreHiddenPanels();
+                break;
             case MenuCommand.Settings:
-                startup = false; OpenSettings(); click = false; break;
+                startup = false;
+                OpenSettings();
+                click = false;
+                break;
             case MenuCommand.QuickHelp:
-                startup = false; help = true; click = false; break;
+                startup = false;
+                help = true;
+                click = false;
+                break;
             case MenuCommand.Docs:
-                startup = false; OpenReference(); break;
+                startup = false;
+                OpenReference();
+                break;
         }
         UpdateNativeMenuState();
     }
 
+    /// <summary>验证 macOS 原生菜单的状态和命令路由。</summary>
+    /// <exception cref="PlatformNotSupportedException">不在 macOS 上运行此菜单检查。</exception>
     public void SmokeMacMenu()
     {
         if (!OperatingSystem.IsMacOS()) throw new PlatformNotSupportedException("Run this menu smoke on macOS.");
@@ -180,13 +281,17 @@ public sealed partial class Viewer
         try
         {
             preferences.RecentProjects = [sample, song];
-            InstallNativeMenu(); InstallNativeMenu();
+            InstallNativeMenu();
+            InstallNativeMenu();
             if (macMenu == null) throw new Exception("Native macOS menu was not created.");
             macMenu.AssertInstalled();
             if (macMenu.RecentLabelForTest(1) != "Scarlet Death / lexycat @ BACKSTAGE  LV.17")
                 throw new Exception("Native recent menu did not show the song: " + macMenu.RecentLabelForTest(1));
         }
-        finally { Directory.Delete(song, true); }
+        finally
+        {
+            Directory.Delete(song, true);
+        }
         preferences.RecentProjects = [sample];
         InstallNativeMenu();
         if (!macMenu.EnabledForTest(MenuCommand.OpenFile) || macMenu.EnabledForTest(MenuCommand.Undo))
@@ -219,6 +324,8 @@ public sealed partial class Viewer
         Console.WriteLine("Native macOS menu groups, direct recent open, View and export actions passed.");
     }
 
+    /// <summary>验证 Windows 原生菜单的状态和命令路由。</summary>
+    /// <exception cref="PlatformNotSupportedException">不在 Windows 上运行此菜单检查。</exception>
     public void SmokeWindowsMenu()
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("Run this menu smoke on Windows.");
@@ -233,10 +340,18 @@ public sealed partial class Viewer
             Update();
         }
         windowsMenu.PostForTest(MenuCommand.Welcome);
-        for (int i = 0; i < 20 && !startup; i++) { Pump(); Sdl.SDL_Delay(1); }
+        for (int i = 0; i < 20 && !startup; i++)
+        {
+            Pump();
+            Sdl.SDL_Delay(1);
+        }
         if (!startup) throw new Exception("Win32 Welcome menu command did not reach Viewer.");
         windowsMenu.PostForTest(MenuCommand.OpenFile, 0);
-        for (int i = 0; i < 20 && loading == null && Current.ProjectPath == null; i++) { Pump(); Sdl.SDL_Delay(1); }
+        for (int i = 0; i < 20 && loading == null && Current.ProjectPath == null; i++)
+        {
+            Pump();
+            Sdl.SDL_Delay(1);
+        }
         if (loading is { } task)
         {
             if (!task.Wait(TimeSpan.FromSeconds(30))) throw new TimeoutException("Win32 recent menu load timed out.");

@@ -1,3 +1,5 @@
+// 将界面文字的字形度量、布局与图集绘制连接到 Canvas。
+
 using System.Text;
 
 namespace KuroakiGimmick.Graphics;
@@ -43,6 +45,12 @@ public sealed partial class Fonts : IDisposable
     /// 步进只由 em 归一化的字体度量和逻辑字号决定，与栅格像素尺寸无关，
     /// 因此同一段文字在不同 DPI 的显示器之间移动时宽度不变。
     /// </summary>
+    /// <param name="text">待测量文本。</param>
+    /// <param name="size">排版使用的字号。</param>
+    /// <param name="monospaced">是否按等宽规则排版。</param>
+    /// <param name="unified">是否使用统一的字体度量。</param>
+    /// <param name="bold">是否使用粗体字重。</param>
+    /// <returns>文本的逻辑宽度。</returns>
     public float Measure(string text, float size, bool monospaced = false, bool unified = false, bool bold = false)
     {
         float cell = monospaced ? Cell(bold) * size : 0;
@@ -58,6 +66,17 @@ public sealed partial class Fonts : IDisposable
     /// <paramref name="unified"/> 保留给既有调用方：整套界面本就共用同一字体，
     /// 不再存在需要切换到独立文档字体的情况。
     /// </summary>
+    /// <param name="c">提交绘制命令的画布。</param>
+    /// <param name="text">待绘制文本。</param>
+    /// <param name="x">逻辑横坐标。</param>
+    /// <param name="y">逻辑纵坐标。</param>
+    /// <param name="size">排版使用的字号。</param>
+    /// <param name="color">绘制使用的 RGBA 颜色。</param>
+    /// <param name="monospaced">是否按等宽规则排版。</param>
+    /// <param name="maxWidth">可用于排版的最大宽度。</param>
+    /// <param name="unified">是否使用统一的字体度量。</param>
+    /// <param name="bold">是否使用粗体字重。</param>
+    /// <param name="italic">是否采用斜体。</param>
     public void Text(Canvas c, string text, float x, float y, float size, Color color,
         bool monospaced = false, float maxWidth = float.MaxValue, bool unified = false, bool bold = false, bool italic = false)
     {
@@ -110,5 +129,6 @@ public sealed partial class Fonts : IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public void Dispose() => ui.Dispose();
 }

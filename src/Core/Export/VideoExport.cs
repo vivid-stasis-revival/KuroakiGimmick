@@ -1,3 +1,5 @@
+// 协调离线渲染、FFmpeg 编码、取消及最终文件发布。
+
 using System.Diagnostics;
 using System.Buffers;
 using KuroakiGimmick.Graphics;
@@ -31,21 +33,36 @@ public sealed class VideoExport : IDisposable
     int rendered, nextSlot;
     readonly int frameBytes;
     bool inputCompleted, finalized;
+    /// <summary>本次离线渲染使用的输出设置。</summary>
     public ExportOptions Options { get; }
     int frame;
+    /// <summary>当前导出进度的帧计数。</summary>
     public int Frame { get => Volatile.Read(ref frame); private set => Volatile.Write(ref frame, value); }
+    /// <summary>承担该任务的渲染工作线程数。</summary>
     public int RenderWorkers => parallel?.WorkerCount ?? 1;
+    /// <summary>本次导出计划的总帧数。</summary>
     public int TotalFrames { get; }
-    /// <summary>Average frames delivered to the encoder per wall-clock second, including export startup/backpressure.</summary>
+    /// <summary>按实际经过秒数计算提交给编码器的平均帧率，包含启动和等待编码器的时间。</summary>
     public double AverageFramesPerSecond => Frame / Math.Max(.001, elapsed.Elapsed.TotalSeconds);
     /// <summary>已渲染帧数占总帧数的比例（0..1）。它只反映送进管道的帧，ffmpeg 收尾混流的那段时间会停在 1 附近。</summary>
-    public double Progress => Frame / (double) TotalFrames;
+    public double Progress => Frame / (double)TotalFrames;
+    /// <summary>导出是否已完成。</summary>
     public bool Completed { get; private set; }
+    /// <summary>导出是否已取消。</summary>
     public bool Cancelled { get; private set; }
+    /// <summary>是否正在收尾并等待编码输出完成。</summary>
     public bool Finalizing => inputCompleted;
+    /// <summary>导出过程中记录的失败信息。</summary>
     public string? Error { get; private set; }
-    public string Status => Error != null ? Error : Cancelled? "Export cancelled" : Completed? "Export complete" : inputCompleted ? "Finalizing audio and MP4..." : $"Rendering frame {Frame:N0} / {TotalFrames:N0}" + (parallel != null ? $" / {RenderWorkers} render threads" : "");
+    /// <summary>提供给界面的当前导出状态。</summary>
+    public string Status => Error != null ? Error : Cancelled ? "Export cancelled" : Completed ? "Export complete" : inputCompleted ? "Finalizing audio and MP4..." : $"Rendering frame {Frame:N0} / {TotalFrames:N0}" + (parallel != null ? $" / {RenderWorkers} render threads" : "");
     /// <summary>构造即启动 ffmpeg 子进程并建立管道；ffmpeg 不可用时直接抛错，这是 MP4 导出的硬依赖边界。</summary>
+    /// <param name="c">提交绘制命令的画布。</param>
+    /// <param name="r">场景渲染器。</param>
+    /// <param name="s">当前预览会话。</param>
+    /// <param name="options">视频导出选项。</param>
+    /// <exception cref="IOException">目标会覆盖源音频，或所选音轨无法用于导出。</exception>
+    /// <exception cref="InvalidOperationException">经变速换算的时长、音轨或导出缓冲需求不满足限制。</exception>
     public VideoExport(Canvas c, SceneRenderer r, Session s, ExportOptions options)
     {
         options.Validate();
@@ -66,9 +83,9 @@ public sealed class VideoExport : IDisposable
         temporary = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(options.Path))!,
             "." + System.IO.Path.GetFileNameWithoutExtension(options.Path) + "." + Guid.NewGuid().ToString("N") + ".partial.mp4");
         // 变速段会改变输出时长，因此帧数按 route 的实际时长算，而不是 End-Start。
-        presentationRoute=s.Interludes!=null;
+        presentationRoute = s.Interludes != null;
         route = s.Interludes is { } interludes
-            ? ChartPlaybackRoute.Identity(interludes.PresentationAt(options.Start),interludes.PresentationAt(options.End,true))
+            ? ChartPlaybackRoute.Identity(interludes.PresentationAt(options.Start), interludes.PresentationAt(options.End, true))
             : s.Playback.Route(options.Start, options.End);
         double outputDuration = route.Duration;
         if (!double.IsFinite(outputDuration) || outputDuration <= 0 || outputDuration > 3600) throw new InvalidOperationException("Speed-adjusted export must be at most one hour.");
@@ -99,8 +116,15 @@ public sealed class VideoExport : IDisposable
             if (s.HasNativeSequenceAudio)
             {
                 nativeAudioTemporary = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "kg-native-voice-" + Guid.NewGuid().ToString("N") + ".wav");
-                try { NativeSequenceAudio.WriteFloatWave(nativeAudioTemporary, s.Audio!); }
-                catch { TryDeleteNativeAudio(); throw; }
+                try
+                {
+                    NativeSequenceAudio.WriteFloatWave(nativeAudioTemporary, s.Audio!);
+                }
+                catch
+                {
+                    TryDeleteNativeAudio();
+                    throw;
+                }
                 inputAudio = nativeAudioTemporary;
             }
             Add("-i", inputAudio ?? throw new InvalidOperationException("Decoded export audio has no source."));
@@ -118,10 +142,17 @@ public sealed class VideoExport : IDisposable
             filters.Add(string.Concat(Enumerable.Range(0, spans.Length).Select(i => $"[a{i}]")) + $"concat=n={spans.Length}:v=0:a=1,apad[sound]");
             Add("-filter_complex", string.Join(";", filters), "-map", "[sound]", "-c:a", "aac", "-b:a", "192k");
         }
-        Add("-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p", "-t", N(TotalFrames / (double) options.Fps),
+        Add("-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p", "-t", N(TotalFrames / (double)options.Fps),
             "-movflags", "+faststart", temporary);
-        try { process = Process.Start(p) ?? throw new IOException("Could not launch FFmpeg. Install FFmpeg or set KUROAKI_FFMPEG."); }
-        catch { TryDeleteNativeAudio(); throw; }
+        try
+        {
+            process = Process.Start(p) ?? throw new IOException("Could not launch FFmpeg. Install FFmpeg or set KUROAKI_FFMPEG.");
+        }
+        catch
+        {
+            TryDeleteNativeAudio();
+            throw;
+        }
         // 必须一直异步抽干 stderr，否则 ffmpeg 写满管道缓冲区会死锁；出错时它也是唯一的错误信息来源。
         stderr = process.StandardError.ReadToEndAsync();
         frameBytes = checked(options.Width * options.Height * 4);
@@ -136,7 +167,15 @@ public sealed class VideoExport : IDisposable
                 for (int i = 0; i < readbacks.Length; i++) readbacks[i] = c.CreateReadback(target);
             }
         }
-        catch { foreach (var slot in readbacks) slot?.Dispose(); target?.Dispose(); process.Kill(); process.Dispose(); TryDeleteNativeAudio(); throw; }
+        catch
+        {
+            foreach (var slot in readbacks) slot?.Dispose();
+            target?.Dispose();
+            process.Kill();
+            process.Dispose();
+            TryDeleteNativeAudio();
+            throw;
+        }
         // 容量 2：渲染线程最多领先编码器两帧，既能重叠 GPU 与编码耗时，又不会把整段视频堆在内存里。
         frames = System.Threading.Channels.Channel.CreateBounded<byte[]>(new System.Threading.Channels.BoundedChannelOptions(2)
         {
@@ -145,7 +184,7 @@ public sealed class VideoExport : IDisposable
         });
         var encodingToken = cancel.Token;
         var encodingInput = process.StandardInput.BaseStream;
-        writer = Task.Run(async() =>
+        writer = Task.Run(async () =>
         {
             try
             {
@@ -159,7 +198,10 @@ public sealed class VideoExport : IDisposable
                         if (parallel != null) Interlocked.Increment(ref frame);
                         PerformanceStats.Add(PerformanceStats.Counter.EncodedFrames, 1);
                     }
-                    finally { ArrayPool<byte>.Shared.Return(bytes); }
+                    finally
+                    {
+                        ArrayPool<byte>.Shared.Return(bytes);
+                    }
                 }
             }
             finally
@@ -180,6 +222,7 @@ public sealed class VideoExport : IDisposable
         }
         try
         {
+            // 1. 检查渲染线程、写入任务及编码进程是否已失败。
             if (parallel?.Failure is { } renderError) throw new IOException("Render worker failed: " + renderError.Message, renderError);
             if (writer.IsFaulted)
             {
@@ -190,6 +233,7 @@ public sealed class VideoExport : IDisposable
                 throw new IOException(stderr.GetAwaiter().GetResult());
             }
             // 上一帧还没送进去就先补送，绝不重新渲染——否则 Frame 计数与实际写入的帧会错位。
+            // 2. 先交付暂存帧，再尝试从最早就绪的读回槽取下一帧。
             if (pending != null)
             {
                 if (!frames.Writer.TryWrite(pending))
@@ -205,8 +249,10 @@ public sealed class VideoExport : IDisposable
                 if (!oldest.TryCopy(pending)) throw new InvalidOperationException("Signalled readback became unavailable.");
                 downloads.Dequeue();
                 if (!frames.Writer.TryWrite(pending)) return;
-                pending = null; Frame++;
+                pending = null;
+                Frame++;
             }
+            // 3. 单线程导出只在有空闲槽时推进渲染，避免占用事件循环等待 GPU。
             if (parallel == null && rendered < TotalFrames && downloads.Count < readbacks.Length)
             {
                 using var frameTiming = PerformanceStats.Measure(PerformanceStats.Stage.Frame);
@@ -214,17 +260,23 @@ public sealed class VideoExport : IDisposable
                 try
                 {
                     renderer.PresentationWidth = Options.Width;
-                    if(presentationRoute)renderer.RenderPresentation(session,route.ChartAt(rendered/(double)Options.Fps),Options.Notes,Options.Effects);
-                    else renderer.Render(session, route.ChartAt(rendered / (double) Options.Fps), Options.Notes, Options.Effects);
+                    if (presentationRoute) renderer.RenderPresentation(session, route.ChartAt(rendered / (double)Options.Fps), Options.Notes, Options.Effects);
+                    else renderer.Render(session, route.ChartAt(rendered / (double)Options.Fps), Options.Notes, Options.Effects);
                 }
-                finally { renderer.PresentationWidth = previewWidth; }
+                finally
+                {
+                    renderer.PresentationWidth = previewWidth;
+                }
                 canvas.Pass(target!, renderer.Final.Texture, canvas.Basic);
                 var slot = readbacks[nextSlot];
                 canvas.BeginReadback(slot, target!);
-                downloads.Enqueue(slot); nextSlot = (nextSlot + 1) % readbacks.Length; rendered++;
+                downloads.Enqueue(slot);
+                nextSlot = (nextSlot + 1) % readbacks.Length;
+                rendered++;
                 return;
             }
-            if (Frame < TotalFrames) return; // GPU or encoder backpressure: return to the SDL event pump.
+            if (Frame < TotalFrames) return; // GPU 或编码器暂时繁忙，将控制权交回 SDL 事件循环。
+            // 4. 所有帧送达后关闭编码输入，等任务与进程成功结束才发布临时文件。
             if (!inputCompleted)
             {
                 frames.Writer.TryComplete();
@@ -283,9 +335,16 @@ public sealed class VideoExport : IDisposable
     void TryDeleteNativeAudio()
     {
         if (nativeAudioTemporary == null) return;
-        try { File.Delete(nativeAudioTemporary); }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
+        try
+        {
+            File.Delete(nativeAudioTemporary);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
     }
 
     /// <summary>释放顺序固定：先停编码器，再等 writer 退出，最后清理临时文件与 GPU 资源。顺序颠倒会让 writer 写向已关闭的管道。</summary>
@@ -315,7 +374,11 @@ public sealed class VideoExport : IDisposable
             {
             }
         }
-        if (pending != null) { ArrayPool<byte>.Shared.Return(pending); pending = null; }
+        if (pending != null)
+        {
+            ArrayPool<byte>.Shared.Return(pending);
+            pending = null;
+        }
         foreach (var slot in readbacks) slot.Dispose();
         target?.Dispose();
         process.Dispose();

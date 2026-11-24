@@ -1,6 +1,8 @@
+// 对 MPF 模拟的事件顺序、运行状态及资源限制执行离线断言。
+
 namespace KuroakiGimmick.Core;
 
-/// <summary>Synthetic source-order, lifecycle and resource-limit regressions; no private assets.</summary>
+/// <summary>用合成数据检查 MPF 的来源顺序、生命周期和资源上限。</summary>
 internal static class MpfRuntimeChecks
 {
     internal static int Run()
@@ -129,7 +131,11 @@ internal static class MpfRuntimeChecks
                 set_mod_val("result", sum);
                 ::Finish::
                 set_mod_val("frames", frames);
-                """, c => { c.PerFrame.Clear(); c.PerFrame.Add(new(0, 600, "test")); }, end: 600);
+                """, c =>
+{
+    c.PerFrame.Clear();
+    c.PerFrame.Add(new(0, 600, "test"));
+}, end: 600);
             Check(!longSong.Chart.Diagnostics.Any(d => d.Error), "ten-minute script exceeds old lifetime budget without false loop error");
             Near(longSong.Time.Get("frames", 600), 35999, "long script reaches Finish after every active frame");
             Near(longSong.Time.Get("result", 599), 496, "long script retains correct output at song end");
@@ -137,10 +143,10 @@ internal static class MpfRuntimeChecks
 
             var skins = Load("::Main::", c =>
             {
-                c.Mods.Add(new(0,0,"linear",.5,.5,"chorus_greenleft_overlay",-1,0));
-                c.Mods.Add(new(1,0,"linear",0,0,"changeskin",-1,1));
-                c.Mods.Add(new(2,0,"linear",.6,.6,"chorus_greenleft_overlay",-1,2));
-            }, files: dir => File.WriteAllText(Path.Combine(dir,"..","cgmk_config.json"), "{\"ENABLE_SKIN_CHANGE\":true}"));
+                c.Mods.Add(new(0, 0, "linear", .5, .5, "chorus_greenleft_overlay", -1, 0));
+                c.Mods.Add(new(1, 0, "linear", 0, 0, "changeskin", -1, 1));
+                c.Mods.Add(new(2, 0, "linear", .6, .6, "chorus_greenleft_overlay", -1, 2));
+            }, files: dir => File.WriteAllText(Path.Combine(dir, "..", "cgmk_config.json"), "{\"ENABLE_SKIN_CHANGE\":true}"));
             var skinState = new PartialSkinBlendState(skins.Time);
             Check(skinState.Sample(.5).Active && !skinState.Sample(1.5).Active && skinState.Sample(2.5).Active,
                 "changeskin clears lane overlay until its quantized alpha changes");
@@ -151,7 +157,8 @@ internal static class MpfRuntimeChecks
 
             var sameTick = Load("::Init::\ntween_mod_val(\"cover1\", 2, \"linear\", 0.7, 0.9);\n::Main::\n", c =>
             {
-                c.PerFrame.Clear(); c.PerFrame.Add(new(2 - 1.0 / 120, 4, "test"));
+                c.PerFrame.Clear();
+                c.PerFrame.Add(new(2 - 1.0 / 120, 4, "test"));
                 c.Mods.Add(new(2, 2, "linear", 0, 1, "cover1", -1, 0));
             });
             Near(sameTick.Time.Get("cover1", 3), .8, "new MPF tween follows same-tick native registration");
@@ -172,7 +179,9 @@ internal static class MpfRuntimeChecks
 
             var recover = Load("::Main::\nif (beatStart < 2) { var bad = 1 / 0; }\nset_mod_val(\"cover1\", 0.7);", c =>
             {
-                c.PerFrame.Clear(); c.PerFrame.Add(new(0, 1, "test")); c.PerFrame.Add(new(3, 4, "test"));
+                c.PerFrame.Clear();
+                c.PerFrame.Add(new(0, 1, "test"));
+                c.PerFrame.Add(new(3, 4, "test"));
             });
             Check(recover.Chart.Diagnostics.Any(d => d.Error && d.Message.Contains("ZeroDivisionError", StringComparison.Ordinal)),
                 "first range reports runtime error");
@@ -180,7 +189,8 @@ internal static class MpfRuntimeChecks
 
             var tail = Load("::Main::\n::Finish::\nset_mod_val_at(\"cover1\", 3, 0.8);\ntween_mod_val(\"cover2\", 4, \"linear\", 0, 1);", c =>
             {
-                c.PerFrame.Clear(); c.PerFrame.Add(new(0, 1, "test"));
+                c.PerFrame.Clear();
+                c.PerFrame.Add(new(0, 1, "test"));
             }, end: 1);
             Check(tail.Time.End >= 5 - 1e-8, "Finish scheduled work extends timeline End");
             Near(tail.Time.Get("cover1", 3.5), .8, "Finish delayed set executes past original duration");

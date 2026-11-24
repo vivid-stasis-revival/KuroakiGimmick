@@ -1,3 +1,5 @@
+// 协调窗口输入、后台加载结果、交互状态和逐帧呈现。
+
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
@@ -18,7 +20,9 @@ public sealed partial class Viewer : IDisposable
     readonly WorkspaceWindowManager workspaceWindows;
     WorkspaceWindowManager.Window activeWorkspaceWindow;
     readonly WorkspaceManager workspaceManager;
+    /// <summary>界面与场景绘制共用的画布。</summary>
     public Canvas Canvas { get; }
+    /// <summary>为当前预览会话合成场景的渲染器。</summary>
     public SceneRenderer Renderer { get; }
     readonly Fonts fonts;
     readonly Texture logo;
@@ -32,8 +36,10 @@ public sealed partial class Viewer : IDisposable
     int menuStateHash = int.MinValue;
     bool settings, settingsInput;
     bool dockContextInput;
+    /// <summary>当前打开的预览会话。</summary>
     public Session Current { get; private set; }
     Target? uiTarget;
+    /// <summary>绘制用户界面时使用的渲染目标。</summary>
     public Target UiTarget => uiTarget!;
     /// <summary>主线程队列。对话框回调等异步结果只能入队，由窗口线程在 Update 中取出执行；回调内不直接改 Viewer 状态。</summary>
     readonly ConcurrentQueue<Action> actions = new();
@@ -53,8 +59,7 @@ public sealed partial class Viewer : IDisposable
     bool held { get => activePointer.Held; set => activePointer.Held = value; }
     bool seeking { get => activePointer.Seeking; set => activePointer.Seeking = value; }
     bool quit, full, notes = true, effects = true, integerScale, diagnostics, help;
-    // Mute is transient UI state, not a project volume value. Keeping it separate prevents M from
-    // overwriting PreviewVolume and lets a second press restore the exact configured level.
+    // 静音是临时界面状态，单独保存可防止 M 改写 PreviewVolume，再次按键恢复精确的配置音量。
     bool audioMuted;
 #if KG_SWITCH
     const bool dialogOpen = false;
@@ -70,6 +75,14 @@ public sealed partial class Viewer : IDisposable
     /// <summary>任何图片加载、谱面导出、会话加载或仍在进行的视频导出都算忙；导出一旦完成、取消或出错就不再计入，由 Update 负责回收。</summary>
     bool Busy => imageLoad != null || ChartExportBusy || loading != null || export is { Completed: false, Cancelled: false, Error: null };
     /// <summary>所有 GPU 资源（Canvas、字体、logo、Renderer）在窗口线程创建；silent 表示无音频、也不套用用户偏好。</summary>
+    /// <param name="h">窗口和设备宿主。</param>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="silent">是否以静音方式启动。</param>
+    /// <param name="applyPreferences">是否应用设备偏好。</param>
+    /// <param name="uiLanguage">可选的界面语言。</param>
+    /// <param name="showStartup">是否显示启动页。</param>
+    /// <param name="initialPath">初始打开路径。</param>
+    /// <param name="settingsPath">可选的偏好文件路径。</param>
     public Viewer(Host h, Session session, bool silent = false, bool applyPreferences = true, string? uiLanguage = null, bool showStartup = false, string? initialPath = null, string? settingsPath = null)
     {
         activePointer = mainPointer;
@@ -177,14 +190,17 @@ public sealed partial class Viewer : IDisposable
                 SyncDockWindows();
                 bool mainReady = host.Gpu.PresentationReady();
                 if (!mainReady && dockWindowIds.Count == 0 && nativeWindows == null)
-                { Sdl.SDL_Delay(1); continue; }
+                {
+                    Sdl.SDL_Delay(1);
+                    continue;
+                }
 #if KG_SWITCH
                 long updateEnd = Stopwatch.GetTimestamp();
 #endif
                 if (mainReady) Draw();
                 else
                 {
-                    // Keep the shared scene current while the main swapchain is under backpressure.
+                    // 主窗口交换链出现背压时仍需更新共享场景。
                     using (Renderer.Preview(preferences.StackLimit, preferences.StackLimitLayers))
                         Renderer.RenderInteractivePresentation(Current, transport.PresentationPosition, notes, effects);
                     Canvas.Flush();
@@ -215,7 +231,7 @@ public sealed partial class Viewer : IDisposable
     }
 
 #if KG_MOBILE
-    // UIKit owns the run loop on iOS; a display-link callback advances one frame.
+    // iOS 的主循环由 UIKit 管理，每次显示刷新回调推进一帧。
     internal void PauseMobile() => transport.SetPlaying(false);
     internal bool MobileFrame()
     {
@@ -408,7 +424,11 @@ public sealed partial class Viewer : IDisposable
     /// <summary>编辑器打开时转交 SaveEditor。落盘前把 viewer 侧的 NOTES / FX 开关写回 project，保存的才是当前所见状态。</summary>
     void SaveProject(bool saveAs = false)
     {
-        if (editor != null) { SaveEditor(saveAs); return; }
+        if (editor != null)
+        {
+            SaveEditor(saveAs);
+            return;
+        }
         if (Busy || Current.IsEmpty)
         {
             return;
@@ -429,7 +449,10 @@ public sealed partial class Viewer : IDisposable
                 RememberRecentSource(path);
                 message = L.Get("Project saved: ") + path;
             }
-            catch (Exception ex) { message = L.Get("Save failed: ") + ex.Message; }
+            catch (Exception ex)
+            {
+                message = L.Get("Save failed: ") + ex.Message;
+            }
         }
         if (!saveAs && Current.ProjectPath != null) SaveAt(Current.ProjectPath);
         else Dialog(true, suggested, paths => SaveAt(paths[0]));
@@ -485,7 +508,8 @@ public sealed partial class Viewer : IDisposable
     {
         full = !full;
         Sdl.SDL_SetWindowFullscreen(host.Window, full);
-    }(int W, int H, int Pw, int Ph) WindowSize()
+    }
+    (int W, int H, int Pw, int Ph) WindowSize()
     {
         var viewport = Viewport();
         return (viewport.Width, viewport.Height, viewport.PixelWidth, viewport.PixelHeight);
@@ -534,10 +558,13 @@ public sealed partial class Viewer : IDisposable
     void FileRow(string label, string? value, float x, float y, float w)
     {
         Label(label, x, y);
-        Text(value == null ? L.Get("Not attached") : Path.GetFileName(value), x, y + 18, 12, value == null ? muted : white, max : w);
+        Text(value == null ? L.Get("Not attached") : Path.GetFileName(value), x, y + 18, 12, value == null ? muted : white, max: w);
     }
 
+    /// <summary>将预览定位到指定时刻。</summary>
+    /// <param name="t">目标歌曲时刻，单位为秒。</param>
     public void SetTime(double t) => transport.Seek(t);
+    /// <summary>打开设备和工作区设置界面。</summary>
     public void OpenSettings()
     {
         settings = true;
@@ -549,7 +576,7 @@ public sealed partial class Viewer : IDisposable
     bool effectiveVolumeDirty;
     void SetVolume(double volume)
     {
-        // Moving either volume slider is an explicit request to hear that level, so it also leaves mute.
+        // 调整任一音量滑块均表示用户希望听到新音量，同时退出临时静音。
         audioMuted = false;
         Current.Project.PreviewVolume = Math.Clamp(volume, 0, 1);
         transport.SetVolume(Current.Project.PreviewVolume);
@@ -564,7 +591,9 @@ public sealed partial class Viewer : IDisposable
     }
 
     /// <summary>mm:ss.ff 格式；负值取绝对值显示，不带符号。</summary>
-    public static string Clock(double s) => $"{(int)Math.Abs(s)/60:00}:{Math.Abs(s)%60:00.00}";
+    /// <param name="s">待显示的秒数。</param>
+    /// <returns>以绝对值格式化的分、秒与百分秒文本。</returns>
+    public static string Clock(double s) => $"{(int)Math.Abs(s) / 60:00}:{Math.Abs(s) % 60:00.00}";
     /// <summary>
     /// 释放次序：先取消进行中的导出与手势、结束布局拖动并释放鼠标捕获，再释放原生窗口、导出、音频，
     /// 最后才释放依附 GPU 设备的 UI 目标、Renderer、字体、logo 与 Canvas。只能在窗口线程调用。

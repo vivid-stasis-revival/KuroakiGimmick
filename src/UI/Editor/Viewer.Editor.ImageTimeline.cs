@@ -1,3 +1,5 @@
+// 时间轴上的 image 动画组条块：绘制、选中，以及整体平移 / 拉伸右端的拖拽。
+
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Core.Editing;
 using KuroakiGimmick.Graphics;
@@ -5,9 +7,6 @@ using KuroakiGimmick.Native;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// 时间轴上的 image 动画组条块：绘制、选中，以及整体平移 / 拉伸右端的拖拽。
-/// </summary>
 public sealed partial class Viewer
 {
     /// <summary>一次动画组拖拽的快照。Owner 与 Revision 用于松手时校验文档没被换过；Resize 为真表示拖的是右端把手而非整体平移。</summary>
@@ -40,23 +39,28 @@ public sealed partial class Viewer
             if (imageGroupDrag is { } drag && drag.Group.Id == group.Id) (start, end) = ImageGroupDragRange(drag);
             float x = BeatX(start), width = Math.Max(10, BeatX(end) - x);
             if (x + width < editorTracksRect.X || x > editorTracksRect.X + editorTracksRect.W) continue;
-            var box = new Rect(x, y + 6, width, 23); bool selected = selectedImageId == id && ActiveImageGroup?.Id == group.Id;
+            var box = new Rect(x, y + 6, width, 23);
+            bool selected = selectedImageId == id && ActiveImageGroup?.Id == group.Id;
             Canvas.Fill(box, Mix(Theme.PanelRaised, Theme.Accent, selected ? .7f : .3f));
             Canvas.Border(box, selected ? white : soft, selected ? 2 : 1);
             if (width > 40) Text(L.Get(group.Label), x + 5, y + 11, 11, white, true, width - 12);
             if (group.Duration > 0) Canvas.Fill(new(x + width - 4, y + 10, 2, 14), muted);
             else Canvas.Line(x + width / 2, y + 10, x + width / 2, y + 25, 2, white);
             if (!interactive || !click || !box.Contains(mouseX, mouseY) || !editorTracksRect.Contains(mouseX, mouseY)) continue;
-            SelectImageObject(id, true, group.Id); selectedNoteTime = null;
+            SelectImageObject(id, true, group.Id);
+            selectedNoteTime = null;
             if (!group.Editable)
             {
-                imageInspector = false; expandedImageTracks.Add(id); layoutRevision = -1;
+                imageInspector = false;
+                expandedImageTracks.Add(id);
+                layoutRevision = -1;
                 message = L.Get("Independent/dynamic image events: raw event editor.");
             }
             else
             {
                 imageGroupDrag = new(editor, editor.Revision, group, BeatAt(mouseX), group.Duration > 0 && width > 17 && mouseX >= x + width - 7);
-                Sdl.SDL_CaptureMouse(true); held = true;
+                Sdl.SDL_CaptureMouse(true);
+                held = true;
             }
             click = false;
         }

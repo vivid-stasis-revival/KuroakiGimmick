@@ -3,7 +3,7 @@ using System.Text;
 
 namespace KuroakiGimmick.Core;
 
-/// <summary>Bounded-buffer source reading that retains CRLF, CR and LF exactly.</summary>
+/// <summary>使用有界缓冲读取源码，逐行保留 CRLF、CR 或 LF。</summary>
 internal static class SourceLines
 {
     internal readonly record struct Line(string Text, string Ending);
@@ -28,15 +28,22 @@ internal static class SourceLines
                     {
                         pending.Append(buffer, start, i - start);
                         text = pending.ToString();
-                        // Do not retain the capacity of one unusually long line
-                        // for the rest of a multi-gigabyte document.
+                        // 避免因一条异常长行而在读取后续的大文件时一直保留过大的缓冲容量。
                         pending = null;
                     }
                     string ending = character == '\n' ? "\n" : "\r";
                     if (character == '\r')
                     {
-                        if (i + 1 < count && buffer[i + 1] == '\n') { i++; ending = "\r\n"; }
-                        else if (i + 1 == count && reader.Peek() == '\n') { reader.Read(); ending = "\r\n"; }
+                        if (i + 1 < count && buffer[i + 1] == '\n')
+                        {
+                            i++;
+                            ending = "\r\n";
+                        }
+                        else if (i + 1 == count && reader.Peek() == '\n')
+                        {
+                            reader.Read();
+                            ending = "\r\n";
+                        }
                     }
                     start = i + 1;
                     yield return new(text, ending);
@@ -45,6 +52,9 @@ internal static class SourceLines
             }
             if (pending is { Length: > 0 }) yield return new(pending.ToString(), "");
         }
-        finally { ArrayPool<char>.Shared.Return(buffer); }
+        finally
+        {
+            ArrayPool<char>.Shared.Return(buffer);
+        }
     }
 }

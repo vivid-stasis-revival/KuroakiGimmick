@@ -1,3 +1,5 @@
+// 解析 VSP 图片条目，将命名属性轨道转换为帧号、姿态和颜色。
+
 using System.Globalization;
 using System.Numerics;
 using StbImageSharp;
@@ -10,13 +12,36 @@ namespace KuroakiGimmick.Core;
 // Custom Gimmicks v1.14.1：.vsp 图像声明 + 具名 .vsm 轨道。
 public sealed class CustomImages
 {
+    /// <summary>图片文件及解码前取得的源尺寸。</summary>
+    /// <param name="Path">图片文件路径。</param>
+    /// <param name="Width">图像像素宽度。</param>
+    /// <param name="Height">图像像素高度。</param>
     public record Asset(string Path, int Width, int Height);
+    /// <summary>VSP 中关联图片资源的图层条目。</summary>
+    /// <param name="Id">VSM 属性轨道引用的图片 ID。</param>
+    /// <param name="Layer">所属 VSP 图层名。</param>
+    /// <param name="LayerPriority">所在图层的优先级。</param>
+    /// <param name="Priority">条目在层内的优先级。</param>
+    /// <param name="Order">源声明顺序。</param>
+    /// <param name="Asset">关联的图片资源。</param>
+    /// <param name="Frames">源图包含的帧数。</param>
+    /// <param name="Width">单帧绘制宽度。</param>
+    /// <param name="Height">单帧绘制高度。</param>
+    /// <param name="Lane">条目所属的轨道。</param>
     public record Item(string Id, string Layer, double LayerPriority, double Priority, int Order, Asset Asset, int Frames, double Width,
         double Height, int Lane);
+    /// <summary>当前图片配置的来源路径。</summary>
     public string? Path { get; private set; }
+    /// <summary>供按图层顺序绘制的图片条目。</summary>
     public List<Item> Items { get; } = [];
+    /// <summary>以键索引的图片资源与尺寸。</summary>
     public Dictionary<string, Asset> Files { get; } = new(StringComparer.Ordinal);
     static readonly HashSet<string> Kinds = new("imgx imgy imgxb imgyb imgxtime imgytime imgrot imgscalex imgscaley imgscaleytime imgskewx imgskewy imgcolrgb imgalp imgidx".Split(' '));
+    /// <summary>将图片属性轨道名拆分为属性种类与图片 ID。</summary>
+    /// <param name="name">完整属性名。</param>
+    /// <param name="kind">输出解析到的图片属性类型。</param>
+    /// <param name="id">输出图片 ID。</param>
+    /// <returns>名称符合图片属性约定时为 true。</returns>
     public static bool TryMod(string name, out string kind, out string id)
     {
         int split = name.IndexOf('_');
@@ -26,6 +51,8 @@ public sealed class CustomImages
     }
 
     /// <summary>未声明轨道时的原版默认值；160/90 是 320×180 逻辑空间的中心，573613 是原版表示该项未设置的哨兵值。</summary>
+    /// <param name="kind">图片属性键。</param>
+    /// <returns>该属性在首次写入前的值。</returns>
     public static double Default(string kind) => kind switch
     {
         "imgx" => 160,
@@ -35,6 +62,12 @@ public sealed class CustomImages
         "imgcolrgb" => 16777215,
         _ => 0
     };
+    /// <summary>从工程路径或编辑快照读取 VSP 图层、资源与声明。</summary>
+    /// <param name="p">当前工程的路径与呈现配置。</param>
+    /// <param name="chart">提供音符、演出事件及诊断的谱面。</param>
+    /// <param name="editedText">编辑器的 VSP 文本覆盖。</param>
+    /// <param name="resourceRoot">图片引用的可选解析根目录。</param>
+    /// <returns>按层整理的图片条目与资源。</returns>
     public static CustomImages Load(ViewerProject p, Chart chart, string? editedText = null, string? resourceRoot = null)
     {
         var result = new CustomImages();
@@ -154,7 +187,7 @@ public sealed class CustomImages
                         {
                             throw new InvalidDataException("Invalid frame count.");
                         }
-                        int frames = (int) frameNumber;
+                        int frames = (int)frameNumber;
                         double priority = Number(args[3]);
                         string path = System.IO.Path.GetFullPath(args[2].Replace('\\', System.IO.Path.DirectorySeparatorChar), root);
                         if (!result.Files.TryGetValue(path, out var asset))
@@ -200,7 +233,7 @@ public sealed class CustomImages
                         {
                             throw new InvalidDataException("Lane must be 0..6.");
                         }
-                        result.Items.Add(new(id, layer, layerPriority, priority, line, asset, frames, width, height, (int) lane));
+                        result.Items.Add(new(id, layer, layerPriority, priority, line, asset, frames, width, height, (int)lane));
                         chart.ImageNames.Add(id);
                     }
                     else
@@ -233,11 +266,20 @@ public sealed class CustomImages
         return result;
     }
 
+    /// <summary>按歌曲时刻求得的图片渲染参数。</summary>
+    /// <param name="Matrix">将图片映射到画布的变换矩阵。</param>
+    /// <param name="Frame">当前帧号。</param>
+    /// <param name="Rgb">RGB 调色值。</param>
+    /// <param name="Alpha">不透明度。</param>
     public record Pose(Matrix3x2 Matrix, int Frame, uint Rgb, double Alpha);
     /// <summary>
     /// 按已排序的层顺序产出每张图的当前姿态（320×180 逻辑空间）。alpha ≤ 0 或矩阵出现非有限分量的图直接跳过，不绘制。
     /// 变换次序固定为缩放 → 斜切 → 旋转 → 平移，与原版绘制顺序一致，不能为了合并矩阵改写。
     /// </summary>
+    /// <param name="timeline">用于采样轨道和回调的时间轴。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <param name="valueOverrides">替代轨道采样值的可选映射。</param>
+    /// <returns>按绘制顺序排列的可见图片及其姿态。</returns>
     public IEnumerable<(Item Image, Pose Pose)> At(Timeline timeline, double time, IReadOnlyDictionary<string, double>? valueOverrides = null)
     {
         foreach (var item in Items)
@@ -265,7 +307,7 @@ public sealed class CustomImages
                 ys = (NoteY(timeline, time, item.Lane, M("imgscaleytime")) - NoteY(timeline, time, item.Lane, 0)) / item.Height;
             }
             var matrix = Matrix3x2.CreateScale((float)(item.Width * M("imgscalex")),
-                (float)(item.Height * M("imgscaley") * ys)) * new Matrix3x2(1, (float) M("imgskewy"), (float) M("imgskewx"), 1, 0,
+                (float)(item.Height * M("imgscaley") * ys)) * new Matrix3x2(1, (float)M("imgskewy"), (float)M("imgskewx"), 1, 0,
                 0) * Matrix3x2.CreateRotation((float)(M("imgrot") * Math.PI / 180)) * Matrix3x2.CreateTranslation((float)(M("imgx") + M("imgxb") + xt),
                 (float)(M("imgy") + M("imgyb") + yt));
             double frame = Math.Max(0, Math.Round(M("imgidx"), MidpointRounding.AwayFromZero)) % item.Frames;
@@ -273,7 +315,7 @@ public sealed class CustomImages
             {
                 continue;
             }
-            yield return (item, new(matrix, (int) frame, (uint) Math.Clamp(M("imgcolrgb"), 0, 16777215), alpha));
+            yield return (item, new(matrix, (int)frame, (uint)Math.Clamp(M("imgcolrgb"), 0, 16777215), alpha));
         }
     }
 

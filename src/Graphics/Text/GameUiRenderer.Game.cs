@@ -1,11 +1,10 @@
+// 测量精灵字体，绘制独立于 application proxy 的固定连击和判定 HUD。
+
 using System.Globalization;
 using KuroakiGimmick.Core;
 
 namespace KuroakiGimmick.Graphics;
 
-/// <summary>
-/// Combo / judgement 等固定 GUI HUD。它们不进入 application proxy，并保持各自独立的显隐语义。
-/// </summary>
 // 对应 o_combodisplay、o_judgement_ingame 与 obj_judgement_display 三个独立对象。
 // 它们在原版里各自带状态（补间进度、上次判定、淡出计时），这里统一改写成"距上次判定多久"的闭式，
 // 因为预览要支持拖时间轴：任何跨帧累加的量在跳转后都会停在错误的位置。
@@ -96,6 +95,9 @@ public sealed partial class GameUiRenderer
     }
 
     /// <summary>原版 o_combodisplay 的 event_user(2)：顶部大号数字按 op_minusscore 切换内容。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <returns>按当前 HUD 模式生成的顶部计数文本。</returns>
     public static string ComboText(Session session, double time)
     {
         double countdown = session.Timeline.Get("df_countdown", time);
@@ -136,7 +138,7 @@ public sealed partial class GameUiRenderer
             return;
         }
         double y = ComboY + ComboBounce(session, time);
-        SpriteText(ComboFont, text, 160 - (m.Left + m.Right) / 2, (float) y + ComboBaseline, Color.White);
+        SpriteText(ComboFont, text, 160 - (m.Left + m.Right) / 2, (float)y + ComboBaseline, Color.White);
         if (session.Timeline.Get("df_countdown", time) > 0)
             Text(font, "COUNTDOWN", 160, (float)y + 19, Color.White, Color.White, true);
     }
@@ -191,6 +193,9 @@ public sealed partial class GameUiRenderer
     /// 每次判定时从连击数两侧向外喷的钻尘落点：原版 160 ± (string_width(combo_text) / 2 + 6)。
     /// 粒子本身由 SceneRenderer 画（钻尘纹理在那边），这里只负责把宽度算出来；数字不显示时返回 null。
     /// </summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <returns>可见连击区域的粒子偏移，不显示时为 null。</returns>
     public float? ComboDustOffset(Session session, double time)
     {
         Use(session.GameUi);

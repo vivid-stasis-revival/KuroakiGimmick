@@ -1,3 +1,5 @@
+// 将 CGMK 棋盘配置、三张源帧与更新时间关联到同一会话。
+
 namespace KuroakiGimmick.Core;
 
 /// <summary>
@@ -8,11 +10,21 @@ namespace KuroakiGimmick.Core;
 // 它无法复现游戏里未知的 RNG。
 public sealed class Checkerboard
 {
+    /// <summary>校验通过的三张棋盘格源图路径。</summary>
     public string[] Frames { get; private set; } = [];
+    /// <summary>触发棋盘格更新的歌曲秒数。</summary>
     public List<double> Updates { get; } = [];
+    /// <summary>谱面对象和配置是否启用棋盘格效果。</summary>
     public bool Enabled { get; private set; }
+    /// <summary>原版对象定义指定的模式，可为空。</summary>
     public int? FixedMode { get; private set; }
+    /// <summary>效果已启用且三张源图均已加载。</summary>
     public bool Ready => Enabled && Frames.Length == 3;
+    /// <summary>根据对象定义或 CGMK 设置加载棋盘帧和更新时间。</summary>
+    /// <param name="p">当前工程的路径与呈现配置。</param>
+    /// <param name="chart">提供音符、演出事件及诊断的谱面。</param>
+    /// <param name="timeline">用于采样轨道和回调的时间轴。</param>
+    /// <returns>包含已校验帧路径与刷新时刻的棋盘格状态。</returns>
     public static Checkerboard Load(ViewerProject p, Chart chart, Timeline timeline)
     {
         var result = new Checkerboard();
@@ -87,7 +99,7 @@ public sealed class Checkerboard
                     continue;
                 }
                 // tween 会在每个源 Step 重写一次被消费的控制值，因此按 60 Hz 逻辑 tick 逐帧采样。
-                for (int frame = (int) Math.Max(1, Math.Ceiling(s.Time * 60)); frame <= Math.Floor(end * 60); frame++)
+                for (int frame = (int)Math.Max(1, Math.Ceiling(s.Time * 60)); frame <= Math.Floor(end * 60); frame++)
                 {
                     if (s.Value(frame / 60.0) > 0)
                     {
@@ -121,6 +133,8 @@ public sealed class Checkerboard
     }
 
     /// <summary>二分统计 time 之前已发生的刷新次数；0 代表还没刷新过，对应创建时的固定第 2 帧。</summary>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <returns>截至该时刻已发生的刷新次数。</returns>
     public int Generation(double time)
     {
         int lo = 0, hi = Updates.Count;
@@ -139,7 +153,11 @@ public sealed class Checkerboard
         return lo;
     }
 
+    /// <summary>计算指定代数和格子的确定性帧号，初代固定为 2。</summary>
+    /// <param name="generation">刷新代数，初始为 0。</param>
+    /// <param name="cell">棋盘格的单元索引。</param>
+    /// <returns>用于该格的源帧号，范围为 0 至 2。</returns>
     public static int CellFrame(int generation, int cell) => generation == 0 ? 2 : Math.Min(2,
-        (int)(Timeline.Hash(unchecked((uint) generation * 9743 + (uint) cell * 137 + 9127)) * 3));
+        (int)(Timeline.Hash(unchecked((uint)generation * 9743 + (uint)cell * 137 + 9127)) * 3));
 }
 

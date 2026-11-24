@@ -1,13 +1,11 @@
+// 设置面板沿用 Viewer 的 Canvas 和按钮命中区，使用 ViewerSettings 持久化选项。
+
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Graphics;
 using KuroakiGimmick.Native;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// Settings panels use the same Canvas/Button hitboxes as the rest of the Viewer.
-/// Only view geometry changes. Options continue to be persisted through ViewerSettings.
-/// </summary>
 public sealed partial class Viewer
 {
     void SettingsCard(Rect r, string heading)
@@ -84,7 +82,11 @@ public sealed partial class Viewer
                 if (Button(steps[i].ToString("+0;-0"), new(xx[i], dy, bw, 29), key: $"settings-{(audio ? "audio" : "visual")}-delay:{steps[i]}"))
                 {
                     value = Math.Clamp(value + steps[i], -2000, 2000);
-                    if (audio) { p.AudioDelayMs = value; transport.SetDelay(value); }
+                    if (audio)
+                    {
+                        p.AudioDelayMs = value;
+                        transport.SetDelay(value);
+                    }
                     else p.VisualDelayMs = value;
                 }
             Text($"{value:+0;-0;0} ms", cx + (cw - 75) / 2, dy + 6, 12, white, true);
@@ -128,14 +130,23 @@ public sealed partial class Viewer
             Text("STACK LIMIT", sx, y + 7, 13, white);
             if (Button(L.Get(preferences.StackLimit ? "ON" : "OFF"), new(cx, y, 74, 30),
                 active: preferences.StackLimit, key: "settings-stack-limit"))
-            { preferences.StackLimit = !preferences.StackLimit; SaveSettings(); }
+            {
+                preferences.StackLimit = !preferences.StackLimit;
+                SaveSettings();
+            }
             int layers = preferences.StackLimitLayers, step = (Sdl.SDL_GetModState() & 3) != 0 ? 16 : 64;
             float controlsX = cx + 84;
             if (Button("-", new(controlsX, y, 32, 30), enabled: layers > ViewerSettings.MinStackLayers, key: "settings-stack-minus"))
-            { preferences.StackLimitLayers = layers - step; SaveSettings(); }
+            {
+                preferences.StackLimitLayers = layers - step;
+                SaveSettings();
+            }
             Text(preferences.StackLimitLayers.ToString(), controlsX + 43, y + 7, 13, white, true);
             if (Button("+", new(controlsX + 96, y, 32, 30), enabled: layers < ViewerSettings.MaxStackLayers, key: "settings-stack-plus"))
-            { preferences.StackLimitLayers = layers + step; SaveSettings(); }
+            {
+                preferences.StackLimitLayers = layers + step;
+                SaveSettings();
+            }
             SettingsHint("16–1024 layers. +/- 64; Shift +/- 16. Preview only.", sx, y + 42, r.W - 28);
         }
     }
@@ -178,7 +189,10 @@ public sealed partial class Viewer
         Text(L.Get("Show expanded GMK summaries"), x, y + 7, 13, white, max: toggleX - x - 12);
         if (Button(L.Get(preferences.ShowExpandedGimmickSummary ? "ON" : "OFF"), new(toggleX, y, 110, 30),
             active: preferences.ShowExpandedGimmickSummary, key: "settings-expanded-gimmick-summary"))
-        { preferences.ShowExpandedGimmickSummary = !preferences.ShowExpandedGimmickSummary; SaveSettings(); }
+        {
+            preferences.ShowExpandedGimmickSummary = !preferences.ShowExpandedGimmickSummary;
+            SaveSettings();
+        }
         y += 48;
         Text(L.Get("Split overlapping clips into rows"), x, y + 7, 13, white, max: toggleX - x - 12);
         if (Button(L.Get(preferences.SplitOverlappingTimelineClips ? "ON" : "OFF"), new(toggleX, y, 110, 30),
@@ -221,7 +235,10 @@ public sealed partial class Viewer
             int cardWidth = ViewerSettings.CardWidths[i];
             string name = cardWidth == 1280 ? "720P" : cardWidth == 1920 ? "1080P" : cardWidth == 2560 ? "1440P" : "4K";
             if (Button(name, new(cx + i * (quarter + 6), y, quarter, 29), active: CardWidth == cardWidth, key: "settings-card-size:" + cardWidth))
-            { preferences.CardWidth = cardWidth; SaveSettings(); }
+            {
+                preferences.CardWidth = cardWidth;
+                SaveSettings();
+            }
         }
         if (r.H >= 208)
             SettingsHint("Master switch is the VS UI button in the top bar. Sprites come from the installed Game UI pack.", sx, r.Y + r.H - 23, r.W - 28);
@@ -235,13 +252,19 @@ public sealed partial class Viewer
         Text(L.Get("Put Image Gimmick Into Assets folder"), sx, y + 6, 12, white, max: toggleX - sx - 8);
         if (Button(preferences.PutImageGimmickIntoAssetsFolder ? L.Get("ON") : L.Get("OFF"), new(toggleX, y, 70, 28),
             active: preferences.PutImageGimmickIntoAssetsFolder, key: "settings-image-assets-folder"))
-        { preferences.PutImageGimmickIntoAssetsFolder = !preferences.PutImageGimmickIntoAssetsFolder; SaveSettings(); }
+        {
+            preferences.PutImageGimmickIntoAssetsFolder = !preferences.PutImageGimmickIntoAssetsFolder;
+            SaveSettings();
+        }
         if (r.H >= 102)
         {
             Text(L.Get("Overwrite exports"), sx, y + 34, 12, white);
             if (Button(preferences.OverwriteExports ? L.Get("ON") : L.Get("OFF"), new(toggleX, y + 31, 70, 28),
                 active: preferences.OverwriteExports, key: "settings-overwrite-exports"))
-            { preferences.OverwriteExports = !preferences.OverwriteExports; SaveSettings(); }
+            {
+                preferences.OverwriteExports = !preferences.OverwriteExports;
+                SaveSettings();
+            }
         }
 #if !KG_MOBILE && !KG_SWITCH
         if (r.H >= 220)
@@ -252,10 +275,16 @@ public sealed partial class Viewer
             int maximum = ExportOptions.MaxRenderWorkers;
             Text(L.Get("Render threads"), sx, rowY + 7, 13, white, max: buttonsX - sx - 10);
             if (Button("-", new(buttonsX, rowY, 32, 30), enabled: workers > 1, key: "settings-render-workers-minus"))
-            { preferences.VideoRenderWorkers = --workers; SaveSettings(); }
+            {
+                preferences.VideoRenderWorkers = --workers;
+                SaveSettings();
+            }
             Text($"{workers} / {maximum}", buttonsX + 44, rowY + 7, 13, white, max: controlsWidth - 84);
             if (Button("+", new(buttonsX + controlsWidth - 32, rowY, 32, 30), enabled: workers < maximum, key: "settings-render-workers-plus"))
-            { preferences.VideoRenderWorkers = workers + 1; SaveSettings(); }
+            {
+                preferences.VideoRenderWorkers = workers + 1;
+                SaveSettings();
+            }
             SettingsHint("Parallel rendering uses more GPU memory. Speed depends on the scene and GPU.", sx, rowY + 45, r.W - 28);
         }
 #endif
@@ -271,28 +300,46 @@ public sealed partial class Viewer
         Text(L.Get("Calculation Engine"), sx, compact ? y - 18 : y + 7, 13, white, max: compact ? cw : cx - sx - 8);
         float half = (cw - 6) / 2;
         if (Button("OPTIMIZATION (RUST)", new(cx, y, half, 30), active: preferences.CalculationEngine == "optimization", key: "engine-rust"))
-        { preferences.CalculationEngine = "optimization"; SaveSettings(); }
+        {
+            preferences.CalculationEngine = "optimization";
+            SaveSettings();
+        }
         if (Button("COMPATIBILITY (C#)", new(cx + half + 6, y, half, 30), active: preferences.CalculationEngine == "compatibility", key: "engine-managed"))
-        { preferences.CalculationEngine = "compatibility"; SaveSettings(); }
+        {
+            preferences.CalculationEngine = "compatibility";
+            SaveSettings();
+        }
 
         y += compact ? 62 : 76;
         Text(L.Get("Audio Engine"), sx, compact ? y - 18 : y + 7, 13, white, max: compact ? cw : cx - sx - 8);
         if (Button("OPTIMIZATION (RUST)", new(cx, y, half, 30), active: preferences.AudioEngine == "optimization", key: "audio-rust"))
-        { preferences.AudioEngine = "optimization"; SaveSettings(); }
+        {
+            preferences.AudioEngine = "optimization";
+            SaveSettings();
+        }
         if (Button("NVORBIS (LEGACY)", new(cx + half + 6, y, half, 30), active: preferences.AudioEngine == "nvorbis", key: "audio-legacy"))
-        { preferences.AudioEngine = "nvorbis"; SaveSettings(); }
+        {
+            preferences.AudioEngine = "nvorbis";
+            SaveSettings();
+        }
 
         y += compact ? 62 : 75;
         Text(L.Get("Parallel Loading"), sx, compact ? y - 18 : y + 7, 13, white, max: compact ? cw : cx - sx - 8);
         if (Button(preferences.ParallelLoading ? L.Get("ENABLED") : L.Get("DISABLED"), new(cx, y, MathF.Min(155, cw), 30),
             active: preferences.ParallelLoading, key: "parallel-loading"))
-        { preferences.ParallelLoading = !preferences.ParallelLoading; SaveSettings(); }
+        {
+            preferences.ParallelLoading = !preferences.ParallelLoading;
+            SaveSettings();
+        }
 
         y += compact ? 62 : 75;
         Text(L.Get("Decoded Audio Cache"), sx, compact ? y - 18 : y + 7, 13, white, max: compact ? cw : cx - sx - 8);
         if (Button(preferences.DecodedAudioCache ? L.Get("ENABLED") : L.Get("DISABLED"), new(cx, y, MathF.Min(155, cw), 30),
             active: preferences.DecodedAudioCache, key: "audio-cache"))
-        { preferences.DecodedAudioCache = !preferences.DecodedAudioCache; SaveSettings(); }
+        {
+            preferences.DecodedAudioCache = !preferences.DecodedAudioCache;
+            SaveSettings();
+        }
         y += 42;
         if (compact)
             SettingsHint("Changes apply when opening the next chart. Debug environment overrides take priority.", sx, y, r.W - 28);

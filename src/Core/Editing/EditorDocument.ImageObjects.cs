@@ -1,3 +1,5 @@
+// 替换图片资源并编辑图片的姿态和时间范围。
+
 namespace KuroakiGimmick.Core.Editing;
 
 // 图片对象的直接操作层：把画布上的拖拽换算成对 VSM 事件的增删改。
@@ -5,6 +7,8 @@ namespace KuroakiGimmick.Core.Editing;
 public sealed partial class EditorDocument
 {
     /// <summary>换图不动任何事件：ID、图层、帧数、逻辑宽高全部保留，引用它的动画照旧生效。</summary>
+    /// <param name="item">目标图片的 VSP 条目。</param>
+    /// <param name="image">已经校验并暂存的图片资源。</param>
     public void ReplaceImageResource(CustomImages.Item item, ImageImportBatch.Image image)
     {
         RequireImage(item.Id);
@@ -26,7 +30,8 @@ public sealed partial class EditorDocument
     /// </summary>
     static double ImageDuration(BpmMap map, double begin, double end)
     {
-        CheckBeat(begin); CheckBeat(end);
+        CheckBeat(begin);
+        CheckBeat(end);
         if (end <= begin) throw new FormatException("Animation end must be after its start.");
         return (map.Time(end) - map.Time(begin)) * map.BpmAtBeat(begin) / 60;
     }
@@ -54,10 +59,17 @@ public sealed partial class EditorDocument
     /// 设定图片的初始姿态，写在该图片最早一条姿态事件所在的拍上（<see cref="ImageObjectModel.InitialBeat"/>）。
     /// 同一拍上最多允许一条关键帧加一条出发动画，再多就说明意图不明确，交给原始事件编辑器。
     /// </summary>
+    /// <param name="id">目标图片 ID。</param>
+    /// <param name="pose">新的初始姿态。</param>
+    /// <param name="channels">要处理的图片姿态通道位掩码。</param>
+    /// <param name="map">在歌曲秒数与拍数之间转换的 BPM 映射。</param>
+    /// <exception cref="InvalidOperationException">已有姿态或动画使初始端点的修改不唯一。</exception>
     public void SetInitialImagePose(string id, ImageEditPose pose, ImageChannels channels, BpmMap map)
     {
-        RequireImage(id); pose.Validate(channels);
-        double beat = ImageObjectModel.InitialBeat(Vsm, id); CheckBeat(beat);
+        RequireImage(id);
+        pose.Validate(channels);
+        double beat = ImageObjectModel.InitialBeat(Vsm, id);
+        CheckBeat(beat);
         Change("Set initial image pose: " + id, () =>
         {
             foreach (string p in ImageEditPose.Properties(channels))
@@ -69,7 +81,8 @@ public sealed partial class EditorDocument
                 if (keys.Length > 1 || outgoing.Length > 1 || at.Any(c => !ImageObjectModel.Simple(c)))
                     throw new InvalidOperationException("Ambiguous initial pose: " + name + ". Use its raw event.");
                 CheckImageSpan(name, beat, beat, map, at.Select(c => c.Id).ToHashSet());
-                var key = keys.FirstOrDefault(); var next = outgoing.FirstOrDefault();
+                var key = keys.FirstOrDefault();
+                var next = outgoing.FirstOrDefault();
                 // 关键帧的终值与出发动画的起值本来就对不上，说明作者是故意要一个跳变，这里不替他决定该改哪一边。
                 if (key != null && next != null && !VsmDocument.NearlyEqual(VsmDocument.Number(key.To), VsmDocument.Number(next.From)))
                     throw new InvalidOperationException("Initial pose and animation intentionally differ: " + name + ". Edit START instead.");
@@ -82,9 +95,17 @@ public sealed partial class EditorDocument
         });
     }
     /// <summary>在任意一拍打一个姿态关键帧（duration 为 0 的事件）。该拍上已有动态事件或多条事件就拒绝，改由原始事件编辑。</summary>
+    /// <param name="id">目标图片 ID。</param>
+    /// <param name="beat">谱面位置，单位为拍。</param>
+    /// <param name="pose">关键帧姿态。</param>
+    /// <param name="channels">要处理的图片姿态通道位掩码。</param>
+    /// <param name="map">在歌曲秒数与拍数之间转换的 BPM 映射。</param>
+    /// <exception cref="InvalidOperationException">目标属性受歧义或动态姿态控制，须编辑源事件。</exception>
     public void SetImagePose(string id, double beat, ImageEditPose pose, ImageChannels channels, BpmMap map)
     {
-        RequireImage(id); CheckBeat(beat); pose.Validate(channels);
+        RequireImage(id);
+        CheckBeat(beat);
+        pose.Validate(channels);
         Change("Set image pose: " + id, () =>
         {
             foreach (string p in ImageEditPose.Properties(channels))
@@ -104,10 +125,22 @@ public sealed partial class EditorDocument
     /// 新建一段图片动画：选中的每个通道各生成一条事件，共用同一 start/duration/ease，从而在分组时被识别成同一组。
     /// start/end 单位是拍，duration 按起点 BPM 折算；返回第一条事件的 Id 供 UI 选中。
     /// </summary>
+    /// <param name="id">目标图片 ID。</param>
+    /// <param name="start">起始拍。</param>
+    /// <param name="end">结束拍。</param>
+    /// <param name="from">起始姿态。</param>
+    /// <param name="to">结束姿态。</param>
+    /// <param name="channels">要处理的图片姿态通道位掩码。</param>
+    /// <param name="ease">插值使用的缓动函数名。</param>
+    /// <param name="map">在歌曲秒数与拍数之间转换的 BPM 映射。</param>
+    /// <returns>用于定位新动画的事件 ID。</returns>
+    /// <exception cref="FormatException">未选择属性通道或缓动名不受支持。</exception>
     public Guid AddImageAnimation(string id, double start, double end, ImageEditPose from, ImageEditPose to,
         ImageChannels channels, string ease, BpmMap map)
     {
-        RequireImage(id); from.Validate(channels); to.Validate(channels);
+        RequireImage(id);
+        from.Validate(channels);
+        to.Validate(channels);
         if (channels == ImageChannels.None) throw new FormatException("Choose at least one property.");
         if (!Easings.IsKnown(ease)) throw new FormatException("Unknown easing.");
         double duration = ImageDuration(map, start, end);
@@ -116,7 +149,8 @@ public sealed partial class EditorDocument
         {
             foreach (string p in ImageEditPose.Properties(channels))
             {
-                string name = p + "_" + id; CheckImageSpan(name, start, end, map);
+                string name = p + "_" + id;
+                CheckImageSpan(name, start, end, map);
                 var c = new VsmDocument.Clip(Guid.NewGuid(), start, duration, ease, VsmDocument.N(from.Get(p)), VsmDocument.N(to.Get(p)), name, -1);
                 if (first == Guid.Empty) first = c.Id;
                 Vsm.Add(c);
@@ -141,9 +175,17 @@ public sealed partial class EditorDocument
     /// <summary>
     /// 改一段动画的起点或终点姿态。linkNeighbors 为真时顺带把接在同一处的相邻事件改成同值，保持轨道连续。
     /// </summary>
+    /// <param name="group">包含同组姿态事件的图片动作。</param>
+    /// <param name="end">是否修改终点。</param>
+    /// <param name="pose">新的端点姿态。</param>
+    /// <param name="channels">要处理的图片姿态通道位掩码。</param>
+    /// <param name="map">在歌曲秒数与拍数之间转换的 BPM 映射。</param>
+    /// <param name="linkNeighbors">是否联动相邻动作端点。</param>
+    /// <exception cref="InvalidOperationException">动画不包含全部请求的属性。</exception>
     public void SetImageEndpoint(ImageMotionGroup group, bool end, ImageEditPose pose, ImageChannels channels, BpmMap map, bool linkNeighbors = true)
     {
-        pose.Validate(channels); group = CurrentImageGroup(group);
+        pose.Validate(channels);
+        group = CurrentImageGroup(group);
         if (channels == ImageChannels.None || (group.Channels & channels) != channels)
             throw new InvalidOperationException("This animation does not contain all requested properties.");
         var ids = group.Clips.Select(c => c.Id).ToHashSet();
@@ -173,9 +215,17 @@ public sealed partial class EditorDocument
     /// 整体平移/缩放一段动画的时间区间并换缓动，姿态值不变。原本是关键帧（duration 为 0）的仍保持为关键帧。
     /// 新起点上若已有别的动画起跑则拒绝：同拍两条动画谁先谁后取决于源文件顺序，不该由拖时间轴的动作来决定。
     /// </summary>
+    /// <param name="group">包含同组姿态事件的图片动作。</param>
+    /// <param name="start">新的起始拍。</param>
+    /// <param name="end">新的结束拍。</param>
+    /// <param name="ease">插值使用的缓动函数名。</param>
+    /// <param name="map">在歌曲秒数与拍数之间转换的 BPM 映射。</param>
+    /// <exception cref="FormatException">缓动名称无效。</exception>
+    /// <exception cref="InvalidOperationException">同一属性已有动画占用目标起点。</exception>
     public void TimeImageGroup(ImageMotionGroup group, double start, double end, string ease, BpmMap map)
     {
-        group = CurrentImageGroup(group); CheckBeat(start);
+        group = CurrentImageGroup(group);
+        CheckBeat(start);
         if (!Easings.IsKnown(ease)) throw new FormatException("Unknown easing.");
         double duration = group.Duration == 0 ? 0 : ImageDuration(map, start, end);
         var ignore = group.Clips.Select(c => c.Id).ToHashSet();
@@ -191,15 +241,25 @@ public sealed partial class EditorDocument
         });
     }
     /// <summary>删除整组事件。这里不走 CurrentImageGroup：即使该组已经不可直接编辑，用户仍然有权把它删掉。</summary>
+    /// <param name="group">包含同组姿态事件的图片动作。</param>
     public void DeleteImageGroup(ImageMotionGroup group)
     {
         RequireImage(group.ImageId);
-        Change("Delete image animation", () => { foreach (var c in group.Clips) Vsm.Delete(c.Id); });
+        Change("Delete image animation", () =>
+{
+    foreach (var c in group.Clips) Vsm.Delete(c.Id);
+});
     }
     /// <summary>把一整组动画复制到另一拍。复制体一律换新 Guid——事件身份不能共用，否则后续改一条会连带改到源。</summary>
+    /// <param name="group">包含同组姿态事件的图片动作。</param>
+    /// <param name="beat">复制后动作的起始拍。</param>
+    /// <param name="map">在歌曲秒数与拍数之间转换的 BPM 映射。</param>
+    /// <returns>复制得到的动作事件 ID。</returns>
     public Guid DuplicateImageGroup(ImageMotionGroup group, double beat, BpmMap map)
     {
-        group = CurrentImageGroup(group); CheckBeat(beat); Guid first = Guid.Empty;
+        group = CurrentImageGroup(group);
+        CheckBeat(beat);
+        Guid first = Guid.Empty;
         Change("Duplicate image animation", () =>
         {
             foreach (var c in group.Clips)
@@ -207,7 +267,8 @@ public sealed partial class EditorDocument
                 double end = map.Beat(map.Time(beat) + c.Duration * 60 / map.BpmAtBeat(beat));
                 CheckImageSpan(c.Name, beat, end, map);
                 var copy = c with { Id = Guid.NewGuid(), Beat = beat };
-                if (first == Guid.Empty) first = copy.Id; Vsm.Add(copy);
+                if (first == Guid.Empty) first = copy.Id;
+                Vsm.Add(copy);
             }
         });
         return first;
@@ -217,6 +278,12 @@ public sealed partial class EditorDocument
     /// 只要有一条事件的取值不是固定数值（"_" 或 573613 表示沿用当前值），整次操作就放弃——平移一个运行时才知道的值没有意义。
     /// 该轴上完全没有事件时，在初始拍补一条“默认值 + 偏移”的关键帧。
     /// </summary>
+    /// <param name="id">目标图片 ID。</param>
+    /// <param name="dx">水平方向的逻辑位移。</param>
+    /// <param name="dy">垂直方向的逻辑位移。</param>
+    /// <param name="map">在歌曲秒数与拍数之间转换的 BPM 映射。</param>
+    /// <exception cref="FormatException">路径偏移无效。</exception>
+    /// <exception cref="InvalidOperationException">路径涉及不能安全改写的源事件。</exception>
     public void OffsetImagePath(string id, double dx, double dy, BpmMap map)
     {
         RequireImage(id);
@@ -235,7 +302,8 @@ public sealed partial class EditorDocument
                     throw new InvalidOperationException("Dynamic path values must be edited as raw events.");
                 if (rows.Length == 0)
                 {
-                    double at = ImageObjectModel.InitialBeat(Vsm, id); string v = VsmDocument.N(CustomImages.Default(property) + delta);
+                    double at = ImageObjectModel.InitialBeat(Vsm, id);
+                    string v = VsmDocument.N(CustomImages.Default(property) + delta);
                     Vsm.Add(new(Guid.NewGuid(), at, 0, "linear", v, v, property + "_" + id, -1));
                 }
                 foreach (var c in rows) Vsm.Replace(c with { From = VsmDocument.N(VsmDocument.Number(c.From) + delta), To = VsmDocument.N(VsmDocument.Number(c.To) + delta) });

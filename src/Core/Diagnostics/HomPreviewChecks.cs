@@ -23,7 +23,11 @@ internal static class HomPreviewChecks
     {
         int calls = 0;
         var plan = SceneRenderer.PlanInteractiveFeedback(target, previous, valid,
-            tick => { calls++; return tick == zeroAt ? 0 : .98; });
+            tick =>
+{
+    calls++;
+    return tick == zeroAt ? 0 : .98;
+});
         if (plan != (expected, keep) || calls != lookups || target - plan.PreviousTick > 4)
             throw new InvalidOperationException($"HOM preview: unexpected replay plan for {name}.");
     }

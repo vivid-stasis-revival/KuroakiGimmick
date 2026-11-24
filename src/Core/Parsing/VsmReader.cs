@@ -1,3 +1,5 @@
+// 将演出文本解析为谱面头字段、事件及逐帧函数。
+
 using System.Globalization;
 using System.Text.RegularExpressions;
 
@@ -9,19 +11,24 @@ namespace KuroakiGimmick.Core;
 public static class VsmReader
 {
     /// <summary>从文件整体替换 mod 与逐帧轨道；超过 64 MiB 直接拒绝，不做部分读取。</summary>
+    /// <param name="c">要替换演出事件的谱面。</param>
+    /// <param name="path">VSM 文件路径。</param>
+    /// <exception cref="InvalidDataException">源 VSM 大小超出当前加载限制。</exception>
     public static void ReplaceMods(Chart c, string path)
     {
         if (ChartLoadLimits.Exceeds(new FileInfo(path).Length, 64 * 1024 * 1024))
         {
             throw new InvalidDataException("VSM exceeds 64 MiB.");
         }
-        // The Rust parser is only used when it can preserve the C# representation.
-        // Native errors, unsupported syntax or diagnostics return to the original code.
+        // 只有能保留 C# 表示时才采用 Rust 的 VSM 解析结果；不支持的语法、原生错误或诊断交由原解析路径处理。
         if (RustEngineBridge.TryApplyVsmFile(c, path)) return;
         ReplaceModsOriginal(c, path);
     }
 
     /// <summary>编辑器预览直接消费内存中的修订文本；不写临时源文件覆盖原文件，也不另建一套解析器。</summary>
+    /// <param name="c">要替换演出事件的谱面。</param>
+    /// <param name="text">VSM 源文本。</param>
+    /// <param name="source">诊断中使用的来源标识。</param>
     public static void ReplaceModsText(Chart c, string text, string source)
     {
         if (RustEngineBridge.TryApplyVsm(c, text, source)) return;
@@ -108,8 +115,8 @@ public static class VsmReader
                                 throw new FormatException("Proxy count must be 0..64.");
                             }
                             break;
-                            // read_mods_file 把任意 !key:value 条目存进
-                            // modsDefinition.data；未知元数据不产生任何演出效果。
+                        // read_mods_file 把任意 !key:value 条目存进
+                        // modsDefinition.data；未知元数据不产生任何演出效果。
                         default:
                             break;
                     }
@@ -195,12 +202,12 @@ public static class VsmReader
             return exact;
         }
         var hex = Regex.Match(token, @"^0x[0-9a-fA-F]+");
-        var match = hex.Success? hex : Regex.Match(token, @"^[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?");
+        var match = hex.Success ? hex : Regex.Match(token, @"^[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?");
         if (!match.Success)
         {
             throw new FormatException("No numeric prefix in '" + token + "'.");
         }
-        double number = hex.Success? Convert.ToUInt64(match.Value[2..], 16) : double.Parse(match.Value, NumberStyles.Float,
+        double number = hex.Success ? Convert.ToUInt64(match.Value[2..], 16) : double.Parse(match.Value, NumberStyles.Float,
             CultureInfo.InvariantCulture);
         if (!double.IsFinite(number))
         {
@@ -208,7 +215,7 @@ public static class VsmReader
         }
         if (match.Length != token.Length)
         {
-            notice($"GML-style numeric prefix: '{token}' read as {number.ToString("R",CultureInfo.InvariantCulture)}; suffix ignored. Native runner behavior is not verified.");
+            notice($"GML-style numeric prefix: '{token}' read as {number.ToString("R", CultureInfo.InvariantCulture)}; suffix ignored. Native runner behavior is not verified.");
         }
         return number;
     }

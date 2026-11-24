@@ -5,7 +5,9 @@ internal static class DensePreviewChecks
     internal static void Run()
     {
         static void Check(bool value, string message)
-        { if (!value) throw new InvalidOperationException(message); }
+        {
+            if (!value) throw new InvalidOperationException(message);
+        }
         Check(new ViewerSettings().StackLimit && AppJson.Deserialize<ViewerSettings>("{}")!.StackLimit,
             "STACK LIMIT must default on for both new and old settings.");
         Check(!AppJson.Deserialize<ViewerSettings>(AppJson.Serialize(new ViewerSettings { StackLimit = false }))!.StackLimit,

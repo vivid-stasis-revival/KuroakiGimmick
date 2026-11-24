@@ -1,3 +1,5 @@
+// 将编辑轨道名称关联到帮助说明。
+
 using KuroakiGimmick.Core;
 
 namespace KuroakiGimmick.UI;

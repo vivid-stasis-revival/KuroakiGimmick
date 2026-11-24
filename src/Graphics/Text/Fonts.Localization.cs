@@ -10,5 +10,7 @@ public sealed partial class Fonts
     /// </summary>
     public bool ChineseInterface { get; private set; }
 
+    /// <summary>更新界面字体处理使用的语言设置。</summary>
+    /// <param name="language">界面语言设置键。</param>
     public void SetInterfaceLanguage(string language) => ChineseInterface = UiLanguage.Resolve(language) == UiLanguage.Chinese;
 }

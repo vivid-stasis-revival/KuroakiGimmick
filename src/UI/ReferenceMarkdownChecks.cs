@@ -1,3 +1,5 @@
+// 用实际参考手册数据检查 Markdown 解析与排版。
+
 using System.Globalization;
 using KuroakiGimmick.Core.Documentation;
 using KuroakiGimmick.Graphics;
@@ -11,7 +13,11 @@ internal static class ReferenceMarkdownChecks
         try
         {
             int checks = 0;
-            void Check(bool value, string reason) { checks++; if (!value) throw new InvalidOperationException(reason); }
+            void Check(bool value, string reason)
+            {
+                checks++;
+                if (!value) throw new InvalidOperationException(reason);
+            }
             string Compact(string text) => string.Concat(text.Where(c => !char.IsWhiteSpace(c)));
             var literal = ReferenceMarkdown.Inline("`0`。");
             Check(string.Concat(literal.Select(s => s.Text)) == "0。" && literal[0].Style.HasFlag(ReferenceMarkdown.Style.Code), "Inline code kept Markdown backticks");
@@ -32,7 +38,11 @@ internal static class ReferenceMarkdownChecks
             Check(ReferenceMarkdown.TableCells("| a | | c |")!.Length == 3, "Empty table cell was lost");
 
             const string code = "  value = `literal`;\n\t// **keep** <tag> a || b\n";
-            var entry = new VsmReference.Entry { Id = "fixture", Name = "Fixture", Blocks = [
+            var entry = new VsmReference.Entry
+            {
+                Id = "fixture",
+                Name = "Fixture",
+                Blocks = [
                 new() { Kind = "heading", Text = "**参数** 与 `value`" },
                 new() { Text = "| 名称 | 默认值 | 类型 | 支持 | **读取位置** |" },
                 new() { Text = "| --- | ---: | :---: | --- | --- |" },
@@ -40,7 +50,8 @@ internal static class ReferenceMarkdownChecks
                 new() { Kind = "paragraph", Text = "`0`。" },
                 new() { Kind = "code", Text = code, Language = "gml" },
                 new() { Kind = "table", Columns = ["名字", "说明"], Rows = [["`prx`", "位移"]], RowLinks = ["vsm-prx"] }
-            ] };
+            ]
+            };
             var normalized = ReferenceMarkdown.Blocks(entry);
             Check(normalized.Count(b => b.Kind == "table") == 2, "Split paragraph table was not normalized");
             Check(normalized.First(b => b.Kind == "table").Rows[0].Length == 5, "Official-style table has wrong column count");
@@ -50,8 +61,7 @@ internal static class ReferenceMarkdownChecks
 
             using var fonts = new Fonts();
             float Measure(string text, float size, bool weight, bool mono) => fonts.Measure(text, size, monospaced: mono, unified: true, bold: weight);
-            // Use the production source-generated JSON path: direct object initializers did not
-            // reproduce the missing Language field in the default F1 page's code block.
+            // 通过实际源生成 JSON 入口加载数据；直接构造对象曾漏掉 F1 默认页代码块缺失 Language 的情况。
             var codeLanguages = VsmReference.FromJson("""
                 {"SchemaVersion":1,"Entries":[{"Id":"code-language","Kind":"guide","Name":"Code",
                   "Source":"","ParentId":"","Category":"","Summary":"","MatchPattern":"",
@@ -124,6 +134,10 @@ internal static class ReferenceMarkdownChecks
             Console.WriteLine($"PASS reference Markdown/layout: {checks} checks; inline styles, code/pipe escaping, responsive tables, source copy, row navigation, Unicode; {catalogue.Entries.Count} bundled entries at 3 widths (no SDL window)");
             return 0;
         }
-        catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(ex);
+            return 1;
+        }
     }
 }

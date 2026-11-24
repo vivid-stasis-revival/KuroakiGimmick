@@ -1,3 +1,5 @@
+// 读取歌曲元数据，并按所选难度解析 ENCORE 或 SHATTER 的覆盖值。
+
 using System.Globalization;
 using System.Text.Json;
 
@@ -12,6 +14,8 @@ namespace KuroakiGimmick.Core;
 public sealed class SongInfo
 {
     /// <summary>原版难度编号，用于挑选 difficulty_display_N；BACKSTAGE 与 ENCORE 共用第 4 槽，未知难度归 0。</summary>
+    /// <param name="difficulty">歌曲的难度键。</param>
+    /// <returns>该难度对应的来源槽位编号。</returns>
     public static int Slot(string difficulty) => Normalize(difficulty) switch
     {
         "OPENING" => 1,
@@ -23,23 +27,38 @@ public sealed class SongInfo
     };
 
     /// <summary>难度标识统一成大写并去掉 _STORY 后缀，文件名与 UI 名称的差异只在 <see cref="Effective"/> 里体现。</summary>
+    /// <param name="difficulty">歌曲的难度键。</param>
+    /// <returns>转为大写并移除 _STORY 的难度名。</returns>
     public static string Normalize(string difficulty) => difficulty.ToUpperInvariant().Replace("_STORY", "");
 
     /// <summary>固定的难度顺序，同时也是目录打开时的候选顺序来源；不按字母排序。</summary>
     public static readonly string[] Order = ["OPENING", "MIDDLE", "FINALE", "ENCORE", "SHATTER"];
 
+    /// <summary>歌曲元数据的来源路径。</summary>
     public string Path { get; private init; } = "";
+    /// <summary>歌曲谱面使用的文件标识。</summary>
     public string? ChartId { get; private init; }
+    /// <summary>元数据中的歌曲名。</summary>
     public string? Name { get; private init; }
+    /// <summary>可选的格式化歌曲显示名。</summary>
     public string? FormattedName { get; private init; }
+    /// <summary>曲师署名。</summary>
     public string? Artist { get; private init; }
+    /// <summary>用于展示的 BPM 文本，可含变速范围。</summary>
     public string? BpmDisplay { get; private init; }
+    /// <summary>曲绘作者署名。</summary>
     public string? JacketArtist { get; private init; }
+    /// <summary>定位歌曲音频的资源标识。</summary>
     public string? AudioId { get; private init; }
+    /// <summary>元数据指定的曲绘资源。</summary>
     public string? Jacket { get; private init; }
+    /// <summary>试听音频的资源标识。</summary>
     public string? PreviewId { get; private init; }
+    /// <summary>元数据中的歌曲版本信息。</summary>
     public string? Version { get; private init; }
+    /// <summary>元数据是否声明 ENCORE 内容。</summary>
     public bool HasEncore { get; private init; }
+    /// <summary>是否按横向方形帧条播放曲绘。</summary>
     public bool JacketAnimated { get; private init; }
     /// <summary>enc_data 的原始内容；缺失时为 null，此时任何难度都不套用 backstage 语义。</summary>
     public EncoreData? Encore { get; private init; }
@@ -48,6 +67,9 @@ public sealed class SongInfo
     public ShatterData? Shatter { get; private set; }
 
     /// <summary>主曲第 N 槽的等级与谱师。SHATTER 这类没有对应槽的难度读不到值，显示为空而不是借用别的槽。</summary>
+    /// <param name="Constant">可选难度定数。</param>
+    /// <param name="Display">等级显示文字。</param>
+    /// <param name="Designer">谱师署名。</param>
     public sealed record SlotData(double? Constant, string? Display, string? Designer);
 
     /// <summary>
@@ -55,16 +77,34 @@ public sealed class SongInfo
     /// 没有单独的文件。它的字段是单数的 difficulty_number / note_designer，所以主文件的第 5 槽几乎总是空的，
     /// 等级与谱师只能从这里取；这类谱包多半连 info.json 都没有，曲名、曲师那些全曲字段也一并写在这里。
     /// </summary>
+    /// <param name="Path">SHATTER 元数据文件路径。</param>
+    /// <param name="DifficultyName">自定义难度名。</param>
+    /// <param name="ChartId">谱面键。</param>
+    /// <param name="Name">曲名。</param>
+    /// <param name="FormattedName">格式化曲名。</param>
+    /// <param name="Artist">曲师署名。</param>
+    /// <param name="BpmDisplay">BPM 显示文本。</param>
+    /// <param name="JacketArtist">曲绘作者。</param>
+    /// <param name="AudioId">音频资源 ID。</param>
+    /// <param name="Jacket">曲绘资源。</param>
+    /// <param name="PreviewId">试听资源 ID。</param>
+    /// <param name="Version">歌曲版本。</param>
+    /// <param name="Level">显示等级。</param>
+    /// <param name="Designer">谱师署名。</param>
+    /// <param name="JacketAnimated">是否为动画曲绘。</param>
     public sealed record ShatterData(string Path, string? DifficultyName, string? ChartId, string? Name,
         string? FormattedName, string? Artist, string? BpmDisplay, string? JacketArtist, string? AudioId,
         string? Jacket, string? PreviewId, string? Version, string? Level, string? Designer, bool JacketAnimated);
 
+    /// <summary>SHATTER 专属元数据文件名。</summary>
     public const string ShatterFile = "shatterinfo.json";
 
     /// <summary>
     /// 能当作歌曲目录打开的信息文件。命令行、拖放与打开对话框共用这一个判断，免得三处各认各的，
     /// 漏掉的那处表现出来就是"这个文件打不开"。
     /// </summary>
+    /// <param name="path">候选元数据路径。</param>
+    /// <returns>文件名为受支持的歌曲信息文件时为 true。</returns>
     public static bool IsInfoFile(string path) =>
         System.IO.Path.GetFileName(path).ToLowerInvariant() is "info.json" or "song.json" or ShatterFile;
 
@@ -72,6 +112,17 @@ public sealed class SongInfo
     /// enc_data。<c>HideBackstage</c> 为真才不算 backstage，缺省视为 backstage —— 与原版
     /// song_get_info 的 BACKSTAGE 标签规则一致，谱面文件叫 ENCORE 而 UI 叫 BACKSTAGE 是正常的。
     /// </summary>
+    /// <param name="SongId">歌曲数值 ID。</param>
+    /// <param name="Name">曲名。</param>
+    /// <param name="FormattedName">格式化曲名。</param>
+    /// <param name="AudioId">音频资源 ID。</param>
+    /// <param name="Jacket">曲绘资源。</param>
+    /// <param name="PreviewId">试听资源 ID。</param>
+    /// <param name="BpmDisplay">BPM 显示文本。</param>
+    /// <param name="Artist">曲师署名。</param>
+    /// <param name="JacketArtist">曲绘作者。</param>
+    /// <param name="HideBackstage">是否隐藏 BACKSTAGE。</param>
+    /// <param name="JacketAnimated">是否采用动画曲绘。</param>
     public sealed record EncoreData(int? SongId, string? Name, string? FormattedName, string? AudioId,
         string? Jacket, string? PreviewId, string? BpmDisplay, string? Artist, string? JacketArtist, bool HideBackstage, bool JacketAnimated);
 
@@ -80,6 +131,22 @@ public sealed class SongInfo
     /// SHATTER 的资源只认 shatterinfo，自身缺项时保持 null，让调用方按 CSM 语义回落到 music.ogg / jacket.*，
     /// 绝不能借用同目录 info.json 显式指定的主曲资源。
     /// </summary>
+    /// <param name="Difficulty">当前难度键。</param>
+    /// <param name="DisplayDifficulty">显示的难度名。</param>
+    /// <param name="Backstage">是否为 BACKSTAGE。</param>
+    /// <param name="UsesEncore">是否采用 ENCORE 替换项。</param>
+    /// <param name="Name">曲名。</param>
+    /// <param name="FormattedName">格式化曲名。</param>
+    /// <param name="Artist">曲师署名。</param>
+    /// <param name="BpmDisplay">BPM 显示文本。</param>
+    /// <param name="JacketArtist">曲绘作者。</param>
+    /// <param name="AudioId">音频资源 ID。</param>
+    /// <param name="Jacket">曲绘资源。</param>
+    /// <param name="PreviewId">试听资源 ID。</param>
+    /// <param name="Constant">可选难度定数。</param>
+    /// <param name="Level">显示等级。</param>
+    /// <param name="Designer">谱师署名。</param>
+    /// <param name="JacketAnimated">是否采用动画曲绘。</param>
     public sealed record SongView(string Difficulty, string DisplayDifficulty, bool Backstage, bool UsesEncore,
         string? Name, string? FormattedName, string? Artist, string? BpmDisplay, string? JacketArtist,
         string? AudioId, string? Jacket, string? PreviewId, double? Constant, string? Level, string? Designer, bool JacketAnimated);
@@ -89,6 +156,9 @@ public sealed class SongInfo
     /// <paramref name="error"/> 上报；info.json 缺了但 shatterinfo.json 还在时，全曲字段由后者顶上——
     /// Shatter 谱包大多只发这一份文件，整首歌的信息都在里面。
     /// </summary>
+    /// <param name="directory">歌曲目录。</param>
+    /// <param name="error">报告读取错误的可选回调。</param>
+    /// <returns>已解析的歌曲信息，无可用信息时为 null。</returns>
     public static SongInfo? Read(string directory, Action<string>? error = null)
     {
         var shatter = SongFiles.Existing(directory, ShatterFile) is { } side ? ReadShatter(side, error) : null;
@@ -201,15 +271,22 @@ public sealed class SongInfo
     static bool Bool(JsonElement parent, string key) => parent.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.True;
 
     /// <summary>该难度是否走 enc_data。谱面文件叫 ENCORE 或 BACKSTAGE 都算，且 enc_data 必须存在。</summary>
+    /// <param name="difficulty">歌曲的难度键。</param>
+    /// <returns>该难度采用 ENCORE 替换信息时为 true。</returns>
     public bool UsesEncore(string difficulty) => Encore != null && Normalize(difficulty) is "ENCORE" or "BACKSTAGE";
 
     /// <summary>
     /// 该难度在 UI 上的名字。走 enc_data 且没有 hide_backstage 时 ENCORE 显示为 BACKSTAGE；
     /// shatterinfo.json 写了 difficulty_name 就照写的显示，自造难度名（有谱包把 SHATTER 叫成 EVIL）才出得来。
     /// </summary>
+    /// <param name="difficulty">歌曲的难度键。</param>
+    /// <returns>该难度的界面显示名称。</returns>
     public string DisplayDifficulty(string difficulty) => UsesEncore(difficulty) && !Encore!.HideBackstage
         ? "BACKSTAGE" : ShatterOf(difficulty)?.DifficultyName ?? Normalize(difficulty);
 
+    /// <summary>查找指定难度所对应的元数据槽位。</summary>
+    /// <param name="difficulty">歌曲的难度键。</param>
+    /// <returns>对应的槽位元数据，未声明时为 null。</returns>
     public SlotData? SlotOf(string difficulty) => slots.GetValueOrDefault(Slot(difficulty));
 
     /// <summary>
@@ -224,6 +301,8 @@ public sealed class SongInfo
     /// 全曲字段里 shatterinfo.json 排在 info.json 之后：它写的常是"曲名 [Shatter]"这种带难度后缀的变体，
     /// info.json 写了就该听 info.json 的。等级与谱师反过来以 shatterinfo.json 为准，那才是这个难度自己的数据。
     /// </summary>
+    /// <param name="difficulty">歌曲的难度键。</param>
+    /// <returns>合并当前难度覆盖字段后的曲目信息。</returns>
     public SongView Effective(string difficulty)
     {
         bool encore = UsesEncore(difficulty);
@@ -251,6 +330,8 @@ public sealed class SongInfo
     /// 没有 difficulty_display_N 时按 difficulty_constant_N 生成等级文字，对应原版 load_song_information
     /// 的兜底：小数第一位 ≥ 5 显示 "N+"，否则显示 "N"。
     /// </summary>
+    /// <param name="view">当前难度的曲目信息。</param>
+    /// <returns>格式化的可选等级文本。</returns>
     public static string? Level(SongView view)
     {
         if (view.Level is { Length: > 0 } display)

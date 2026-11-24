@@ -1,3 +1,5 @@
+// 依据原版游戏 HUD 的阶段与美术资源绘制计分和剧情元素。
+
 using KuroakiGimmick.Core;
 
 namespace KuroakiGimmick.Graphics;
@@ -16,6 +18,8 @@ public sealed partial class GameUiRenderer : IDisposable
     readonly Dictionary<string, Dictionary<int, GameUiAssets.Glyph>> glyphs = [];
     /// <summary>统计数字精灵的不透明包围盒缓存，按文件名索引；整张透明或读不出时存 null。</summary>
     readonly Dictionary<string, Rect?> opaqueBounds = [];
+    /// <summary>在指定画布上建立使用游戏 HUD 资源的渲染器。</summary>
+    /// <param name="c">提交绘制命令的画布。</param>
     public GameUiRenderer(Canvas c) => canvas = c;
     /// <summary>
     /// 资源包身份（引用相等）变化时才重建缓存：先 Flush 把仍引用旧纹理的批次交出去，再 Dispose，
@@ -92,7 +96,7 @@ public sealed partial class GameUiRenderer : IDisposable
         int previous = -1;
         if (center)
         {
-            x -= Width(font, text)*scale / 2;
+            x -= Width(font, text) * scale / 2;
         }
         foreach (var rune in text.EnumerateRunes())
         {
@@ -101,13 +105,13 @@ public sealed partial class GameUiRenderer : IDisposable
             {
                 continue;
             }
-            x += (g.Kerning.FirstOrDefault(k => k.Character == previous)?.Shift ?? 0) * f.ScaleX*scale;
+            x += (g.Kerning.FirstOrDefault(k => k.Character == previous)?.Shift ?? 0) * f.ScaleX * scale;
             // AscenderOffset 属于图集源 V 的行偏移，只能加在 source 上。
             // 之前改成移动目标位置，结果把 Monaco CJK 字形的最后六行裁掉了。
-            canvas.QuadGradient(texture, new(x + g.Offset * f.ScaleX*scale, y, g.W * f.ScaleX*scale, g.H * f.ScaleY*scale), top, bottom,
-                new(g.X / (float) texture.Width, (g.Y + f.AscenderOffset) / texture.Height, g.W / (float) texture.Width,
-                g.H / (float) texture.Height));
-            x += g.Advance * f.ScaleX*scale;
+            canvas.QuadGradient(texture, new(x + g.Offset * f.ScaleX * scale, y, g.W * f.ScaleX * scale, g.H * f.ScaleY * scale), top, bottom,
+                new(g.X / (float)texture.Width, (g.Y + f.AscenderOffset) / texture.Height, g.W / (float)texture.Width,
+                g.H / (float)texture.Height));
+            x += g.Advance * f.ScaleX * scale;
             previous = rune.Value;
         }
     }
@@ -119,6 +123,12 @@ public sealed partial class GameUiRenderer : IDisposable
     /// 指示框在原点，LEVEL 字样偏移 (3,3)、数字偏移 (26,2)，各自在 +1 像素处先压一层三成黑作为阴影。
     /// 资源包缺失或等级没有对应帧时返回 false 且一笔不画，由调用方决定退回文字，不去猜一个不存在的帧。
     /// </summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="level">等级显示文本。</param>
+    /// <param name="x">逻辑横坐标。</param>
+    /// <param name="y">逻辑纵坐标。</param>
+    /// <param name="scale">绘制尺寸的倍率。</param>
+    /// <returns>成功用游戏素材绘制徽章时为 true。</returns>
     public bool DrawDifficultyBadge(Session session, string level, float x, float y, float scale)
     {
         Use(session.GameUi);
@@ -149,6 +159,8 @@ public sealed partial class GameUiRenderer : IDisposable
     /// 等级文字到数字精灵帧号。0-18 是普通等级，"9+" 到 "17+" 接在其后，因此带加号的映射为 plus+10；
     /// 认不出的写法返回 -1。
     /// </summary>
+    /// <param name="level">等级文字。</param>
+    /// <returns>对应的原版数字帧，不支持时返回 -1。</returns>
     public static int DifficultyNumberFrame(string? level)
     {
         if (string.IsNullOrEmpty(level))
@@ -166,6 +178,12 @@ public sealed partial class GameUiRenderer : IDisposable
     /// 统计面板的标签精灵。第 0 帧是含 GIMMICK 的六项排布，第 1 帧是五项；
     /// <paramref name="scale"/> 是一个源像素对应的目标像素数。资源缺失时返回 false，由调用方退回文字。
     /// </summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="x">逻辑横坐标。</param>
+    /// <param name="y">逻辑纵坐标。</param>
+    /// <param name="scale">绘制尺寸的倍率。</param>
+    /// <param name="gimmick">是否包含 GIMMICK 项。</param>
+    /// <returns>成功用游戏素材绘制标签时为 true。</returns>
     public bool DrawStatLabels(Session session, float x, float y, float scale, bool gimmick)
     {
         Use(session.GameUi);
@@ -182,6 +200,13 @@ public sealed partial class GameUiRenderer : IDisposable
     /// <paramref name="maxWidth"/> 时整串等比缩小，避免高位数值向左压进统计条。
     /// 资源缺失时返回 false，由调用方退回文字。
     /// </summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="rightX">右对齐横坐标。</param>
+    /// <param name="y">逻辑纵坐标。</param>
+    /// <param name="scale">绘制尺寸的倍率。</param>
+    /// <param name="value">统计项整数值。</param>
+    /// <param name="maxWidth">可用于排版的最大宽度。</param>
+    /// <returns>成功用原版字形绘制数值时为 true。</returns>
     public bool DrawStatNumber(Session session, float rightX, float y, float scale, int value,
         float maxWidth = float.PositiveInfinity)
     {
@@ -282,6 +307,8 @@ public sealed partial class GameUiRenderer : IDisposable
     /// 会进入 application proxy 的 HUD。实机行为只有 PAUSE / Escape 与两组分数跟随 proxy；
     /// 顶部 combo、判定显示、歌曲信息与难度都不属于这一层。
     /// </summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void DrawProxyHud(Session session, double time)
     {
         Use(session.GameUi);
@@ -322,6 +349,8 @@ public sealed partial class GameUiRenderer : IDisposable
     /// 固定在 application surface 上、受 uialpha 整体控制的 HUD。底栏、歌曲信息与难度使用同一个 alpha，
     /// uialpha=0 时这一层必须完全透明，不能留下遮挡字幕/图片的黑条。
     /// </summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void DrawFixedHud(Session session, double time)
     {
         Use(session.GameUi);
@@ -372,6 +401,8 @@ public sealed partial class GameUiRenderer : IDisposable
     /// 真正的 GUI HUD：顶部 combo 与判定显示固定在屏幕上，不进入 proxy，也不受 uialpha 影响。
     /// hide_combo 是谱面侧的整组读数开关，同时隐藏 combo、判定信息及其新生成的 combo 粒子。
     /// </summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void DrawGuiHud(Session session, double time)
     {
         Use(session.GameUi);
@@ -386,6 +417,8 @@ public sealed partial class GameUiRenderer : IDisposable
     }
 
     /// <summary>兼容旧调用点：按新的三阶段顺序绘制完整 HUD。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void Draw(Session session, double time)
     {
         DrawProxyHud(session, time);
@@ -409,10 +442,13 @@ public sealed partial class GameUiRenderer : IDisposable
     /// 原生 sequence 的对话框。触发条件按 mod 事件在时间轴上的拍转成秒后与当前时间比较；
     /// VisibleCharacters 是逐字机打进度，跨行连续消费，因此必须按行顺序截断。
     /// </summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void DrawSequenceStory(Session session, double time)
     {
         if (session.NativeGimmick.Data?.Sequence is not { } sequence || sequence.Story.Count == 0) return;
-        Use(session.GameUi); if (current?.Data == null) return;
+        Use(session.GameUi);
+        if (current?.Data == null) return;
         string font = Font(session);
         var state = NativeStoryState.Sample(sequence, time,
             trigger => sequence.AutomaticTriggers.TryGetValue(trigger, out double start) && time >= start
@@ -426,10 +462,13 @@ public sealed partial class GameUiRenderer : IDisposable
     /// 触发窗口由展开时的顺序决定，与谱面里 custom_episode 事件一一对应。
     /// 编辑器画区间和列台词也走这里，保证时间轴上看到的和预览里演的是同一份。
     /// </summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <returns>供当前谱面剧情重放的序列，无有效脚本时为 null。</returns>
     public NativeSequenceDefinition? EpisodeSequence(Session session)
     {
         if (session.Episode is not { Playable: true } episode) return null;
-        Use(session.GameUi); if (current?.Data == null) return null;
+        Use(session.GameUi);
+        if (current?.Data == null) return null;
         string font = Font(session);
         if (!ReferenceEquals(episodeSource, episode) || episodeFont != font)
         {
@@ -443,6 +482,9 @@ public sealed partial class GameUiRenderer : IDisposable
         return episodeSequence;
     }
 
+    /// <summary>取当前会话的剧情序列并绘制已触发的文本框。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void DrawEpisodeStory(Session session, double time)
     {
         if (EpisodeSequence(session) is not { } sequence) return;
@@ -464,8 +506,20 @@ public sealed partial class GameUiRenderer : IDisposable
         if (state == null) return;
         float y = (float)state.Y;
         Sprite("sp_dialogue", 0, 0, y, Color.White);
-        int gradient = state.Speaker switch { "Saturday" => 1, "Allison" => 2, "Kotomi" => 3, "Eri" => 4, "Chiyo" => 5,
-            "Tsuki" => 6, "Dawn" => 7, "Storyteller" => 8, "Kanshi" => 9, "Aoi" => 10, _ => 0 };
+        int gradient = state.Speaker switch
+        {
+            "Saturday" => 1,
+            "Allison" => 2,
+            "Kotomi" => 3,
+            "Eri" => 4,
+            "Chiyo" => 5,
+            "Tsuki" => 6,
+            "Dawn" => 7,
+            "Storyteller" => 8,
+            "Kanshi" => 9,
+            "Aoi" => 10,
+            _ => 0
+        };
         Sprite("sp_dialogue_grads", gradient, 0, y + 9, Color.White);
         if (state.Speaker.Length > 0)
         {
@@ -479,7 +533,8 @@ public sealed partial class GameUiRenderer : IDisposable
         int characterOffset = 0;
         for (int i = 0; i < state.Lines.Count && remaining > 0; i++)
         {
-            string line = state.Lines[i]; int visible = Math.Min(remaining, line.Length);
+            string line = state.Lines[i];
+            int visible = Math.Min(remaining, line.Length);
             if (state.JitterCharacters is not { Count: > 0 } && state.RColorCharacters is not { Count: > 0 }) Text(font, line[..visible], 6, textY + i * 10, color, color);
             else
             {

@@ -7,6 +7,8 @@ public static class Easings
 {
     static readonly HashSet<string> Known = new("linear inSine outSine inOutSine inQuad outQuad inOutQuad inCubic outCubic inOutCubic inQuart outQuart inOutQuart inQuint outQuint inOutQuint inExpo outExpo inOutExpo inCirc outCirc inOutCirc inBack outBack inOutBack inElastic outElastic inOutElastic inBounce outBounce inOutBounce".Split(' '));
     /// <summary>去掉 “Ease” 前缀并做大小写无关匹配；无法识别时原样返回，让诊断能报出作者写的原拼写。</summary>
+    /// <param name="s">输入的缓动名称。</param>
+    /// <returns>规范化的缓动名称。</returns>
     public static string Normalize(string s)
     {
         s = s.Trim();
@@ -17,8 +19,15 @@ public static class Easings
         return Known.FirstOrDefault(k => k.Equals(s, StringComparison.OrdinalIgnoreCase)) ?? s;
     }
 
+    /// <summary>检查缓动名称是否受当前求值器支持。</summary>
+    /// <param name="s">输入的缓动名称。</param>
+    /// <returns>存在该缓动函数时为 true。</returns>
     public static bool IsKnown(string s) => Known.Contains(Normalize(s));
     /// <summary>求缓动值；t 先夹到 [0,1]，端点精确返回 0/1。名称未知时抛异常，由调用方转成诊断，不静默退成 linear。</summary>
+    /// <param name="ease">插值使用的缓动函数名。</param>
+    /// <param name="t">归一化的时间进度。</param>
+    /// <returns>该进度对应的缓动系数。</returns>
+    /// <exception cref="InvalidDataException">缓动名称不受支持。</exception>
     public static double Eval(string ease, double t)
     {
         t = Math.Clamp(t, 0, 1);

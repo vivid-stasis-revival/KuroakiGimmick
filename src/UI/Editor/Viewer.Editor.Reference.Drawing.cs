@@ -1,12 +1,11 @@
+// VSM 手册整页的绘制：导航树、正文、本页目录抽屉、页脚翻页。
+// 输入判定和绘制写在一起而不是拆成独立的 hit-test pass，因为命中区依赖本帧算出的布局与裁剪矩形。
+
 using KuroakiGimmick.Core.Documentation;
 using KuroakiGimmick.Graphics;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// VSM 手册整页的绘制：导航树、正文、本页目录抽屉、页脚翻页。
-/// 输入判定和绘制写在一起而不是拆成独立的 hit-test pass，因为命中区依赖本帧算出的布局与裁剪矩形。
-/// </summary>
 public sealed partial class Viewer
 {
     Color DocsBg => Theme.DocsBackground;
@@ -32,7 +31,11 @@ public sealed partial class Viewer
         Text(label, r.X + Math.Max(7, (r.W - textWidth) / 2), r.Y + (r.H - 23) / 2, size,
             enabled ? DocsText : DocsMuted.Alpha(.4), max: r.W - 14, unified: true);
         bool hit = referenceOpen && enabled && click && over;
-        if (hit) { click = false; motion.Snap(id + ":hover", 1); }
+        if (hit)
+        {
+            click = false;
+            motion.Snap(id + ":hover", 1);
+        }
         return hit;
     }
 
@@ -200,13 +203,16 @@ public sealed partial class Viewer
             }
             if (over && click)
             {
-                click = false; FocusReferenceSearch(false);
+                click = false;
+                FocusReferenceSearch(false);
                 if (item.Branch && mouseX < row.X + 27)
                 {
                     if (!referenceExpanded.Add(item.Id)) referenceExpanded.Remove(item.Id);
-                    BuildReferenceNavigation(); break;
+                    BuildReferenceNavigation();
+                    break;
                 }
-                SelectReference(item.Id); break;
+                SelectReference(item.Id);
+                break;
             }
         }
         Canvas.Clip(null);
@@ -245,7 +251,11 @@ public sealed partial class Viewer
                     x += item.Widths[col];
                 }
                 if (referenceOpen && over && click)
-                { click = false; SelectReference(item.Link, true); break; }
+                {
+                    click = false;
+                    SelectReference(item.Link, true);
+                    break;
+                }
             }
             else if (item.Kind == "code")
             {

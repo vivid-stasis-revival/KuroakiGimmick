@@ -1,3 +1,5 @@
+// 对系统文档选择器公开应用的只读 Documents 树，并限制路径解析范围。
+
 using Android.Content;
 using Android.Database;
 using Android.OS;
@@ -7,6 +9,7 @@ using Document = Android.Provider.DocumentsContract.Document;
 
 namespace KuroakiGimmick.Mobile;
 
+/// <summary>将应用 Documents 目录作为只读文档树提供给 Android 系统文件选择器。</summary>
 [ContentProvider(["io.github.kuroakigimmick.mobile.documents"], Exported = true, GrantUriPermissions = true,
     Permission = "android.permission.MANAGE_DOCUMENTS", Name = "io.github.kuroakigimmick.mobile.FilesProvider")]
 [IntentFilter(["android.content.action.DOCUMENTS_PROVIDER"])]
@@ -15,13 +18,21 @@ public sealed class FilesProvider : DocumentsProvider
     static readonly string[] RootColumns = [Root.ColumnRootId, Root.ColumnDocumentId, Root.ColumnTitle, Root.ColumnFlags, Root.ColumnMimeTypes];
     static readonly string[] DocumentColumns = [Document.ColumnDocumentId, Document.ColumnDisplayName, Document.ColumnMimeType, Document.ColumnSize, Document.ColumnFlags];
     string BaseDirectory => Path.Combine(Context!.FilesDir!.AbsolutePath, "Documents");
-    public override bool OnCreate() { Directory.CreateDirectory(BaseDirectory); return true; }
+    /// <inheritdoc/>
+    public override bool OnCreate()
+    {
+        Directory.CreateDirectory(BaseDirectory);
+        return true;
+    }
+    /// <inheritdoc/>
     public override ICursor QueryRoots(string[]? projection)
     {
         var cursor = new MatrixCursor(projection ?? RootColumns);
         var row = cursor.NewRow()!;
-        row.Add(Root.ColumnRootId, "kuroaki"); row.Add(Root.ColumnDocumentId, "root:");
-        row.Add(Root.ColumnTitle, "Kuroaki/Gimmick"); row.Add(Root.ColumnFlags, (int)DocumentRootFlags.LocalOnly);
+        row.Add(Root.ColumnRootId, "kuroaki");
+        row.Add(Root.ColumnDocumentId, "root:");
+        row.Add(Root.ColumnTitle, "Kuroaki/Gimmick");
+        row.Add(Root.ColumnFlags, (int)DocumentRootFlags.LocalOnly);
         row.Add(Root.ColumnMimeTypes, "*/*");
         return cursor;
     }
@@ -44,19 +55,25 @@ public sealed class FilesProvider : DocumentsProvider
         row.Add(Document.ColumnSize, directory ? 0L : new FileInfo(path).Length);
         row.Add(Document.ColumnFlags, 0);
     }
+    /// <inheritdoc/>
     public override ICursor QueryDocument(string? documentId, string[]? projection)
     {
-        var cursor = new MatrixCursor(projection ?? DocumentColumns); Add(cursor, Resolve(documentId)); return cursor;
+        var cursor = new MatrixCursor(projection ?? DocumentColumns);
+        Add(cursor, Resolve(documentId));
+        return cursor;
     }
+    /// <inheritdoc/>
     public override ICursor QueryChildDocuments(string? parentDocumentId, string[]? projection, string? sortOrder)
     {
         var cursor = new MatrixCursor(projection ?? DocumentColumns);
         foreach (string path in Directory.EnumerateFileSystemEntries(Resolve(parentDocumentId))) Add(cursor, path);
         return cursor;
     }
+    /// <inheritdoc/>
+    /// <exception cref="Java.IO.FileNotFoundException">请求了读取之外的打开模式，或指定文档无法按给定 ID 定位。</exception>
     public override ParcelFileDescriptor OpenDocument(string? documentId, string? mode, CancellationSignal? signal)
     {
-        // Files UI may copy or share exports, while edits remain owned by K/G.
+        // COMPAT: 系统文件界面可以复制或分享导出物，提供器只接受读取模式。
         if (mode != "r") throw new Java.IO.FileNotFoundException("Read-only provider.");
         return ParcelFileDescriptor.Open(new Java.IO.File(Resolve(documentId)), ParcelFileMode.ReadOnly)!;
     }

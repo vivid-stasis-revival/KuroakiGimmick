@@ -1,3 +1,6 @@
+// image 对象的编辑模型：选中、编辑目标（INITIAL / KEY / PATH / 动画起点终点）、姿态读写与动画增删。
+// 直接操作只在“可直接编辑”时提供，否则一律退回裸事件编辑，判定见 ImageTransformIssue。
+
 using System.Numerics;
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Core.Editing;
@@ -5,10 +8,6 @@ using KuroakiGimmick.Graphics;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// image 对象的编辑模型：选中、编辑目标（INITIAL / KEY / PATH / 动画起点终点）、姿态读写与动画增删。
-/// 直接操作只在“可直接编辑”时提供，否则一律退回裸事件编辑，判定见 ImageTransformIssue。
-/// </summary>
 public sealed partial class Viewer
 {
     string? selectedImageId;
@@ -36,10 +35,22 @@ public sealed partial class Viewer
     /// <summary>换谱面时清空 image 编辑状态。先取消手势，否则鼠标捕获会留到下一个谱面。</summary>
     void ResetImageObjects()
     {
-        CancelSceneDirectGesture(); CancelImageGesture(); selectedImageId = null; selectedImageGroup = null; imageInspector = imageCanvas = imageSources = false;
-        imageModelOwner = null; imageModelRevision = -1; imageSampler = null; imageGroups.Clear();
-        expandedImageTracks.Clear(); hiddenImageItems.Clear(); lockedImageItems.Clear(); imageListScroll = 0;
-        imageViewCenter = new(160, 90); imageViewZoom = 1; imageObjectError = "";
+        CancelSceneDirectGesture();
+        CancelImageGesture();
+        selectedImageId = null;
+        selectedImageGroup = null;
+        imageInspector = imageCanvas = imageSources = false;
+        imageModelOwner = null;
+        imageModelRevision = -1;
+        imageSampler = null;
+        imageGroups.Clear();
+        expandedImageTracks.Clear();
+        hiddenImageItems.Clear();
+        lockedImageItems.Clear();
+        imageListScroll = 0;
+        imageViewCenter = new(160, 90);
+        imageViewZoom = 1;
+        imageObjectError = "";
     }
     /// <summary>
     /// 按需重建采样器与分组缓存。三个条件都要比：文档实例、Revision、以及 BpmMap 的引用相等——
@@ -50,11 +61,18 @@ public sealed partial class Viewer
     {
         if (editor == null) return;
         if (imageModelOwner == editor && imageModelRevision == editor.Revision && ReferenceEquals(imageModelMap, Current.Timeline.Bpm)) return;
-        imageModelOwner = editor; imageModelRevision = editor.Revision; imageModelMap = Current.Timeline.Bpm;
+        imageModelOwner = editor;
+        imageModelRevision = editor.Revision;
+        imageModelMap = Current.Timeline.Bpm;
         imageSampler = new(editor.Vsm, Current.Timeline.Bpm);
-        declaredImageIds = new(editor.Images.DeclaredIds(), StringComparer.Ordinal); imageGroups.Clear();
+        declaredImageIds = new(editor.Images.DeclaredIds(), StringComparer.Ordinal);
+        imageGroups.Clear();
         if (selectedImageId != null && !declaredImageIds.Contains(selectedImageId))
-        { selectedImageId = null; selectedImageGroup = null; imageInspector = false; }
+        {
+            selectedImageId = null;
+            selectedImageGroup = null;
+            imageInspector = false;
+        }
     }
     /// <summary>取某个 image 的动画分组，按 id 记忆化；缓存由 EnsureImageModel 统一失效，这里不再自行判断。</summary>
     ImageMotionGroup[] ImageGroups(string id)
@@ -122,10 +140,17 @@ public sealed partial class Viewer
         if (!declaredImageIds.Contains(id)) return;
         bool changed = selectedImageId != id;
         textInspector = textSources = textCanvas = false;
-        selectedImageId = id; selectedImageGroup = groupId; imageInspector = imageSources = true;
+        selectedImageId = id;
+        selectedImageGroup = groupId;
+        imageInspector = imageSources = true;
         workspaceManager.Editor.Activate("images");
-        if (canvas) { imageCanvas = true; desktopPreview = false; }
-        selectedWindowEvent = -1; imageObjectError = "";
+        if (canvas)
+        {
+            imageCanvas = true;
+            desktopPreview = false;
+        }
+        selectedWindowEvent = -1;
+        imageObjectError = "";
         if (groupId != null)
         {
             selectedClip = groupId;
@@ -134,11 +159,23 @@ public sealed partial class Viewer
         }
         else if (keyBeat is double directBeat)
         {
-            selectedClip = null; imagePoseTarget = ImagePoseTarget.Key; imageKeyBeat = directBeat;
+            selectedClip = null;
+            imagePoseTarget = ImagePoseTarget.Key;
+            imageKeyBeat = directBeat;
         }
-        else { selectedClip = null; imagePoseTarget = ImagePoseTarget.Initial; }
-        if (changed) { inspectorScroll = 0; imageViewCenter = new(160, 90); imageViewZoom = 1; }
-        transport.SetPlaying(false); transport.Seek(Current.Timeline.Bpm.Time(ImageEditBeat));
+        else
+        {
+            selectedClip = null;
+            imagePoseTarget = ImagePoseTarget.Initial;
+        }
+        if (changed)
+        {
+            inspectorScroll = 0;
+            imageViewCenter = new(160, 90);
+            imageViewZoom = 1;
+        }
+        transport.SetPlaying(false);
+        transport.Seek(Current.Timeline.Bpm.Time(ImageEditBeat));
         layoutRevision = -1;
     }
     /// <summary>
@@ -148,13 +185,24 @@ public sealed partial class Viewer
     void SelectImageFromClip(VsmDocument.Clip? clip)
     {
         textInspector = false;
-        if (clip == null || !CustomImages.TryMod(clip.Name, out _, out var id)) { imageInspector = false; return; }
+        if (clip == null || !CustomImages.TryMod(clip.Name, out _, out var id))
+        {
+            imageInspector = false;
+            return;
+        }
         EnsureImageModel();
-        if (!declaredImageIds.Contains(id)) { imageInspector = false; return; }
+        if (!declaredImageIds.Contains(id))
+        {
+            imageInspector = false;
+            return;
+        }
         // 选中裸事件只是顺带把同一张 image 显示出来；不得替换这条事件自身的身份，也不得移动播放头。
-        selectedImageId = id; selectedImageGroup = ImageGroups(id).FirstOrDefault(g => g.Clips.Any(c => c.Id == clip.Id))?.Id;
-        imageInspector = true; imagePoseTarget = clip.Duration > 0 ? ImagePoseTarget.End : ImagePoseTarget.Key;
-        imageKeyBeat = clip.Beat; imageObjectError = "";
+        selectedImageId = id;
+        selectedImageGroup = ImageGroups(id).FirstOrDefault(g => g.Clips.Any(c => c.Id == clip.Id))?.Id;
+        imageInspector = true;
+        imagePoseTarget = clip.Duration > 0 ? ImagePoseTarget.End : ImagePoseTarget.Key;
+        imageKeyBeat = clip.Beat;
+        imageObjectError = "";
     }
     /// <summary>
     /// 返回禁止直接编辑的原因，空串表示可以直接拖。三类原因：资源还没就绪、
@@ -176,7 +224,8 @@ public sealed partial class Viewer
         if (selectedImageId == null) return;
         imagePoseTarget = target;
         if (target == ImagePoseTarget.Key) imageKeyBeat = InsertionBeat;
-        transport.SetPlaying(false); transport.Seek(Current.Timeline.Bpm.Time(ImageEditBeat));
+        transport.SetPlaying(false);
+        transport.Seek(Current.Timeline.Bpm.Time(ImageEditBeat));
         imageObjectError = "";
     }
     /// <summary>
@@ -186,12 +235,14 @@ public sealed partial class Viewer
     void CommitImagePose(ImageEditPose pose, ImageChannels channels)
     {
         if (editor == null || selectedImageId == null) return;
-        string issue = ImageTransformIssue(); if (issue.Length > 0) throw new InvalidOperationException(issue);
+        string issue = ImageTransformIssue();
+        if (issue.Length > 0) throw new InvalidOperationException(issue);
         var map = Current.Timeline.Bpm;
         if (imagePoseTarget == ImagePoseTarget.Path)
         {
             if (channels != ImageChannels.Position) throw new InvalidOperationException(L.Get("PATH mode edits positions only."));
-            var old = ReadImagePose(); editor.OffsetImagePath(selectedImageId, pose.X - old.X, pose.Y - old.Y, map);
+            var old = ReadImagePose();
+            editor.OffsetImagePath(selectedImageId, pose.X - old.X, pose.Y - old.Y, map);
         }
         else if (imagePoseTarget is ImagePoseTarget.Start or ImagePoseTarget.End)
         {
@@ -202,7 +253,9 @@ public sealed partial class Viewer
         }
         else if (imagePoseTarget == ImagePoseTarget.Initial) editor.SetInitialImagePose(selectedImageId, pose, channels, map);
         else editor.SetImagePose(selectedImageId, ImageEditBeat, pose, channels, map);
-        layoutRevision = -1; imageObjectError = ""; message = L.Get("Updated image: ") + selectedImageId;
+        layoutRevision = -1;
+        imageObjectError = "";
+        message = L.Get("Updated image: ") + selectedImageId;
     }
     /// <summary>
     /// 执行一次 image 编辑并把可预期的失败转成面板提示。只捕获这几类异常，
@@ -210,9 +263,16 @@ public sealed partial class Viewer
     /// </summary>
     void ImageAction(Action action)
     {
-        try { action(); imageObjectError = ""; }
+        try
+        {
+            action();
+            imageObjectError = "";
+        }
         catch (Exception ex) when (ex is InvalidOperationException or FormatException or ArgumentException or System.IO.IOException)
-        { imageObjectError = ex.Message; message = L.Get("Image edit: ") + ex.Message; }
+        {
+            imageObjectError = ex.Message;
+            message = L.Get("Image edit: ") + ex.Message;
+        }
     }
     /// <summary>
     /// 按当前预设加一段 4 拍动画（outCubic）。continuePath 为真时从上一组的终点接着排，保证首尾相接不留缝。
@@ -223,22 +283,46 @@ public sealed partial class Viewer
         if (editor == null || selectedImageId == null) return;
         ImageAction(() =>
         {
-            EnsureImageModel(); var map = Current.Timeline.Bpm;
+            EnsureImageModel();
+            var map = Current.Timeline.Bpm;
             double at = continuePath && ActiveImageGroup is { } last ? last.End(map) : atBeat ?? InsertionBeat;
-            string issue = ImageTransformIssue(); if (issue.Length > 0) throw new InvalidOperationException(issue);
-            var startPose = imageSampler!.Pose(selectedImageId, at); var endPose = startPose;
+            string issue = ImageTransformIssue();
+            if (issue.Length > 0) throw new InvalidOperationException(issue);
+            var startPose = imageSampler!.Pose(selectedImageId, at);
+            var endPose = startPose;
             ImageChannels channels;
             switch (imagePreset)
             {
-                case 1: channels = ImageChannels.Scale; endPose = endPose with { ScaleX = startPose.ScaleX * 1.25, ScaleY = startPose.ScaleY * 1.25 }; break;
-                case 2: channels = ImageChannels.Rotation; endPose = endPose with { Rotation = startPose.Rotation + 90 }; break;
-                case 3: channels = ImageChannels.Alpha; startPose = startPose with { Alpha = 0 }; endPose = endPose with { Alpha = 1 }; break;
-                case 4: channels = ImageChannels.Alpha; endPose = endPose with { Alpha = 0 }; break;
-                case 5: channels = ImageChannels.Scale | ImageChannels.Alpha; startPose = startPose with { ScaleX = startPose.ScaleX * .6, ScaleY = startPose.ScaleY * .6, Alpha = 0 }; endPose = endPose with { Alpha = 1 }; break;
-                default: channels = ImageChannels.Position; endPose = endPose with { X = startPose.X + 40 }; break;
+                case 1:
+                    channels = ImageChannels.Scale;
+                    endPose = endPose with { ScaleX = startPose.ScaleX * 1.25, ScaleY = startPose.ScaleY * 1.25 };
+                    break;
+                case 2:
+                    channels = ImageChannels.Rotation;
+                    endPose = endPose with { Rotation = startPose.Rotation + 90 };
+                    break;
+                case 3:
+                    channels = ImageChannels.Alpha;
+                    startPose = startPose with { Alpha = 0 };
+                    endPose = endPose with { Alpha = 1 };
+                    break;
+                case 4:
+                    channels = ImageChannels.Alpha;
+                    endPose = endPose with { Alpha = 0 };
+                    break;
+                case 5:
+                    channels = ImageChannels.Scale | ImageChannels.Alpha;
+                    startPose = startPose with { ScaleX = startPose.ScaleX * .6, ScaleY = startPose.ScaleY * .6, Alpha = 0 };
+                    endPose = endPose with { Alpha = 1 };
+                    break;
+                default:
+                    channels = ImageChannels.Position;
+                    endPose = endPose with { X = startPose.X + 40 };
+                    break;
             }
             Guid added = editor.AddImageAnimation(selectedImageId, at, at + 4, startPose, endPose, channels, "outCubic", map);
-            SelectImageObject(selectedImageId, true, added); FocusImageTrack(selectedImageId, at);
+            SelectImageObject(selectedImageId, true, added);
+            FocusImageTrack(selectedImageId, at);
         });
     }
     /// <summary>
@@ -247,9 +331,14 @@ public sealed partial class Viewer
     /// </summary>
     void FocusImageTrack(string id, double beat)
     {
-        layoutRevision = -1; RebuildEditTracks();
+        layoutRevision = -1;
+        RebuildEditTracks();
         int i = editTracks.FindIndex(t => t.ImageId == id && t.ImageGroup);
-        if (i >= 0) { trackScroll = Math.Max(0, i - 1); motion.Snap("timeline-track-scroll", trackScroll); }
+        if (i >= 0)
+        {
+            trackScroll = Math.Max(0, i - 1);
+            motion.Snap("timeline-track-scroll", trackScroll);
+        }
         if (beat < beatStart || BeatX(beat) > editorTracksRect.X + editorTracksRect.W) beatStart = Math.Max(-64, beat - 2);
     }
     /// <summary>
@@ -259,8 +348,10 @@ public sealed partial class Viewer
     void FrameImageObject()
     {
         if (ActiveImageItem is not { } item) return;
-        transport.SetPlaying(false); transport.Seek(Current.Timeline.Bpm.Time(ImageEditBeat));
-        var pose = ReadImagePose(); imageViewCenter = new((float)pose.X, (float)pose.Y);
+        transport.SetPlaying(false);
+        transport.Seek(Current.Timeline.Bpm.Time(ImageEditBeat));
+        var pose = ReadImagePose();
+        imageViewCenter = new((float)pose.X, (float)pose.Y);
         float width = (float)Math.Abs(item.Width * pose.ScaleX), height = (float)Math.Abs(item.Height * pose.ScaleY);
         imageViewZoom = Math.Clamp(Math.Min(240 / Math.Max(1, width), 130 / Math.Max(1, height)), .05f, 8);
     }

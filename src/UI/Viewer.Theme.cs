@@ -1,3 +1,5 @@
+// 为界面主题选择调色板并应用到 Viewer。
+
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Graphics;
 

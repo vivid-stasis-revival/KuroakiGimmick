@@ -1,3 +1,5 @@
+// 在暂存目录验证并安装移动端 ZIP 资源包。
+
 #if KG_MOBILE
 using System.IO.Compression;
 using KuroakiGimmick.Core;
@@ -24,7 +26,7 @@ internal static class MobileAssetPack
         catch (Exception e) when (e is IOException or InvalidOperationException or System.Text.Json.JsonException) { return false; }
     }
 
-    // Resource packs are supplied by the user. Staging never replaces a working pack.
+    // 资源包由用户提供，暂存阶段保留已安装且可用的资源包。
     internal static string Install(string zip, string root)
     {
         string staging = Path.Combine(root, "AssetImport-" + Guid.NewGuid().ToString("N"));
@@ -44,7 +46,7 @@ internal static class MobileAssetPack
             if (!Ready(assets)) throw new InvalidDataException("ZIP must contain Assets/Brand and a complete note skin.");
             if (!Directory.Exists(Path.Combine(assets, "MobileShaders")))
                 throw new InvalidDataException("Use a resource pack prepared for Android/iOS with MobileShaders.");
-            // Preserve an earlier incomplete/user-created directory instead of deleting it.
+            // 保留已有的不完整或用户自行创建的目录，以免丢失其中的文件。
             string backup = destination + "-previous-" + Guid.NewGuid().ToString("N");
             bool hadPrevious = Directory.Exists(destination);
             if (hadPrevious) Directory.Move(destination, backup);

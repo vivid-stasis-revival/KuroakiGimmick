@@ -1,3 +1,5 @@
+// 建立主窗口及 GPU 设备，并在退出时按依赖顺序拆除宿主资源。
+
 using System.Runtime.InteropServices;
 using KuroakiGimmick.Graphics;
 using KuroakiGimmick.Core;
@@ -8,14 +10,18 @@ namespace KuroakiGimmick.Native;
 /// <summary>进程级窗口和设备所有者。窗口先于 GPU 创建，GPU 先于窗口释放；不持有歌曲状态。</summary>
 public sealed class Host : IDisposable
 {
+    /// <summary>SDL 主窗口句柄。</summary>
     public nint Window { get; }
+    /// <summary>当前窗口宿主所使用的托管 GPU 设备。</summary>
     public GpuDevice Gpu { get; }
+    /// <summary>包含 SDL_GPU 和实际 GPU 驱动名的设备描述。</summary>
     public string Device { get; }
     bool disposed;
     /// <summary>
     /// 构造顺序即所有权顺序：SDL 初始化 → 窗口 → 图标 → GPU 设备。中途任何一步失败，
     /// catch 都要按相反顺序拆干净（销毁窗口、SDL_Quit）再把异常抛出去，不能留下半初始化的进程。
     /// </summary>
+    /// <param name="hidden">是否创建隐藏的宿主窗口。</param>
     public Host(bool hidden = false)
     {
         Sdl.SDL_SetMainReady();
@@ -56,6 +62,7 @@ public sealed class Host : IDisposable
         // SDL 的 RGBA32 在支持的小端平台上就是 ABGR8888（0x16762004），大端取 0x16462004。
         // 这两个常量按字节序二选一，不是可以随手统一的魔数。
         // https://wiki.libsdl.org/SDL3/SDL_CreateSurfaceFrom
+        // SAFETY: SDL_Surface 借用已固定的 RGBA 数组，finally 在退出 fixed 之前销毁 surface。
         fixed (byte* pixels = icon.Data)
         {
             var surface = Sdl.SDL_CreateSurfaceFrom(icon.Width, icon.Height, BitConverter.IsLittleEndian ? 0x16762004u : 0x16462004u,

@@ -1,3 +1,5 @@
+// 从 VMV 或 VSM 推算谱面演出权重，并保留采用的来源。
+
 using System.Globalization;
 using System.Text;
 using KuroakiGimmick.Core.Editing;
@@ -16,19 +18,80 @@ public static class ModWeights
     /// <summary>全局 mod 的权重表。addGlobalMod 的第二个参数是权重，不是默认值。</summary>
     public static readonly IReadOnlyDictionary<string, double> Global = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
     {
-        ["beat"] = 1.5, ["boost_distance"] = 2.5, ["boost_time"] = 2.5, ["drawdist"] = 0, ["drawuntil"] = 0,
-        ["driven"] = 4, ["freeze"] = 2, ["fx_chroma_distort"] = 0.5, ["fx_contrast"] = 0.5, ["fx_film"] = 1,
-        ["fx_glow"] = 1, ["fx_particleglow"] = 0.5, ["hom"] = 2, ["notealp"] = 1.5, ["noterot"] = 2.5,
-        ["particlexpower"] = 0.5, ["particleypower"] = 0.5, ["pburstleft"] = 0.5, ["pburstright"] = 0.5,
-        ["pburstspeed"] = 0.5, ["pra"] = 2, ["prcb"] = 1, ["prcl"] = 1, ["prcr"] = 1, ["prct"] = 1, ["prrx"] = 2,
-        ["prry"] = 2, ["prrz"] = 2, ["prrzb"] = 2, ["prsx"] = 2, ["prvib"] = 1, ["prx"] = 2, ["prxb"] = 2,
-        ["prxc"] = 2, ["prxd"] = 1, ["pry"] = 2, ["pryb"] = 2, ["pryc"] = 2, ["pryd"] = 1, ["przm"] = 2,
-        ["przmb"] = 2, ["przmc"] = 1, ["przx"] = 2, ["przy"] = 2, ["scrollind0"] = 1.5, ["scrollind1"] = 1.5,
-        ["scrollind2"] = 1.5, ["scrollind3"] = 1.5, ["scrollind4"] = 1.5, ["scrollind5"] = 1.5, ["scrollind6"] = 1.5,
-        ["scrollspeed"] = 0, ["shcb"] = 1, ["shcl"] = 1, ["shcr"] = 1, ["shct"] = 1, ["shfb"] = 1, ["shfl"] = 1,
-        ["shfr"] = 1, ["shft"] = 1, ["shxa"] = 1.5, ["shxp"] = 1.5, ["shxs"] = 1.5, ["shya"] = 1.5, ["shyp"] = 1.5,
-        ["shys"] = 1.5, ["spinradius"] = 2, ["spinx"] = 2, ["spiny"] = 2, ["uialpha"] = 0, ["unknown"] = 0,
-        ["velocity"] = 2, ["wave"] = 2.5, ["yoffset"] = 1.5,
+        ["beat"] = 1.5,
+        ["boost_distance"] = 2.5,
+        ["boost_time"] = 2.5,
+        ["drawdist"] = 0,
+        ["drawuntil"] = 0,
+        ["driven"] = 4,
+        ["freeze"] = 2,
+        ["fx_chroma_distort"] = 0.5,
+        ["fx_contrast"] = 0.5,
+        ["fx_film"] = 1,
+        ["fx_glow"] = 1,
+        ["fx_particleglow"] = 0.5,
+        ["hom"] = 2,
+        ["notealp"] = 1.5,
+        ["noterot"] = 2.5,
+        ["particlexpower"] = 0.5,
+        ["particleypower"] = 0.5,
+        ["pburstleft"] = 0.5,
+        ["pburstright"] = 0.5,
+        ["pburstspeed"] = 0.5,
+        ["pra"] = 2,
+        ["prcb"] = 1,
+        ["prcl"] = 1,
+        ["prcr"] = 1,
+        ["prct"] = 1,
+        ["prrx"] = 2,
+        ["prry"] = 2,
+        ["prrz"] = 2,
+        ["prrzb"] = 2,
+        ["prsx"] = 2,
+        ["prvib"] = 1,
+        ["prx"] = 2,
+        ["prxb"] = 2,
+        ["prxc"] = 2,
+        ["prxd"] = 1,
+        ["pry"] = 2,
+        ["pryb"] = 2,
+        ["pryc"] = 2,
+        ["pryd"] = 1,
+        ["przm"] = 2,
+        ["przmb"] = 2,
+        ["przmc"] = 1,
+        ["przx"] = 2,
+        ["przy"] = 2,
+        ["scrollind0"] = 1.5,
+        ["scrollind1"] = 1.5,
+        ["scrollind2"] = 1.5,
+        ["scrollind3"] = 1.5,
+        ["scrollind4"] = 1.5,
+        ["scrollind5"] = 1.5,
+        ["scrollind6"] = 1.5,
+        ["scrollspeed"] = 0,
+        ["shcb"] = 1,
+        ["shcl"] = 1,
+        ["shcr"] = 1,
+        ["shct"] = 1,
+        ["shfb"] = 1,
+        ["shfl"] = 1,
+        ["shfr"] = 1,
+        ["shft"] = 1,
+        ["shxa"] = 1.5,
+        ["shxp"] = 1.5,
+        ["shxs"] = 1.5,
+        ["shya"] = 1.5,
+        ["shyp"] = 1.5,
+        ["shys"] = 1.5,
+        ["spinradius"] = 2,
+        ["spinx"] = 2,
+        ["spiny"] = 2,
+        ["uialpha"] = 0,
+        ["unknown"] = 0,
+        ["velocity"] = 2,
+        ["wave"] = 2.5,
+        ["yoffset"] = 1.5,
     };
 
     /// <summary>
@@ -47,16 +110,27 @@ public static class ModWeights
     };
 
     /// <summary>先查原版表，再查模组注册表；两者都没有才算未知。</summary>
+    /// <param name="name">mod 名称。</param>
+    /// <param name="weight">输出查询到的权重。</param>
+    /// <returns>已识别该 mod 时为 true。</returns>
     public static bool TryWeight(string name, out double weight) =>
         Global.TryGetValue(name, out weight) || External.TryGetValue(name, out weight);
 
     /// <summary>权重的来源，报告里如实写出，不把 VSM 推算当成 VMV 的权威值。</summary>
+    /// <param name="Weight">计算出的总权重。</param>
+    /// <param name="Source">选定的权重来源。</param>
+    /// <param name="Vmv">可选 VMV 路径。</param>
+    /// <param name="Vsm">可选 VSM 路径。</param>
+    /// <param name="ModCount">统计到的 mod 数。</param>
+    /// <param name="UnknownMods">未识别的 mod 名。</param>
     public sealed record Result(double Weight, string Source, string? Vmv, string? Vsm, int ModCount, string[] UnknownMods);
 
     /// <summary>
     /// 解析 .vmv 的 <c>[mods] weight</c>。这是个极小的 INI：只找 [mods] 段里的 weight 键，
     /// 其余段与键一律忽略；读不出数值就返回 null 交给 VSM 兜底。
     /// </summary>
+    /// <param name="path">VMV 文件路径。</param>
+    /// <returns>文件提供的可用权重或 null。</returns>
     public static double? ReadVmv(string path)
     {
         try
@@ -94,6 +168,8 @@ public static class ModWeights
     /// 由 VSM 文本推算权重。复用 VsmDocument 的解析器，因此 mpf 段、注释、元数据行与重复区间的处理
     /// 与编辑器完全一致；只有严格七字段的事件行参与累加，原版那套更宽松的切分可能多收几行。
     /// </summary>
+    /// <param name="text">VSM 源文本。</param>
+    /// <returns>计算出的权重、mod 数量与未知名称列表。</returns>
     public static (double Weight, int ModCount, string[] Unknown) FromVsm(string text)
     {
         double total = 0;
@@ -131,6 +207,9 @@ public static class ModWeights
     /// 为某个难度求权重。先找同名 .vmv，再找同名 .vsm，最后回落 GLOBAL.vsm —— 与 read_mods_file
     /// 的难度专属优先规则一致。三者都没有时权重为 0，GIMMICK 项不显示。
     /// </summary>
+    /// <param name="chartPath">谱面文件路径。</param>
+    /// <param name="difficulty">歌曲的难度键。</param>
+    /// <returns>包含权重、来源和未识别 mod 的结果。</returns>
     public static Result Resolve(string? chartPath, string difficulty)
     {
         string? dir = chartPath == null ? null : Path.GetDirectoryName(chartPath);

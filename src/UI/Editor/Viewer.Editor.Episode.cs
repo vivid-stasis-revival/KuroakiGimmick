@@ -1,3 +1,9 @@
+// 谱面内剧情（custom_episode）的创作支持。谱面里那一行事件是零时长的触发点，真正演什么、演多久
+// 全写在 story.json 里，所以不画出来的话作者只能靠反复试听去猜一段剧情压在了哪几个音符上。
+//
+// 时间轴上的区间和右侧的台词表都读 GameUiRenderer.EpisodeSequence 展开出来的那一份，
+// 与预览里演的、导出时渲的完全同源——这里刻意不复制一套时长估算，否则两边迟早对不上。
+
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Core.Editing;
 using KuroakiGimmick.Graphics;
@@ -5,13 +11,6 @@ using KuroakiGimmick.Native;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// 谱面内剧情（custom_episode）的创作支持。谱面里那一行事件是零时长的触发点，真正演什么、演多久
-/// 全写在 story.json 里，所以不画出来的话作者只能靠反复试听去猜一段剧情压在了哪几个音符上。
-///
-/// 时间轴上的区间和右侧的台词表都读 <see cref="Graphics.Text.GameUiRenderer.EpisodeSequence"/> 展开出来的那一份，
-/// 与预览里演的、导出时渲的完全同源——这里刻意不复制一套时长估算，否则两边迟早对不上。
-/// </summary>
 public sealed partial class Viewer
 {
     // 剧情自己一套色相。窗口动作已经占了紫、音符占了蓝与粉、音频包络占了青，
@@ -33,8 +32,14 @@ public sealed partial class Viewer
             if (ReferenceEquals(episodeProbed, Current)) return episodeScriptPath;
             episodeProbed = Current;
             // 探测只是"文件在不在"，任何 IO 故障都当作没有剧本：编辑器不该因为一次读盘失败就打不开。
-            try { episodeScriptPath = EpisodeScript.Find(Current.Project, Current.Chart); }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { episodeScriptPath = null; }
+            try
+            {
+                episodeScriptPath = EpisodeScript.Find(Current.Project, Current.Chart);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                episodeScriptPath = null;
+            }
             return episodeScriptPath;
         }
     }
@@ -124,8 +129,11 @@ public sealed partial class Viewer
         {
             if (!area.Contains(mouseX, mouseY)) continue;
             ClipClicked(id, (Sdl.SDL_GetModState() & (3 | 0x0CC0)) != 0);
-            selectedWindowEvent = -1; inspectorScroll = 0; selectedNoteTime = null;
-            transport.SetPlaying(false); click = false;
+            selectedWindowEvent = -1;
+            inspectorScroll = 0;
+            selectedNoteTime = null;
+            transport.SetPlaying(false);
+            click = false;
             return;
         }
     }
@@ -153,11 +161,14 @@ public sealed partial class Viewer
         // 把视野推到第一次触发上：区间在视野外会被剔除，命中矩形自然也就不存在了。
         // 播放头和横向起点都要设：跟随打开时以播放头为准，关闭时以 beatStart 为准。
         double at = sequence.StoryWindows[0].Start;
-        transport.SetPlaying(false); transport.Seek(at + .5);
+        transport.SetPlaying(false);
+        transport.Seek(at + .5);
         beatStart = Math.Max(-64, Current.Timeline.Bpm.Beat(at) - 2);
         // 滚到底再画：区间的命中矩形只有在这一行真的被画出来的那一帧才存在。
-        trackScroll = editTracks.Count; Draw(1440, 940);
-        motion.Snap("timeline-track-scroll", trackScroll); Draw(1440, 940);
+        trackScroll = editTracks.Count;
+        Draw(1440, 940);
+        motion.Snap("timeline-track-scroll", trackScroll);
+        Draw(1440, 940);
         if (episodeBands.Count == 0)
             throw new InvalidOperationException("No story span was drawn on the custom_episode track.");
         var (area, owner) = episodeBands[0];
@@ -165,13 +176,16 @@ public sealed partial class Viewer
         float x = Math.Clamp(area.X + area.W * .6f, editorTracksRect.X + 1, editorTracksRect.X + editorTracksRect.W - 2);
         float y = area.Y + area.H / 2;
         if (x <= area.X + 12) throw new InvalidOperationException("The story span is too narrow to click past its trigger.");
-        SetClipSelection(null); Draw(1440, 940);
-        Handle(new() { Type = 0x401, Button = 1, X = x, Y = y, Clicks = 1 }); Draw(1440, 940);
+        SetClipSelection(null);
+        Draw(1440, 940);
+        Handle(new() { Type = 0x401, Button = 1, X = x, Y = y, Clicks = 1 });
+        Draw(1440, 940);
         Handle(new() { Type = 0x402, Button = 1, X = x, Y = y });
         if (selectedClip != owner)
             throw new InvalidOperationException("Clicking a story span did not select the trigger that owns it.");
         int clips = editor.Vsm.Clips.Count();
-        Handle(new() { Type = 0x401, Button = 1, X = x, Y = y, Clicks = 2 }); Draw(1440, 940);
+        Handle(new() { Type = 0x401, Button = 1, X = x, Y = y, Clicks = 2 });
+        Draw(1440, 940);
         Handle(new() { Type = 0x402, Button = 1, X = x, Y = y });
         if (editor.Vsm.Clips.Count() != clips)
             throw new InvalidOperationException("Double-clicking inside a story span inserted another trigger.");
@@ -218,7 +232,12 @@ public sealed partial class Viewer
                 // 被顶掉的那几句也列出来，但标出来它们根本轮不到——删掉反而看不出剧本写了却没演。
                 string mark = time >= end ? " " + L.Get("[skipped]") : "";
                 row(L.Format($"{map.Beat(time):0.###}b  ") + ImageShortText(text, editorInspectorRect.W * .52f, 11) + mark,
-                    () => { transport.SetPlaying(false); transport.Seek(time); selectedNoteTime = null; });
+                    () =>
+{
+    transport.SetPlaying(false);
+    transport.Seek(time);
+    selectedNoteTime = null;
+});
             }
         }
         if (!any) row(L.Get("Preview is still rebuilding this trigger."), null);

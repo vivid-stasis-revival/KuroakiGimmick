@@ -1,3 +1,5 @@
+// 从曲目目录定位难度谱面、配套配置及可附加的歌曲文件。
+
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -10,6 +12,8 @@ namespace KuroakiGimmick.Core;
 public static class SongFiles
 {
     /// <summary>从文件名取难度标识；前导下划线形式取第一段，例如 _ENCORE_x 得到 ENCORE。</summary>
+    /// <param name="file">谱面文件名。</param>
+    /// <returns>从文件名解析出的难度键。</returns>
     public static string Difficulty(string file)
     {
         string name = Path.GetFileNameWithoutExtension(file);
@@ -17,8 +21,13 @@ public static class SongFiles
     }
 
     /// <summary>歌曲目录：取谱面、VSM、VSP、jacket 中第一个已知路径的所在目录，同目录关联都以它为基准。</summary>
+    /// <param name="p">当前工程的路径与呈现配置。</param>
+    /// <returns>工程对应的歌曲根目录，无可用路径时为 null。</returns>
     public static string? Root(ViewerProject p) => Path.GetDirectoryName(p.Chart ?? p.Gimmick ?? p.Images ?? p.Jacket);
     /// <summary>按 <paramref name="names"/> 给出的顺序取第一个存在的文件；精确匹配优先，再按 Ordinal 排序后做大小写无关匹配，保证跨平台重复打开结果一致。</summary>
+    /// <param name="dir">候选文件的父目录。</param>
+    /// <param name="names">按优先级排列的文件名。</param>
+    /// <returns>首个存在的文件路径，无匹配时为 null。</returns>
     public static string? Existing(string dir, params string[] names)
     {
         var exact = names.Select(n => Path.Combine(dir, n)).FirstOrDefault(File.Exists);
@@ -40,6 +49,10 @@ public static class SongFiles
     /// 直接给出 info.json / song.json 等同于打开它所在的歌曲目录；shatterinfo.json 则直接落到 SHATTER 谱面——
     /// 它只描述这一个难度，按目录优先级打开会落到同目录的常规难度上去。
     /// </summary>
+    /// <param name="path">工程、谱面或歌曲目录的路径。</param>
+    /// <returns>根据来源文件建立的工程配置。</returns>
+    /// <exception cref="FileNotFoundException">歌曲目录中没有可打开的谱面或演出文件。</exception>
+    /// <exception cref="InvalidDataException">给定路径不属于支持的工程或谱面来源。</exception>
     public static ViewerProject Open(string path)
     {
         path = Path.GetFullPath(path);
@@ -100,6 +113,8 @@ public static class SongFiles
     /// 只有它一张谱面时也不必落进按字母枚举的兜底。目录里一张谱面都没有时返回 null。
     /// 最近打开列表要显示的难度也走这里，否则列表上写的和点进去看到的可能不是同一张谱。
     /// </summary>
+    /// <param name="directory">要搜索的歌曲目录。</param>
+    /// <returns>首选谱面路径，无可打开谱面时为 null。</returns>
     public static string? PreferredChart(string directory)
     {
         foreach (string candidate in new[]
@@ -125,12 +140,21 @@ public static class SongFiles
     /// 一个可切换的难度。<c>Chart</c> 为 null 表示该难度在这个目录下没有谱面文件（谱包可能只写了信息槽
     /// 或 shatterinfo.json 却没放谱面），此时只作为不可点的占位显示。
     /// </summary>
+    /// <param name="Name">难度键。</param>
+    /// <param name="Display">用于界面的难度名。</param>
+    /// <param name="Level">可选的等级文字。</param>
+    /// <param name="Designer">可选的谱师署名。</param>
+    /// <param name="Chart">关联的谱面路径。</param>
+    /// <param name="Backstage">是否为 BACKSTAGE 难度。</param>
     public sealed record SongDifficulty(string Name, string Display, string? Level, string? Designer, string? Chart, bool Backstage);
 
     /// <summary>
     /// 枚举目录下的难度，顺序固定为 OPENING→SHATTER，不依赖文件系统枚举顺序。
     /// info.json 缺失时仍按文件名列出，只是没有等级与谱师文字。
     /// </summary>
+    /// <param name="directory">歌曲目录。</param>
+    /// <param name="info">可选的歌曲元数据。</param>
+    /// <returns>按游戏难度顺序排列的可用谱面信息。</returns>
     public static SongDifficulty[] Difficulties(string directory, SongInfo? info)
     {
         var result = new List<SongDifficulty>();
@@ -159,8 +183,7 @@ public static class SongFiles
         return matches.Length == 1 ? matches[0] : null;
     }
 
-    // Unsaved editor settings and explicitly attached configs take precedence over
-    // song-folder discovery. A standalone window document only overrides its own keys.
+    // 未保存的配置与显式附加配置优先于歌曲目录发现结果；独立窗口文档只覆盖自身的键。
     static JsonNode? ConfigValue(ViewerProject p, string name)
     {
         var config = p.CgmkConfigOverride;
@@ -177,10 +200,18 @@ public static class SongFiles
     }
 
     /// <summary>按编辑快照、显式配置、难度/共用配置的优先级取布尔值；缺失或类型错误时使用默认值。</summary>
+    /// <param name="p">当前工程的路径与呈现配置。</param>
+    /// <param name="name">配置项键。</param>
+    /// <param name="fallback">缺少该配置项时使用的回退值。</param>
+    /// <returns>解析的布尔值或回退值。</returns>
     public static bool Config(ViewerProject p, string name, bool fallback = true) =>
         ConfigValue(p, name) is JsonValue value && value.TryGetValue<bool>(out bool result) ? result : fallback;
 
     /// <summary>同上，取字符串项。</summary>
+    /// <param name="p">当前工程的路径与呈现配置。</param>
+    /// <param name="name">配置项键。</param>
+    /// <param name="fallback">缺少该配置项时使用的回退值。</param>
+    /// <returns>读取的字符串或回退文本。</returns>
     public static string ConfigString(ViewerProject p, string name, string fallback) =>
         ConfigValue(p, name) is JsonValue value && value.TryGetValue<string>(out string? result) ? result : fallback;
 }

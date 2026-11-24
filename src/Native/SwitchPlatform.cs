@@ -22,11 +22,11 @@ internal static class SwitchPlatform
         Directory.CreateDirectory(Path.Combine(Root, "Exports"));
         Directory.CreateDirectory(Path.Combine(Root, "Temp"));
         Sdl.ForceGpuDriver("vulkan");
-        // mono-nx reports Horizon using its Unix BCL. Select explicitly, never infer from IsLinux().
+        // mono-nx 通过 Unix BCL 暴露 Horizon，需要显式选择平台，不能仅按 IsLinux() 判断。
         Sdl.SDL_SetHint("SDL_TOUCH_MOUSE_EVENTS", "1");
         if (args.Length != 0) return args;
         string launch = Path.Combine(Root, "launch.args");
-        // One literal argument per line; no shell expansion or quote parsing.
+        // 每行是一个字面参数，不执行 shell 展开或引号解析。
         return File.Exists(launch) ? File.ReadAllLines(launch).Where(l => l.Length > 0).ToArray() : [];
     }
 

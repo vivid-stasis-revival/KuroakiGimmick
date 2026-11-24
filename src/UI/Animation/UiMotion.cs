@@ -32,7 +32,11 @@ internal sealed class UiMotion
         if (double.IsFinite(seconds)) now = Math.Max(now, seconds);
         Enabled = enabled;
         if (!enabled)
-            foreach (var t in values.Values) { t.From = t.Target; t.Duration = 0; }
+            foreach (var t in values.Values)
+            {
+                t.From = t.Target;
+                t.Duration = 0;
+            }
         if (now < nextSweep) return;
         foreach (string key in values.Where(p => now - p.Value.Seen > 8).Select(p => p.Key).ToArray()) values.Remove(key);
         nextSweep = now + 2;

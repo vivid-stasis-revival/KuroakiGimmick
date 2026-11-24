@@ -1,17 +1,17 @@
+// 将 SDL 单指事件映射为单指针操作，双指独占导航。触摸、实体鼠标与手柄光标分别处理，归一化触摸坐标转换为逻辑界面单位。
+
 using System.Numerics;
 using KuroakiGimmick.Core.Editing;
 using KuroakiGimmick.Native;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// SDL3 native finger events drive a single mouse-like pointer, while two fingers own
-/// navigation exclusively. This keeps touch, physical mice and controller cursors separate.
-/// All touch coordinates are converted from normalized window coordinates to logical UI units.
-/// </summary>
 public sealed partial class Viewer
 {
-    enum TouchNavigation { None, Timeline, ImageCanvas, TextCanvas }
+    enum TouchNavigation
+    {
+        None, Timeline, ImageCanvas, TextCanvas
+    }
     readonly record struct TouchContact(Vector2 Window, Vector2 Ui);
 
     readonly Dictionary<(ulong Device, ulong Finger), TouchContact> touchContacts = [];
@@ -28,8 +28,7 @@ public sealed partial class Viewer
     Guid? touchSelectedClip;
     int touchSelectedWindowEvent;
     double? touchSelectedNoteTime;
-    // Timeline double-clicks normally edit on mouse-down. A touch must remain
-    // cancellable until release, without adding/removing entries in undo history.
+    // 鼠标双击在按下时编辑，触摸则在释放前必须可取消，且不增删撤销历史。
     sealed record PendingTouchAction(EditorDocument Owner, long Revision, Action Commit);
     PendingTouchAction? touchTimelineAction;
 
@@ -42,8 +41,7 @@ public sealed partial class Viewer
 
     TouchContact ReadTouchContact(Sdl.Event e)
     {
-        // SDL_TouchFingerEvent coordinates are normalized to the WINDOW, not physical pixels.
-        // Use exactly the same UI transform as LogicalInput for mouse events.
+        // SDL_TouchFingerEvent 坐标相对于窗口归一化；使用与鼠标 LogicalInput 相同的 UI 变换，避免重复计入物理像素密度。
         Sdl.SDL_GetWindowSize(host.Window, out int width, out int height);
         Vector2 raw = new(e.FingerX * width, e.FingerY * height);
         var viewport = Viewport();
@@ -52,8 +50,7 @@ public sealed partial class Viewer
 
     void SendTouchMouse(uint type, TouchContact contact, byte clicks = 1)
     {
-        // Synthetic events use mouse ID 0. SDL's own SDL_TOUCH_MOUSEID duplicates are ignored
-        // at the top of Handle, but the real mouse and Joy-Con input paths remain intact.
+        // 合成事件使用鼠标 ID 0。Handle 入口忽略 SDL_TOUCH_MOUSEID 的重复事件，真实鼠标与 Joy-Con 仍走原有路径。
         sendingTouchMouse = true;
         try
         {
@@ -68,13 +65,16 @@ public sealed partial class Viewer
                 Y = contact.Window.Y
             });
         }
-        finally { sendingTouchMouse = false; }
+        finally
+        {
+            sendingTouchMouse = false;
+        }
     }
 
     bool HandleTouchInput(Sdl.Event e)
     {
         if (e.Type is < Sdl.FingerDown or > Sdl.FingerCanceled) return false;
-        // SDL_TouchFingerEvent.windowID lives at byte 52, unlike mouse.windowID at byte 16.
+        // SDL_TouchFingerEvent.windowID 在字节偏移 52，鼠标事件的 windowID 在偏移 16。
         if (e.FingerWindowID != 0 && e.FingerWindowID != Sdl.SDL_GetWindowID(host.Window))
             return true;
         if (!float.IsFinite(e.FingerX) || !float.IsFinite(e.FingerY))
@@ -110,13 +110,13 @@ public sealed partial class Viewer
             }
             else if (touchContacts.Count == 2 && !touchHadMulti)
             {
-                // Never commit the first finger's edit when a second finger joins.
+                // 第二根手指加入时不得提交第一根手指开始的编辑。
                 touchHadMulti = true;
                 touchLastTapAt = -1;
                 AbortPrimaryTouch();
                 StartTwoFingerNavigation();
             }
-            // A third finger is tracked solely so lifting it cannot restart a mouse drag.
+            // 记录第三根手指仅为避免其抬起时意外重新启动鼠标拖动。
             return true;
         }
 
@@ -133,8 +133,7 @@ public sealed partial class Viewer
             return true;
         }
 
-        // FingerUP and FingerCANCELED. After a multi-finger gesture, remaining fingers are
-        // inert until EVERY finger lifts: no ghost tap, marquee, click, or drag commit.
+        // FingerUp 或 FingerCanceled 后，只要多指手势中仍有手指未抬起，就继续忽略点击、框选与拖动提交。
         if (!touchHadMulti && touchPrimary == id)
         {
             if (e.Type == Sdl.FingerUp)
@@ -173,8 +172,7 @@ public sealed partial class Viewer
     void AbortPrimaryTouch()
     {
         touchTimelineAction = null;
-        // Preview gestures are transactional; cancel them instead of synthesizing button-up,
-        // which would call FinishDrag/FinishMarquee and commit unintended changes.
+        // 预览手势可取消。避免合成鼠标释放而触发 FinishDrag 或 FinishMarquee，误提交手势中的更改。
         if (draggedTrackKey != null) CancelTrackOrder();
         if (sceneDirectDrag != null) CancelSceneDirectGesture();
         if (textDrag != null)
@@ -212,7 +210,11 @@ public sealed partial class Viewer
         touchNavigation = TouchNavigation.None;
         if (!touchPrimary.HasValue || touchContacts.Count != 2) return;
         foreach (var id in touchContacts.Keys)
-            if (id != touchPrimary.Value) { touchSecondary = id; break; }
+            if (id != touchPrimary.Value)
+            {
+                touchSecondary = id;
+                break;
+            }
         if (!touchSecondary.HasValue) return;
 
         Vector2 first = touchContacts[touchPrimary.Value].Ui;
@@ -228,7 +230,7 @@ public sealed partial class Viewer
             touchGestureBeat = BeatAt(touchGestureCenter.X);
             touchGesturePixelsPerBeat = pixelsPerBeat;
             touchGestureTrackScroll = trackScroll;
-            // A finger gesture is direct user navigation, not FOLLOW playback.
+            // 手指手势表示用户主动导航，不能当作 FOLLOW 播放。
             if (editorFollow && transport.Playing && !preferences.AlwaysFollow) editorFollow = false;
         }
         else if (imageCanvas && previewImage.Contains(first.X, first.Y) &&
@@ -242,8 +244,7 @@ public sealed partial class Viewer
         else if (textCanvas && previewImage.Contains(first.X, first.Y) &&
                  previewImage.Contains(second.X, second.Y))
         {
-            // Text Canvas intentionally has a fixed view center. Pinch zoom works there,
-            // but translation is reserved for Image Canvas and the timeline.
+            // 字幕画布固定视图中心，可双指缩放；平移仅用于图片画布和时间轴。
             touchNavigation = TouchNavigation.TextCanvas;
             touchGestureTextZoom = textZoom;
         }
@@ -257,7 +258,7 @@ public sealed partial class Viewer
             !touchContacts.TryGetValue(touchSecondary.Value, out var second)) return;
         Vector2 center = (first.Ui + second.Ui) * .5f;
         float distance = Vector2.Distance(first.Ui, second.Ui);
-        // Ignore pinch scaling when fingers start nearly coincident; translation still works.
+        // 双指起点距离过小时跳过缩放，平移仍可继续。
         float ratio = touchGestureDistance < 24 ? 1 :
             Math.Clamp(distance / touchGestureDistance, .25f, 4f);
         switch (touchNavigation)

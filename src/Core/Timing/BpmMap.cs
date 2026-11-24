@@ -1,3 +1,5 @@
+// 从谱面或对象配置构建速度分段，统一拍数、秒数与工程偏移的换算。
+
 namespace KuroakiGimmick.Core;
 
 /// <summary>
@@ -6,13 +8,26 @@ namespace KuroakiGimmick.Core;
 public sealed class BpmMap
 {
     /// <summary>分段起点：Time 秒、Beat 拍、Bpm 为该段之后生效的速度；两个数组按 Time 与 Beat 同时升序。</summary>
+    /// <param name="Time">分段起始秒数。</param>
+    /// <param name="Beat">对应的起始拍。</param>
+    /// <param name="Bpm">本段每分钟拍数。</param>
     public record Segment(double Time, double Beat, double Bpm);
+    /// <summary>按时间和拍数排列的变速锚点。</summary>
     public List<Segment> Segments { get; } = [];
     readonly double offset;
+    /// <summary>是否指定固定 BPM 并忽略谱面内的变速事件。</summary>
     public bool IsFixed { get; }
+    /// <summary>依据固定速度、对象覆盖或谱内变速构建拍秒映射。</summary>
+    /// <param name="chart">提供音符、演出事件及诊断的谱面。</param>
+    /// <param name="bpm">初始每分钟拍数。</param>
+    /// <param name="offsetMs">工程偏移，单位为毫秒。</param>
+    /// <param name="fixedBpm">可选的固定 BPM。</param>
+    /// <param name="nativePoints">可选的原版变速点列表。</param>
+    /// <exception cref="InvalidDataException">BPM 或偏移量超限，或变速点的顺序、起点或数值无效。</exception>
     public BpmMap(Chart chart, double bpm, double offsetMs, double? fixedBpm = null,
         IReadOnlyList<GimmickBpmPoint>? nativePoints = null)
     {
+        // 1. 校验初始及固定 BPM，并将工程偏移从毫秒转换为秒。
         if (!double.IsFinite(bpm) || bpm <= 0 || bpm > 10000)
         {
             throw new InvalidDataException("BPM must be between 0 and 10000.");
@@ -28,6 +43,7 @@ public sealed class BpmMap
         IsFixed = fixedBpm.HasValue;
         // offset 只在这里从毫秒转成秒并保存一次，Time/Beat 各自加减一次，别处不得重复应用。
         offset = offsetMs / 1000;
+        // 2. 未锁定 BPM 时优先展开来源对象的变速表。
         if (!fixedBpm.HasValue && nativePoints is { Count: > 0 })
         {
             double previousBeat = 0, previousBpm = 60, time = 0;
@@ -46,6 +62,7 @@ public sealed class BpmMap
             if (nativePoints[0].Beat != 0) throw new InvalidDataException("Native BPM override must start at beat zero.");
             return;
         }
+        // 3. 尝试由 Rust 构建分段；未取得结果时继续使用托管实现。
         if (RustEngineBridge.TryBuildBpm(chart, bpm, offsetMs, fixedBpm, out var nativeSegments) && nativeSegments != null)
         {
             Segments.AddRange(nativeSegments);
@@ -56,7 +73,7 @@ public sealed class BpmMap
         {
             return;
         }
-        // 固定速度是刻意忽略谱内变速点的：直接返回，只留下唯一一段。
+        // 4. 只有非固定速度到达此处：按时间合并谱内变速点。
         foreach (var n in chart.Notes.Where(n => n.Type == 3).OrderBy(n => n.Time))
         {
             if (!n.Extra.TryGetValue(1, out var value))
@@ -89,6 +106,8 @@ public sealed class BpmMap
     }
 
     /// <summary>拍 → 秒（含 offset）。二分查询最后一个起点不晚于 beat 的分段。</summary>
+    /// <param name="beat">谱面位置，单位为拍。</param>
+    /// <returns>应用工程偏移后的歌曲秒数。</returns>
     public double Time(double beat)
     {
         var s = Segments[Math.Max(0, SortedSearch.UpperBound(Segments, beat, static s => s.Beat) - 1)];
@@ -96,6 +115,8 @@ public sealed class BpmMap
     }
 
     /// <summary>秒 → 拍，是 Time 的逆运算：先减掉 offset 再折算，两边必须成对，否则 offset 会被算两次。</summary>
+    /// <param name="time">歌曲时刻，单位为秒。</param>
+    /// <returns>该时刻的谱面拍数。</returns>
     public double Beat(double time)
     {
         time -= offset;
@@ -104,6 +125,8 @@ public sealed class BpmMap
     }
 
     /// <summary>该拍所在分段的 BPM。按拍查询不涉及 offset，因此这里不做 offset 修正。</summary>
+    /// <param name="beat">谱面位置，单位为拍。</param>
+    /// <returns>该拍对应的每分钟拍数。</returns>
     public double BpmAtBeat(double beat)
     {
         if (double.IsNaN(beat)) return Segments[^1].Bpm;

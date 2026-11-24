@@ -1,10 +1,11 @@
+// 处理 Starcrashers 后段回调以及 Allison 音符皮肤的动态混合。
+
 using System;
 using System.Numerics;
 using KuroakiGimmick.Core;
 
 namespace KuroakiGimmick.Graphics;
 
-/// <summary>Additional late Starcrashers callbacks and dynamic Allison note-skin blend.</summary>
 public sealed partial class NativeGimmickRenderer
 {
     private Session? lateSession;
@@ -20,18 +21,17 @@ public sealed partial class NativeGimmickRenderer
         return lateEvents;
     }
 
-    /// <summary>
-    /// Original obj_starcrashers_mask.Draw draws o_pt_diamonddust_invmask onto the
-    /// SCENE using inverse-destination/inverse-source blending BEFORE targeting its mask surface.
-    /// Calling this inside DrawMask would be a different and incorrect composition.
-    /// </summary>
+    /// <summary>原版 obj_starcrashers_mask.Draw 在切换到遮罩目标前，以反目标色和反源色将 o_pt_diamonddust_invmask 绘制到场景；此处的合成顺序依赖这一目标切换。</summary>
+    /// <param name="scene">要绘制到的场景目标。</param>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void DrawMaskedStarFieldLateDust(Target scene, Session session, double time)
     {
         Prepare(session);
         var data = Late(session);
         if (data == null || !current!.Sprites.TryGetValue("pt_diamonddust", out var spec)) return;
         int tick = Math.Max(0, (int)Math.Floor(time * 60 + 1e-8));
-        // Slower dust can linger. Iterate all births up to now, bounded by 25k/session.
+        // 较慢的尘埃可能仍存活，需要遍历截至当前的出生记录，每会话上限 25000。
         canvas.Begin(scene, scene.Texture.Width, scene.Texture.Height, 320, 180);
         canvas.Blend(BlendFactor.InverseDestinationColor, BlendFactor.InverseSourceColor);
         foreach (var dust in data.Diamonds)
@@ -46,7 +46,10 @@ public sealed partial class NativeGimmickRenderer
         canvas.Flush();
     }
 
-    /// <summary>GameMaker round(mod * 255)/255; original mixes normal and Allison in a 107x22 surface.</summary>
+    /// <summary>按 GameMaker 的 round(mod × 255) / 255 量化混合值；原版在 107×22 的 surface 上混合普通与 Allison 皮肤。</summary>
+    /// <param name="timeline">用于采样轨道和回调的时间轴。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <returns>按源规则量化的皮肤混合系数。</returns>
     public static double GreenleftAlpha(Timeline timeline, double time)
     {
         return PartialSkinBlendState.At(timeline, time).Alpha;
@@ -67,7 +70,15 @@ public sealed partial class NativeGimmickRenderer
             Color.White.Alpha(alpha));
     }
 
-    /// <summary>Left two chip lanes and first bumper: source obj_starcrashers_gimmick.Step_1.</summary>
+    /// <summary>根据 obj_starcrashers_gimmick.Step_1 处理左侧两个 chip 轨道及首个撞块。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <param name="type">来源音符类型编号。</param>
+    /// <param name="lane">音符的轨道编号。</param>
+    /// <param name="x">逻辑横坐标。</param>
+    /// <param name="y">逻辑纵坐标。</param>
+    /// <param name="baseAlpha">混合前的不透明度。</param>
+    /// <param name="rotation">旋转角度。</param>
     public void DrawMaskedStarFieldNoteBlend(Session session, double time, int type, int lane, float x, float y,
         double baseAlpha, float rotation)
     {
@@ -83,6 +94,15 @@ public sealed partial class NativeGimmickRenderer
             StarcrashersSprite(session, "sp_note_bumper_timing_allison", 0, x, y, alpha, rotation);
     }
 
+    /// <summary>绘制叠加皮肤与原长条帧之间的混合。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <param name="lane">音符的轨道编号。</param>
+    /// <param name="x">逻辑横坐标。</param>
+    /// <param name="startY">长条起点的逻辑纵坐标。</param>
+    /// <param name="endY">长条终点的逻辑纵坐标。</param>
+    /// <param name="baseAlpha">混合前的不透明度。</param>
+    /// <param name="pressed">是否绘制按下状态。</param>
     public void DrawMaskedStarFieldHoldBlend(Session session, double time, int lane, float x, float startY, float endY,
         double baseAlpha, bool pressed)
     {
@@ -92,7 +112,11 @@ public sealed partial class NativeGimmickRenderer
         Prepare(session);
         endY += 6;
         float top = Math.Min(startY, endY), bottom = Math.Max(startY, endY);
-        if (pressed) { top = Math.Min(top, 140); bottom = Math.Min(bottom, 140); }
+        if (pressed)
+        {
+            top = Math.Min(top, 140);
+            bottom = Math.Min(bottom, 140);
+        }
         float bodyTop = top + 4, bodyBottom = pressed ? bottom + 4 : bottom - 3;
         float visibleTop = Math.Max(-8, bodyTop), visibleBottom = Math.Min(188, bodyBottom);
         if (visibleBottom > visibleTop)

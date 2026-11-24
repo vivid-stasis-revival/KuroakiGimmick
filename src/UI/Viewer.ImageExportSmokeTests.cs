@@ -1,3 +1,5 @@
+// 验证共享图片的保存、删除、冲突处理及工程重开。
+
 using System.Text;
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Core.Editing;
@@ -33,29 +35,33 @@ public sealed partial class Viewer
             var input = new ChartExportInput(new ViewerProject { Chart = chart }, null, "", [], "{}", [], [],
                 ImageText: document.Text, ImageRoot: source, ImageOriginalNames: document.OriginalResourceNames());
             foreach (var kind in new[] { ChartExportKind.VspAndAssets, ChartExportKind.ChartFolder })
-            foreach (bool assets in new[] { false, true })
-            {
-                string destination = Path.Combine(root, $"{kind}-{assets}", "ENCORE.vsp");
-                var plan = ChartExport.Prepare(input, kind, destination, putImageGimmickIntoAssetsFolder: assets);
-                string expected = assets ? "Assets/num2.PNG" : "num2.PNG";
-                if (plan.Files.Count(file => file.Name.EndsWith(".PNG")) != 1)
-                    throw new InvalidOperationException("Shared image was exported more than once.");
-                string text = Encoding.UTF8.GetString(plan.Files.Single(file => file.Name.EndsWith(".vsp")).Data!);
-                int references = 0;
-                VspDocument.Rewrite(text, (_, token) =>
+                foreach (bool assets in new[] { false, true })
                 {
-                    if (token != expected) throw new InvalidOperationException("Shared VSP reference was renamed.");
-                    references++; return token;
-                });
-                if (references != 2) throw new InvalidOperationException("An image gimmick was lost during export.");
-                ChartExport.Write(plan);
-                string output = Path.Combine(kind == ChartExportKind.ChartFolder ? destination : Path.GetDirectoryName(destination)!, expected);
-                if (!File.ReadAllBytes(output).AsSpan().SequenceEqual(File.ReadAllBytes(original)))
-                    throw new InvalidOperationException("Export changed image content.");
-            }
+                    string destination = Path.Combine(root, $"{kind}-{assets}", "ENCORE.vsp");
+                    var plan = ChartExport.Prepare(input, kind, destination, putImageGimmickIntoAssetsFolder: assets);
+                    string expected = assets ? "Assets/num2.PNG" : "num2.PNG";
+                    if (plan.Files.Count(file => file.Name.EndsWith(".PNG")) != 1)
+                        throw new InvalidOperationException("Shared image was exported more than once.");
+                    string text = Encoding.UTF8.GetString(plan.Files.Single(file => file.Name.EndsWith(".vsp")).Data!);
+                    int references = 0;
+                    VspDocument.Rewrite(text, (_, token) =>
+                    {
+                        if (token != expected) throw new InvalidOperationException("Shared VSP reference was renamed.");
+                        references++;
+                        return token;
+                    });
+                    if (references != 2) throw new InvalidOperationException("An image gimmick was lost during export.");
+                    ChartExport.Write(plan);
+                    string output = Path.Combine(kind == ChartExportKind.ChartFolder ? destination : Path.GetDirectoryName(destination)!, expected);
+                    if (!File.ReadAllBytes(output).AsSpan().SequenceEqual(File.ReadAllBytes(original)))
+                        throw new InvalidOperationException("Export changed image content.");
+                }
             SmokeImageSaveAndDelete(root, chart, original);
         }
-        finally { Directory.Delete(root, true); }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
         Console.WriteLine("PASS shared images: repeated import, original filename/case, save deduplication, VSP/Chart Folder exports, root/Assets references and bytes");
     }
 
@@ -99,7 +105,10 @@ public sealed partial class Viewer
             doc.SaveCopy(destination);
             throw new InvalidOperationException("Saving a collision did not request confirmation.");
         }
-        catch (ImageSaveConflictException ex) { Check(ex.FileName == "num2.PNG", "Wrong image conflict reported."); }
+        catch (ImageSaveConflictException ex)
+        {
+            Check(ex.FileName == "num2.PNG", "Wrong image conflict reported.");
+        }
         Check(doc.Dirty && !File.Exists(destination), "Conflicting save wrote a project or lost the dirty state.");
 
         doc.SaveCopy(destination, resolveImageNameConflicts: true);

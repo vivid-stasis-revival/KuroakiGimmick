@@ -1,3 +1,5 @@
+// 交互层状态协调器。加载结果通过主线程队列提交，GPU 操作只在窗口线程执行；设置、输入与绘制分文件维护。
+
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
@@ -8,9 +10,6 @@ using KuroakiGimmick.Native;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// 交互层状态协调器。加载结果通过主线程队列提交，GPU 操作只在窗口线程执行；设置、输入与绘制分文件维护。
-/// </summary>
 public sealed partial class Viewer
 {
     /// <summary>
@@ -79,7 +78,7 @@ public sealed partial class Viewer
             Type = 0x300,
             Scan = 17
         });
-        // M is a transient mute. It must not rewrite PreviewVolume or restore a hard-coded 80%.
+        // M 仅临时静音，不应改写 PreviewVolume；恢复时使用原值而非固定 80%。
         double savedVolume = Current.Project.PreviewVolume;
         SetVolume(.23);
         effectiveVolumeDirty = false;
@@ -91,8 +90,7 @@ public sealed partial class Viewer
             throw new Exception("Unmute did not restore the configured preview volume.");
         SetVolume(savedVolume);
         effectiveVolumeDirty = false;
-        // 6.2.2.2 NoteModsY parity: velocity multiplies the whole scroll term. Doubling it must double
-        // the displacement from the 144 judgement line when the other motion terms are zero.
+        // 核对 6.2.2.2 NoteModsY：velocity 乘完整滚动项；其他运动项为零时，倍率翻倍会使相对判定线 144 的位移也翻倍。
         double velocity1 = NoteMotion.YFromScroll(1000, 0, 0, 2, NoteMotion.ScrollMultiplier(3, 1, 1), 0);
         double velocity2 = NoteMotion.YFromScroll(1000, 0, 0, 2, NoteMotion.ScrollMultiplier(3, 1, 2), 0);
         if (Math.Abs((144 - velocity2) - 2 * (144 - velocity1)) > 1e-9)
@@ -138,13 +136,14 @@ public sealed partial class Viewer
         Draw(1440, 940);
         // 剧情轨要排在设置面板那一段之前：它自带完整的开关编辑器流程，而下面几条断言靠的是查看器自己的布局。
         SmokeEpisodeUi();
-        editorMode = false; Draw(1440, 940);
+        editorMode = false;
+        Draw(1440, 940);
         // 拖放测试先完成自己的编辑工作流，再检查设置。
         SmokeShatterDrop();
         Draw(1440, 940);
         // 从 editor 的实际设置按钮进入；改变设置必须经过 DrawSettings 消费鼠标点击。
-        // Regression: expanded Proxy rows must push Settings and the scroll
-        // footer down, not overlay the 16 proxy buttons (v6/v7 sidebar bug).
+        // 回归检查：展开 Proxy 后，设置和滚动提示必须随内容向下移动，
+        // 避免覆盖 16 个 proxy 按钮（v6/v7 侧栏问题）。
         foreach (bool windows in new[] { false, true })
         {
             float collapsed = EditorToolsSettingsOffset(false, windows);
@@ -224,8 +223,7 @@ public sealed partial class Viewer
             settings = false;
             Current.Project.GameUiFont = saved;
         }
-        // Exercise the real F1 renderer, including the default page's code block without a
-        // language tag. Layout-only tests previously skipped the metadata read by this path.
+        // 调用真实 F1 渲染器，覆盖默认页未标注语言的代码块。仅检查排版曾漏掉此路径读取的元数据。
         OpenReferenceForTest("kg-guide:00");
         Draw(1440, 940);
         if (!referenceOpen || !referencePage.Items.Any(item => item.Kind == "code" && item.Anchor == ""))

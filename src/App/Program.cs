@@ -1,3 +1,5 @@
+// 在创建图形设备前处理平台启动参数和离线命令，并将交互预览交给 Host 与 Viewer。
+
 using System.Globalization;
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Graphics;
@@ -19,12 +21,14 @@ internal static class Program
     /// 退出码契约：0 正常结束；1 未捕获异常（已写入 viewer.log）；2 strict 模式或 --inspect 发现错误诊断；130 用户取消视频导出。
     /// 数字解析一律走 InvariantCulture，命令行不随系统区域设置改变含义。
     /// </summary>
-    [STAThread] static int Main(string[] args)
+    [STAThread]
+    static int Main(string[] args)
     {
 #if KG_SWITCH
         args = SwitchPlatform.Initialize(args);
         Console.Error.WriteLine("[K/G boot] launch initialized");
 #endif
+        // 1. 先捕获系统界面语言，再为命令行与数值解析设置固定的区域规则。
         _ = UiLanguage.SystemLanguage;
 #if KG_SWITCH
         Console.Error.WriteLine("[K/G boot] UI language initialized");
@@ -40,6 +44,7 @@ internal static class Program
         cli |= args.Contains("--large-chart-test") || args.Contains("--chart-size-test") || args.Contains("--mpf-test") || args.Contains("--smoke-size-warning") || args.Contains("--parallel-export-test") || args.Contains("--render-workers-default-test") || args.Contains("--hom-preview-test") || args.Contains("--dock-layout-test") || args.Contains("--smoke-dock-window");
         try
         {
+            // 2. 优先处理 shader 烘焙、自检等可在工程装配之前完成的命令。
             if (args.Length >= 3 && args[0] == "--bake-mobile-shaders")
             {
                 MobileShaderPack.Bake(args[1], args[2], args.Skip(3));
@@ -73,13 +78,23 @@ internal static class Program
             if (args.Contains("--chart-size-test")) return ChartSizeChecks.Run();
             if (args.Contains("--large-chart-test"))
             {
-                IntervalIndexChecks.Run(); VsmLookupChecks.Run(); EditorSnapshotChecks.Run(); LargeChartLoadingChecks.Run(); DensePreviewChecks.Run();
+                IntervalIndexChecks.Run();
+                VsmLookupChecks.Run();
+                EditorSnapshotChecks.Run();
+                LargeChartLoadingChecks.Run();
+                DensePreviewChecks.Run();
                 return 0;
             }
             if (args.Contains("--mpf-test"))
             {
-                MpfScriptChecks.Run(); MpfLanguageChecks.Run(); MpfRuntimeChecks.Run(); Cgmk1141Checks.Run(); Cgmk1142Checks.Run(); MusicControlChecks.Run();
-                MpfSourceChecks.Run(); return MpfSourceEditorChecks.Run();
+                MpfScriptChecks.Run();
+                MpfLanguageChecks.Run();
+                MpfRuntimeChecks.Run();
+                Cgmk1141Checks.Run();
+                Cgmk1142Checks.Run();
+                MusicControlChecks.Run();
+                MpfSourceChecks.Run();
+                return MpfSourceEditorChecks.Run();
             }
             if (args.Contains("--render-workers-default-test")) return RenderWorkerDefaultsChecks.Run();
             if (args.Contains("--gimmick-definition-test")) return GimmickDefinitionChecks.Run();
@@ -104,6 +119,7 @@ internal static class Program
                 RustNoteBridge.SelfTest();
                 return 0;
             }
+            // 3. 解析工程输入与命令行覆盖值，随后创建用于检查、预览或导出的会话。
             var options = Parse(args);
             if (!cli)
             {
@@ -171,7 +187,7 @@ internal static class Program
                 throw new InvalidDataException("Load a chart or VSM before exporting.");
             }
 #if KG_IOS
-            var host = new Host(cli && !options.ContainsKey("smoke-workspace-memory")); // Owned by the UIKit frame callback after Main returns.
+            var host = new Host(cli && !options.ContainsKey("smoke-workspace-memory")); // Main 返回后由 UIKit 的帧回调管理。
 #else
             using var host = new Host(cli && !options.ContainsKey("smoke-workspace-memory"));
 #endif
@@ -195,9 +211,9 @@ internal static class Program
                     CultureInfo.InvariantCulture) : fallback;
                 var output = options.GetValueOrDefault("out") ?? throw new ArgumentException("--render requires --out output.mp4");
                 // start/end 是秒；高度按 16:9 由宽度推出，不单独给 --height，避免导出非谱面比例的画面。
-                int width = (int) Number("width", 1920);
+                int width = (int)Number("width", 1920);
                 var exportOptions = new ExportOptions(Path.GetFullPath(output), Number("start", 0), Number("end", session.Duration),
-                    (int) Number("fps", 60), width, width * 9 / 16, session.Project.Notes && !options.ContainsKey("no-notes"),
+                    (int)Number("fps", 60), width, width * 9 / 16, session.Project.Notes && !options.ContainsKey("no-notes"),
                     session.Project.PostProcessing && !options.ContainsKey("no-fx"), overwriteExports,
                     options.TryGetValue("render-workers", out var workers) ? int.Parse(workers, CultureInfo.InvariantCulture)
                         : ViewerSettings.ValidRenderWorkers(ViewerSettings.Load().VideoRenderWorkers));
@@ -267,9 +283,15 @@ internal static class Program
             if (options.ContainsKey("smoke-startup"))
             {
                 string output = Path.GetFullPath(options.GetValueOrDefault("out", "KuroakiStartup.ppm"));
-                try { viewer.SmokeStartupUi(output); }
-                finally { if (startupTestSettings != null && Directory.Exists(Path.GetDirectoryName(startupTestSettings)))
-                    Directory.Delete(Path.GetDirectoryName(startupTestSettings)!, true); }
+                try
+                {
+                    viewer.SmokeStartupUi(output);
+                }
+                finally
+                {
+                    if (startupTestSettings != null && Directory.Exists(Path.GetDirectoryName(startupTestSettings)))
+                        Directory.Delete(Path.GetDirectoryName(startupTestSettings)!, true);
+                }
                 Console.WriteLine(output);
                 return 0;
             }
@@ -345,8 +367,14 @@ internal static class Program
             }
             if (workspaceMemoryTest)
             {
-                try { viewer.SmokeWorkspaceMemory(); }
-                finally { if (File.Exists(startupTestSettings)) File.Delete(startupTestSettings); }
+                try
+                {
+                    viewer.SmokeWorkspaceMemory();
+                }
+                finally
+                {
+                    if (File.Exists(startupTestSettings)) File.Delete(startupTestSettings);
+                }
                 return 0;
             }
 #if KG_IOS
@@ -390,8 +418,14 @@ internal static class Program
         }
         finally
         {
-            try { PerformanceStats.WriteConfiguredReport(); }
-            catch (IOException ex) { Console.Error.WriteLine("Profile report: " + ex.Message); }
+            try
+            {
+                PerformanceStats.WriteConfiguredReport();
+            }
+            catch (IOException ex)
+            {
+                Console.Error.WriteLine("Profile report: " + ex.Message);
+            }
         }
     }
 
@@ -507,7 +541,7 @@ internal static class Program
             {
                 throw new ArgumentException("Unknown option --" + key);
             }
-            if (++ i >= args.Length)
+            if (++i >= args.Length)
             {
                 throw new ArgumentException("Missing value for --" + key);
             }

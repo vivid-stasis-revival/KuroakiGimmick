@@ -1,3 +1,5 @@
+// 驱动真实预览和堆叠设置，记录渲染计时及按时间采样的画面。
+
 using System.Diagnostics;
 using System.Reflection;
 using System.Security.Cryptography;
@@ -24,13 +26,15 @@ using var viewer = new Viewer(host, session, silent: true, applyPreferences: fal
     settingsPath: Path.Combine(output, "isolated-settings.json"));
 if (mode == "settings")
 {
-    // Exercise real buttons with isolated preferences, never the user's settings.
+    // 在隔离的偏好设置下操作真实按钮。
     var preferences = (ViewerSettings)typeof(Viewer).GetField("preferences", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(viewer)!;
     preferences.UiAnimations = false;
-    preferences.Workspace.FollowDisplayScale = false; preferences.Workspace.UiScale = 1;
+    preferences.Workspace.FollowDisplayScale = false;
+    preferences.Workspace.UiScale = 1;
     preferences.StackLimit = true;
     preferences.StackLimitLayers = ViewerSettings.DefaultStackLayers;
-    viewer.OpenSettings(); viewer.Draw(1440, 940);
+    viewer.OpenSettings();
+    viewer.Draw(1440, 940);
     void Click(int x, int y)
     {
         viewer.Handle(new() { Type = 0x401, Button = 1, X = x, Y = y });
@@ -38,7 +42,7 @@ if (mode == "settings")
         viewer.Handle(new() { Type = 0x402, Button = 1, X = x, Y = y });
         viewer.Draw(1440, 940);
     }
-    Click(200, 267); // Video navigation
+    Click(200, 267); // 切换到视频设置页。
     if ((string?)typeof(Viewer).GetField("settingsSection", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(viewer) != "display")
         throw new InvalidOperationException("Video navigation did not open.");
     ushort oldMods = Sdl.SDL_GetModState();
@@ -51,27 +55,39 @@ if (mode == "settings")
                 throw new InvalidOperationException($"Layer step/persistence: expected {expected}, got {preferences.StackLimitLayers}.");
         }
         Sdl.SDL_SetModState(0);
-        Click(638, 276); Layers(320);
-        Click(542, 276); Layers(256);
-        Sdl.SDL_SetModState(1); // left Shift
-        Click(542, 276); Layers(240);
-        Sdl.SDL_SetModState(2); // right Shift
-        Click(638, 276); Layers(256);
+        Click(638, 276);
+        Layers(320);
+        Click(542, 276);
+        Layers(256);
+        Sdl.SDL_SetModState(1); // 左侧 Shift 键。
+        Click(542, 276);
+        Layers(240);
+        Sdl.SDL_SetModState(2); // 右侧 Shift 键。
+        Click(638, 276);
+        Layers(256);
         Sdl.SDL_SetModState(0);
         preferences.StackLimitLayers = 1008;
-        Click(638, 276); Layers(1024);
-        Click(638, 276); Layers(1024);
+        Click(638, 276);
+        Layers(1024);
+        Click(638, 276);
+        Layers(1024);
         preferences.StackLimitLayers = 32;
-        Click(542, 276); Layers(16);
-        Click(542, 276); Layers(16);
+        Click(542, 276);
+        Layers(16);
+        Click(542, 276);
+        Layers(16);
         Sdl.SDL_SetModState(1);
-        Click(638, 276); Layers(32);
+        Click(638, 276);
+        Layers(32);
     }
-    finally { Sdl.SDL_SetModState(oldMods); }
-    Click(470, 276); // STACK LIMIT off
+    finally
+    {
+        Sdl.SDL_SetModState(oldMods);
+    }
+    Click(470, 276); // 关闭堆叠层数限制。
     if (preferences.StackLimit || ViewerSettings.Load(Path.Combine(output, "isolated-settings.json")).StackLimit)
         throw new InvalidOperationException("STACK LIMIT off was not applied and persisted.");
-    Click(370, 855); // Reset defaults
+    Click(370, 855); // 恢复默认设置。
     if (!preferences.StackLimit || !ViewerSettings.Load(Path.Combine(output, "isolated-settings.json")).StackLimit
         || preferences.StackLimitLayers != ViewerSettings.DefaultStackLayers)
         throw new InvalidOperationException("Reset defaults did not restore STACK LIMIT.");
@@ -91,7 +107,9 @@ var measurements = new List<object>();
 var checksums = new Dictionary<(double Time, int Layers), string>();
 foreach (double time in times)
 {
-    while (Sdl.SDL_PollEvent(out _)) { }
+    while (Sdl.SDL_PollEvent(out _))
+    {
+    }
     int layerLimit = mode == "layers" ? limits[measurements.Count] : ViewerSettings.DefaultStackLayers;
     long candidatesBefore = PerformanceStats.Value(PerformanceStats.Counter.Candidates);
     watch.Restart();
@@ -120,7 +138,7 @@ foreach (double time in times)
     byte[] pixels = viewer.Canvas.Read(target);
     double completedMs = watch.Elapsed.TotalMilliseconds;
     string checksum = Convert.ToHexString(SHA256.HashData(pixels));
-    // UI contains live FPS/motion state. Scene frames must be seek-independent.
+    // 界面含实时 FPS 和动画状态；场景帧应与到达该时刻的跳转路径无关。
     bool compare = !ui && !(mode == "scope" && measurements.Count == 1
         && (session.NoteIndex.HasDensePreview || session.Score.HasDensePreview));
     var frameKey = (time, mode == "layers" ? layerLimit : 0);
@@ -135,8 +153,13 @@ foreach (double time in times)
 viewer.Canvas.SavePng(ui ? viewer.UiTarget : viewer.Renderer.Final, Path.Combine(output, mode + ".png"));
 File.WriteAllText(Path.Combine(output, mode + ".json"), JsonSerializer.Serialize(new
 {
-    mode, loadMs, records = session.Chart.Notes.Count, playable = session.NoteIndex.Count,
-    judgements = session.Score.NoteCount, noteReduction = session.NoteIndex.HasDensePreview,
-    hitReduction = session.Score.HasDensePreview, measurements,
+    mode,
+    loadMs,
+    records = session.Chart.Notes.Count,
+    playable = session.NoteIndex.Count,
+    judgements = session.Score.NoteCount,
+    noteReduction = session.NoteIndex.HasDensePreview,
+    hitReduction = session.Score.HasDensePreview,
+    measurements,
     profile = JsonDocument.Parse(PerformanceStats.Snapshot()).RootElement
 }, new JsonSerializerOptions { WriteIndented = true }));

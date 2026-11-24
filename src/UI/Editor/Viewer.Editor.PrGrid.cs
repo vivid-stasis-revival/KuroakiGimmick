@@ -1,26 +1,21 @@
+// 根据 320×180 谱面逻辑画布校准 PR 控制，在编辑器像素空间绘制参考线。视频导出与 VSM 不包含此覆盖层。几何及 UV 遮罩与场景渲染共用 proxy 采样姿态。
+
 using System.Numerics;
 using KuroakiGimmick.Graphics;
 using KuroakiGimmick.Native;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// PR family calibration for the chart's 320x180 logical coordinates.
-/// Draws an overlay in editor pixels only: it is never included in video export or saved VSM.
-/// Geometry and UV masks share the scene renderer's evaluated proxy pose.
-/// </summary>
 public sealed partial class Viewer
 {
     (Guid Id, int Target)? prGridSelection;
-    // Keep the overlay visibility rule shared between rendering and mouse hit testing.
-    // A hidden floating panel must never steal clicks from image/text objects in the scene.
+    // 叠加层绘制与鼠标命中共用可见性判断，隐藏的浮动面板不能截获场景图片或文字的点击。
     bool TryPrGridTarget(out int target)
     {
         target = -1;
         if (editor == null || prGridMode == 2 || imageCanvas || textCanvas || desktopPreview) return false;
         var selected = selectedClip is Guid id ? EditorFindClip(id) : null;
-        // Editing/undoing the target of the same clip must move its guide too. Merely
-        // choosing another P in the picker does not change the clip and keeps precedence.
+        // 在同一事件上修改或撤销其目标时参考线随之移动；选择器改选另一 P 时保留显式选择，事件本身不变。
         if (selected != null)
         {
             if (prGridSelection is { } previous && previous.Id == selected.Id && previous.Target != selected.Proxy)
@@ -32,15 +27,14 @@ public sealed partial class Viewer
         bool hoveredProxy = hoveredEditTrack is { Window: false, Target: >= 0, ImageId: null, TextId: null };
         bool workflowProxy = workflow == "add" && addProxy >= 0;
         if (prGridMode == 0 && newProxy < 0 && !selectedProxy && !hoveredProxy && !workflowProxy) return false;
-        // Explicit picker selection wins over stale hover state. Clip selection synchronizes newProxy.
+        // 选择器中的显式目标优先于旧的悬停状态，选中事件时同步更新 newProxy。
         target = newProxy >= 0 ? newProxy :
             selectedProxy ? selected!.Proxy : workflowProxy ? addProxy :
             hoveredProxy ? hoveredEditTrack!.Target : 0;
         return true;
     }
 
-    // Position is editor-only and measured relative to the actual 16:9 scene, not the outer
-    // letterbox/frame. Default top-right; dragging remembers position until editor reload.
+    // 位置仅供编辑器使用，相对于实际 16:9 场景而非外框；默认右上，拖动位置保留至重新加载编辑器。
     float prGridHudOffsetX = float.NaN, prGridHudOffsetY = 8;
     float prGridHudGrabX, prGridHudGrabY;
     bool prGridHudDragging, prGridHudExpanded;
@@ -90,14 +84,18 @@ public sealed partial class Viewer
         if (!prGridHudExpanded) return;
         Canvas.Line(hud.X + 1, hud.Y + PrGridHeaderHeight, hud.X + hud.W - 1, hud.Y + PrGridHeaderHeight, 1, Theme.BorderStrong.Alpha(.7f));
         float y = hud.Y + PrGridHeaderHeight + 6;
-        void Row(string value, Color color) { Text(value, hud.X + 7, y, 10, color, true, hud.W - 14); y += 17; }
+        void Row(string value, Color color)
+        {
+            Text(value, hud.X + 7, y, 10, color, true, hud.W - 14);
+            y += 17;
+        }
         Row(L.Get("Solid: lane reference / Dashed: source crop"), Theme.AccentSoft);
         if (geometry is not { } g) return;
         string reversed = g.Left > g.Right || g.Top > g.Bottom ? " [" + L.Get("REVERSED") + "]" : "";
         Row(L.Get("SOURCE CROP") + $" X {g.Left:0.#}..{g.Right:0.#} Y {g.Top:0.#}..{g.Bottom:0.#}" + reversed, Theme.Text);
         Row($"X {g.X:0.##}  Y {g.Y:0.##}  ROT {g.Angle:0.##}°  a={g.Alpha:0.##}", Theme.Text);
         Row($"SCALE X {g.ScaleX:0.###}  Y {g.ScaleY:0.###}" + (g.Projective ? " / " + L.Get("PERSPECTIVE") : ""), Theme.Text);
-        Row($"shcl {mask.Left:0.###} ({320 * mask.Left:0.#})   shcr {mask.Right:0.###} ({320 * (1-mask.Right):0.#})", Theme.AccentStrong);
+        Row($"shcl {mask.Left:0.###} ({320 * mask.Left:0.#})   shcr {mask.Right:0.###} ({320 * (1 - mask.Right):0.#})", Theme.AccentStrong);
         Row($"shfl {mask.FadeLeft:0.###}   shfr {mask.FadeRight:0.###} / " + L.Get("UV fade"), Theme.AccentStrong);
         Row(exitX, Theme.Text);
         Row(exitY, Theme.Text);
@@ -111,7 +109,8 @@ public sealed partial class Viewer
             if (e.WindowID != 0 && e.WindowID != ActiveUiWindowId) return false;
             if (e.Type == 0x400 || e.Type == 0x402 && e.Button == 1)
             {
-                mouseX = e.X; mouseY = e.Y;
+                mouseX = e.X;
+                mouseY = e.Y;
                 float width = prGridHudRect.W, height = prGridHudRect.H;
                 prGridHudOffsetX = Math.Clamp(e.X - prGridHudGrabX - previewImage.X, 0, Math.Max(0, previewImage.W - width));
                 prGridHudOffsetY = Math.Clamp(e.Y - prGridHudGrabY - previewImage.Y, 0, Math.Max(0, previewImage.H - height));
@@ -124,23 +123,40 @@ public sealed partial class Viewer
                 return true;
             }
             if (e.Type == 0x300 && e.Scan == 41)
-            { prGridHudDragging = false; held = click = false; Sdl.SDL_CaptureMouse(false); return true; }
+            {
+                prGridHudDragging = false;
+                held = click = false;
+                Sdl.SDL_CaptureMouse(false);
+                return true;
+            }
             if (e.Type == 0x20F)
-            { prGridHudDragging = false; held = click = false; Sdl.SDL_CaptureMouse(false); return false; }
+            {
+                prGridHudDragging = false;
+                held = click = false;
+                Sdl.SDL_CaptureMouse(false);
+                return false;
+            }
             if (e.Type is 0x100 or Sdl.WindowCloseRequested)
-            { prGridHudDragging = false; Sdl.SDL_CaptureMouse(false); return false; }
+            {
+                prGridHudDragging = false;
+                Sdl.SDL_CaptureMouse(false);
+                return false;
+            }
             return e.Type is >= 0x400 and <= 0x403;
         }
         if (e.WindowID != 0 && e.WindowID != ActiveUiWindowId) return false;
         if (!editorMode || settings || UiOverlayVisible || Busy || !TryPrGridTarget(out int target) ||
             e.Type != 0x401 || e.Button != 1) return false;
-        mouseX = e.X; mouseY = e.Y;
+        mouseX = e.X;
+        mouseY = e.Y;
         if (!prGridHudRect.Contains(e.X, e.Y))
         {
             foreach (var label in prGridLabels)
                 if (label.Bounds.Contains(e.X, e.Y))
                 {
-                    SelectProxyFromGuide(label.Target); click = held = false; return true;
+                    SelectProxyFromGuide(label.Target);
+                    click = held = false;
+                    return true;
                 }
             return false;
         }
@@ -155,7 +171,10 @@ public sealed partial class Viewer
             else prGridShowCrop = !prGridShowCrop;
         }
         else if (e.Y >= prGridHudRect.Y + 35 && e.Y <= prGridHudRect.Y + 57 && e.X >= right - 77 && e.X <= right - 7)
-        { prGridShowIds = !prGridShowIds; prGridLabels.Clear(); }
+        {
+            prGridShowIds = !prGridShowIds;
+            prGridLabels.Clear();
+        }
         else if (e.Y < prGridHudRect.Y + PrGridTitleHeight && e.X >= right - 27)
             prGridHudExpanded = !prGridHudExpanded;
         else if (e.Y < prGridHudRect.Y + PrGridTitleHeight && e.X >= right - 75)
@@ -177,7 +196,9 @@ public sealed partial class Viewer
 
     void DrawPrCalibrationGrid(Rect viewport, double time)
     {
-        prGridHudRect = default; prGridLabels.Clear(); proxyPickFrame = null;
+        prGridHudRect = default;
+        prGridLabels.Clear();
+        proxyPickFrame = null;
         if (!TryPrGridTarget(out int target) || viewport.W < 80 || viewport.H < 80) return;
         proxyPickFrame = new(Current, viewport, time, prGridSoloRendered ? prGridSoloTarget : null);
         float scaleX = viewport.W / 320, scaleY = viewport.H / 180;
@@ -188,12 +209,14 @@ public sealed partial class Viewer
         Canvas.Clip(viewport);
         for (int x = 0; x <= 320; x += prGridStep)
         {
-            var a = Point(x, 0); var b = Point(x, 180);
+            var a = Point(x, 0);
+            var b = Point(x, 180);
             Canvas.Line(a.X, a.Y, b.X, b.Y, x % 40 == 0 ? 1.2f : .6f, x % 40 == 0 ? majorGrid : grid);
         }
         for (int y = 0; y <= 180; y += prGridStep)
         {
-            var a = Point(0, y); var b = Point(320, y);
+            var a = Point(0, y);
+            var b = Point(320, y);
             Canvas.Line(a.X, a.Y, b.X, b.Y, y % 40 == 0 ? 1.2f : .6f, y % 40 == 0 ? majorGrid : grid);
         }
         for (int x = 0; x < 320; x += 40) Text(x.ToString(), viewport.X + x * scaleX + 3, viewport.Y + 3, 10, Theme.Muted, true, 36);
@@ -230,10 +253,15 @@ public sealed partial class Viewer
             {
                 float length = Vector2.Distance(a, b);
                 if (!float.IsFinite(length) || length < .01f) return;
-                if (!dashed) { Canvas.Line(a.X, a.Y, b.X, b.Y, width, color); return; }
+                if (!dashed)
+                {
+                    Canvas.Line(a.X, a.Y, b.X, b.Y, width, color);
+                    return;
+                }
                 for (float d = 0; d < length; d += 10)
                 {
-                    var from = Vector2.Lerp(a, b, d / length); var to = Vector2.Lerp(a, b, Math.Min(d + 5, length) / length);
+                    var from = Vector2.Lerp(a, b, d / length);
+                    var to = Vector2.Lerp(a, b, Math.Min(d + 5, length) / length);
                     Canvas.Line(from.X, from.Y, to.X, to.Y, width, color);
                 }
             }
@@ -241,19 +269,20 @@ public sealed partial class Viewer
             {
                 if (g.ClipSegment(a, b, out var p, out var q)) Line(Pixel(p), Pixel(q), color, width, dashed);
             }
-            // Clip the untransformed dashed frame to the field before drawing; never invent a border
-            // along the viewport edge when the actual source crop extends beyond it.
+            // 先将未变换的虚线框裁剪到场地。源裁剪延伸到可视区外时，不在视口边缘虚构边框。
             void SourceLine(Vector2 a, Vector2 b)
             {
                 if (a.X == b.X)
                 {
                     if (a.X < 0 || a.X > 320) return;
-                    a.Y = Math.Clamp(a.Y, 0, 180); b.Y = Math.Clamp(b.Y, 0, 180);
+                    a.Y = Math.Clamp(a.Y, 0, 180);
+                    b.Y = Math.Clamp(b.Y, 0, 180);
                 }
                 else
                 {
                     if (a.Y < 0 || a.Y > 180) return;
-                    a.X = Math.Clamp(a.X, 0, 320); b.X = Math.Clamp(b.X, 0, 320);
+                    a.X = Math.Clamp(a.X, 0, 320);
+                    b.X = Math.Clamp(b.X, 0, 320);
                 }
                 Line(Pixel(a), Pixel(b), Theme.Muted, 1.2f, true);
             }
@@ -270,7 +299,7 @@ public sealed partial class Viewer
                 if (source.W > 0 && source.H > 0)
                     ProjectedLine(trackCorners[i], trackCorners[(i + 1) % 4], Theme.AccentSoft, 1.8f);
             }
-            // Boundaries are in original full-field UV space, not percentages of the cropped width.
+            // 边界基于完整场地的 UV，独立于裁剪后的宽度。
             void Boundary(float value, bool horizontal, string label, bool fade = false)
             {
                 float low = horizontal ? source.Y : source.X, high = low + (horizontal ? source.H : source.W);
@@ -295,12 +324,13 @@ public sealed partial class Viewer
             if (mask.FadeTop > 0) Boundary(180 * (mask.Top + mask.FadeTop), true, "", true);
             if (mask.FadeBottom > 0) Boundary(180 * (1 - mask.Bottom - mask.FadeBottom), true, "", true);
 
-            // Local X/Y axes show rotation, scale and shear around the renderer's actual pivot.
+            // 从渲染器使用的真实枢轴绘制局部 X/Y 轴，显示旋转、缩放与斜切。
             ProjectedLine(g.Origin, g.Origin + new Vector2(15, 0), Theme.AccentSoft, 2);
             ProjectedLine(g.Origin, g.Origin + new Vector2(0, 15), Theme.AccentStrong, 2);
             if (g.TryProject(g.Origin, out var pivot) && pivot.X >= 0 && pivot.X <= 320 && pivot.Y >= 0 && pivot.Y <= 180)
             {
-                var p = Pixel(pivot); Canvas.Border(new(p.X - 3, p.Y - 3, 6, 6), Theme.Text);
+                var p = Pixel(pivot);
+                Canvas.Border(new(p.X - 3, p.Y - 3, 6, 6), Theme.Text);
             }
             var projected = new Vector2[4];
             bool allInFront = true;
@@ -337,6 +367,9 @@ public sealed partial class Viewer
                 Canvas.Line(mouseX, mouseY - 4, mouseX, mouseY + 4, 1, Theme.Text);
             }
         }
-        finally { Canvas.Clip(null); }
+        finally
+        {
+            Canvas.Clip(null);
+        }
     }
 }

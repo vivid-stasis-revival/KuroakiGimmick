@@ -1,3 +1,5 @@
+// 按背景与 GUI 阶段合成剧情序列。
+
 using KuroakiGimmick.Core;
 
 namespace KuroakiGimmick.Graphics;
@@ -29,7 +31,9 @@ public sealed partial class NativeGimmickRenderer
         return sceneStoryState = new NativeInterludeSchedule(definition).Sample(time, time, keepVisible: true);
     }
 
-    /// <summary>o_bg uses ordinary Draw, before the object's GUI-Begin post pass.</summary>
+    /// <summary>o_bg 在普通 Draw 阶段绘制，先于该对象 GUI-Begin 的后处理。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void DrawSequenceSceneBackground(Session session, double time)
     {
         if (SceneStory(session, time)?.BackgroundSprite is not { } sprite || SequenceTexture(session, sprite) is not { } image) return;
@@ -37,7 +41,9 @@ public sealed partial class NativeGimmickRenderer
         canvas.Flush();
     }
 
-    /// <summary>Story portraits and story tint use Draw GUI, before the textbox's smaller depth.</summary>
+    /// <summary>剧情立绘和着色在 Draw GUI 中绘制，先于深度更小的文本框。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void DrawSequenceSceneGui(Session session, double time)
     {
         if (SceneStory(session, time) is not { } state) return;

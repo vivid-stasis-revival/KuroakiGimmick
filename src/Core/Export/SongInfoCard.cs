@@ -7,6 +7,21 @@ namespace KuroakiGimmick.Core;
 /// 卡片按难度成立 —— BACKSTAGE 用的是 enc_data 指定的曲名、封面与音频，因而与同一首歌的其它难度并不相同。
 /// 这里只做数据装配，不碰 GPU，渲染与落盘各自分开。
 /// </summary>
+/// <param name="Title">卡片标题。</param>
+/// <param name="Artist">曲师署名。</param>
+/// <param name="BpmDisplay">BPM 显示文本。</param>
+/// <param name="LengthSeconds">歌曲秒数。</param>
+/// <param name="Difficulty">难度键。</param>
+/// <param name="DisplayDifficulty">显示难度。</param>
+/// <param name="Level">可选等级。</param>
+/// <param name="Designer">谱师署名。</param>
+/// <param name="JacketArtist">曲绘作者署名。</param>
+/// <param name="JacketPath">曲绘路径。</param>
+/// <param name="ChartId">谱面键。</param>
+/// <param name="NoteCount">判定总数。</param>
+/// <param name="Stats">统计值。</param>
+/// <param name="GimmickSource">演出权重的来源。</param>
+/// <param name="GimmickWeight">演出权重。</param>
 public sealed record SongInfoCard(string Title, string Artist, string BpmDisplay, double LengthSeconds,
     string Difficulty, string DisplayDifficulty, string? Level, string? Designer, string? JacketArtist,
     string? JacketPath, string? ChartId, int NoteCount, SongStats Stats, string GimmickSource, double GimmickWeight)
@@ -22,6 +37,8 @@ public sealed record SongInfoCard(string Title, string Artist, string BpmDisplay
     /// 由当前会话装配卡片。长度优先取已解码音频的实际时长 —— 统计公式里的 length 直接决定五项数值，
     /// 用谱面末尾事件推算会与游戏显示的结果对不上；没有音频时才退回谱面时长。
     /// </summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <returns>当前会话的信息卡数据。</returns>
     public static SongInfoCard Build(Session session)
     {
         var project = session.Project;

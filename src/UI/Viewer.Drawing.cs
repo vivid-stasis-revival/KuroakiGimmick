@@ -1,3 +1,5 @@
+// 交互层状态协调器。加载结果通过主线程队列提交，GPU 操作只在窗口线程执行；设置、输入与绘制分文件维护。
+
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
@@ -8,27 +10,32 @@ using KuroakiGimmick.Native;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// 交互层状态协调器。加载结果通过主线程队列提交，GPU 操作只在窗口线程执行；设置、输入与绘制分文件维护。
-/// </summary>
 public sealed partial class Viewer
 {
     /// <summary>绘制预览、检查面板和设置覆盖层；使用 Renderer.Final 展示场景而不是再实现一套预览逻辑。</summary>
     bool drawingWorkspaceFrame;
     bool workspaceTogglePending;
 
+    /// <summary>绘制当前工作区及其界面。</summary>
+    /// <param name="forcedWidth">可选的强制绘制宽度。</param>
+    /// <param name="forcedHeight">可选的强制绘制高度。</param>
     public void Draw(int? forcedWidth = null, int? forcedHeight = null)
     {
-        // Immediate-mode buttons may request a different workspace. Apply that request
-        // before the next frame, never halfway through a panel list from the old mode.
+        // 即时模式按钮可能请求切换工作区，在下一帧之前统一应用，避免遍历旧模式面板时中途切换。
         if (workspaceTogglePending)
         {
             workspaceTogglePending = false;
             ToggleWorkspace();
         }
         drawingWorkspaceFrame = true;
-        try { DrawWorkspaceFrame(forcedWidth, forcedHeight); }
-        finally { drawingWorkspaceFrame = false; }
+        try
+        {
+            DrawWorkspaceFrame(forcedWidth, forcedHeight);
+        }
+        finally
+        {
+            drawingWorkspaceFrame = false;
+        }
     }
 
     void DrawWorkspaceFrame(int? forcedWidth, int? forcedHeight)
@@ -67,7 +74,8 @@ public sealed partial class Viewer
             if (editorMode && prGridSolo && TryPrGridTarget(out int proxyTarget) && SceneRenderer.CanInspectProxy(Current))
             {
                 Renderer.RenderProxyInspection(Current, time, proxyTarget, notes, effects);
-                prGridSoloRendered = true; prGridSoloTarget = proxyTarget;
+                prGridSoloRendered = true;
+                prGridSoloTarget = proxyTarget;
             }
         }
         // 信息卡片有自己的离屏目标，必须在 UI 合成开始之前画完，中途不再切换渲染目标。
@@ -85,12 +93,25 @@ public sealed partial class Viewer
         Text("GIMMICK", 83, 50, 10, soft, true);
         Canvas.Fill(new(272, 28, 1, 30), line);
         Text(Paths.BuildRevision, 292, 35, 12, muted, true, max: Math.Max(1, w - 1024));
-        if (Button(L.Get("LAYOUT"), new(w - 634, 25, 90, 31), enabled: !Busy)) { OpenLayout(); click = false; }
-        if (Button(L.Get("CARD"), new(w - 724, 25, 80, 31), enabled: !Busy && !Current.IsEmpty)) { OpenInfoCard(); }
+        if (Button(L.Get("LAYOUT"), new(w - 634, 25, 90, 31), enabled: !Busy))
+        {
+            OpenLayout();
+            click = false;
+        }
+        if (Button(L.Get("CARD"), new(w - 724, 25, 80, 31), enabled: !Busy && !Current.IsEmpty))
+        {
+            OpenInfoCard();
+        }
         if (Button(L.Get("EXPORT"), new(w - 534, 25, 90, 31), enabled: !Busy && !Current.IsEmpty))
-        { OpenChartExport(); click = false; }
+        {
+            OpenChartExport();
+            click = false;
+        }
         if (Button(L.Get("EDITOR UI"), new(w - 434, 25, 116, 31), enabled: !Busy && !Current.IsEmpty))
-        { ToggleWorkspace(); click = false; }
+        {
+            ToggleWorkspace();
+            click = false;
+        }
         if (Button(L.Get("SETTINGS"), new(w - 308, 25, 102, 31), enabled: !Busy))
         {
             OpenSettings();
@@ -107,12 +128,12 @@ public sealed partial class Viewer
         ViewerDockRects(w, h);
         DrawMainDockPanels(w, h, pw, ph, time, false);
         Divider(24, h - 55, w - 48);
-        Canvas.Fill(new(24, h - 35, 5, 5), Busy? red : soft);
+        Canvas.Fill(new(24, h - 35, 5, 5), Busy ? red : soft);
         using (Canvas.Opacity(motion.To("status", 1, .15))) Text(message, 38, h - 40, 11, muted, max: w - 310);
         Text(L.Get("VOL"), w - 237, h - 38, 9, muted, true);
         var volumeRect = new Rect(w - 198, h - 38, 93, 12);
         Canvas.Fill(new(volumeRect.X, volumeRect.Y + 5, volumeRect.W, 2), line);
-        Canvas.Fill(new(volumeRect.X, volumeRect.Y + 5, (float) transport.Volume * volumeRect.W, 2), soft);
+        Canvas.Fill(new(volumeRect.X, volumeRect.Y + 5, (float)transport.Volume * volumeRect.W, 2), soft);
         if (!UiOverlayVisible && held && volumeRect.Contains(mouseX, mouseY))
         {
             SetVolume((mouseX - volumeRect.X) / volumeRect.W);
@@ -123,7 +144,7 @@ public sealed partial class Viewer
             SaveSettings();
             effectiveVolumeDirty = false;
         }
-        Text($"{transport.Volume*100:0}%", w - 89, h - 40, 10, white, true);
+        Text($"{transport.Volume * 100:0}%", w - 89, h - 40, 10, white, true);
         DrawInfoCard(w, h);
         if ((help || helpAlpha > .001f) && !settings)
         {
@@ -155,7 +176,10 @@ public sealed partial class Viewer
                 }
             }
             if (Button(L.Get("VSM DOCS / F1"), new(r.X + 283, r.Y + 400, 237, 32)))
-            { OpenReference(); click = false; }
+            {
+                OpenReference();
+                click = false;
+            }
             if (Button(L.Get("CLOSE"), new(r.X + 30, r.Y + 400, 237, 32)))
             {
                 help = false;
@@ -218,12 +242,24 @@ public sealed partial class Viewer
     {
         switch (id)
         {
-            case "sources": DrawViewerSources(area, h, time); break;
-            case "preview": DrawViewerPreview(area, w, h, pw, ph, time); break;
-            case "transport": DrawViewerTransport(area, time); break;
-            case "inspector": DrawViewerInspector(area, time, area.Y - 174); break;
-            case "export": DrawViewerExport(area, time, area.Y - 509); break;
-            case "diagnostics": DrawViewerDiagnostics(area, h, area.Y - 91); break;
+            case "sources":
+                DrawViewerSources(area, h, time);
+                break;
+            case "preview":
+                DrawViewerPreview(area, w, h, pw, ph, time);
+                break;
+            case "transport":
+                DrawViewerTransport(area, time);
+                break;
+            case "inspector":
+                DrawViewerInspector(area, time, area.Y - 174);
+                break;
+            case "export":
+                DrawViewerExport(area, time, area.Y - 509);
+                break;
+            case "diagnostics":
+                DrawViewerDiagnostics(area, h, area.Y - 91);
+                break;
             default: throw new ArgumentOutOfRangeException(nameof(id), id, "Unknown viewer dock panel.");
         }
     }
@@ -243,7 +279,7 @@ public sealed partial class Viewer
         Canvas.Fill(frame, Color.Hex(0x030204));
         Canvas.Border(frame, line);
         var image = Canvas.PreviewRect(new(cx + 1, previewY + 1, Math.Max(1, cw - 2), Math.Max(1, previewH - 2)),
-            pw / (float) w, ph / (float) h, integerScale);
+            pw / (float)w, ph / (float)h, integerScale);
         previewImage = image;
         // 歌曲画面不随工作区淡入淡出：直接展示 Renderer.Final，不另做一套预览渲染。
         using (Canvas.Unfaded())
@@ -273,7 +309,7 @@ public sealed partial class Viewer
     {
         float cx = area.X + PreviewHorizontalPadding, cw = Math.Max(1, area.W - 2 * PreviewHorizontalPadding);
         float controls = area.Y + 4;
-        if (Button(transport.Playing? L.Get("PAUSE") : L.Get("PLAY"), new(cx, controls, 79, 34), primary : true, enabled : !Busy, key: "viewer-play"))
+        if (Button(transport.Playing ? L.Get("PAUSE") : L.Get("PLAY"), new(cx, controls, 79, 34), primary: true, enabled: !Busy, key: "viewer-play"))
         {
             transport.SetPlaying(!transport.Playing);
         }
@@ -289,7 +325,7 @@ public sealed partial class Viewer
         }
         if (Button($"{transport.Speed:0.00}x", new(cx + 170, controls, 65, 34), enabled: !Busy, key: "viewer-speed"))
         {
-            transport.SetSpeed(transport.Speed >= 2?.25 : transport.Speed + .25);
+            transport.SetSpeed(transport.Speed >= 2 ? .25 : transport.Speed + .25);
         }
         if (Button(L.Get("NOTES"), new(cx + 245, controls, 65, 34), active: notes, enabled: !Busy))
         {
@@ -325,14 +361,14 @@ public sealed partial class Viewer
         var seek = new Rect(cx, ty + 38, cw, 45);
         Canvas.Fill(seek, panel);
         // 事件密度直接由已加载文件统计，从不使用占位波形数据。
-        int bins = Math.Max(1, (int) cw / 4);
+        int bins = Math.Max(1, (int)cw / 4);
         var density = Current.EventDensity.Bins(bins, Current.Duration);
         int peak = Current.EventDensity.Peak;
         for (int i = 0; i < bins; i++)
         {
-            float bar = 3 + 30 * MathF.Sqrt(density[i] / (float) peak);
+            float bar = 3 + 30 * MathF.Sqrt(density[i] / (float)peak);
             Canvas.Fill(new(cx + i * cw / bins, seek.Y + seek.H - bar - 6, 2, bar),
-                i / (double) bins <= time / Current.Duration? red.Alpha(.65) : soft.Alpha(.3));
+                i / (double)bins <= time / Current.Duration ? red.Alpha(.65) : soft.Alpha(.3));
         }
         Canvas.Fill(new(cx, seek.Y + seek.H - 1, cw, 1), line);
         float cursor = cx + (float)(time / Current.Duration) * cw;
@@ -367,12 +403,26 @@ public sealed partial class Viewer
             (p.Panel is "inspector" or "export" or "diagnostics")).Panel ?? "inspector";
         float tabWidth = Math.Max(1, (rw - 10) / 2);
         if (Button(L.Get("INSPECT"), new(rx, dy + 128, tabWidth, 31), active: selected != "diagnostics"))
-        { if (DockingEnabled) workspaceManager.Viewer.Activate("inspector"); selected = "inspector"; click = false; SaveSettings(); }
+        {
+            if (DockingEnabled) workspaceManager.Viewer.Activate("inspector");
+            selected = "inspector";
+            click = false;
+            SaveSettings();
+        }
         if (Button(L.Get("REPORT ") + Current.Chart.Diagnostics.Count,
             new(rx + tabWidth + 10, dy + 128, tabWidth, 31), active: selected == "diagnostics"))
-        { if (DockingEnabled) workspaceManager.Viewer.Activate("diagnostics"); selected = "diagnostics"; click = false; SaveSettings(); }
+        {
+            if (DockingEnabled) workspaceManager.Viewer.Activate("diagnostics");
+            selected = "diagnostics";
+            click = false;
+            SaveSettings();
+        }
         diagnostics = selected == "diagnostics";
-        if (animatedDiagnostics != diagnostics) { animatedDiagnostics = diagnostics; motion.Snap("inspect-panel", 0); }
+        if (animatedDiagnostics != diagnostics)
+        {
+            animatedDiagnostics = diagnostics;
+            motion.Snap("inspect-panel", 0);
+        }
         using (Canvas.Opacity(motion.To("inspect-panel", 1, .14)))
         {
             if (diagnostics) DrawViewerDiagnostics(new(area.X, area.Y + 78, area.W, Math.Max(0, area.H - 78)), h, dy);
@@ -387,178 +437,178 @@ public sealed partial class Viewer
     void DrawViewerDiagnostics(Rect area, int h, float dy)
     {
         float rx = area.X, rw = area.W;
-            // 旧的报告视图仍是最初固定 282 px 的布局：消息被硬切成 32 字符一块，
-            // 导航按钮放在写死的 Y 值上。
-            // 一旦右侧面板宽度或全局 UI 缩放改变，面板变大了内容却不会重排。
-            // 报告布局必须与工作区其余部分留在同一套响应式坐标系里，
-            // 不要再回到固定像素的写法。
-            Text(L.Get("Compatibility details"), rx, area.Y + 8, 15, white, max: rw);
-            var list = Current.Chart.Diagnostics;
-            int index = list.Count == 0 ? 0 : Math.Clamp(diagnosticPage, 0, list.Count - 1);
-            diagnosticPage = index;
+        // 旧的报告视图仍是最初固定 282 px 的布局：消息被硬切成 32 字符一块，
+        // 导航按钮放在写死的 Y 值上。
+        // 一旦右侧面板宽度或全局 UI 缩放改变，面板变大了内容却不会重排。
+        // 报告布局必须与工作区其余部分留在同一套响应式坐标系里，
+        // 不要再回到固定像素的写法。
+        Text(L.Get("Compatibility details"), rx, area.Y + 8, 15, white, max: rw);
+        var list = Current.Chart.Diagnostics;
+        int index = list.Count == 0 ? 0 : Math.Clamp(diagnosticPage, 0, list.Count - 1);
+        diagnosticPage = index;
 
-            float navY = Math.Max(area.Y + 110, area.Y + area.H - 76);
-            float saveY = navY + 38;
-            float bodyTop = area.Y + 36;
-            float bodyBottom = Math.Max(bodyTop + 72, navY - 22);
-            float yy = bodyTop;
-            int shown = 0;
+        float navY = Math.Max(area.Y + 110, area.Y + area.H - 76);
+        float saveY = navY + 38;
+        float bodyTop = area.Y + 36;
+        float bodyBottom = Math.Max(bodyTop + 72, navY - 22);
+        float yy = bodyTop;
+        int shown = 0;
 
-            if (list.Count == 0)
+        if (list.Count == 0)
+        {
+            Text(L.Get("No unsupported events found."), rx, yy, 12, muted, max: rw);
+        }
+        else
+        {
+            for (int item = index; item < list.Count && yy < bodyBottom - 24; item++)
             {
-                Text(L.Get("No unsupported events found."), rx, yy, 12, muted, max: rw);
-            }
-            else
-            {
-                for (int item = index; item < list.Count && yy < bodyBottom - 24; item++)
+                var d = list[item];
+                string[] rows = EditorHelpLayout.Wrap(d.Message, Math.Max(80, rw - 4),
+                    text => fonts.Measure(text, 11));
+                int maxRows = Math.Max(1, (int)MathF.Floor((bodyBottom - yy - 25) / 16));
+                int drawRows = Math.Min(rows.Length, maxRows);
+                if (drawRows <= 0) break;
+
+                Text(d.Error ? L.Get("ERROR") : L.Get("NOTICE"), rx, yy, 9, d.Error ? red : soft, true);
+                for (int row = 0; row < drawRows; row++)
                 {
-                    var d = list[item];
-                    string[] rows = EditorHelpLayout.Wrap(d.Message, Math.Max(80, rw - 4),
-                        text => fonts.Measure(text, 11));
-                    int maxRows = Math.Max(1, (int)MathF.Floor((bodyBottom - yy - 25) / 16));
-                    int drawRows = Math.Min(rows.Length, maxRows);
-                    if (drawRows <= 0) break;
-
-                    Text(d.Error ? L.Get("ERROR") : L.Get("NOTICE"), rx, yy, 9, d.Error ? red : soft, true);
-                    for (int row = 0; row < drawRows; row++)
-                    {
-                        string text = rows[row];
-                        if (row == drawRows - 1 && drawRows < rows.Length)
-                            text = EditorHelpLayout.FitTitle(text + " …", Math.Max(80, rw - 4), value => fonts.Measure(value, 11));
-                        Text(text, rx, yy + 18 + row * 16, 11, muted, max: rw);
-                    }
-
-                    yy += 28 + drawRows * 16;
-                    shown++;
-                    if (drawRows < rows.Length) break;
+                    string text = rows[row];
+                    if (row == drawRows - 1 && drawRows < rows.Length)
+                        text = EditorHelpLayout.FitTitle(text + " …", Math.Max(80, rw - 4), value => fonts.Measure(value, 11));
+                    Text(text, rx, yy + 18 + row * 16, 11, muted, max: rw);
                 }
-            }
 
-            if (list.Count > 0)
-            {
-                string range = $"{index + 1}–{Math.Min(list.Count, index + Math.Max(1, shown))} / {list.Count}";
-                Text(range, rx, navY - 19, 10, muted, true, max: rw);
+                yy += 28 + drawRows * 16;
+                shown++;
+                if (drawRows < rows.Length) break;
             }
+        }
 
-            float navGap = 10;
-            float navWidth = Math.Max(1, (rw - navGap) / 2);
-            int nextIndex = Math.Min(Math.Max(0, list.Count - 1), index + Math.Max(1, shown));
-            if (Button(L.Get("PREV"), new(rx, navY, navWidth, 31), enabled: list.Count > 0 && index > 0))
-            {
-                diagnosticPage = Math.Max(0, index - Math.Max(1, shown));
-            }
-            if (Button(L.Get("NEXT"), new(rx + navWidth + navGap, navY, navWidth, 31), enabled: list.Count > 0 && nextIndex > index))
-            {
-                diagnosticPage = nextIndex;
-            }
-            if (Button(L.Get("SAVE REPORT"), new(rx, saveY, rw, 36)))
-            {
-                Report();
-            }
+        if (list.Count > 0)
+        {
+            string range = $"{index + 1}–{Math.Min(list.Count, index + Math.Max(1, shown))} / {list.Count}";
+            Text(range, rx, navY - 19, 10, muted, true, max: rw);
+        }
+
+        float navGap = 10;
+        float navWidth = Math.Max(1, (rw - navGap) / 2);
+        int nextIndex = Math.Min(Math.Max(0, list.Count - 1), index + Math.Max(1, shown));
+        if (Button(L.Get("PREV"), new(rx, navY, navWidth, 31), enabled: list.Count > 0 && index > 0))
+        {
+            diagnosticPage = Math.Max(0, index - Math.Max(1, shown));
+        }
+        if (Button(L.Get("NEXT"), new(rx + navWidth + navGap, navY, navWidth, 31), enabled: list.Count > 0 && nextIndex > index))
+        {
+            diagnosticPage = nextIndex;
+        }
+        if (Button(L.Get("SAVE REPORT"), new(rx, saveY, rw, 36)))
+        {
+            Report();
+        }
     }
 
     void DrawViewerInspector(Rect area, double time, float dy)
     {
         float rx = area.X, rw = area.W;
-            string[] mods = Current.NativeGimmick.Data?.PreviewMods ?? ["scrollspeed", "velocity", "wave", "notealp", "uialpha"];
-            for (int i = 0; i < Math.Min(mods.Length, 5); i++)
-            {
-                Label(mods[i].ToUpperInvariant(), rx, dy + 182 + i * 29);
-                Text(Current.Timeline.Get(mods[i], Current.SceneTime(time)).ToString("0.000", CultureInfo.InvariantCulture), rx + 162, dy + 180 + i * 29, 12, white, true);
-            }
-            Divider(rx, dy + 340, rw);
-            Label(L.Get("TIMING"), rx, dy + 357);
-            if (Button(Current.Project.NoteAlignment == 0 ? L.Get("ALIGN: TOP") : L.Get("ALIGN: BOTTOM"), new(rx + 100, dy + 349, 147, 26), enabled : !Busy))
-            {
-                Current.Project.NoteAlignment = 1 - Math.Clamp(Current.Project.NoteAlignment, 0, 1);
-            }
-            Text("BPM", rx, dy + 386, 11, muted);
-            // 固定节拍来自对象定义；不能显示一个已禁用编辑、却与实际时间轴不同的项目值。
-            double displayedBpm = Current.Timeline.Bpm.IsFixed? Current.Timeline.Bpm.BpmAtBeat(0) : Current.Project.Bpm;
-            Text(displayedBpm.ToString("0.##", CultureInfo.InvariantCulture), rx + 91, dy + 386, 12, white, true);
-            if (Button("-", new(rx + 178, dy + 377, 31, 26), enabled: !Busy && !Current.Timeline.Bpm.IsFixed))
-            {
-                Rebuild(bpm: Math.Max(1, Current.Project.Bpm - 1));
-            }
-            if (Button("+", new(rx + 216, dy + 377, 31, 26), enabled: !Busy && !Current.Timeline.Bpm.IsFixed))
-            {
-                Rebuild(bpm: Current.Project.Bpm + 1);
-            }
-            Text(L.Get("Timeline / ms"), rx, dy + 422, 11, muted);
-            Text(Current.Project.TimelineOffsetMs.ToString("0"), rx + 105, dy + 422, 12, white, true);
-            if (Button("-", new(rx + 178, dy + 413, 31, 26), enabled: !Busy))
-            {
-                SetTimelineOffset(Current.Project.TimelineOffsetMs - 1);
-            }
-            if (Button("+", new(rx + 216, dy + 413, 31, 26), enabled: !Busy))
-            {
-                SetTimelineOffset(Current.Project.TimelineOffsetMs + 1);
-            }
-            Text(L.Get("Scroll"), rx, dy + 458, 11, muted);
-            Text(Current.Project.NoteSpeed.ToString("0.0"), rx + 105, dy + 458, 12, white, true);
-            double scrollStep = (Sdl.SDL_GetModState() & 3) != 0 ? .1 : 1;
-            if (Button("-", new(rx + 178, dy + 449, 31, 26), enabled: !Busy))
-            {
-                SetNoteSpeed(Current.Project.NoteSpeed - scrollStep);
-            }
-            if (Button("+", new(rx + 216, dy + 449, 31, 26), enabled: !Busy))
-            {
-                SetNoteSpeed(Current.Project.NoteSpeed + scrollStep);
-            }
-            Divider(rx, dy + 491, rw);
+        string[] mods = Current.NativeGimmick.Data?.PreviewMods ?? ["scrollspeed", "velocity", "wave", "notealp", "uialpha"];
+        for (int i = 0; i < Math.Min(mods.Length, 5); i++)
+        {
+            Label(mods[i].ToUpperInvariant(), rx, dy + 182 + i * 29);
+            Text(Current.Timeline.Get(mods[i], Current.SceneTime(time)).ToString("0.000", CultureInfo.InvariantCulture), rx + 162, dy + 180 + i * 29, 12, white, true);
+        }
+        Divider(rx, dy + 340, rw);
+        Label(L.Get("TIMING"), rx, dy + 357);
+        if (Button(Current.Project.NoteAlignment == 0 ? L.Get("ALIGN: TOP") : L.Get("ALIGN: BOTTOM"), new(rx + 100, dy + 349, 147, 26), enabled: !Busy))
+        {
+            Current.Project.NoteAlignment = 1 - Math.Clamp(Current.Project.NoteAlignment, 0, 1);
+        }
+        Text("BPM", rx, dy + 386, 11, muted);
+        // 固定节拍来自对象定义；不能显示一个已禁用编辑、却与实际时间轴不同的项目值。
+        double displayedBpm = Current.Timeline.Bpm.IsFixed ? Current.Timeline.Bpm.BpmAtBeat(0) : Current.Project.Bpm;
+        Text(displayedBpm.ToString("0.##", CultureInfo.InvariantCulture), rx + 91, dy + 386, 12, white, true);
+        if (Button("-", new(rx + 178, dy + 377, 31, 26), enabled: !Busy && !Current.Timeline.Bpm.IsFixed))
+        {
+            Rebuild(bpm: Math.Max(1, Current.Project.Bpm - 1));
+        }
+        if (Button("+", new(rx + 216, dy + 377, 31, 26), enabled: !Busy && !Current.Timeline.Bpm.IsFixed))
+        {
+            Rebuild(bpm: Current.Project.Bpm + 1);
+        }
+        Text(L.Get("Timeline / ms"), rx, dy + 422, 11, muted);
+        Text(Current.Project.TimelineOffsetMs.ToString("0"), rx + 105, dy + 422, 12, white, true);
+        if (Button("-", new(rx + 178, dy + 413, 31, 26), enabled: !Busy))
+        {
+            SetTimelineOffset(Current.Project.TimelineOffsetMs - 1);
+        }
+        if (Button("+", new(rx + 216, dy + 413, 31, 26), enabled: !Busy))
+        {
+            SetTimelineOffset(Current.Project.TimelineOffsetMs + 1);
+        }
+        Text(L.Get("Scroll"), rx, dy + 458, 11, muted);
+        Text(Current.Project.NoteSpeed.ToString("0.0"), rx + 105, dy + 458, 12, white, true);
+        double scrollStep = (Sdl.SDL_GetModState() & 3) != 0 ? .1 : 1;
+        if (Button("-", new(rx + 178, dy + 449, 31, 26), enabled: !Busy))
+        {
+            SetNoteSpeed(Current.Project.NoteSpeed - scrollStep);
+        }
+        if (Button("+", new(rx + 216, dy + 449, 31, 26), enabled: !Busy))
+        {
+            SetNoteSpeed(Current.Project.NoteSpeed + scrollStep);
+        }
+        Divider(rx, dy + 491, rw);
     }
 
     void DrawViewerExport(Rect area, double time, float dy)
     {
         float rx = area.X, rw = area.W;
-            Label(L.Get("VIDEO EXPORT"), rx, dy + 509);
-            if (Button(new[]
-            {
+        Label(L.Get("VIDEO EXPORT"), rx, dy + 509);
+        if (Button(new[]
+        {
                 "1280 x 720",
                 "1920 x 1080",
                 "2560 x 1440",
                 "3840 x 2160"
             }
-            [resolution], new(rx, dy + 532, 145, 31), enabled: !Busy))
+        [resolution], new(rx, dy + 532, 145, 31), enabled: !Busy))
+        {
+            resolution = (resolution + 1) % 4;
+        }
+        if (Button(fps + " FPS", new(rx + 155, dy + 532, 95, 31), enabled: !Busy))
+        {
+            fps = fps == 30 ? 60 : fps == 60 ? 120 : 30;
+        }
+        Text(L.Get("IN  ") + Clock(rangeIn), rx, dy + 581, 12, muted, true);
+        Text(L.Get("OUT ") + Clock(rangeOut), rx, dy + 605, 12, muted, true);
+        if (Button(L.Get("SET IN  I"), new(rx, dy + 635, 120, 30), enabled: !Busy))
+        {
+            rangeIn = Math.Clamp(time, 0, Math.Max(0, rangeOut - 1.0 / fps));
+        }
+        if (Button(L.Get("SET OUT  U"), new(rx + 130, dy + 635, 120, 30), enabled: !Busy))
+        {
+            rangeOut = Math.Max(time, rangeIn + 1.0 / fps);
+        }
+        if (Button(L.Get("FULL SONG"), new(rx, dy + 675, rw, 28), enabled: !Busy))
+        {
+            rangeIn = 0;
+            rangeOut = Current.Duration;
+        }
+        if (Button(export == null ? L.Get("EXPORT MP4") : L.Get("CANCEL EXPORT"), new(rx, dy + 716, rw, 42), primary: true, enabled: loading == null))
+        {
+            if (export == null)
             {
-                resolution = (resolution + 1) % 4;
+                ChooseExport();
             }
-            if (Button(fps + " FPS", new(rx + 155, dy + 532, 95, 31), enabled: !Busy))
+            else
             {
-                fps = fps == 30 ? 60 : fps == 60 ? 120 : 30;
+                export.Cancel();
             }
-            Text(L.Get("IN  ") + Clock(rangeIn), rx, dy + 581, 12, muted, true);
-            Text(L.Get("OUT ") + Clock(rangeOut), rx, dy + 605, 12, muted, true);
-            if (Button(L.Get("SET IN  I"), new(rx, dy + 635, 120, 30), enabled: !Busy))
-            {
-                rangeIn = Math.Clamp(time, 0, Math.Max(0, rangeOut - 1.0 / fps));
-            }
-            if (Button(L.Get("SET OUT  U"), new(rx + 130, dy + 635, 120, 30), enabled: !Busy))
-            {
-                rangeOut = Math.Max(time, rangeIn + 1.0 / fps);
-            }
-            if (Button(L.Get("FULL SONG"), new(rx, dy + 675, rw, 28), enabled: !Busy))
-            {
-                rangeIn = 0;
-                rangeOut = Current.Duration;
-            }
-            if (Button(export == null ? L.Get("EXPORT MP4") : L.Get("CANCEL EXPORT"), new(rx, dy + 716, rw, 42), primary : true, enabled : loading == null))
-            {
-                if (export == null)
-                {
-                    ChooseExport();
-                }
-                else
-                {
-                    export.Cancel();
-                }
-            }
-            if (export != null)
-            {
-                Canvas.Fill(new(rx, dy + 770, rw, 3), line);
-                Canvas.Fill(new(rx, dy + 770, (float) export.Progress * rw, 3), red);
-            }
-            Text(L.Get("Fixed frames / original audio"), rx, dy + 788, 10, muted);
+        }
+        if (export != null)
+        {
+            Canvas.Fill(new(rx, dy + 770, rw, 3), line);
+            Canvas.Fill(new(rx, dy + 770, (float)export.Progress * rw, 3), red);
+        }
+        Text(L.Get("Fixed frames / original audio"), rx, dy + 788, 10, muted);
     }
 
     /// <summary>
@@ -603,7 +653,7 @@ public sealed partial class Viewer
         Canvas.Begin(null, pw, ph, w, h, bg);
         Canvas.Quad(UiTarget.Texture, new(0, 0, w, h), Color.White);
 #if KG_SWITCH
-        // Switch has no desktop compositor cursor; draw the same logical pointer used for hit tests.
+        // Switch 没有桌面合成器光标，直接绘制命中测试使用的逻辑指针。
         Canvas.Fill(new(mouseX - 5, mouseY - 1, 11, 3), Color.White);
         Canvas.Fill(new(mouseX - 1, mouseY - 5, 3, 11), Color.White);
 #endif

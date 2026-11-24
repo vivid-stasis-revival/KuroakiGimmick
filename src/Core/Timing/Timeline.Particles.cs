@@ -1,8 +1,7 @@
+// 无显示状态的时间轴。构建时按拍数和声明顺序整理轨道；查询不依赖上一帧，因此预览、倒拖和导出可以共享结果。
+
 namespace KuroakiGimmick.Core;
 
-/// <summary>
-/// 无显示状态的时间轴。构建时按拍数和声明顺序整理轨道；查询不依赖上一帧，因此预览、倒拖和导出可以共享结果。
-/// </summary>
 public sealed partial class Timeline
 {
     /// <summary>侧边爆发粒子：跟随 particlexpower/particleypower 的整体位移，寿命固定 4 秒（240 个 60 Hz tick）。</summary>
@@ -25,10 +24,10 @@ public sealed partial class Timeline
                 continue;
             }
             // 左右爆发的原版发射点 x=130/190，方向相反；这些都在 320×180 逻辑空间里。
-            float x = e.Name == "pburstleft" ? 130 : 190, dir = e.Name == "pburstleft" ? -1 : 1, speed = (float) Get("pburstspeed", time);
+            float x = e.Name == "pburstleft" ? 130 : 190, dir = e.Name == "pburstleft" ? -1 : 1, speed = (float)Get("pburstspeed", time);
             for (int group = 0; group < groups; group++)
             {
-                uint seed = unchecked((uint) e.Order * 3011 + (uint) group * 23 + 1717);
+                uint seed = unchecked((uint)e.Order * 3011 + (uint)group * 23 + 1717);
                 float y = MathF.Floor(Hash(seed) * 281) - 50;
                 float power = dir * 1.5f * (3 + Hash(seed + 1) * 2) * speed;
                 for (uint i = 0; i < 2; i++)
@@ -48,7 +47,7 @@ public sealed partial class Timeline
                             break;
                         }
                     }
-                    Particles.Add(new(time, x, y, vx, 0, (int) Math.Min(3, Hash(seed + 3 + i * 2) * 4), 0, 0, death, true, 4, true));
+                    Particles.Add(new(time, x, y, vx, 0, (int)Math.Min(3, Hash(seed + 3 + i * 2) * 4), 0, 0, death, true, 4, true));
                     added++;
                 }
             }
@@ -58,14 +57,16 @@ public sealed partial class Timeline
     /// <summary>plaudite 爆发粒子：一次性触发与倒计时重复触发两条路径，都按 60 Hz tick 推进。</summary>
     void BuildBursts(double duration)
     {
-        int added = 0; bool budgetReported = false;
+        int added = 0;
+        bool budgetReported = false;
         var events = chart.Mods.Where(e => e.Name == "plaudite_pburst" && e.Proxy == -1).OrderBy(e => e.Beat).ThenBy(e => e.Order).ToArray();
         void Emit(double time, double groups, uint seedBase)
         {
             if (groups > 4096 || added + Math.Ceiling(groups) * 2 > 100000)
             {
                 if (!budgetReported) chart.Diagnostics.Add(new("particles", 0, "Particle burst budget exceeded (4096 groups/event or 100000 particles/session); excess emissions omitted.", true));
-                budgetReported = true; return;
+                budgetReported = true;
+                return;
             }
             float speed = (float)Get("pburstspeed", time);
             for (int group = 0; group < Math.Ceiling(groups); group++)
@@ -92,7 +93,8 @@ public sealed partial class Timeline
         var repeated = events.Where(e => e.From > 0).Select(e => (Start: Bpm.Time(e.Beat), Milliseconds: e.To, e.Order)).ToArray();
         if (repeated.Length == 0) return;
         var active = new List<(double Start, double Milliseconds, int Order)>();
-        int cursor = 0; double countdown = -.01;
+        int cursor = 0;
+        double countdown = -.01;
         // cc 先更新已有的倒计时 tween，再派发新回调。
         // 并存的 tween 保持源顺序：后声明的短 tween 可能先结束，而更早的长 tween 仍然存活。
         for (int tick = 0; tick <= Math.Ceiling(duration * 60); tick++)
@@ -117,11 +119,11 @@ public sealed partial class Timeline
     void BuildCustomParticles(double duration, bool emit = true)
     {
         particleOffsets.Add(System.Numerics.Vector2.Zero);
-        int frames = (int) Math.Ceiling(duration * 60);
+        int frames = (int)Math.Ceiling(duration * 60);
         for (int frame = 1; frame <= frames; frame++)
         {
             double t = frame / 60.0;
-            particleOffsets.Add(particleOffsets[^1] + new System.Numerics.Vector2((float) Get("particlexpower", t), (float) Get("particleypower",
+            particleOffsets.Add(particleOffsets[^1] + new System.Numerics.Vector2((float)Get("particlexpower", t), (float)Get("particleypower",
                 t)));
         }
         if (!emit)
@@ -129,9 +131,13 @@ public sealed partial class Timeline
             return;
         }
         double destroyAt = double.PositiveInfinity;
-        if (Native?.Data?.HasBehavior("ambient-lifecycle")==true)
+        if (Native?.Data?.HasBehavior("ambient-lifecycle") == true)
             for (int frame = 0; frame <= frames; frame++)
-                if (Get(Native!.Data!.Behavior("ambient-lifecycle")!.Text("destroyMod","uialpha"), frame / 60.0) <= Native.Data.Behavior("ambient-lifecycle")!.Number("destroyThreshold",0)) { destroyAt = frame / 60.0; break; }
+                if (Get(Native!.Data!.Behavior("ambient-lifecycle")!.Text("destroyMod", "uialpha"), frame / 60.0) <= Native.Data.Behavior("ambient-lifecycle")!.Number("destroyThreshold", 0))
+                {
+                    destroyAt = frame / 60.0;
+                    break;
+                }
         // o_csm_particle_system：每两个 60 Hz tick 调用一次生成。
         // spawn_particles_area(...,1,1.5,1)，High/默认 bgparticles=1：
         // 同一个随机位置生成两颗粒子，速度和帧号各自独立。
@@ -158,15 +164,19 @@ public sealed partial class Timeline
                     }
                 }
                 Particles.Add(new(t, x, y, vx, vy, DiamondFrame(Hash(seed + 2)), MathF.Floor(Hash(seed + 3) * 256) / 255f,
-                    (float) Math.Clamp(Get("rainbow", t), 0, 1), death));
+                    (float)Math.Clamp(Get("rainbow", t), 0, 1), death));
             }
         }
     }
 
-    /// <summary>Source irandom(image_number) includes4; a four-frame sprite wraps that index back to0.</summary>
+    /// <summary>原版 irandom(image_number) 可返回 4，四帧精灵将该索引回绕到 0。</summary>
+    /// <param name="random">用于选择粒子图像的随机采样值。</param>
+    /// <returns>按原版规则回绕后的粒子帧号。</returns>
     public static int DiamondFrame(float random) => Math.Clamp((int)MathF.Floor(random * 5), 0, 4) % 4;
 
     /// <summary>按 60 Hz 表插值出该时刻的整体粒子位移；表外的时间夹到两端，不外推。</summary>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <returns>指定时刻累计的粒子横纵偏移。</returns>
     public System.Numerics.Vector2 ParticleOffset(double time)
     {
         if (particleOffsets.Count == 0)
@@ -174,7 +184,7 @@ public sealed partial class Timeline
             return default;
         }
         double frame = Math.Clamp(time * 60, 0, particleOffsets.Count - 1);
-        int i = (int) frame;
+        int i = (int)frame;
         return System.Numerics.Vector2.Lerp(particleOffsets[i], particleOffsets[Math.Min(i + 1, particleOffsets.Count - 1)], (float)(frame - i));
     }
 }

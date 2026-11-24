@@ -1,3 +1,5 @@
+// 按窗口绑定和移除指针状态。
+
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Graphics;
 
@@ -25,7 +27,7 @@ public sealed partial class Viewer
     nint ActiveUiWindow => activeWorkspaceWindow.Handle;
     uint ActiveUiWindowId => activeWorkspaceWindow.Id;
 
-    /// <summary>Bind a window's pointer state for one input or render callback, restoring it on every exit path.</summary>
+    /// <summary>为一次输入或绘制回调绑定窗口指针状态，在所有退出路径恢复原状态。</summary>
     IDisposable BindPointer(WorkspaceWindowManager.Window window)
     {
         if (window.Main) return new PointerScope(this, mainPointer, window);
@@ -39,9 +41,18 @@ public sealed partial class Viewer
         readonly WorkspacePointerState previous;
         readonly WorkspaceWindowManager.Window previousWindow;
         public PointerScope(Viewer viewer, WorkspacePointerState next, WorkspaceWindowManager.Window window)
-        { this.viewer = viewer; previous = viewer.activePointer; previousWindow = viewer.activeWorkspaceWindow;
-            viewer.activePointer = next; viewer.activeWorkspaceWindow = window; }
-        public void Dispose() { viewer.activePointer = previous; viewer.activeWorkspaceWindow = previousWindow; }
+        {
+            this.viewer = viewer;
+            previous = viewer.activePointer;
+            previousWindow = viewer.activeWorkspaceWindow;
+            viewer.activePointer = next;
+            viewer.activeWorkspaceWindow = window;
+        }
+        public void Dispose()
+        {
+            viewer.activePointer = previous;
+            viewer.activeWorkspaceWindow = previousWindow;
+        }
     }
     void ForgetPointer(WorkspaceWindowManager.Window window) => auxiliaryPointers.Remove(window.Id);
     string? activePanel { get => activePointer.ActivePanel; set => activePointer.ActivePanel = value; }

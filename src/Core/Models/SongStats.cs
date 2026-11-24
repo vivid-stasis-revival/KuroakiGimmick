@@ -1,3 +1,5 @@
+// 从音符、长条和同时判定计算曲目信息卡使用的统计值。
+
 namespace KuroakiGimmick.Core;
 
 /// <summary>
@@ -6,19 +8,48 @@ namespace KuroakiGimmick.Core;
 /// 原版按二进制里的读入顺序遍历音符，这里遍历的是已按时间排序的 Notes：同一时刻多个音符之间的先后
 /// 可能与源文件不同，因而 jack / chain 的配对在同刻音符上可能有细微差异，其余统计与顺序无关。
 /// </summary>
+/// <param name="Chip">CHIP 统计值。</param>
+/// <param name="Tech">TECH 统计值。</param>
+/// <param name="Stream">STREAM 统计值。</param>
+/// <param name="Chord">CHORD 统计值。</param>
+/// <param name="Burst">BURST 统计值。</param>
+/// <param name="Gimmick">GIMMICK 统计值。</param>
+/// <param name="Total">应用难度倍率后的综合统计值。</param>
 public sealed record SongStats(double Chip, double Tech, double Stream, double Chord, double Burst, double Gimmick, double Total)
 {
     /// <summary>原版的取整：正数 floor(v+.5)，负数 ceil(v-.5)。不要换成 Math.Round（银行家舍入）。</summary>
+    /// <param name="v">待舍入的数值。</param>
+    /// <returns>按源游戏规则取整的结果。</returns>
     public static int Round(double v) => v >= 0 ? (int)Math.Floor(v + .5) : (int)Math.Ceiling(v - .5);
 
+    /// <summary>使用源游戏的舍入规则得到 CHIP 的显示整数。</summary>
     public int RoundedChip => Round(Chip);
+    /// <summary>使用源游戏的舍入规则得到 TECH 的显示整数。</summary>
     public int RoundedTech => Round(Tech);
+    /// <summary>使用源游戏的舍入规则得到 STREAM 的显示整数。</summary>
     public int RoundedStream => Round(Stream);
+    /// <summary>使用源游戏的舍入规则得到 CHORD 的显示整数。</summary>
     public int RoundedChord => Round(Chord);
+    /// <summary>使用源游戏的舍入规则得到 BURST 的显示整数。</summary>
     public int RoundedBurst => Round(Burst);
+    /// <summary>使用源游戏的舍入规则得到 GIMMICK 的显示整数。</summary>
     public int RoundedGimmick => Round(Gimmick);
 
     /// <summary>逐音符统计量，对应原版的 SongData 结构体。密度单位是"每秒桶"，时间一律用毫秒。</summary>
+    /// <param name="Bumpers">撞块数量。</param>
+    /// <param name="HoldNotes">长条数量。</param>
+    /// <param name="HoldPieces">长条中途判定数量。</param>
+    /// <param name="NormalNotes">普通音符数量。</param>
+    /// <param name="NoteCount">含长条头尾和中途判定的总数。</param>
+    /// <param name="MultiNoteCount">重复时刻产生的同时判定计数。</param>
+    /// <param name="MultiHoldNoteCount">命中位于长条区间内的次数。</param>
+    /// <param name="PeakDensity">加权密度桶峰值。</param>
+    /// <param name="AverageDensity">加权密度桶平均值。</param>
+    /// <param name="PeakBeatDensity">单桶即时权重峰值。</param>
+    /// <param name="JackStat">同轨相邻音符的时间差权重和。</param>
+    /// <param name="ChainStat">相邻轨道与撞块配对的时间差权重和。</param>
+    /// <param name="JackCount">同轨相邻配对数。</param>
+    /// <param name="ChainCount">轨道与撞块配对数。</param>
     public sealed record Counts(int Bumpers, int HoldNotes, int HoldPieces, int NormalNotes, int NoteCount,
         int MultiNoteCount, int MultiHoldNoteCount, double PeakDensity, double AverageDensity, double PeakBeatDensity,
         double JackStat, double ChainStat, int JackCount, int ChainCount);
@@ -27,6 +58,9 @@ public sealed record SongStats(double Chip, double Tech, double Stream, double C
     /// 遍历音符得到 SongData。<paramref name="lengthSeconds"/> 只决定密度桶的数量。
     /// ms_per_note 初值 1 并由途中的变速音符改写，这是原版行为：第一条变速点之前的长条会按毫秒计件。
     /// </summary>
+    /// <param name="notes">按谱面顺序提供的音符。</param>
+    /// <param name="lengthSeconds">用于划分密度桶的歌曲秒数。</param>
+    /// <returns>音符计数、密度及相邻轨道统计。</returns>
     public static Counts Measure(IEnumerable<Note> notes, double lengthSeconds)
     {
         int bumpers = 0, holdNotes = 0, holdPieces = 0, normalNotes = 0, noteCount = 0, multiNoteCount = 0, multiHoldNoteCount = 0;
@@ -155,6 +189,8 @@ public sealed record SongStats(double Chip, double Tech, double Stream, double C
     }
 
     /// <summary>难度对总分指数的加成。BACKSTAGE 与 ENCORE 同值，未知难度按 0。</summary>
+    /// <param name="difficulty">歌曲的难度键。</param>
+    /// <returns>该难度应用到综合统计的加成。</returns>
     public static double DifficultyMultiplier(string difficulty) => SongInfo.Normalize(difficulty) switch
     {
         "OPENING" => 0,
@@ -168,6 +204,13 @@ public sealed record SongStats(double Chip, double Tech, double Stream, double C
     /// 由统计量算出六项。plaudite / n7 在原版里长度减半、平均密度加倍，是写死在源码里的特例。
     /// <paramref name="gimmickWeight"/> 为 0 时 GIMMICK 项为 0，界面上也不显示这一行。
     /// </summary>
+    /// <param name="d">预先计算的音符和密度统计。</param>
+    /// <param name="lengthSeconds">歌曲时长，单位为秒。</param>
+    /// <param name="difficulty">歌曲的难度键。</param>
+    /// <param name="chartId">用于匹配特殊公式的谱面键。</param>
+    /// <param name="gimmickWeight">演出权重。</param>
+    /// <returns>六项统计及综合值。</returns>
+    /// <exception cref="InvalidDataException">计算时使用的曲长不大于零。</exception>
     public static SongStats Compute(Counts d, double lengthSeconds, string difficulty, string? chartId, double gimmickWeight)
     {
         double length = lengthSeconds, averageDensity = d.AverageDensity;

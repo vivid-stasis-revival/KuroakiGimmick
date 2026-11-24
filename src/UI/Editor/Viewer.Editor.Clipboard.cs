@@ -1,3 +1,6 @@
+// 选择集的复制 / 粘贴。内容以文本形式进出系统剪贴板，因此两个编辑器实例之间可以互相粘贴，
+// 也可以把这段文本发给别人。粘贴一律走 Edit 记进撤销历史，副本必定获得新 Id —— 事件身份不共享。
+
 using System.Runtime.InteropServices;
 using System.Text.Json.Nodes;
 using KuroakiGimmick.Core;
@@ -6,10 +9,6 @@ using KuroakiGimmick.Native;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// 选择集的复制 / 粘贴。内容以文本形式进出系统剪贴板，因此两个编辑器实例之间可以互相粘贴，
-/// 也可以把这段文本发给别人。粘贴一律走 Edit 记进撤销历史，副本必定获得新 Id —— 事件身份不共享。
-/// </summary>
 public sealed partial class Viewer
 {
     /// <summary>
@@ -33,16 +32,30 @@ public sealed partial class Viewer
         }
         string text = EditorClipboard.Write(clips, windows);
         if (text.Length == 0)
-        { message = L.Get(cut ? "Select something to cut first." : "Select something to copy first."); return; }
+        {
+            message = L.Get(cut ? "Select something to cut first." : "Select something to copy first.");
+            return;
+        }
         int count = clips.Length + windows.Count;
-        // A successful OS write is not enough: the payload must also be fully pasteable.
+        // 剪切前还须确保写入系统剪贴板的整份内容能被粘贴。
         if (cut && EditorClipboard.Read(text)?.Count != count)
-        { message = L.Get("Selection cannot be cut because it exceeds clipboard limits or contains unsupported events."); return; }
-        if (!writeClipboard(text)) { message = L.Get("Clipboard unavailable: ") + Sdl.Error; return; }
-        if (!cut) { message = L.Format($"Copied {count} items to the clipboard."); return; }
+        {
+            message = L.Get("Selection cannot be cut because it exceeds clipboard limits or contains unsupported events.");
+            return;
+        }
+        if (!writeClipboard(text))
+        {
+            message = L.Get("Clipboard unavailable: ") + Sdl.Error;
+            return;
+        }
+        if (!cut)
+        {
+            message = L.Format($"Copied {count} items to the clipboard.");
+            return;
+        }
         try
         {
-            // Delete precisely what was copied, never an unrelated marker or image selection.
+            // 只删除实际复制的项目，保留其他选中的书签或图片。
             editor.Change(L.Format($"Cut {count} items"), () =>
             {
                 foreach (var clip in clips) editor.Vsm.Delete(clip.Id);
@@ -50,10 +63,17 @@ public sealed partial class Viewer
             });
         }
         catch (Exception ex) when (ex is FormatException or InvalidOperationException or InvalidDataException)
-        { message = L.Get("Cut rejected: ") + ex.Message; return; }
-        SetClipSelection(null); selectedWindowEvent = -1;
+        {
+            message = L.Get("Cut rejected: ") + ex.Message;
+            return;
+        }
+        SetClipSelection(null);
+        selectedWindowEvent = -1;
         if (selectedImageGroup is Guid imageGroupId && clips.Any(c => c.Id == imageGroupId))
-        { selectedImageGroup = null; imagePoseTarget = ImagePoseTarget.Initial; }
+        {
+            selectedImageGroup = null;
+            imagePoseTarget = ImagePoseTarget.Initial;
+        }
         layoutRevision = -1;
         message = L.Format($"Cut {count} items to the clipboard.");
     }
@@ -67,8 +87,14 @@ public sealed partial class Viewer
         if (editor == null || Busy) return;
         nint pointer = Sdl.SDL_GetClipboardText();
         string text;
-        try { text = Marshal.PtrToStringUTF8(pointer) ?? ""; }
-        finally { Sdl.SDL_free(pointer); }
+        try
+        {
+            text = Marshal.PtrToStringUTF8(pointer) ?? "";
+        }
+        finally
+        {
+            Sdl.SDL_free(pointer);
+        }
         PasteClipboardText(text);
     }
 

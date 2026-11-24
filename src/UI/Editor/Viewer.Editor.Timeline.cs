@@ -1,3 +1,6 @@
+// 时间轴本体：轨道行的构建与绘制、片段拖拽、缩放与刷子定位。横轴单位是拍，播放头与音频读表用秒，
+// 二者一律经 BPM map 换算；行高、标签宽等都是 UI 像素。
+
 using System.Text.Json.Nodes;
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Core.Editing;
@@ -7,10 +10,6 @@ using KuroakiGimmick.Native;
 using static KuroakiGimmick.Core.Windows.WindowMotionConfig;
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// 时间轴本体：轨道行的构建与绘制、片段拖拽、缩放与刷子定位。横轴单位是拍，播放头与音频读表用秒，
-/// 二者一律经 BPM map 换算；行高、标签宽等都是 UI 像素。
-/// </summary>
 public sealed partial class Viewer
 {
     TimelineNotePainter? timelineNotePainter;
@@ -115,9 +114,11 @@ public sealed partial class Viewer
     void BuildWaveform()
     {
         if (ReferenceEquals(waveformAudio, Current.Audio)) return;
-        waveformAudio = Current.Audio; waveform = [];
+        waveformAudio = Current.Audio;
+        waveform = [];
         if (waveformAudio == null) return;
-        const int count = 4096; waveform = new float[count];
+        const int count = 4096;
+        waveform = new float[count];
         // 真实解码音频的峰值包络。大文件按 stride 限量采样（每个 bin 最多取 512 个点）；
         // 绝不拿事件密度冒充音频波形。
         var samples = waveformAudio.Samples;
@@ -125,7 +126,8 @@ public sealed partial class Viewer
         {
             int start = (int)((long)b * samples.Length / count), end = (int)((long)(b + 1) * samples.Length / count);
             int stride = Math.Max(1, (end - start) / 512);
-            float peak = 0; for (int i = start; i < end; i += stride) peak = Math.Max(peak, Math.Abs(samples[i]));
+            float peak = 0;
+            for (int i = start; i < end; i += stride) peak = Math.Max(peak, Math.Abs(samples[i]));
             waveform[b] = Math.Min(1, peak);
         }
     }
@@ -136,8 +138,10 @@ public sealed partial class Viewer
     void DrawEditTimeline(Rect r, double time, float viewportWidth, float viewportHeight)
     {
         if (editor == null) return;
-        RebuildEditTracks(); BuildWaveform();
-        Canvas.Fill(r, panel); Canvas.Border(r, line);
+        RebuildEditTracks();
+        BuildWaveform();
+        Canvas.Fill(r, panel);
+        Canvas.Border(r, line);
         if (EButton(L.Get("SNAP ") + L.Get(SnapLabels[snapIndex]), new(r.X + 8, r.Y + 7, 88, 25))) snapIndex = (snapIndex + 1) % SnapSteps.Length;
         if (EButton(L.Get("N MAGNET"), new(r.X + 104, r.Y + 7, 89, 25), active: noteMagnet)) noteMagnet = !noteMagnet;
         if (EButton("-", new(r.X + 205, r.Y + 7, 31, 25))) ZoomTimeline(.8, r.X + 236);
@@ -145,7 +149,12 @@ public sealed partial class Viewer
         if (EButton("<", new(r.X + 281, r.Y + 7, 31, 25))) ScrollTimeline(beatStart - 4);
         if (EButton(">", new(r.X + 318, r.Y + 7, 31, 25))) ScrollTimeline(beatStart + 4);
         if (EButton(L.Get("GOTO"), new(r.X + 357, r.Y + 7, 64, 25))) OpenValue(L.Get("Jump to beat"), Current.Timeline.Bpm.Beat(time).ToString("0.###"), v =>
-        { double b = VsmDocument.Number(v); beatStart = Math.Max(-64, b - 2); selectedNoteTime = null; transport.Seek(Current.Timeline.Bpm.Time(b)); });
+        {
+            double b = VsmDocument.Number(v);
+            beatStart = Math.Max(-64, b - 2);
+            selectedNoteTime = null;
+            transport.Seek(Current.Timeline.Bpm.Time(b));
+        });
         if (EButton("A", new(r.X + 429, r.Y + 7, 31, 25))) loopIn = Current.Timeline.Bpm.Beat(time);
         if (EButton("B", new(r.X + 466, r.Y + 7, 31, 25))) loopOut = Math.Max(loopIn + .125, Current.Timeline.Bpm.Beat(time));
         if (EButton(L.Get("LOOP"), new(r.X + 505, r.Y + 7, 63, 25), active: loopEnabled)) loopEnabled = !loopEnabled;
@@ -157,7 +166,10 @@ public sealed partial class Viewer
         }
         else if (EButton(activeMarker == null ? L.Get("MARK / E") : L.Get("CLEAR TARGET"),
             new(r.X + 662, r.Y + 7, 110, 25)))
-        { if (activeMarker == null) MarkTimestamp(); else activeMarker = null; }
+        {
+            if (activeMarker == null) MarkTimestamp();
+            else activeMarker = null;
+        }
         if (r.W > 1150) Text(activeMarker != null ? L.Format($"TARGET B {InsertionBeat:0.###}") : L.Format($"{editTracks.Count} tracks"),
             r.X + 874, r.Y + 14, 11, activeMarker != null ? soft : muted, true, r.W - 1005);
         if (EButton(L.Get("UP"), new(r.X + r.W - 116, r.Y + 7, 49, 25))) trackScroll = Math.Max(0, trackScroll - 1);
@@ -178,7 +190,8 @@ public sealed partial class Viewer
         double gridStep = pixelsPerBeat < 10 ? 16 : pixelsPerBeat < 22 ? 4 : pixelsPerBeat < 42 ? 2 : 1;
         for (double b = Math.Floor(beatStart / gridStep) * gridStep; b <= endBeat; b += gridStep)
         {
-            float bx = BeatX(b); Canvas.Line(bx, rulerY, bx, r.Y + r.H - 8, 1, Math.Abs(b % 4) < .0001 ? Theme.GridMajor : line);
+            float bx = BeatX(b);
+            Canvas.Line(bx, rulerY, bx, r.Y + r.H - 8, 1, Math.Abs(b % 4) < .0001 ? Theme.GridMajor : line);
             Text(b.ToString("0.##"), bx + 4, rulerY + 4, 10, muted, true);
         }
         double step = SnapSteps[snapIndex];
@@ -198,7 +211,8 @@ public sealed partial class Viewer
             double sec = Current.Timeline.Bpm.Time(beatStart + px / pixelsPerBeat);
             int bin = (int)(sec / waveformAudio.Duration * waveform.Length);
             if (bin < 0 || bin >= waveform.Length) continue;
-            float amp = waveform[bin] * 11; Canvas.Fill(new(x + px, audioY + 13 - amp, 1.4f, Math.Max(1, 2 * amp)), Color.Hex(0x47A9AA).Alpha(.75));
+            float amp = waveform[bin] * 11;
+            Canvas.Fill(new(x + px, audioY + 13 - amp, 1.4f, Math.Max(1, 2 * amp)), Color.Hex(0x47A9AA).Alpha(.75));
         }
         // 四条只读 chip 轨。Bumper 压在相邻两条轨的中缝上（L 盖 0-1、M 盖 1-2、R 盖 2-3），所以块高按
         // Renderer.NoteLanes 给的覆盖范围来，chip 一格、bumper 两格；Hold 尾巴保留真实结束时间，不做等长化。
@@ -206,13 +220,22 @@ public sealed partial class Viewer
             Canvas.Line(x, noteY + lane * 13, x + editorTracksRect.W, noteY + lane * 13, 1, line);
         bool timelineInteractive = !UiOverlayVisible && !Busy && !ImageGestureActive;
         // 画两趟：先 bumper 后 chip。同一拍上 chip 落在 bumper 的色带里，后画才不会被盖掉。
-        Note? picked = null; int pickedRows = 5; double pickedBeat = 0;
+        Note? picked = null;
+        int pickedRows = 5;
+        double pickedBeat = 0;
         double noteFrom = Current.Timeline.Bpm.Time(beatStart), noteTo = Current.Timeline.Bpm.Time(endBeat);
         var visibleNotes = Current.NoteIndex.PreviewVisible(noteFrom, noteTo, preferences.StackLimitLayers, preferences.StackLimit);
         if (Canvas.NoteInstances != null && timelineNotePainter == null && !timelineNotePainterFailed && Environment.GetEnvironmentVariable("KG_TIMELINE_INSTANCING") != "off")
         {
-            try { timelineNotePainter = new(Canvas); }
-            catch (Exception ex) { timelineNotePainterFailed = true; Console.Error.WriteLine("Timeline instances unavailable: " + ex.Message); }
+            try
+            {
+                timelineNotePainter = new(Canvas);
+            }
+            catch (Exception ex)
+            {
+                timelineNotePainterFailed = true;
+                Console.Error.WriteLine("Timeline instances unavailable: " + ex.Message);
+            }
         }
         using (PerformanceStats.Measure(PerformanceStats.Stage.EditorNotes))
         {
@@ -246,7 +269,9 @@ public sealed partial class Viewer
                     int rowCount = rows.Last - rows.First + 1;
                     if (timelineInteractive && click && rowCount < pickedRows && timeArea.Contains(mouseX, mouseY) && hit.Contains(mouseX, mouseY))
                     {
-                        picked = n; pickedRows = rowCount; pickedBeat = beat;
+                        picked = n;
+                        pickedRows = rowCount;
+                        pickedBeat = beat;
                     }
                 }
             }
@@ -254,7 +279,10 @@ public sealed partial class Viewer
         }
         if (picked != null)
         {
-            selectedNoteTime = picked.Time; transport.SetPlaying(false); transport.Seek(picked.Time); click = false;
+            selectedNoteTime = picked.Time;
+            transport.SetPlaying(false);
+            transport.Seek(picked.Time);
+            click = false;
             message = L.Format($"NOTE lane {picked.Lane} / beat {pickedBeat:0.######}. Add a gimmick here; the note is unchanged.");
         }
         Canvas.Clip(null);
@@ -282,7 +310,8 @@ public sealed partial class Viewer
         EnsureTimelineClipIndex();
         hoveredEditTrack = null;
         // 片段与轨道行的几何每帧重建。选框求交、右键命中都读这两张表，而不是各自再算一遍坐标。
-        clipHits.Clear(); rowHits.Clear();
+        clipHits.Clear();
+        rowHits.Clear();
         float shownTrackScroll = Math.Clamp(motion.To("timeline-track-scroll", trackScroll, .13), 0, Math.Max(0, editTracks.Count - visibleRows));
         trackShownScroll = shownTrackScroll;
         int firstTrack = Math.Max(0, (int)MathF.Floor(shownTrackScroll));
@@ -306,23 +335,39 @@ public sealed partial class Viewer
             if (track.GimmickGroup)
             {
                 if (EButton(expandedGimmickTracks.Contains(track.Target) ? "-" : ">", new(r.X + 5, y + 5, 22, 24), key: "gimmick-expand:" + track.Key))
-                { if (!expandedGimmickTracks.Add(track.Target)) expandedGimmickTracks.Remove(track.Target); layoutRevision = -1; }
+                {
+                    if (!expandedGimmickTracks.Add(track.Target)) expandedGimmickTracks.Remove(track.Target);
+                    layoutRevision = -1;
+                }
                 Text(ImageShortText(track.Label, labelW - 122), r.X + 33, y + 10, 12, white, true, labelW - 122);
             }
             else if (track.TextId is { } tid)
             {
                 if (EButton(expandedTextTracks.Contains(tid) ? "-" : ">", new(r.X + 5, y + 5, 22, 24), key: "text-expand:" + tid))
-                { if (!expandedTextTracks.Add(tid)) expandedTextTracks.Remove(tid); layoutRevision = -1; }
+                {
+                    if (!expandedTextTracks.Add(tid)) expandedTextTracks.Remove(tid);
+                    layoutRevision = -1;
+                }
                 Text(ImageShortText(track.Label, labelW - 100), r.X + 33, y + 10, 12, white, true, labelW - 100);
-                if (timelineInteractive && click && labelRect.Contains(mouseX, mouseY) && mouseY >= clipY && mouseY < clipEnd) { SelectText(tid); click = false; }
+                if (timelineInteractive && click && labelRect.Contains(mouseX, mouseY) && mouseY >= clipY && mouseY < clipEnd)
+                {
+                    SelectText(tid);
+                    click = false;
+                }
             }
             else if (track.ImageGroup)
             {
                 if (EButton(expandedImageTracks.Contains(track.ImageId!) ? "-" : ">", new(r.X + 5, y + 5, 22, 24), key: "image-expand:" + track.Key))
-                { if (!expandedImageTracks.Add(track.ImageId!)) expandedImageTracks.Remove(track.ImageId!); layoutRevision = -1; }
+                {
+                    if (!expandedImageTracks.Add(track.ImageId!)) expandedImageTracks.Remove(track.ImageId!);
+                    layoutRevision = -1;
+                }
                 Text(ImageShortText(track.Label, labelW - 100), r.X + 33, y + 10, 12, white, true, labelW - 100);
                 if (timelineInteractive && click && labelRect.Contains(mouseX, mouseY) && mouseY >= clipY && mouseY < clipEnd)
-                { SelectImageObject(track.ImageId!); click = false; }
+                {
+                    SelectImageObject(track.ImageId!);
+                    click = false;
+                }
             }
             else Text(ImageShortText(track.Label, labelW - 96), r.X + 10, y + 10, 12, track.Window ? Color.Hex(0xDAB6FF) : white, true, labelW - 96);
             for (int n = 0; n < 3; n++) Canvas.Line(grip.X + 4, y + 12 + n * 4, grip.X + 13, y + 12 + n * 4, 1, muted);
@@ -335,8 +380,19 @@ public sealed partial class Viewer
             }
             if (EButton("+", new(x - 27, y + 5, 21, 24), enabled: !Busy && y + 5 >= clipY && y + 29 <= clipEnd, key: "track-add:" + track.Key))
             {
-                if (track.TextId is { } textId) { double at = InsertionBeat; SelectText(textId); textAt = at; transport.Seek(Current.Timeline.Bpm.Time(at)); }
-                else if (track.ImageGroup) { double at = InsertionBeat; SelectImageObject(track.ImageId!); AddImageMotion(atBeat: at); }
+                if (track.TextId is { } textId)
+                {
+                    double at = InsertionBeat;
+                    SelectText(textId);
+                    textAt = at;
+                    transport.Seek(Current.Timeline.Bpm.Time(at));
+                }
+                else if (track.ImageGroup)
+                {
+                    double at = InsertionBeat;
+                    SelectImageObject(track.ImageId!);
+                    AddImageMotion(atBeat: at);
+                }
                 else if (track.Window) AddWindowEvent(track.Property, window: track.Target);
                 else AddMod(property: track.Property, proxy: track.Target);
             }
@@ -381,28 +437,50 @@ public sealed partial class Viewer
                 double b = Snap(BeatAt(mouseX));
                 TimelineDoubleClick(() =>
                 {
-                    if (track.TextId is { } textTargetId) { SelectText(textTargetId); textAt = b; transport.Seek(Current.Timeline.Bpm.Time(b)); }
+                    if (track.TextId is { } textTargetId)
+                    {
+                        SelectText(textTargetId);
+                        textAt = b;
+                        transport.Seek(Current.Timeline.Bpm.Time(b));
+                    }
                     else if (track.ImageGroup)
-                    { SelectImageObject(track.ImageId!); imageKeyBeat = b; imagePoseTarget = ImagePoseTarget.Key; transport.Seek(Current.Timeline.Bpm.Time(b)); }
-                    else if (track.Window) AddWindowEvent(track.Property, b, track.Target); else AddMod(b, track.Property, track.Target);
+                    {
+                        SelectImageObject(track.ImageId!);
+                        imageKeyBeat = b;
+                        imagePoseTarget = ImagePoseTarget.Key;
+                        transport.Seek(Current.Timeline.Bpm.Time(b));
+                    }
+                    else if (track.Window) AddWindowEvent(track.Property, b, track.Target);
+                    else AddMod(b, track.Property, track.Target);
                 });
                 click = false;
             }
         }
         // 轨道空白处按下左键 = 拉选框。排在片段与行内控件之后，它们都已经有机会先吃掉这一次 click。
         if (timelineInteractive && click && mouseClicks < 2 && editorTracksRect.Contains(mouseX, mouseY))
-        { BeginMarquee(); click = false; }
+        {
+            BeginMarquee();
+            click = false;
+        }
         if (marqueeActive)
         {
-            if (held) UpdateMarquee(); else FinishMarquee();
+            if (held) UpdateMarquee();
+            else FinishMarquee();
         }
         DrawMarquee();
         DrawTrackOrder();
         if (timelineInteractive && click && new Rect(x, rulerY, editorTracksRect.W, 25).Contains(mouseX, mouseY))
-        { editorScrub = true; selectedNoteTime = null; transport.SetPlaying(false); transport.Seek(Current.Timeline.Bpm.Time(Snap(BeatAt(mouseX)))); click = false; }
+        {
+            editorScrub = true;
+            selectedNoteTime = null;
+            transport.SetPlaying(false);
+            transport.Seek(Current.Timeline.Bpm.Time(Snap(BeatAt(mouseX))));
+            click = false;
+        }
         if (editorScrub && held) transport.Seek(Current.Timeline.Bpm.Time(Snap(BeatAt(mouseX))));
         Canvas.Clip(timeArea);
-        float playhead = BeatX(Current.Timeline.Bpm.Beat(time)); Canvas.Line(playhead, rulerY, playhead, r.Y + r.H - 8, 2, white);
+        float playhead = BeatX(Current.Timeline.Bpm.Beat(time));
+        Canvas.Line(playhead, rulerY, playhead, r.Y + r.H - 8, 2, white);
         Canvas.Fill(new(playhead - 4, rulerY, 8, 5), white);
         Canvas.Clip(null);
         // Track 帮助在 FinishUiFrame 里合成，排在布局调整手柄之后。把 tooltip 挪出时间轴这一遍绘制，
@@ -438,7 +516,8 @@ public sealed partial class Viewer
         {
             CalculateDrag();
             double follow = dragBeat - group.Beat;
-            beat += follow; end += follow;
+            beat += follow;
+            end += follow;
         }
         float bx = BeatX(beat), ex = BeatX(end), width = Math.Max(9, ex - bx);
         if (bx + width < editorTracksRect.X || bx > editorTracksRect.X + editorTracksRect.W) return;
@@ -450,7 +529,8 @@ public sealed partial class Viewer
         var color = window ? Mix(Theme.Accent, Color.Hex(0x7854A8), .55f) : Theme.Accent.Alpha(.58f);
         string key = window ? "window-clip:" + windowIndex : "clip:" + clip?.Id;
         float select = motion.To(key, selected ? 1 : 0, .13, selected ? 1 : 0);
-        Canvas.Fill(r, Mix(color, window ? Mix(Theme.AccentSoft, Color.Hex(0x8E6ABB), .55f) : Theme.AccentStrong.Alpha(.72f), select)); Canvas.Border(r, Mix(color, white, select));
+        Canvas.Fill(r, Mix(color, window ? Mix(Theme.AccentSoft, Color.Hex(0x8E6ABB), .55f) : Theme.AccentStrong.Alpha(.72f), select));
+        Canvas.Border(r, Mix(color, white, select));
         Canvas.Fill(new(r.X + r.W - 4, r.Y + 3, 2, r.H - 6), selected ? white : muted);
         // 批量选择的成员顶边加一条亮线；主选中项（inspector 正在显示的那个）另外在左侧竖一条。
         if (batched) Canvas.Fill(new(r.X, r.Y - 2, r.W, 2), white.Alpha(.85));
@@ -479,11 +559,18 @@ public sealed partial class Viewer
                 else ClipClicked(clip.Id, additive);
             }
             else SetClipSelection(null);
-            selectedWindowEvent = window ? windowIndex : -1; inspectorScroll = 0; selectedNoteTime = null;
-            if (gimmickGroup != null && !selectedClips.Contains(clip!.Id)) { click = false; return; }
+            selectedWindowEvent = window ? windowIndex : -1;
+            inspectorScroll = 0;
+            selectedNoteTime = null;
+            if (gimmickGroup != null && !selectedClips.Contains(clip!.Id))
+            {
+                click = false;
+                return;
+            }
             bool resize = width >= 13 && mouseX >= r.X + r.W - 7 && (clip != null || WindowMotionConfig.Text(e!, "op") is "NewWindowDance" or "WindowResize");
             editDrag = new(clip, e == null ? null : (JsonObject)e.DeepClone(), windowIndex, beat, end, BeatAt(mouseX), resize, gimmickGroup?.Select(c => c.Id).ToArray());
-            transport.SetPlaying(false); click = false;
+            transport.SetPlaying(false);
+            click = false;
         }
     }
     /// <summary>把鼠标位移换算成拍并吸附。拉伸以片段最后一个关键拍为锚，因此只动右端，起始拍不会被带着跑。</summary>
@@ -499,7 +586,8 @@ public sealed partial class Viewer
         }
         else
         {
-            dragBeat = Snap(editDrag.Beat + delta); dragDuration = editDrag.End - editDrag.Beat;
+            dragBeat = Snap(editDrag.Beat + delta);
+            dragDuration = editDrag.End - editDrag.Beat;
         }
     }
     /// <summary>
@@ -509,7 +597,9 @@ public sealed partial class Viewer
     void FinishDrag()
     {
         if (editor == null || editDrag == null) return;
-        CalculateDrag(); var d = editDrag; editDrag = null;
+        CalculateDrag();
+        var d = editDrag;
+        editDrag = null;
         if (Math.Abs(BeatAt(mouseX) - d.MouseBeat) * pixelsPerBeat < 3) return;
         if (d.Clip is { } c)
         {
@@ -517,7 +607,10 @@ public sealed partial class Viewer
             {
                 var resized = ids.Select(EditorFindClip).OfType<VsmDocument.Clip>()
                     .Select(item => item with { Duration = VsmDurationAt(item.LastBeat, item.LastBeat + dragDuration) }).ToArray();
-                Edit(L.Get("Resize gimmick group"), () => { foreach (var item in resized) editor.Vsm.Replace(item); });
+                Edit(L.Get("Resize gimmick group"), () =>
+{
+    foreach (var item in resized) editor.Vsm.Replace(item);
+});
                 return;
             }
             // 批量选择里拖动其中一个 = 整组按同一个位移搬家，组内相对间距不变，撤销也只有一步。
@@ -526,7 +619,10 @@ public sealed partial class Viewer
                 double delta = dragBeat - d.Beat;
                 var moved = editor.Vsm.Clips.Where(x => selectedClips.Contains(x.Id))
                     .Select(x => x with { Beat = x.Beat + delta, RepeatEnd = x.RepeatEnd + delta }).ToArray();
-                Edit(L.Format($"Move {moved.Length} clips"), () => { foreach (var m in moved) editor.Vsm.Replace(m); });
+                Edit(L.Format($"Move {moved.Length} clips"), () =>
+{
+    foreach (var m in moved) editor.Vsm.Replace(m);
+});
                 return;
             }
             var next = d.Resize ? c with { Duration = VsmDurationAt(c.LastBeat, c.LastBeat + dragDuration) } : c with { Beat = dragBeat, RepeatEnd = c.RepeatEnd + dragBeat - c.Beat };
@@ -549,7 +645,8 @@ public sealed partial class Viewer
     /// <summary>以 anchorX（UI 像素）处的拍为不动点缩放。pixelsPerBeat 限制在 3~640，避免网格退化或溢出。</summary>
     void ZoomTimeline(double scale, float anchorX)
     {
-        double anchor = BeatAt(anchorX); pixelsPerBeat = Math.Clamp(pixelsPerBeat * scale, 3, 640);
+        double anchor = BeatAt(anchorX);
+        pixelsPerBeat = Math.Clamp(pixelsPerBeat * scale, 3, 640);
         beatStart = Math.Max(-64, anchor - (anchorX - editorTracksRect.X) / pixelsPerBeat);
     }
 }

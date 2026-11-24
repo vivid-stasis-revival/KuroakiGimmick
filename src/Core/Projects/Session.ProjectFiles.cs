@@ -1,13 +1,14 @@
+// 会话装配根：按依赖顺序加载谱面、对象定义和资源，再构建同一条可随机访问的时间轴。CPU 资源不持有 GPU 对象。
+
 using System.Text.Json;
 
 namespace KuroakiGimmick.Core;
 
-/// <summary>
-/// 会话装配根：按依赖顺序加载谱面、对象定义和资源，再构建同一条可随机访问的时间轴。CPU 资源不持有 GPU 对象。
-/// </summary>
 public sealed partial class Session
 {
     /// <summary>打开谱面或项目；项目中的相对路径以项目文件所在目录解析，而非当前工作目录。</summary>
+    /// <param name="path">要打开的工程或谱面路径。</param>
+    /// <returns>已装配的预览会话。</returns>
     public static Session Load(string path)
     {
         var project = ReadProject(path, out string? projectPath);
@@ -51,6 +52,8 @@ public sealed partial class Session
     }
 
     /// <summary>按扩展名替换单项输入，再重建会话；其它已挂载资源保持不变。</summary>
+    /// <param name="path">要附加到当前会话的文件路径。</param>
+    /// <returns>应用附加文件后得到的会话。</returns>
     public Session Attach(string path)
     {
         var p = Project.Copy();
@@ -72,7 +75,8 @@ public sealed partial class Session
                     return Load(path);
                 }
                 p.Gimmick = path;
-                p.MpfSourceRoot = null; p.MpfSourceDifficulty = null;
+                p.MpfSourceRoot = null;
+                p.MpfSourceDifficulty = null;
                 // 换了 VSM 就回到 auto：资源 profile 与 BPM 由新 gimmick 重新决定，不沿用上一份的固定选择。
                 p.Profile = "auto";
                 break;
@@ -103,7 +107,8 @@ public sealed partial class Session
                     return Load(path);
                 }
                 p.Chart = path;
-                p.MpfSourceRoot = null; p.MpfSourceDifficulty = null;
+                p.MpfSourceRoot = null;
+                p.MpfSourceDifficulty = null;
                 p.Notes = true;
                 break;
             default:
@@ -113,6 +118,7 @@ public sealed partial class Session
     }
 
     /// <summary>仅保存项目引用与设置，不复制或修改外部歌曲素材。</summary>
+    /// <param name="path">工程文件的保存路径。</param>
     public void Save(string path)
     {
         path = Path.GetFullPath(path);

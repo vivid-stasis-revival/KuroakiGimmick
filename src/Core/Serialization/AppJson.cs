@@ -4,9 +4,10 @@ using System.Text.Json.Serialization.Metadata;
 
 namespace KuroakiGimmick.Core;
 
-/// <summary>NativeAOT-safe JSON entry point for both JIT and native builds.</summary>
+/// <summary>JIT 和 NativeAOT 共用的 JSON 入口，使用传入选项或默认解析器获取类型元数据。</summary>
 internal static class AppJson
 {
+    // COMPAT: 按注册顺序组合源生成上下文，各上下文提供其声明类型的序列化元数据。
     internal static readonly IJsonTypeInfoResolver Resolver = JsonTypeInfoResolver.Combine(
         AppJsonContext.Default, BpmJsonContext.Default, SceneFontJsonContext.Default, VsmJsonContext.Default,
         ManualJsonContext.Default);

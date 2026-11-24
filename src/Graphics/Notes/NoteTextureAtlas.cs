@@ -3,7 +3,7 @@ using StbImageSharp;
 
 namespace KuroakiGimmick.Graphics;
 
-/// <summary>Lossless shelf packing of complete source images with duplicated borders. Oversized/custom UV images retain standalone textures.</summary>
+/// <summary>以行架排列整张源图并复制边缘像素，保持无损；超大图像或特殊 UV 继续使用独立纹理。</summary>
 internal static class NoteTextureAtlas
 {
     internal sealed record Source(string File, ImageResult Image);
@@ -26,23 +26,36 @@ internal static class NoteTextureAtlas
                     throw new InvalidDataException($"Note texture size does not match its dump manifest: {Path.GetFileName(frame.File)} is {image.Width}x{image.Height}.");
                 bool outside = allFrames.Any(f => f.File == frame.File && (f.UvX < 0 || f.UvY < 0 || f.UvX + f.UvW > 1 || f.UvY + f.UvH > 1));
                 if (Environment.GetEnvironmentVariable("KG_NOTE_ATLAS") == "off" || image.Width + 2 > pageSize || image.Height + 2 > pageSize || outside)
-                { textures[frame.File] = new(gpu, image.Width, image.Height, image.Data); regions[frame.File] = new(0, 0, 1, 1); }
+                {
+                    textures[frame.File] = new(gpu, image.Width, image.Height, image.Data);
+                    regions[frame.File] = new(0, 0, 1, 1);
+                }
                 else sources.Add(new(frame.File, image));
             }
             if (white) sources.Add(new("@white", new ImageResult { Width = 1, Height = 1, Data = [255, 255, 255, 255] }));
             sources.Sort(static (a, b) => b.Image.Height.CompareTo(a.Image.Height));
-            // Allocate only the used page extent (small default skins do not allocate a 64 MiB texture).
+            // 仅分配图集页已使用的范围，使较小的默认皮肤无需申请完整的 64 MiB 纹理。
             while (sources.Count > 0)
             {
                 var placed = new List<(Source Source, int X, int Y)>();
                 int x = 0, y = 0, row = 0, usedW = 0, usedH = 0;
                 for (int i = 0; i < sources.Count;)
                 {
-                    var s = sources[i]; int w = s.Image.Width + 2, h = s.Image.Height + 2;
-                    if (x + w > pageSize) { y += row; x = 0; row = 0; }
+                    var s = sources[i];
+                    int w = s.Image.Width + 2, h = s.Image.Height + 2;
+                    if (x + w > pageSize)
+                    {
+                        y += row;
+                        x = 0;
+                        row = 0;
+                    }
                     if (y + h > pageSize) break;
-                    placed.Add((s, x + padding, y + padding)); sources.RemoveAt(i);
-                    x += w; row = Math.Max(row, h); usedW = Math.Max(usedW, x); usedH = Math.Max(usedH, y + h);
+                    placed.Add((s, x + padding, y + padding));
+                    sources.RemoveAt(i);
+                    x += w;
+                    row = Math.Max(row, h);
+                    usedW = Math.Max(usedW, x);
+                    usedH = Math.Max(usedH, y + h);
                 }
                 var pixels = new byte[checked(usedW * usedH * 4)];
                 foreach (var (s, px, py) in placed)
@@ -65,6 +78,10 @@ internal static class NoteTextureAtlas
             }
             return (textures, regions);
         }
-        catch { foreach (var texture in textures.Values.Distinct()) texture.Dispose(); throw; }
+        catch
+        {
+            foreach (var texture in textures.Values.Distinct()) texture.Dispose();
+            throw;
+        }
     }
 }

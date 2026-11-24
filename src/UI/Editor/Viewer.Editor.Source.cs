@@ -1,3 +1,5 @@
+// 管理编辑器的源码草稿、文本输入及应用到文档的操作。
+
 using System.Runtime.InteropServices;
 using KuroakiGimmick.Core.Editing;
 using KuroakiGimmick.Graphics;
@@ -24,43 +26,72 @@ public sealed partial class Viewer
         if (Busy) return;
         if (editor == null && !EnsureAuthoring()) return;
         if (editor == null) return;
-        CloseInline(); CloseClipMenu(); transport.SetPlaying(false);
-        sourceOwner = editor; sourceRevision = editor.Revision;
-        sourceVsm = new(editor.Vsm.Text); sourceVsp = new(editor.Images.Text);
-        sourceMpfTab = false; sourceMpfIndex = 0; sourceMpfFiles.Clear(); sourceMpfDrafts.Clear(); sourceMpfStatus = "";
-        sourceImageTab = sourceSelecting = false; sourceTop = 0; sourceLeft = 0;
-        workflow = displayedWorkflow = "source"; workflowError = "";
-        settings = help = false; held = click = false;
+        CloseInline();
+        CloseClipMenu();
+        transport.SetPlaying(false);
+        sourceOwner = editor;
+        sourceRevision = editor.Revision;
+        sourceVsm = new(editor.Vsm.Text);
+        sourceVsp = new(editor.Images.Text);
+        sourceMpfTab = false;
+        sourceMpfIndex = 0;
+        sourceMpfFiles.Clear();
+        sourceMpfDrafts.Clear();
+        sourceMpfStatus = "";
+        sourceImageTab = sourceSelecting = false;
+        sourceTop = 0;
+        sourceLeft = 0;
+        workflow = displayedWorkflow = "source";
+        workflowError = "";
+        settings = help = false;
+        held = click = false;
         Sdl.SDL_StartTextInput(ActiveUiWindow);
     }
 
     void CloseSourceEditor()
     {
-        workflow = ""; sourceSelecting = false; held = click = false;
-        Sdl.SDL_CaptureMouse(false); Sdl.SDL_StopTextInput(ActiveUiWindow);
+        workflow = "";
+        sourceSelecting = false;
+        held = click = false;
+        Sdl.SDL_CaptureMouse(false);
+        Sdl.SDL_StopTextInput(ActiveUiWindow);
     }
 
     void ApplySourceEditor()
     {
-        if (sourceMpfTab) { SaveMpfSource(); return; }
+        if (sourceMpfTab)
+        {
+            SaveMpfSource();
+            return;
+        }
         if (sourceOwner == null || sourceVsm == null || sourceVsp == null) return;
         if (editor != sourceOwner || editor.Revision != sourceRevision)
-        { workflowError = L.Get("Document changed. Reopen the source editor before applying."); return; }
+        {
+            workflowError = L.Get("Document changed. Reopen the source editor before applying.");
+            return;
+        }
         try
         {
             editor.ApplySource(sourceVsm.Text, sourceVsp.Text);
-            layoutRevision = -1; SetClipSelection(null); selectedWindowEvent = -1;
+            layoutRevision = -1;
+            SetClipSelection(null);
+            selectedWindowEvent = -1;
             imageInspector = textInspector = false;
             if (sourceMpfDrafts.Values.Any(file => file.Buffer.Dirty))
             {
-                sourceRevision = editor.Revision; sourceVsm.MarkSaved(); sourceVsp.MarkSaved();
-                workflowError = ""; sourceMpfStatus = L.Get("VSM/VSP applied. Save or discard the remaining MPF drafts before closing.");
+                sourceRevision = editor.Revision;
+                sourceVsm.MarkSaved();
+                sourceVsp.MarkSaved();
+                workflowError = "";
+                sourceMpfStatus = L.Get("VSM/VSP applied. Save or discard the remaining MPF drafts before closing.");
             }
             else CloseSourceEditor();
             message = L.Get("Source applied. Undo restores the previous VSM and VSP.");
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidDataException or IOException or FormatException)
-        { workflowError = ex.Message; }
+        {
+            workflowError = ex.Message;
+        }
     }
 
     int SourceHit(float x, float y)
@@ -73,7 +104,8 @@ public sealed partial class Viewer
         while (lo < hi)
         {
             int mid = (lo + hi) / 2;
-            if (SourceWidth(buffer.Text.Substring(start, mid + 1)) < wanted) lo = mid + 1; else hi = mid;
+            if (SourceWidth(buffer.Text.Substring(start, mid + 1)) < wanted) lo = mid + 1;
+            else hi = mid;
         }
         if (lo < length && wanted > (SourceWidth(buffer.Text.Substring(start, lo)) + SourceWidth(buffer.Text.Substring(start, lo + 1))) / 2) lo++;
         return start + lo;
@@ -94,7 +126,12 @@ public sealed partial class Viewer
     {
         if (SourceBuffer is not { } buffer)
         {
-            if (e.Type is 0x400 or 0x401 or 0x402) { mouseX = e.X; mouseY = e.Y; click = e.Type == 0x401 && e.Button == 1; }
+            if (e.Type is 0x400 or 0x401 or 0x402)
+            {
+                mouseX = e.X;
+                mouseY = e.Y;
+                click = e.Type == 0x401 && e.Button == 1;
+            }
             if (e.Type == 0x300 && e.Scan == 41) CloseSourceEditor();
             return true;
         }
@@ -102,13 +139,16 @@ public sealed partial class Viewer
         {
             if (e.Type is 0x400 or 0x401 or 0x402)
             {
-                mouseX = e.X; mouseY = e.Y;
+                mouseX = e.X;
+                mouseY = e.Y;
                 if (e.Type == 0x401 && e.Button == 1)
                 {
                     if (sourceTextRect.Contains(mouseX, mouseY))
                     {
                         buffer.Select(SourceHit(mouseX, mouseY), (Sdl.SDL_GetModState() & 3) != 0);
-                        sourceSelecting = true; Sdl.SDL_CaptureMouse(true); click = false;
+                        sourceSelecting = true;
+                        Sdl.SDL_CaptureMouse(true);
+                        click = false;
                     }
                     else click = true;
                 }
@@ -118,37 +158,86 @@ public sealed partial class Viewer
                     if (mouseY > sourceTextRect.Y + sourceTextRect.H) sourceTop = Math.Min(buffer.LineStarts.Length - 1, sourceTop + 1);
                     buffer.Select(SourceHit(mouseX, mouseY), true);
                 }
-                else if (e.Type == 0x402 && e.Button == 1) { sourceSelecting = false; Sdl.SDL_CaptureMouse(false); }
-                held = false; return true;
+                else if (e.Type == 0x402 && e.Button == 1)
+                {
+                    sourceSelecting = false;
+                    Sdl.SDL_CaptureMouse(false);
+                }
+                held = false;
+                return true;
             }
-            if (e.Type == 0x20F) { sourceSelecting = false; Sdl.SDL_CaptureMouse(false); return true; }
+            if (e.Type == 0x20F)
+            {
+                sourceSelecting = false;
+                Sdl.SDL_CaptureMouse(false);
+                return true;
+            }
             if (e.Type == 0x403)
             {
                 if ((Sdl.SDL_GetModState() & 3) != 0) sourceLeft = Math.Max(0, sourceLeft - e.WheelY * 45);
                 else sourceTop = Math.Clamp(sourceTop - (int)Math.Round(e.WheelY * 3), 0, buffer.LineStarts.Length - 1);
                 return true;
             }
-            if (e.Type == 0x303) { buffer.Insert(Marshal.PtrToStringUTF8(e.TextData) ?? ""); RevealSourceCursor(); return true; }
+            if (e.Type == 0x303)
+            {
+                buffer.Insert(Marshal.PtrToStringUTF8(e.TextData) ?? "");
+                RevealSourceCursor();
+                return true;
+            }
             if (e.Type != 0x300) return true;
             bool command = (e.Modifiers & 0x0CC0) != 0, shift = (e.Modifiers & 3) != 0;
-            if (e.Scan == 41) { CloseSourceEditor(); return true; }
+            if (e.Scan == 41)
+            {
+                CloseSourceEditor();
+                return true;
+            }
             if (command)
             {
                 switch (e.Scan)
                 {
-                    case 40: ApplySourceEditor(); return true;
-                    case 22: if (sourceMpfTab) SaveMpfSource(); return true;
-                    case 4: buffer.SelectAll(); break;
-                    case 6: if (buffer.SelectionLength > 0) Sdl.SDL_SetClipboardText(buffer.Selection); break;
-                    case 27: if (buffer.SelectionLength > 0) { Sdl.SDL_SetClipboardText(buffer.Selection); buffer.Insert(""); } break;
+                    case 40:
+                        ApplySourceEditor();
+                        return true;
+                    case 22:
+                        if (sourceMpfTab) SaveMpfSource();
+                        return true;
+                    case 4:
+                        buffer.SelectAll();
+                        break;
+                    case 6:
+                        if (buffer.SelectionLength > 0) Sdl.SDL_SetClipboardText(buffer.Selection);
+                        break;
+                    case 27:
+                        if (buffer.SelectionLength > 0)
+                        {
+                            Sdl.SDL_SetClipboardText(buffer.Selection);
+                            buffer.Insert("");
+                        }
+                        break;
                     case 25:
                         nint ptr = Sdl.SDL_GetClipboardText();
-                        try { buffer.Insert(Marshal.PtrToStringUTF8(ptr) ?? ""); } finally { Sdl.SDL_free(ptr); }
+                        try
+                        {
+                            buffer.Insert(Marshal.PtrToStringUTF8(ptr) ?? "");
+                        }
+                        finally
+                        {
+                            Sdl.SDL_free(ptr);
+                        }
                         break;
-                    case 29: if (shift) buffer.Redo(); else buffer.Undo(); break;
-                    case 28: buffer.Redo(); break;
-                    case 74: buffer.Select(0, shift); break;
-                    case 77: buffer.Select(buffer.Text.Length, shift); break;
+                    case 29:
+                        if (shift) buffer.Redo();
+                        else buffer.Undo();
+                        break;
+                    case 28:
+                        buffer.Redo();
+                        break;
+                    case 74:
+                        buffer.Select(0, shift);
+                        break;
+                    case 77:
+                        buffer.Select(buffer.Text.Length, shift);
+                        break;
                 }
             }
             else
@@ -156,40 +245,84 @@ public sealed partial class Viewer
                 int row = buffer.LineAt(buffer.Cursor);
                 switch (e.Scan)
                 {
-                    case 40: case 88: buffer.Insert(buffer.NewLine); break;
-                    case 43: buffer.Insert("    "); break;
-                    case 42: buffer.Delete(true); break;
-                    case 76: buffer.Delete(false); break;
-                    case 80: buffer.Move(-1, shift); break;
-                    case 79: buffer.Move(1, shift); break;
-                    case 82: buffer.MoveLine(-1, shift); break;
-                    case 81: buffer.MoveLine(1, shift); break;
-                    case 75: buffer.MoveLine(-Math.Max(1, (int)(sourceTextRect.H / SourceRowHeight)), shift); break;
-                    case 78: buffer.MoveLine(Math.Max(1, (int)(sourceTextRect.H / SourceRowHeight)), shift); break;
-                    case 74: buffer.Select(buffer.LineStarts[row], shift); break;
-                    case 77: buffer.Select(buffer.LineEnd(row), shift); break;
+                    case 40:
+                    case 88:
+                        buffer.Insert(buffer.NewLine);
+                        break;
+                    case 43:
+                        buffer.Insert("    ");
+                        break;
+                    case 42:
+                        buffer.Delete(true);
+                        break;
+                    case 76:
+                        buffer.Delete(false);
+                        break;
+                    case 80:
+                        buffer.Move(-1, shift);
+                        break;
+                    case 79:
+                        buffer.Move(1, shift);
+                        break;
+                    case 82:
+                        buffer.MoveLine(-1, shift);
+                        break;
+                    case 81:
+                        buffer.MoveLine(1, shift);
+                        break;
+                    case 75:
+                        buffer.MoveLine(-Math.Max(1, (int)(sourceTextRect.H / SourceRowHeight)), shift);
+                        break;
+                    case 78:
+                        buffer.MoveLine(Math.Max(1, (int)(sourceTextRect.H / SourceRowHeight)), shift);
+                        break;
+                    case 74:
+                        buffer.Select(buffer.LineStarts[row], shift);
+                        break;
+                    case 77:
+                        buffer.Select(buffer.LineEnd(row), shift);
+                        break;
                 }
             }
             RevealSourceCursor();
         }
-        catch (Exception ex) when (ex is ArgumentException or InvalidDataException) { workflowError = ex.Message; }
+        catch (Exception ex) when (ex is ArgumentException or InvalidDataException)
+        {
+            workflowError = ex.Message;
+        }
         return true;
     }
 
     void DrawSourceEditor(int width, int height)
     {
         var box = new Rect(24, 24, width - 48, height - 48);
-        Canvas.Fill(box, panel); Canvas.Border(box, soft);
+        Canvas.Fill(box, panel);
+        Canvas.Border(box, soft);
         Text(L.Get("VSM / VSP / MPF SOURCE"), box.X + 20, box.Y + 16, 20, white, true);
         if (WorkflowButton("VSM" + (sourceVsm?.Dirty == true ? " *" : ""), new(box.X + 20, box.Y + 52, 100, 28), active: !sourceMpfTab && !sourceImageTab))
-        { sourceMpfTab = false; sourceImageTab = false; workflowError = ""; sourceTop = 0; sourceLeft = 0; RevealSourceCursor(); }
+        {
+            sourceMpfTab = false;
+            sourceImageTab = false;
+            workflowError = "";
+            sourceTop = 0;
+            sourceLeft = 0;
+            RevealSourceCursor();
+        }
         if (WorkflowButton("VSP" + (sourceVsp?.Dirty == true ? " *" : ""), new(box.X + 128, box.Y + 52, 100, 28), active: !sourceMpfTab && sourceImageTab))
-        { sourceMpfTab = false; sourceImageTab = true; workflowError = ""; sourceTop = 0; sourceLeft = 0; RevealSourceCursor(); }
+        {
+            sourceMpfTab = false;
+            sourceImageTab = true;
+            workflowError = "";
+            sourceTop = 0;
+            sourceLeft = 0;
+            RevealSourceCursor();
+        }
         if (WorkflowButton("MPF" + (sourceMpfDrafts.Values.Any(file => file.Buffer.Dirty) ? " *" : ""), new(box.X + 236, box.Y + 52, 100, 28), active: sourceMpfTab)) OpenMpfSources();
         Text(L.Get(sourceMpfTab ? "Ctrl/Cmd+S: save MPF | Ctrl/Cmd+Z: undo draft" : "Enter: newline | Ctrl/Cmd+Enter: apply | Ctrl/Cmd+Z: undo draft"), box.X + 350, box.Y + 60, 11, muted, max: box.W - 370);
         if (sourceMpfTab) DrawMpfSourcePicker(box);
         var area = new Rect(box.X + 16, box.Y + (sourceMpfTab ? 133 : 91), box.W - 32, box.H - (sourceMpfTab ? 227 : 185));
-        Canvas.Fill(area, bg); Canvas.Border(area, line);
+        Canvas.Fill(area, bg);
+        Canvas.Border(area, line);
         sourceTextRect = new(area.X + 70, area.Y + 8, area.W - 80, area.H - 16);
         if (SourceBuffer is { } buffer)
         {

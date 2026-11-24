@@ -1,3 +1,5 @@
+// 发现游戏 HUD 资源包并检查图集尺寸、字形范围及解码预算。
+
 using System.Text.Json;
 using StbImageSharp;
 
@@ -8,12 +10,18 @@ namespace KuroakiGimmick.Core;
 /// </summary>
 public sealed class GameUiAssets
 {
+    /// <summary>HUD 精灵的各帧文件和绘制度量。</summary>
     public sealed class Sprite
     {
+        /// <summary>各帧填充后的像素宽度。</summary>
         public int Width { get; set; }
+        /// <summary>各帧填充后的像素高度。</summary>
         public int Height { get; set; }
+        /// <summary>精灵绘制原点的横坐标。</summary>
         public int OriginX { get; set; }
+        /// <summary>精灵绘制原点的纵坐标。</summary>
         public int OriginY { get; set; }
+        /// <summary>按帧号排列的图像资源路径。</summary>
         public List<string> Frames { get; set; } = [];
         /// <summary>
         /// 逐帧的裁剪矩形 [left, top, width, height]，直接取自 GameMaker 纹理页条目。
@@ -23,45 +31,75 @@ public sealed class GameUiAssets
         public List<int[]>? Bounds { get; set; }
     }
 
+    /// <summary>一对字形的字距修正。</summary>
     public sealed class Kern
     {
+        /// <summary>配对字距规则匹配的字符编码。</summary>
         public int Character { get; set; }
+        /// <summary>配对命中时应用的水平位移。</summary>
         public float Shift { get; set; }
     }
 
+    /// <summary>字体图集内单个字符的区域与排版信息。</summary>
     public sealed class Glyph
     {
+        /// <summary>字形映射的字符编码。</summary>
         public int Character { get; set; }
+        /// <summary>字形在字体图集中的左边界。</summary>
         public int X { get; set; }
+        /// <summary>字形在字体图集中的纵向位置，取样时计入 AscenderOffset。</summary>
         public int Y { get; set; }
+        /// <summary>图集内该字形的像素宽度。</summary>
         public int W { get; set; }
+        /// <summary>图集内该字形的像素高度。</summary>
         public int H { get; set; }
+        /// <summary>绘制完本字形后笔位置的推进量。</summary>
         public float Advance { get; set; }
+        /// <summary>绘制本字形时的水平偏移。</summary>
         public float Offset { get; set; }
+        /// <summary>按相邻字符选择的配对字距表。</summary>
         public List<Kern> Kerning { get; set; } = [];
     }
 
+    /// <summary>原版字体图集的尺寸和字形度量。</summary>
     public sealed class Font
     {
+        /// <summary>包含字形的字体图集路径。</summary>
         public string File { get; set; } = "";
+        /// <summary>原版字体的标称字号。</summary>
         public float Size { get; set; } = 10;
+        /// <summary>排版连续文本行时的行距。</summary>
         public float LineHeight { get; set; } = 14;
+        /// <summary>将导出的字形纵坐标换算到图集采样区域时的偏移。</summary>
         public float AscenderOffset { get; set; }
+        /// <summary>字体图集的横向缩放系数。</summary>
         public float ScaleX { get; set; } = 1;
+        /// <summary>字体图集的纵向缩放系数。</summary>
         public float ScaleY { get; set; } = 1;
+        /// <summary>字符到图集区域和字距的映射记录。</summary>
         public List<Glyph> Glyphs { get; set; } = [];
     }
 
+    /// <summary>从 HUD 清单解出的精灵表与字体表。</summary>
     public sealed class Pack
     {
+        /// <summary>游戏 HUD 资源清单的格式版本。</summary>
         public int Version { get; set; }
+        /// <summary>按名称索引的 HUD 精灵。</summary>
         public Dictionary<string, Sprite> Sprites { get; set; } = [];
+        /// <summary>按资源名索引的游戏字体。</summary>
         public Dictionary<string, Font> Fonts { get; set; } = [];
     }
 
+    /// <summary>当前 HUD 资源清单的可选位置。</summary>
     public string? Manifest { get; private set; }
+    /// <summary>通过校验的资源清单，不可用时为 null。</summary>
     public Pack? Data { get; private set; }
+    /// <summary>清单及其引用资源是否已通过读取和校验。</summary>
     public bool Ready => Data != null;
+    /// <summary>相对于当前清单目录解析资源的完整路径。</summary>
+    /// <param name="name">相对于 HUD 清单目录的资源名。</param>
+    /// <returns>解析后的绝对路径。</returns>
     public string File(string name) => Path.GetFullPath(name, Path.GetDirectoryName(Manifest!)!);
     /// <summary>UI 包发现顺序：工程显式路径 → 曲目目录 → 随程序安装的 GameUI 目录；都没有时返回 null，不绘制替代 UI。</summary>
     static string? Discover(ViewerProject p)
@@ -79,6 +117,10 @@ public sealed class GameUiAssets
         return System.IO.File.Exists(bundled) ? bundled : null;
     }
 
+    /// <summary>发现并校验游戏 HUD 资源包，将加载失败的诊断加入谱面。</summary>
+    /// <param name="p">当前工程的路径与呈现配置。</param>
+    /// <param name="chart">提供音符、演出事件及诊断的谱面。</param>
+    /// <returns>已校验的 HUD 资源状态，不能加载时 Ready 为 false。</returns>
     public static GameUiAssets Load(ViewerProject p, Chart chart)
     {
         var result = new GameUiAssets();
@@ -191,8 +233,8 @@ public sealed class GameUiAssets
                 }
                 foreach (var g in font.Glyphs)
                 {
-                    if (g.X < 0 || g.Y < 0 || g.Y + font.AscenderOffset < 0 || g.W < 0 || g.H < 0 || (long) g.X + g.W > size.W
-                        || (long) g.Y + font.AscenderOffset + g.H > size.H || !float.IsFinite(g.Advance) || !float.IsFinite(g.Offset)
+                    if (g.X < 0 || g.Y < 0 || g.Y + font.AscenderOffset < 0 || g.W < 0 || g.H < 0 || (long)g.X + g.W > size.W
+                        || (long)g.Y + font.AscenderOffset + g.H > size.H || !float.IsFinite(g.Advance) || !float.IsFinite(g.Offset)
                         || g.Kerning == null || g.Kerning.Any(k => !float.IsFinite(k.Shift)))
                     {
                         throw new InvalidDataException("Invalid original glyph bounds.");

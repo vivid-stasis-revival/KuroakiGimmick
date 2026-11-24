@@ -1,11 +1,12 @@
+// 在桌面载入 Switch 托管程序集，检查平台分支、SDL 布局和 shader 包。
+
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 
 if (args.Length is < 3 or > 5) throw new ArgumentException("SwitchChecks KG_SWITCH.dll baked-shaders out-abi.json [fake-SDL-library] [ogg-audio]");
 var assembly = Assembly.LoadFrom(Path.GetFullPath(args[0]));
-// Persist twice to exercise an existing settings destination, then simulate
-// interruption between preserving the previous settings and publishing the new.
+// 连续保存两次以覆盖已有目标，再模拟保留上一版与发布新版之间的中断。
 var settingsType = assembly.GetType("KuroakiGimmick.Core.ViewerSettings")!;
 var desktopSetting = Activator.CreateInstance(settingsType)!;
 settingsType.GetProperty("UnlimitedChartSize")!.SetValue(desktopSetting, true);
@@ -38,7 +39,10 @@ try
     if (!File.Exists(settingsPath)) throw new Exception("Interrupted save recovery did not restore settings");
     Console.WriteLine("Validated settings updates, recents reopening, and interrupted-save recovery.");
 }
-finally { Directory.Delete(settingsDirectory, true); }
+finally
+{
+    Directory.Delete(settingsDirectory, true);
+}
 
 var sdl = assembly.GetType("KuroakiGimmick.Native.Sdl")!;
 var abi = sdl.GetNestedTypes().Where(t => t.IsValueType && !t.IsEnum).ToDictionary(t => t.Name, t => new
@@ -56,21 +60,39 @@ int count = 0;
 foreach (var file in Directory.EnumerateFiles(args[1], "*.kgsp"))
 {
     using var r = new BinaryReader(File.OpenRead(file));
-    _ = r.ReadInt32(); _ = r.ReadInt32(); bool vertex = r.ReadBoolean(); string source = r.ReadString();
+    _ = r.ReadInt32();
+    _ = r.ReadInt32();
+    bool vertex = r.ReadBoolean();
+    string source = r.ReadString();
     string copy = Path.Combine(dest, Path.GetFileName(file));
     File.Copy(file, copy, true);
     load.Invoke(null, [source, vertex]);
     var original = File.ReadAllBytes(copy);
-    // Truncation must be rejected, not passed to the graphics driver.
+    // 截断的 shader 必须在送入图形驱动前被拒绝。
     File.WriteAllBytes(copy, original[..^1]);
-    try { load.Invoke(null, [source, vertex]); throw new Exception("Truncated pack accepted"); }
-    catch (TargetInvocationException e) when (e.InnerException is IOException or InvalidDataException) { }
-    finally { File.WriteAllBytes(copy, original); }
+    try
+    {
+        load.Invoke(null, [source, vertex]);
+        throw new Exception("Truncated pack accepted");
+    }
+    catch (TargetInvocationException e) when (e.InnerException is IOException or InvalidDataException)
+    {
+    }
+    finally
+    {
+        File.WriteAllBytes(copy, original);
+    }
     count++;
 }
 if (count < 6) throw new Exception("Expected six built-in shaders.");
-try { load.Invoke(null, ["this shader is not baked", false]); throw new Exception("Missing pack accepted"); }
-catch (TargetInvocationException e) when (e.InnerException is InvalidOperationException) { }
+try
+{
+    load.Invoke(null, ["this shader is not baked", false]);
+    throw new Exception("Missing pack accepted");
+}
+catch (TargetInvocationException e) when (e.InnerException is InvalidOperationException)
+{
+}
 Console.WriteLine($"Validated {count} shader packs, truncation rejection and missing-shader diagnostic.");
 
 var sha = assembly.GetType("KuroakiGimmick.Native.SwitchSha256")!;
@@ -81,13 +103,18 @@ var create = incremental.GetMethod("CreateHash")!;
 var append = incremental.GetMethod("AppendData")!;
 var finish = incremental.GetMethod("GetHashAndReset")!;
 var rng = new Random(1771);
-foreach (int length in new[] {0, 1, 3, 55, 56, 63, 64, 65, 119, 120, 127, 128, 4096, 1000000})
+foreach (int length in new[] { 0, 1, 3, 55, 56, 63, 64, 65, 119, 120, 127, 128, 4096, 1000000 })
 {
-    byte[] data = new byte[length]; rng.NextBytes(data);
+    byte[] data = new byte[length];
+    rng.NextBytes(data);
     byte[] expected = System.Security.Cryptography.SHA256.HashData(data);
-    void Match(object? actual) { if (!expected.SequenceEqual((byte[])actual!)) throw new Exception("Managed SHA-256 mismatch at " + length); }
+    void Match(object? actual)
+    {
+        if (!expected.SequenceEqual((byte[])actual!)) throw new Exception("Managed SHA-256 mismatch at " + length);
+    }
     Match(hashBytes.Invoke(null, [data]));
-    using var stream = new MemoryStream(data); Match(hashStream.Invoke(null, [stream]));
+    using var stream = new MemoryStream(data);
+    Match(hashStream.Invoke(null, [stream]));
     using var hash = (IDisposable)create.Invoke(null, [System.Security.Cryptography.HashAlgorithmName.SHA256])!;
     for (int at = 0; at < length; at += 37) append.Invoke(hash, [data, at, Math.Min(37, length - at)]);
     Match(finish.Invoke(hash, []));
@@ -110,11 +137,17 @@ if (args.Length >= 4)
     foreach (string name in new[] { "batches", "vertices", "textures" })
         Set(name, Activator.CreateInstance(gpu.GetField(name, fields)!.FieldType)!);
     Set("<Handle>k__BackingField", (nint)1);
-    Set("vertexBuffer", (nint)10); Set("uploadBuffer", (nint)11); Set("vertexCapacity", 64u);
+    Set("vertexBuffer", (nint)10);
+    Set("uploadBuffer", (nint)11);
+    Set("vertexCapacity", 64u);
     gpu.GetMethod("Begin", fields)!.Invoke(instance, [null, 1, 1, null]);
     ((System.Collections.IList)Get("vertices")).Add(1f);
     var ensure = gpu.GetMethod("EnsureVertices", fields)!;
-    try { ensure.Invoke(instance, [128u]); throw new Exception("Injected transfer allocation failure was ignored"); }
+    try
+    {
+        ensure.Invoke(instance, [128u]);
+        throw new Exception("Injected transfer allocation failure was ignored");
+    }
     catch (TargetInvocationException e) when (e.InnerException is InvalidOperationException failure)
     {
         if (!failure.Message.Contains("bytes=1048576") || !failure.Message.Contains("injected allocation failure"))
@@ -124,7 +157,8 @@ if (args.Length >= 4)
         releasedOld() != 0 || releasedNew() != 1 ||
         ((System.Collections.IList)Get("batches")).Count != 0 || ((System.Collections.IList)Get("vertices")).Count != 0)
         throw new Exception("Failed vertex growth corrupted buffers or left pending cleanup commands");
-    enable(); ensure.Invoke(instance, [128u]);
+    enable();
+    ensure.Invoke(instance, [128u]);
     if ((uint)Get("vertexCapacity") != 1048576 || releasedOld() != 3 || allocations() != 2)
         throw new Exception("Retry failed to commit replacement buffers and release old buffers");
     ensure.Invoke(instance, [128u]);
@@ -139,14 +173,18 @@ if (args.Length >= 4)
     if ((nint)transfer.Invoke(instance, [128u, false])! == 0 || waits() != 1 || transfers() != 2)
         throw new Exception("Transient OOM did not recover with exactly one idle/drain/retry");
     setOom(2);
-    try { transfer.Invoke(instance, [128u, false]); throw new Exception("Persistent OOM was ignored"); }
+    try
+    {
+        transfer.Invoke(instance, [128u, false]);
+        throw new Exception("Persistent OOM was ignored");
+    }
     catch (TargetInvocationException e) when (e.InnerException is InvalidOperationException failure)
     {
         if (!failure.Message.Contains("VK_ERROR_OUT_OF_HOST_MEMORY")) throw;
     }
     if (waits() != 1 || transfers() != 2) throw new Exception("Persistent OOM retried more than once");
     gpu.GetMethod("AbortPendingCommands")!.Invoke(instance, []);
-    // Canvas.Dispose can Flush again after a failure. Abort must reject that new batch.
+    // 失败之后 Canvas.Dispose 仍可能 Flush；Abort 必须拒绝随后产生的批次。
     gpu.GetMethod("Begin", fields)!.Invoke(instance, [null, 1, 1, null]);
     if (((System.Collections.IList)Get("batches")).Count != 0)
         throw new Exception("Aborted device accepted a new cleanup-time render batch");

@@ -1,3 +1,7 @@
+// 时间轴上的批量选择与右键交互：左键空白处拖出选框多选、同一 mod 的批量改参、右键拖拽平移视图、
+// 右键片段弹出菜单。选择集是唯一事实来源，selectedClip 只是其中的"主选中项"，决定 inspector 显示谁。
+// 批量修改一律先把所有结果算完再进一次 Change：任何一个值非法都会在改动文档之前抛出，撤销也只需要一步。
+
 using System.Globalization;
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Core.Editing;
@@ -5,11 +9,6 @@ using KuroakiGimmick.Graphics;
 using KuroakiGimmick.Native;
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// 时间轴上的批量选择与右键交互：左键空白处拖出选框多选、同一 mod 的批量改参、右键拖拽平移视图、
-/// 右键片段弹出菜单。选择集是唯一事实来源，selectedClip 只是其中的"主选中项"，决定 inspector 显示谁。
-/// 批量修改一律先把所有结果算完再进一次 Change：任何一个值非法都会在改动文档之前抛出，撤销也只需要一步。
-/// </summary>
 public sealed partial class Viewer
 {
     /// <summary>批量选择集。不变量：selectedClip 非空且指向 VSM 片段时，它一定也在这里面。</summary>
@@ -84,7 +83,11 @@ public sealed partial class Viewer
                 return;
             }
         }
-        else if (!selectedClips.Contains(id)) { selectedClips.Clear(); selectedClips.Add(id); }
+        else if (!selectedClips.Contains(id))
+        {
+            selectedClips.Clear();
+            selectedClips.Add(id);
+        }
         selectedClip = id;
         SyncPickedProxy(id);
     }
@@ -95,7 +98,9 @@ public sealed partial class Viewer
         if (editor == null) return;
         selectedClips.Clear();
         foreach (var c in editor.Vsm.Clips.Where(c => c.TrackKey == clip.TrackKey)) selectedClips.Add(c.Id);
-        selectedClip = clip.Id; SyncPickedProxy(clip.Id); inspectorScroll = 0;
+        selectedClip = clip.Id;
+        SyncPickedProxy(clip.Id);
+        inspectorScroll = 0;
         message = L.Format($"Selected {selectedClips.Count} {clip.Name} clips.");
     }
 
@@ -109,8 +114,12 @@ public sealed partial class Viewer
         var targets = SelectedClipList();
         if (targets.Length == 0) return;
         var next = targets.Select(apply).ToArray();
-        editor.Change(name, () => { foreach (var c in next) editor.Vsm.Replace(c); });
-        layoutRevision = -1; message = L.Format($"{name} / {next.Length} clips");
+        editor.Change(name, () =>
+{
+    foreach (var c in next) editor.Vsm.Replace(c);
+});
+        layoutRevision = -1;
+        message = L.Format($"{name} / {next.Length} clips");
     }
 
     /// <summary>批量删除，一步撤销。</summary>
@@ -119,7 +128,10 @@ public sealed partial class Viewer
         if (editor == null) return;
         var ids = SelectedClipList().Select(c => c.Id).ToArray();
         if (ids.Length == 0) return;
-        Edit(L.Format($"Delete {ids.Length} clips"), () => { foreach (var id in ids) editor.Vsm.Delete(id); });
+        Edit(L.Format($"Delete {ids.Length} clips"), () =>
+{
+    foreach (var id in ids) editor.Vsm.Delete(id);
+});
         SetClipSelection(null);
     }
 
@@ -136,7 +148,10 @@ public sealed partial class Viewer
         if (Math.Abs(destination - first) < 1e-7) destination += Math.Max(.25, source.Max(c => c.End) - first);
         double delta = destination - first;
         var copies = source.Select(c => c with { Id = Guid.NewGuid(), Beat = c.Beat + delta, RepeatEnd = c.RepeatEnd + delta }).ToArray();
-        Edit(L.Format($"Duplicate {copies.Length} clips"), () => { foreach (var c in copies) editor.Vsm.Add(c); });
+        Edit(L.Format($"Duplicate {copies.Length} clips"), () =>
+{
+    foreach (var c in copies) editor.Vsm.Add(c);
+});
         selectedClips.Clear();
         foreach (var c in copies) selectedClips.Add(c.Id);
         selectedClip = copies[0].Id;
@@ -166,8 +181,10 @@ public sealed partial class Viewer
         float x0 = Math.Min(marqueeFromX, mouseX), x1 = Math.Max(marqueeFromX, mouseX);
         float y0 = Math.Min(marqueeFromY, mouseY), y1 = Math.Max(marqueeFromY, mouseY);
         var area = editorTracksRect;
-        x0 = Math.Clamp(x0, area.X, area.X + area.W); x1 = Math.Clamp(x1, area.X, area.X + area.W);
-        y0 = Math.Clamp(y0, area.Y, area.Y + area.H); y1 = Math.Clamp(y1, area.Y, area.Y + area.H);
+        x0 = Math.Clamp(x0, area.X, area.X + area.W);
+        x1 = Math.Clamp(x1, area.X, area.X + area.W);
+        y0 = Math.Clamp(y0, area.Y, area.Y + area.H);
+        y1 = Math.Clamp(y1, area.Y, area.Y + area.H);
         return new(x0, y0, Math.Max(0, x1 - x0), Math.Max(0, y1 - y0));
     }
 
@@ -177,13 +194,16 @@ public sealed partial class Viewer
     /// </summary>
     void BeginMarquee()
     {
-        marqueeActive = true; marqueeFromX = mouseX; marqueeFromY = mouseY;
+        marqueeActive = true;
+        marqueeFromX = mouseX;
+        marqueeFromY = mouseY;
         marqueeBase.Clear();
         if ((Sdl.SDL_GetModState() & (3 | 0x0CC0)) != 0) foreach (var id in selectedClips) marqueeBase.Add(id);
         selectedClips.Clear();
         foreach (var id in marqueeBase) selectedClips.Add(id);
         if (selectedClips.Count == 0) selectedClip = null;
-        selectedWindowEvent = -1; selectedNoteTime = null;
+        selectedWindowEvent = -1;
+        selectedNoteTime = null;
         transport.SetPlaying(false);
     }
 
@@ -209,7 +229,9 @@ public sealed partial class Viewer
     void FinishMarquee()
     {
         if (!marqueeActive) return;
-        marqueeActive = false; marqueePending = null; inspectorScroll = 0;
+        marqueeActive = false;
+        marqueePending = null;
+        inspectorScroll = 0;
         if (BatchSelection) message = L.Format($"{selectedClips.Count} clips selected. Same mod: edit them together on the right.");
         else if (selectedClips.Count == 0) selectedClip = null;
     }
@@ -232,8 +254,12 @@ public sealed partial class Viewer
     /// </summary>
     void BeginPan(float x, float y)
     {
-        panActive = true; panMoved = false; panFromX = x; panFromY = y;
-        panBeat = beatStart; panScroll = trackScroll;
+        panActive = true;
+        panMoved = false;
+        panFromX = x;
+        panFromY = y;
+        panBeat = beatStart;
+        panScroll = trackScroll;
     }
 
     /// <summary>右键拖动：横向按像素换算成拍平移，纵向按 35 像素一行滚动轨道。</summary>
@@ -273,11 +299,18 @@ public sealed partial class Viewer
         // 真正的菜单矩形要等这一帧画出来才知道（贴边时会翻转），先按未翻转的位置占一个位，
         // 免得菜单还没画过就收到点击时拿旧矩形做命中。
         menuRect = new(x, y, 232, 39);
-        menuOpen = true; menuX = x; menuY = y;
+        menuOpen = true;
+        menuX = x;
+        menuY = y;
         transport.SetPlaying(false);
     }
 
-    void CloseClipMenu() { menuOpen = false; menuClip = null; menuTrack = null; }
+    void CloseClipMenu()
+    {
+        menuOpen = false;
+        menuClip = null;
+        menuTrack = null;
+    }
 
     /// <summary>
     /// 组装菜单条目。选中多个时所有条目都作用于整组，条目文字里直接写上数量，不让用户去猜作用范围。
@@ -293,7 +326,12 @@ public sealed partial class Viewer
             string suffix = count > 1 ? $" ({count})" : "";
             var first = picked[0];
             items.Add((L.Get("SELECT SAME MOD"), true, () => SelectSameTrack(first)));
-            items.Add((L.Get("DUPLICATE") + suffix, true, () => { if (count > 1) DuplicateClips(); else DuplicateSelection(); }));
+            items.Add((L.Get("DUPLICATE") + suffix, true, () =>
+{
+    if (count > 1) DuplicateClips();
+    else DuplicateSelection();
+}
+            ));
             // 整段内容经系统剪贴板往返，与只搬 ease/from/to/duration 的 COPY VALUES 是两回事。
             items.Add((L.Get("CUT") + suffix, !Busy, CutSelection));
             items.Add((L.Get("COPY") + suffix, true, CopySelection));
@@ -304,31 +342,64 @@ public sealed partial class Viewer
             {
                 double delta = Current.Timeline.Bpm.Beat(transport.Position) - picked.Min(c => c.Beat);
                 EditClips(c => c with { Beat = c.Beat + delta, RepeatEnd = c.RepeatEnd + delta }, L.Get("Move to playhead"));
-            }));
+            }
+            ));
             items.Add((L.Get("SWAP FROM / TO") + suffix, true, () => EditClips(c => c with { From = c.To, To = c.From }, L.Get("Swap from/to"))));
             items.Add((L.Get("COPY VALUES"), count == 1, () =>
-            { clipValues = (first.Ease, first.From, first.To, first.Duration); message = L.Get("Copied ease / from / to / duration."); }));
+            {
+                clipValues = (first.Ease, first.From, first.To, first.Duration);
+                message = L.Get("Copied ease / from / to / duration.");
+            }
+            ));
             items.Add((L.Get("PASTE VALUES") + suffix, clipValues != null, () =>
             {
                 var v = clipValues!.Value;
                 EditClips(c => c with { Ease = v.Ease, From = v.From, To = v.To, Duration = v.Duration }, L.Get("Paste values"));
-            }));
-            items.Add((L.Get("DELETE") + suffix, true, () => { if (count > 1) DeleteClips(); else DeleteSelection(); }));
+            }
+            ));
+            items.Add((L.Get("DELETE") + suffix, true, () =>
+{
+    if (count > 1) DeleteClips();
+    else DeleteSelection();
+}
+            ));
         }
         else if (menuTrack is { } track)
         {
             string label = track.TextId != null ? L.Get("TEXT KEY") : track.ImageGroup ? L.Get("IMAGE KEY") : track.Window ? track.Property : track.Property;
             items.Add((L.Format($"ADD {label} AT {menuBeat:0.###}"), !Busy, () =>
             {
-                if (track.TextId is { } textId) { SelectText(textId); textAt = menuBeat; transport.Seek(Current.Timeline.Bpm.Time(menuBeat)); }
-                else if (track.ImageGroup) { SelectImageObject(track.ImageId!); imageKeyBeat = menuBeat; imagePoseTarget = ImagePoseTarget.Key; transport.Seek(Current.Timeline.Bpm.Time(menuBeat)); }
+                if (track.TextId is { } textId)
+                {
+                    SelectText(textId);
+                    textAt = menuBeat;
+                    transport.Seek(Current.Timeline.Bpm.Time(menuBeat));
+                }
+                else if (track.ImageGroup)
+                {
+                    SelectImageObject(track.ImageId!);
+                    imageKeyBeat = menuBeat;
+                    imagePoseTarget = ImagePoseTarget.Key;
+                    transport.Seek(Current.Timeline.Bpm.Time(menuBeat));
+                }
                 else if (track.Window) AddWindowEvent(track.Property, menuBeat, track.Target);
                 else AddMod(menuBeat, track.Property, track.Target);
-            }));
-            items.Add((L.Get("SEEK HERE"), true, () => { selectedNoteTime = null; transport.Seek(Current.Timeline.Bpm.Time(menuBeat)); }));
+            }
+            ));
+            items.Add((L.Get("SEEK HERE"), true, () =>
+{
+    selectedNoteTime = null;
+    transport.Seek(Current.Timeline.Bpm.Time(menuBeat));
+}
+            ));
             // 空白处也要能粘贴：落点用的是插入点，与选中什么无关。
             items.Add((L.Get("PASTE"), !Busy, PasteClipboard));
-            items.Add((L.Get("MARK HERE"), true, () => { transport.Seek(Current.Timeline.Bpm.Time(menuBeat)); MarkTimestamp(); }));
+            items.Add((L.Get("MARK HERE"), true, () =>
+{
+    transport.Seek(Current.Timeline.Bpm.Time(menuBeat));
+    MarkTimestamp();
+}
+            ));
             items.Add((L.Get("LOOP IN HERE"), true, () => loopIn = menuBeat));
             items.Add((L.Get("LOOP OUT HERE"), true, () => loopOut = Math.Max(loopIn + .125, menuBeat)));
             if (!track.Window && track.TextId == null && !track.ImageGroup)
@@ -338,9 +409,11 @@ public sealed partial class Viewer
                     foreach (var c in ClipsOnTimelineRow(track)) selectedClips.Add(c.Id);
                     selectedClip = selectedClips.Count > 0 ? selectedClips.First() : null;
                     SyncPickedProxy(selectedClip);
-                    selectedWindowEvent = -1; inspectorScroll = 0;
+                    selectedWindowEvent = -1;
+                    inspectorScroll = 0;
                     message = L.Format($"Selected {selectedClips.Count} clips on {track.Label}.");
-                }));
+                }
+                ));
         }
         if (menuTrack is { } rowTrack)
         {
@@ -360,20 +433,28 @@ public sealed partial class Viewer
     {
         if (!menuOpen) return;
         var items = BuildClipMenu();
-        if (items.Count == 0) { CloseClipMenu(); return; }
+        if (items.Count == 0)
+        {
+            CloseClipMenu();
+            return;
+        }
         const float itemH = 27, width = 232;
         float height = items.Count * itemH + 12;
         float x = menuX + width > w - 8 ? Math.Max(8, menuX - width) : menuX;
         float y = menuY + height > h - 8 ? Math.Max(8, menuY - height) : menuY;
         menuRect = new(x, y, width, height);
         Canvas.Fill(new(menuRect.X + 3, menuRect.Y + 3, menuRect.W, menuRect.H), Color.Hex(0, .45f));
-        Canvas.Fill(menuRect, panel); Canvas.Border(menuRect, soft);
+        Canvas.Fill(menuRect, panel);
+        Canvas.Border(menuRect, soft);
         menuInput = true;
         for (int i = 0; i < items.Count; i++)
         {
             var item = items[i];
             if (EButton(item.Label, new(menuRect.X + 6, menuRect.Y + 6 + i * itemH, width - 12, itemH - 3), enabled: item.Enabled, key: "clip-menu:" + i))
-            { CloseClipMenu(); item.Run(); }
+            {
+                CloseClipMenu();
+                item.Run();
+            }
         }
         menuInput = false;
     }
@@ -402,7 +483,11 @@ public sealed partial class Viewer
     {
         if (editor == null) return;
         var picked = SelectedClipList();
-        if (picked.Length == 0) { SetClipSelection(null); return; }
+        if (picked.Length == 0)
+        {
+            SetClipSelection(null);
+            return;
+        }
         bool sameMod = picked.All(c => c.Name == picked[0].Name);
         Label(L.Format($"BATCH / {picked.Length} CLIPS") + (sameMod ? " / " + picked[0].Name : L.Get(" / MIXED MODS")), r.X, r.Y);
         if (EButton(L.Get("DUP"), new(r.X, r.Y + 22, 65, 25))) DuplicateClips();
@@ -415,10 +500,14 @@ public sealed partial class Viewer
         double first = picked.Min(c => c.Beat);
         void Field(string name, string value, Action<string> action)
         {
-            float row = fieldCount++ - shownScroll; float y = r.Y + 57 + row * 31;
+            float row = fieldCount++ - shownScroll;
+            float y = r.Y + 57 + row * 31;
             if (row < 0 || y + 27 > r.Y + r.H - 31) return;
             // 值不一致时显示 (mixed)：原样提交等于没改，只有真的敲了新值才会写下去。
-            ValueField(name, value, r.X, y, r.W, v => { if (v != Mixed) action(v); });
+            ValueField(name, value, r.X, y, r.W, v =>
+{
+    if (v != Mixed) action(v);
+});
         }
         if (sameMod) Field(L.Get("Mod"), picked[0].Name, v => EditClips(c => c with { Name = v }, L.Get("Change mod")));
         Field(L.Get("Beat / first"), VsmDocument.Ui(first), v =>
@@ -427,13 +516,20 @@ public sealed partial class Viewer
             EditClips(c => c with { Beat = c.Beat + delta, RepeatEnd = c.RepeatEnd + delta }, L.Get("Shift beats"));
         });
         Field(L.Get("Duration / beat"), Shared(picked, c => VsmDocument.Ui(c.Duration)), v =>
-        { double d = VsmDocument.Number(v); EditClips(c => c with { Duration = d }, L.Get("Set duration")); });
+        {
+            double d = VsmDocument.Number(v);
+            EditClips(c => c with { Duration = d }, L.Get("Set duration"));
+        });
         if (sameMod)
         {
             Field(L.Get("From / _"), SharedValue(picked, c => c.From), v => EditClips(c => c with { From = v }, L.Get("Set from")));
             Field(L.Get("To / _"), SharedValue(picked, c => c.To), v => EditClips(c => c with { To = v }, L.Get("Set to")));
         }
-        Field(L.Get("Ease"), Shared(picked, c => c.Ease), v => { string e = Easings.Normalize(v); EditClips(c => c with { Ease = e }, L.Get("Set ease")); });
+        Field(L.Get("Ease"), Shared(picked, c => c.Ease), v =>
+{
+    string e = Easings.Normalize(v);
+    EditClips(c => c with { Ease = e }, L.Get("Set ease"));
+});
         Field(L.Get("Proxy / -1 global"), Shared(picked, c => c.Proxy.ToString(CultureInfo.InvariantCulture)), v =>
         {
             int p = int.Parse(v, CultureInfo.InvariantCulture);
@@ -457,9 +553,22 @@ public sealed partial class Viewer
     /// </summary>
     bool HandleClipMenuInput(Sdl.Event e)
     {
-        if (e.Type == 0x300) { if (e.Scan == 41) CloseClipMenu(); return true; }
-        if (e.Type is 0x400 or 0x401 or 0x402) { mouseX = e.X; mouseY = e.Y; }
-        if (e.Type == 0x401 && !menuRect.Contains(e.X, e.Y)) { CloseClipMenu(); click = false; return true; }
+        if (e.Type == 0x300)
+        {
+            if (e.Scan == 41) CloseClipMenu();
+            return true;
+        }
+        if (e.Type is 0x400 or 0x401 or 0x402)
+        {
+            mouseX = e.X;
+            mouseY = e.Y;
+        }
+        if (e.Type == 0x401 && !menuRect.Contains(e.X, e.Y))
+        {
+            CloseClipMenu();
+            click = false;
+            return true;
+        }
         // 菜单自己的按钮要靠 0x401 / 0x402 生成 click，这两个事件必须继续往下走。
         return e.Type is not (0x400 or 0x401 or 0x402);
     }

@@ -6,12 +6,29 @@ using KuroakiGimmick.Core.Windows;
 namespace KuroakiGimmick.Core;
 
 /// <summary>已编辑文档的一份冻结快照。导出不会保存、也不会把编辑会话标记为已保存。</summary>
+/// <param name="Project">工程快照。</param>
+/// <param name="Images">图片声明路径。</param>
+/// <param name="VsmText">VSM 源文本。</param>
+/// <param name="VsmBytes">VSM 原始字节。</param>
+/// <param name="ConfigText">配套配置文本。</param>
+/// <param name="ProtectedPaths">必须保护的源路径。</param>
+/// <param name="Notices">导出提示。</param>
+/// <param name="ImageText">图片声明源文本。</param>
+/// <param name="ImageRoot">图片资源根目录。</param>
+/// <param name="TextSources">按 ID 索引的字幕源。</param>
+/// <param name="ImageOriginalNames">暂存图片与原文件名的对应关系。</param>
+/// <param name="VscDialect">来源 VSC 方言。</param>
+/// <param name="Dependencies">额外依赖文件列表。</param>
 public sealed record ChartExportInput(ViewerProject Project, string? Images, string VsmText, byte[] VsmBytes,
     string ConfigText, string[] ProtectedPaths, string[] Notices, string? ImageText = null, string? ImageRoot = null,
     IReadOnlyDictionary<string, string>? TextSources = null, IReadOnlyDictionary<string, string>? ImageOriginalNames = null,
     VscDialect VscDialect = VscDialect.Legacy, IReadOnlyList<string>? Dependencies = null)
 {
     /// <summary>从编辑器文档取快照。此后再改动文档不影响已生成的导出计划。</summary>
+    /// <param name="document">编辑器文档快照。</param>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <returns>用于异步导出的输入数据。</returns>
+    /// <exception cref="InvalidDataException">CGMK 配置不是对象，或 VSM 超过加载上限。</exception>
     public static ChartExportInput Capture(EditorDocument document, Session session)
     {
         var project = document.Project.Copy();
@@ -23,12 +40,14 @@ public sealed record ChartExportInput(ViewerProject Project, string? Images, str
             if (path != null && songRoot != null && File.Exists(path) && ChartExport.Inside(path, songRoot))
                 dependencies.Add(Path.GetFullPath(path));
         }
-        Local(session.NativeGimmick.Manifest); Local(session.NativeGimmick.ResourceManifest);
+        Local(session.NativeGimmick.Manifest);
+        Local(session.NativeGimmick.ResourceManifest);
         foreach (var sprite in session.NativeGimmick.Sprites.Values)
             foreach (string frame in sprite.Frames) Local(frame);
         foreach (string path in session.NativeGimmick.TextureFiles.Values) Local(path);
         foreach (string path in session.NativeGimmick.Resources.Values) Local(path);
-        Local(session.Fx.Path); Local(session.Fx.DynamicDefinitions);
+        Local(session.Fx.Path);
+        Local(session.Fx.DynamicDefinitions);
         foreach (var layer in session.Fx.Layers) Local(layer.TexturePath);
         Local(session.GameUi.Manifest);
         if (project.GameUi != null && Directory.Exists(project.GameUi)) project.GameUi = session.GameUi.Manifest;
@@ -54,7 +73,8 @@ public sealed record ChartExportInput(ViewerProject Project, string? Images, str
         if (config[WindowMotionConfig.EventsKey] is JsonArray) config.Remove("ECG_WINDOW_MOVEMENT_FILE");
         string normalizedVsm = document.Vsm.NormalizedText;
         byte[] normalizedVsmBytes = document.Vsm.NormalizedBytes();
-        var check = new Chart(); VsmReader.ReplaceModsText(check, normalizedVsm, "export.vsm");
+        var check = new Chart();
+        VsmReader.ReplaceModsText(check, normalizedVsm, "export.vsm");
         // 结构化编辑在提交时已校验过。导入的不透明行必须能逐字导出：
         // 报出它们的解析提示，而不是悄悄删掉。可解析事件则统一 canonicalize，成品里不保留浮点运算尾巴。
         if (ChartLoadLimits.Exceeds(normalizedVsmBytes.LongLength, 64L * 1024 * 1024))
@@ -69,6 +89,8 @@ public sealed record ChartExportInput(ViewerProject Project, string? Images, str
             dependencies.Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
     }
     /// <summary>导出文件名的词干：取谱面/VSM 的难度名并去掉 ".editor" 后缀，避免把编辑副本的命名带进成品。</summary>
+    /// <param name="p">当前工程的路径与呈现配置。</param>
+    /// <returns>导出文件采用的基础名称。</returns>
     public static string Stem(ViewerProject p)
     {
         string name = SongFiles.Difficulty(p.Chart ?? p.Gimmick ?? "ENCORE.vsm");

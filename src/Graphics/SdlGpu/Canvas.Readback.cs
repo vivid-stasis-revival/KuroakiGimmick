@@ -1,3 +1,5 @@
+// 读回与 PPM 截图，只处理像素数据，不隐式修改渲染状态。
+
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -6,14 +8,25 @@ using StbImageWriteSharp;
 
 namespace KuroakiGimmick.Graphics;
 
-/// <summary>读回与 PPM 截图，只处理像素数据，不隐式修改渲染状态。</summary>
 public sealed partial class Canvas : IDisposable
 {
+    /// <summary>为指定尺寸分配可复用的异步像素读回槽位。</summary>
+    /// <param name="target">提供读回尺寸的目标。</param>
+    /// <returns>由调用方管理的可复用读回槽位。</returns>
     public GpuReadback CreateReadback(Target target) => new(Gpu, target.Texture.Width, target.Texture.Height, Gpu.TextureRowPitch(target.Texture.Width));
 
-    public void BeginReadback(GpuReadback slot, Target target) { Flush(); slot.Begin(target.Texture); }
+    /// <summary>启动目标图像到读回槽位的传输。</summary>
+    /// <param name="slot">空闲且尺寸匹配的读回槽位。</param>
+    /// <param name="target">要下载的离屏目标。</param>
+    public void BeginReadback(GpuReadback slot, Target target)
+    {
+        Flush();
+        slot.Begin(target.Texture);
+    }
 
     /// <summary>读回前先 Flush 掉挂起的几何；返回左上角为原点、紧密排列的 RGBA8。</summary>
+    /// <param name="target">需要读取的离屏目标。</param>
+    /// <returns>按行紧密排列的 RGBA8 像素。</returns>
     public byte[] Read(Target target)
     {
         Flush();
@@ -24,6 +37,8 @@ public sealed partial class Canvas : IDisposable
     /// 编码成 PNG 字节。读回的排列（左上原点、紧密 RGBA8）正好是编码器要的格式，中间不做任何重排；
     /// 返回字节而不是直接落盘，是因为卡片既要能保存也要能进剪贴板。
     /// </summary>
+    /// <param name="target">要编码的目标。</param>
+    /// <returns>完整的 PNG 文件字节。</returns>
     public byte[] EncodePng(Target target)
     {
         var bytes = Read(target);
@@ -34,6 +49,8 @@ public sealed partial class Canvas : IDisposable
     }
 
     /// <summary>写出 PNG；必要时先建目录。</summary>
+    /// <param name="target">要保存的离屏目标。</param>
+    /// <param name="path">PNG 输出路径。</param>
     public void SavePng(Target target, string path)
     {
         var png = EncodePng(target);
@@ -42,6 +59,8 @@ public sealed partial class Canvas : IDisposable
     }
 
     /// <summary>写出二进制 P6 PPM：只保留 RGB，丢弃每像素的第 4 个字节；必要时先建目录。</summary>
+    /// <param name="target">要保存的离屏目标。</param>
+    /// <param name="path">P6 PPM 输出路径。</param>
     public void SavePpm(Target target, string path)
     {
         var bytes = Read(target);

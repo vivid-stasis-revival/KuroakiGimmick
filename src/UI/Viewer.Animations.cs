@@ -1,3 +1,5 @@
+// 在界面状态切换时采样过渡动画。
+
 using KuroakiGimmick.Graphics;
 
 namespace KuroakiGimmick.UI;
@@ -42,7 +44,11 @@ public sealed partial class Viewer
         discardAlpha = motion.Show("discard-modal", pendingDiscard != null, .15);
         infoCardAlpha = motion.Show("info-card", infoCard, .17);
         startupAlpha = motion.Show("startup", startup, .2);
-        if (animatedStatus != message) { animatedStatus = message; motion.Snap("status", .4f); }
+        if (animatedStatus != message)
+        {
+            animatedStatus = message;
+            motion.Snap("status", .4f);
+        }
     }
 
     // 所有控件使用同一套短促、可随时打断的过渡。不存在会移动的点击目标：
@@ -54,5 +60,6 @@ public sealed partial class Viewer
             a.B + (b.B - a.B) * t, a.A + (b.A - a.A) * t);
     }
     /// <summary>自测入口：关闭 UI 动画，让单帧截图拿到的是最终布局，而不是入场过程中的半透明帧。</summary>
+    /// <param name="enabled">测试期间是否启用界面动画。</param>
     public void SetUiAnimationsForTest(bool enabled) => preferences.UiAnimations = enabled;
 }

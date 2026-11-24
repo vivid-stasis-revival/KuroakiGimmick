@@ -1,42 +1,70 @@
+// 在扁平的存储节点与各窗口的运行时停靠树之间转换。
+
 using KuroakiGimmick.Graphics;
 
 namespace KuroakiGimmick.Core;
 
-/// <summary>Flat, bounded, NativeAOT-safe layout format. Child indices cannot form runtime object cycles.</summary>
+/// <summary>适用于 NativeAOT 的有界扁平布局格式，以子节点索引表示树，恢复时检查环路。</summary>
 public sealed class DockLayoutFile
 {
+    /// <summary>布局快照格式版本，默认 1。</summary>
     public int Version { get; set; } = 1;
+    /// <summary>是否为编辑模式布局。</summary>
     public bool Editor { get; set; }
+    /// <summary>窗口几何与根节点索引的列表。</summary>
     public List<DockWindowFile> Windows { get; set; } = [];
+    /// <summary>可通过索引引用的扁平布局节点表。</summary>
     public List<DockNodeFile> Nodes { get; set; } = [];
+    /// <summary>保存时已隐藏的面板键。</summary>
     public List<string> Hidden { get; set; } = [];
 }
 
+/// <summary>持久化窗口位置、尺寸和布局根节点的数据。</summary>
 public sealed class DockWindowFile
 {
+    /// <summary>用于恢复窗口的稳定键。</summary>
     public string Id { get; set; } = "";
+    /// <summary>根节点在布局节点表中的索引，-1 表示空窗口。</summary>
     public int Root { get; set; } = -1;
+    /// <summary>保存时窗口的桌面横坐标。</summary>
     public int X { get; set; }
+    /// <summary>保存时窗口的桌面纵坐标。</summary>
     public int Y { get; set; }
+    /// <summary>保存的窗口宽度。</summary>
     public int Width { get; set; } = 800;
+    /// <summary>保存的窗口高度。</summary>
     public int Height { get; set; } = 600;
+    /// <summary>保存窗口几何时对应的显示器 ID。</summary>
     public uint Display { get; set; }
+    /// <summary>该窗口保存的界面缩放倍率。</summary>
     public double UiScale { get; set; } = 1;
 }
 
+/// <summary>持久化布局树中标签组或分割节点的数据。</summary>
 public sealed class DockNodeFile
 {
+    /// <summary>区分 tabs 标签组与 split 分割节点。</summary>
     public string Kind { get; set; } = "";
+    /// <summary>分割节点排列子区域的方向。</summary>
     public DockAxis Axis { get; set; }
+    /// <summary>第一个子区域分配到的比例。</summary>
     public float Ratio { get; set; } = .5f;
+    /// <summary>第一个子节点索引，未设置时为 -1。</summary>
     public int First { get; set; } = -1;
+    /// <summary>第二个子节点索引，未设置时为 -1。</summary>
     public int Second { get; set; } = -1;
+    /// <summary>标签组中按显示顺序排列的面板键。</summary>
     public List<string> Panels { get; set; } = [];
+    /// <summary>标签组当前显示的面板键。</summary>
     public string Active { get; set; } = "";
 }
 
 public sealed partial class DockLayout
 {
+    /// <summary>将各窗口的布局树展平为可保存的节点索引表。</summary>
+    /// <param name="editor">为 true 时使用编辑布局，否则使用预览布局。</param>
+    /// <param name="geometry">按窗口标识提供的几何信息。</param>
+    /// <returns>可持久化的布局快照。</returns>
     public DockLayoutFile Snapshot(bool editor, IReadOnlyDictionary<string, DockWindowFile>? geometry = null)
     {
         var file = new DockLayoutFile { Editor = editor, Hidden = hidden.Order(StringComparer.Ordinal).ToList() };
@@ -44,28 +72,49 @@ public sealed partial class DockLayout
         {
             if (node == null) return -1;
             int index = file.Nodes.Count;
-            var entry = new DockNodeFile(); file.Nodes.Add(entry);
+            var entry = new DockNodeFile();
+            file.Nodes.Add(entry);
             if (node is DockTabs tabs)
-            { entry.Kind = "tabs"; entry.Panels = [.. tabs.Panels]; entry.Active = tabs.Active; }
+            {
+                entry.Kind = "tabs";
+                entry.Panels = [.. tabs.Panels];
+                entry.Active = tabs.Active;
+            }
             else
             {
                 var split = (DockSplit)node;
-                entry.Kind = "split"; entry.Axis = split.Axis; entry.Ratio = split.Ratio;
-                entry.First = Add(split.First); entry.Second = Add(split.Second);
+                entry.Kind = "split";
+                entry.Axis = split.Axis;
+                entry.Ratio = split.Ratio;
+                entry.First = Add(split.First);
+                entry.Second = Add(split.Second);
             }
             return index;
         }
         foreach (var root in roots.Values.OrderBy(r => r.Id, StringComparer.Ordinal))
         {
             var window = geometry != null && geometry.TryGetValue(root.Id, out var saved)
-                ? new DockWindowFile { Id = root.Id, X = saved.X, Y = saved.Y, Width = saved.Width,
-                    Height = saved.Height, Display = saved.Display, UiScale = saved.UiScale }
+                ? new DockWindowFile
+                {
+                    Id = root.Id,
+                    X = saved.X,
+                    Y = saved.Y,
+                    Width = saved.Width,
+                    Height = saved.Height,
+                    Display = saved.Display,
+                    UiScale = saved.UiScale
+                }
                 : new DockWindowFile { Id = root.Id };
-            window.Root = Add(root.Node); file.Windows.Add(window);
+            window.Root = Add(root.Node);
+            file.Windows.Add(window);
         }
         return file;
     }
 
+    /// <summary>将隐藏面板重新停靠到主窗口。</summary>
+    /// <param name="file">保存的布局快照。</param>
+    /// <param name="editor">为 true 时使用编辑布局，否则使用预览布局。</param>
+    /// <returns>恢复并校验后的布局；无法使用快照时采用默认布局。</returns>
     public static DockLayout Restore(DockLayoutFile? file, bool editor)
     {
         var fallback = Default(editor);
@@ -96,12 +145,14 @@ public sealed partial class DockLayout
             {
                 if (!Enum.IsDefined(item.Axis) || !float.IsFinite(item.Ratio) || item.Ratio is < .1f or > .9f)
                     throw new InvalidDataException("Invalid split.");
-                var first = Read(item.First, depth + 1); var second = Read(item.Second, depth + 1);
+                var first = Read(item.First, depth + 1);
+                var second = Read(item.Second, depth + 1);
                 if (first == null || second == null) throw new InvalidDataException("Empty split.");
                 node = new DockSplit(item.Axis, item.Ratio, first, second);
             }
             else throw new InvalidDataException("Unknown dock node.");
-            states[index] = 2; return node;
+            states[index] = 2;
+            return node;
         }
         try
         {
@@ -117,15 +168,24 @@ public sealed partial class DockLayout
             return layout;
         }
         catch (Exception ex) when (ex is InvalidDataException or ArgumentException or InvalidOperationException)
-        { return fallback; }
+        {
+            return fallback;
+        }
     }
 
-    /// <summary>Temporary on-screen bounds; never overwrites the saved coordinates.</summary>
+    /// <summary>返回暂时调整到屏幕可见区域的几何范围，保留原始保存坐标。</summary>
+    /// <param name="saved">保存的窗口几何。</param>
+    /// <param name="displays">当前显示器的桌面范围。</param>
+    /// <returns>可在当前桌面显示的窗口矩形。</returns>
     public static Rect RecoverBounds(DockWindowFile saved, IReadOnlyList<Rect> displays)
     {
         Rect display = displays.Count == 0 ? new(0, 0, 1280, 800) : displays[0];
         foreach (var candidate in displays)
-            if (candidate.Contains(saved.X + 40, saved.Y + 20)) { display = candidate; break; }
+            if (candidate.Contains(saved.X + 40, saved.Y + 20))
+            {
+                display = candidate;
+                break;
+            }
         float width = Math.Clamp(saved.Width, 200, Math.Max(200, display.W));
         float height = Math.Clamp(saved.Height, 120, Math.Max(120, display.H));
         float x = Math.Clamp(saved.X, display.X, display.X + Math.Max(0, display.W - Math.Min(width, 100)));

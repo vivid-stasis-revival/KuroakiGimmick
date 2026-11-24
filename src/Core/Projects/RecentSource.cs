@@ -1,3 +1,5 @@
+// 处理最近打开项的来源路径与用于界面的显示文字。
+
 namespace KuroakiGimmick.Core;
 
 /// <summary>
@@ -12,12 +14,16 @@ public static class RecentSource
     /// 最近列表的一行：<c>Path</c> 决定点什么、能不能点，<c>Title</c> 只决定怎么显示。
     /// 欢迎页与原生菜单共用它，两处入口不会各显示各的。
     /// </summary>
+    /// <param name="Path">打开时使用的路径。</param>
+    /// <param name="Title">列表中使用的标题。</param>
     public sealed record Item(string Path, string Title);
 
     /// <summary>
     /// 一行标题。歌曲信息读不到（没有信息文件、只有一张散落的谱面、路径已经不存在）时退回原来的
     /// 文件名写法，不因为缺一份 info.json 就让整行消失；读取失败同样只退回文件名。
     /// </summary>
+    /// <param name="path">最近打开项的路径。</param>
+    /// <returns>用于最近列表的显示标题。</returns>
     public static string Title(string path)
     {
         string fallback = FileName(path);

@@ -1,12 +1,11 @@
+// 乐曲信息卡片覆盖层。卡片按当前难度成立，因此切难度后要重算：BACKSTAGE 的曲名、封面与音频
+// 都来自 enc_data，六项统计也用的是它自己的音频长度。卡片渲染和读回都是 GPU 工作，只在窗口线程发生。
+
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Graphics;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// 乐曲信息卡片覆盖层。卡片按当前难度成立，因此切难度后要重算：BACKSTAGE 的曲名、封面与音频
-/// 都来自 enc_data，六项统计也用的是它自己的音频长度。卡片渲染和读回都是 GPU 工作，只在窗口线程发生。
-/// </summary>
 public sealed partial class Viewer
 {
     bool infoCard, infoCardInput;
@@ -16,14 +15,20 @@ public sealed partial class Viewer
     int cardRevision = -1;
     Texture? cardTexture;
 
+    /// <summary>当前是否显示曲目信息卡。</summary>
     public bool InfoCardVisible => infoCard;
 
     /// <summary>导出宽度，固定 16:9；卡面按 1280x720 的逻辑坐标绘制，这里只决定像素密度。</summary>
     int CardWidth => ViewerSettings.ValidCardWidth(preferences.CardWidth);
 
+    /// <summary>打开当前曲目的信息卡视图。</summary>
     public void OpenInfoCard()
     {
-        if (Current.IsEmpty) { message = L.Get("Open a chart to build an info card."); return; }
+        if (Current.IsEmpty)
+        {
+            message = L.Get("Open a chart to build an info card.");
+            return;
+        }
         infoCard = true;
         settings = help = false;
         cardRevision = -1;
@@ -155,7 +160,11 @@ public sealed partial class Viewer
             try
             {
                 var png = RenderCardPng();
-                if (png == null) { message = L.Get("Info card unavailable: ") + L.Get("no chart loaded"); return; }
+                if (png == null)
+                {
+                    message = L.Get("Info card unavailable: ") + L.Get("no chart loaded");
+                    return;
+                }
                 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
                 ExportFiles.WriteBytes(path, png, preferences.OverwriteExports);
                 message = L.Get("Info card saved: ") + path;
@@ -193,6 +202,10 @@ public sealed partial class Viewer
     /// 命令行用：直接把当前难度的卡片写成 PNG，不经界面。<paramref name="width"/> 覆盖设置里的导出尺寸。
     /// 调用方负责保证在窗口线程上；装配失败按异常抛出，由 Program 统一报错，不静默写出一张空图。
     /// </summary>
+    /// <param name="path">目标 PNG 路径。</param>
+    /// <param name="width">可选的导出像素宽度。</param>
+    /// <param name="overwrite">可选的覆盖策略，省略时采用导出偏好。</param>
+    /// <exception cref="InvalidDataException">当前未加载可生成信息卡的谱面。</exception>
     public void SaveInfoCardTo(string path, int? width = null, bool? overwrite = null)
     {
         var png = RenderCardPng(width) ?? throw new InvalidDataException("No chart loaded: nothing to put on an info card.");

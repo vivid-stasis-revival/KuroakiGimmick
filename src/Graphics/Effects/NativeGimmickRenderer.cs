@@ -1,3 +1,5 @@
+// 根据会话的已验证对象配置提交分阶段绘制并管理其 GPU 缓存。
+
 using System.Numerics;
 using KuroakiGimmick.Core;
 
@@ -22,14 +24,17 @@ public sealed partial class NativeGimmickRenderer : IDisposable
     private readonly HashSet<GimmickShaderMode> failedModes = [];
     private long textureBytes;
     private long imageClock;
-    private readonly Dictionary<(string Path,bool Repeat,bool Linear),long> imageUse=[];
-    private readonly Dictionary<Texture,int> imagePins=[];
-    private void PinImage(Texture texture)=>imagePins[texture]=imagePins.GetValueOrDefault(texture)+1;
+    private readonly Dictionary<(string Path, bool Repeat, bool Linear), long> imageUse = [];
+    private readonly Dictionary<Texture, int> imagePins = [];
+    private void PinImage(Texture texture) => imagePins[texture] = imagePins.GetValueOrDefault(texture) + 1;
     private void UnpinImage(Texture texture)
     {
-        int count=imagePins.GetValueOrDefault(texture);
-        if(count<=1)imagePins.Remove(texture);else imagePins[texture]=count-1;
+        int count = imagePins.GetValueOrDefault(texture);
+        if (count <= 1) imagePins.Remove(texture);
+        else imagePins[texture] = count - 1;
     }
+    /// <summary>为指定画布初始化原版对象绘制资源。</summary>
+    /// <param name="canvas">提交绘制命令的画布。</param>
     public NativeGimmickRenderer(Canvas canvas)
     {
         this.canvas = canvas;
@@ -41,14 +46,14 @@ public sealed partial class NativeGimmickRenderer : IDisposable
     }
 
     /// <summary>先 Flush 再缩放两块离屏目标，避免仍在队列中的批次引用旧尺寸纹理。</summary>
+    /// <param name="width">目标宽度。</param>
+    /// <param name="height">目标高度。</param>
     public void Resize(int width, int height)
     {
         canvas.Flush();
         background.Resize(width, height);
         filtered.Resize(width, height);
-        // The GameMaker obj_starcrashers_mask Surface is ALWAYS 320x180.
-        // Keep it 1 physical pixel per game pixel; final upscaling uses Target's
-        // nearest sampler. Scaling this with RenderWidth breaks raster/blend parity.
+        // GameMaker 的 obj_starcrashers_mask 固定为 320×180，每个游戏像素对应一个物理像素，最后由 Target 最近邻放大；跟随 RenderWidth 会改变光栅化与混合结果。
     }
 
     /// <summary>
@@ -106,7 +111,7 @@ public sealed partial class NativeGimmickRenderer : IDisposable
         var key = (path, repeat, linear);
         if (textures.TryGetValue(key, out var image))
         {
-            imageUse[key]=++imageClock;
+            imageUse[key] = ++imageClock;
             return image;
         }
         if (failedTextures.Contains(key))
@@ -118,22 +123,27 @@ public sealed partial class NativeGimmickRenderer : IDisposable
             // 改变纹理分配/状态之前，先提交已排队的顶点。
             canvas.Flush();
             var size = new ImageResourceBudget().Check(path);
-            long bytes = (long) size.Width * size.Height * 4;
+            long bytes = (long)size.Width * size.Height * 4;
             while (textureBytes + bytes > ResourceFiles.DecodedImageLimit)
             {
-                (string Path,bool Repeat,bool Linear)? victim=null;
-                long oldest=long.MaxValue;
-                foreach(var entry in textures)
-                    if(!imagePins.ContainsKey(entry.Value) && imageUse.GetValueOrDefault(entry.Key)<oldest)
-                    {victim=entry.Key;oldest=imageUse.GetValueOrDefault(entry.Key);}
-                if(victim==null)throw new InvalidDataException("Active object GPU images exceed the 128 MiB working-set budget.");
-                var removed=textures[victim.Value];
-                textureBytes-=(long)removed.Width*removed.Height*4;
-                removed.Dispose();textures.Remove(victim.Value);imageUse.Remove(victim.Value);
+                (string Path, bool Repeat, bool Linear)? victim = null;
+                long oldest = long.MaxValue;
+                foreach (var entry in textures)
+                    if (!imagePins.ContainsKey(entry.Value) && imageUse.GetValueOrDefault(entry.Key) < oldest)
+                    {
+                        victim = entry.Key;
+                        oldest = imageUse.GetValueOrDefault(entry.Key);
+                    }
+                if (victim == null) throw new InvalidDataException("Active object GPU images exceed the 128 MiB working-set budget.");
+                var removed = textures[victim.Value];
+                textureBytes -= (long)removed.Width * removed.Height * 4;
+                removed.Dispose();
+                textures.Remove(victim.Value);
+                imageUse.Remove(victim.Value);
             }
             image = Texture.Load(canvas.Gpu, path, repeat: repeat, linear: linear);
             textures.Add(key, image);
-            imageUse[key]=++imageClock;
+            imageUse[key] = ++imageClock;
             textureBytes += bytes;
             return image;
         }
@@ -146,6 +156,10 @@ public sealed partial class NativeGimmickRenderer : IDisposable
     }
 
     /// <summary>背景画在自己的离屏目标上，按需过一遍图层 shader，最后才贴回调用方的 scene；这是本类唯一会切换渲染目标的入口。</summary>
+    /// <param name="scene">要绘制到的场景目标。</param>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <param name="effects">是否启用场景效果。</param>
     public void DrawBackground(Target scene, Session session, double time, bool effects)
     {
         Prepare(session);
@@ -167,6 +181,8 @@ public sealed partial class NativeGimmickRenderer : IDisposable
     }
 
     /// <summary>绘制烘焙好的对象粒子。速度按原版 60 Hz 逻辑 tick 定义，与显示帧率无关；精灵原点来自 profile，不假定居中。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void DrawParticles(Session session, double time)
     {
         Prepare(session);
@@ -188,13 +204,17 @@ public sealed partial class NativeGimmickRenderer : IDisposable
             {
                 continue;
             }
-            canvas.Quad(image, new(particle.X + particle.Vx * (float) age * 60 - sprite.OriginX,
-                particle.Y + particle.Vy * (float) age * 60 - sprite.OriginY, sprite.Width, sprite.Height), Color.Hsv(particle.Hue,
+            canvas.Quad(image, new(particle.X + particle.Vx * (float)age * 60 - sprite.OriginX,
+                particle.Y + particle.Vy * (float)age * 60 - sprite.OriginY, sprite.Width, sprite.Height), Color.Hsv(particle.Hue,
                 particle.Saturation).Alpha(1 - age / particle.Life));
         }
     }
 
     /// <summary>调用方先选择离屏目标；阶段内不擅自切换场景/轨道/最终合成目标。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <param name="stage">调度绘制项的合成阶段。</param>
+    /// <param name="notes">是否包含音符绘制。</param>
     public void DrawStage(Session session, double time, string stage, bool notes = true)
     {
         Prepare(session);
@@ -209,22 +229,34 @@ public sealed partial class NativeGimmickRenderer : IDisposable
         canvas.Flush();
     }
 
-    public void DrawGui(Session session, double time, bool notes = true, Action<GimmickTextOverlay>? drawText=null)
+    /// <summary>将对象的 GUI 阶段绘制项与可选文字提交到画布。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <param name="notes">是否绘制音符相关项目。</param>
+    /// <param name="drawText">绘制文字覆盖项的可选回调。</param>
+    public void DrawGui(Session session, double time, bool notes = true, Action<GimmickTextOverlay>? drawText = null)
     {
         Prepare(session);
-        if(scheduler!=null && current?.Data is { } definition)
+        if (scheduler != null && current?.Data is { } definition)
         {
-            var commands=scheduler.At(session.Timeline,time,GimmickStages.Gui,notes);
-            var text=definition.TextOverlays.OrderByDescending(t=>t.Depth).ThenBy(t=>t.SortOrder).ToArray();
-            int index=0;
-            foreach(var command in commands)
+            var commands = scheduler.At(session.Timeline, time, GimmickStages.Gui, notes);
+            var text = definition.TextOverlays.OrderByDescending(t => t.Depth).ThenBy(t => t.SortOrder).ToArray();
+            int index = 0;
+            foreach (var command in commands)
             {
-                while(index<text.Length && (text[index].Depth>command.Drawing.Depth || text[index].Depth==command.Drawing.Depth
-                    && text[index].SortOrder<command.Drawing.SortOrder))
-                {var overlay=text[index++];drawText?.Invoke(overlay);}
-                Draw(session,command.Drawing,command.Age,time,command.EventIndex);
+                while (index < text.Length && (text[index].Depth > command.Drawing.Depth || text[index].Depth == command.Drawing.Depth
+                    && text[index].SortOrder < command.Drawing.SortOrder))
+                {
+                    var overlay = text[index++];
+                    drawText?.Invoke(overlay);
+                }
+                Draw(session, command.Drawing, command.Age, time, command.EventIndex);
             }
-            while(index<text.Length){var overlay=text[index++];drawText?.Invoke(overlay);}
+            while (index < text.Length)
+            {
+                var overlay = text[index++];
+                drawText?.Invoke(overlay);
+            }
         }
         canvas.Flush();
         DrawSpriteLyricsText(session, time);
@@ -240,11 +272,11 @@ public sealed partial class NativeGimmickRenderer : IDisposable
             ? drawing.Frame + Math.Floor(Math.Max(0, age) * drawing.FramesPerSecond)
             : session.Timeline.Get(drawing.FrameMod, time);
         if (drawing.Bindings.TryGetValue("frame", out var frameBinding)) frameValue = frameBinding.Value(session.Timeline, time);
-        if(current.Behavior("reset-animation") is { } animation && drawing.Sprite==animation.Text("sprite",""))
+        if (current.Behavior("reset-animation") is { } animation && drawing.Sprite == animation.Text("sprite", ""))
         {
-            double start=0,reset=session.Timeline.Bpm.Time(animation.Number("resetBeat",0));
-            if(time>reset)start=(Math.Floor(reset*60+1e-8)+1)/60.0;
-            frameValue=Math.Clamp(Math.Floor((Math.Max(0,time-start)+1.0/60)*animation.Number("fps",1)-1e-8),0,animation.Number("lastFrame",0));
+            double start = 0, reset = session.Timeline.Bpm.Time(animation.Number("resetBeat", 0));
+            if (time > reset) start = (Math.Floor(reset * 60 + 1e-8) + 1) / 60.0;
+            frameValue = Math.Clamp(Math.Floor((Math.Max(0, time - start) + 1.0 / 60) * animation.Number("fps", 1) - 1e-8), 0, animation.Number("lastFrame", 0));
         }
         if (!double.IsFinite(frameValue)) return;
         int frame = (int)((frameValue % sprite.Frames.Count + sprite.Frames.Count) % sprite.Frames.Count);
@@ -253,17 +285,17 @@ public sealed partial class NativeGimmickRenderer : IDisposable
         double packedColor = drawing.Bindings.TryGetValue("color", out var colorBinding)
             ? colorBinding.Value(session.Timeline, time) : drawing.ColorBgr;
         if (!double.IsFinite(packedColor) || packedColor < 0 || packedColor > 0xFFFFFF) return;
-        if(!GimmickLifecycle.At(drawing.Lifecycle,session.Timeline.Callbacks,time))return;
+        if (!GimmickLifecycle.At(drawing.Lifecycle, session.Timeline.Callbacks, time)) return;
         Color color = Color.GameMaker((uint)packedColor);
-        if(drawing.HsvTint is { } tint)
+        if (drawing.HsvTint is { } tint)
         {
-            var hsv=Color.Hsv((float)tint.Hue.Value(session.Timeline,time),(float)tint.Saturation);
-            color=new(hsv.R*(float)tint.Brightness,hsv.G*(float)tint.Brightness,hsv.B*(float)tint.Brightness);
+            var hsv = Color.Hsv((float)tint.Hue.Value(session.Timeline, time), (float)tint.Saturation);
+            color = new(hsv.R * (float)tint.Brightness, hsv.G * (float)tint.Brightness, hsv.B * (float)tint.Brightness);
         }
         if (drawing.Random is { } random)
         {
-            uint seed = unchecked((uint) Math.Max(0, eventIndex) * random.SeedMultiplier + random.SeedOffset);
-            double RandomCoordinate(uint value, double maximum) => random.IntegerCoordinates? Math.Min(maximum,
+            uint seed = unchecked((uint)Math.Max(0, eventIndex) * random.SeedMultiplier + random.SeedOffset);
+            double RandomCoordinate(uint value, double maximum) => random.IntegerCoordinates ? Math.Min(maximum,
                 MathF.Floor(Timeline.Hash(value) * (float)(maximum + 1))) : Timeline.Hash(value) * maximum;
             x += RandomCoordinate(seed, random.Width);
             y += RandomCoordinate(seed + 1, random.Height);
@@ -281,8 +313,8 @@ public sealed partial class NativeGimmickRenderer : IDisposable
         {
             return;
         }
-        if(Math.Abs(scaleX)<=drawing.MinimumAbsScale || Math.Abs(scaleY)<=drawing.MinimumAbsScale)return;
-        // Invisible movie/animation frames must not decode or upload GPU images.
+        if (Math.Abs(scaleX) <= drawing.MinimumAbsScale || Math.Abs(scaleY) <= drawing.MinimumAbsScale) return;
+        // 不可见的影片或动画帧不解码，也不上传 GPU。
         if (Image(drawing.Sprite, frame) is not { } texture)
         {
             return;
@@ -314,7 +346,9 @@ public sealed partial class NativeGimmickRenderer : IDisposable
             shader.Dispose();
         }
         textures.Clear();
-        imageUse.Clear();imagePins.Clear();imageClock=0;
+        imageUse.Clear();
+        imagePins.Clear();
+        imageClock = 0;
         shaders.Clear();
         failedTextures.Clear();
         failedModes.Clear();

@@ -11,10 +11,13 @@ public sealed class TextValueSampler
     /// 按 (拍, Order) 把事件铺进各自的属性轨；Order 是源文件顺序，同拍事件必须照此叠加。
     /// 573613 是“取当前值”的哨兵，这里先由已铺好的段落求出该时刻的实际值再填回去，与运行时行为一致。
     /// </summary>
+    /// <param name="document">保留源行和事件的 VSM 文档。</param>
+    /// <param name="map">在歌曲秒数与拍数之间转换的 BPM 映射。</param>
     public TextValueSampler(VsmDocument document, BpmMap map)
     {
         this.map = map;
-        var chart = new Chart(); VsmReader.ReplaceModsText(chart, document.Text, "text-authoring.vsm");
+        var chart = new Chart();
+        VsmReader.ReplaceModsText(chart, document.Text, "text-authoring.vsm");
         foreach (var e in chart.Mods.Where(e => e.Proxy == -1 && CustomText.TryMod(e.Name, out _, out _) && Easings.IsKnown(e.Ease))
             .OrderBy(e => e.Beat).ThenBy(e => e.Order))
         {
@@ -26,9 +29,20 @@ public sealed class TextValueSampler
         }
     }
     /// <summary>求某条属性轨在某一拍的取值；该属性没有任何事件时返回 ModCatalog 的默认值，而不是 0。</summary>
+    /// <param name="name">完整文本属性名。</param>
+    /// <param name="beat">谱面位置，单位为拍。</param>
+    /// <returns>对应属性的采样值或协议默认值。</returns>
     public double Get(string name, double beat) => tracks.TryGetValue(name, out var list)
         ? Timeline.Evaluate(list, map.Time(beat), ModCatalog.Default(name, -1)) : ModCatalog.Default(name, -1);
+    /// <summary>求取给定拍数的文本属性，无轨道时采用对应协议默认值。</summary>
+    /// <param name="kind">文本属性键。</param>
+    /// <param name="id">字幕轨 ID。</param>
+    /// <param name="beat">谱面位置，单位为拍。</param>
+    /// <returns>对应属性的采样值或协议默认值。</returns>
     public double Get(string kind, string id, double beat) => Get(Name(kind, id), beat);
     /// <summary>拼出 mod 名。ID 为空表示旧版无名文本，此时不加后缀——加了就变成另一条轨。</summary>
+    /// <param name="kind">文本属性键。</param>
+    /// <param name="id">字幕轨 ID，允许为空。</param>
+    /// <returns>包含可选 ID 后缀的完整轨道名。</returns>
     public static string Name(string kind, string id) => kind + (id.Length == 0 ? "" : "_" + id);
 }

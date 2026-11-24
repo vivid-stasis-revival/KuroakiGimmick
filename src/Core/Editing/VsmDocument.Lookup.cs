@@ -1,3 +1,5 @@
+// 缓存源行索引并随文档版本失效。
+
 namespace KuroakiGimmick.Core.Editing;
 
 public sealed partial class VsmDocument
@@ -11,23 +13,26 @@ public sealed partial class VsmDocument
     void InvalidateLookup()
     {
         sourcePositionsValid = preservedLineCountValid = proxyDeclarationValid = false;
-        // Restore/split/merge replace the public List. Do not retain the old
-        // source through the mutation stamp until some later UI lookup occurs.
+        // 恢复、拆分或合并后会替换公开列表，立即清除旧枚举器标记，避免到下次界面查询前仍持有旧文档。
         lookupLines = null;
         lookupVersion = default;
         sourcePositions = null;
     }
 
-    // Lines is intentionally a public mutable List. Its fail-fast enumerator is a
-    // public, allocation-free mutation stamp, including same-count indexer edits,
-    // Sort and Reverse. Probe a copy so repeated reads never consume the stamp.
-    // This avoids private List fields and does not require callers to notify us.
+    // 公开的 Lines 列表可以直接被修改。复制其枚举器并探测失效状态，可以发现同长度替换、Sort 与 Reverse；反复读取不推进原标记，也不依赖私有字段或调用方通知。
     void EnsureLookupVersion()
     {
         if (ReferenceEquals(lookupLines, Lines))
         {
-            try { var probe = lookupVersion; probe.MoveNext(); return; }
-            catch (InvalidOperationException) { }
+            try
+            {
+                var probe = lookupVersion;
+                probe.MoveNext();
+                return;
+            }
+            catch (InvalidOperationException)
+            {
+            }
         }
         sourcePositionsValid = preservedLineCountValid = proxyDeclarationValid = false;
         lookupLines = Lines;
@@ -45,8 +50,7 @@ public sealed partial class VsmDocument
             for (int i = 0; i < Lines.Count; i++)
             {
                 var line = Lines[i];
-                // Preserve FirstOrDefault/FindIndex behavior even if a caller
-                // inserted duplicate IDs directly through the public list.
+                // 即使外部通过公开列表插入重复 ID，仍保留 FirstOrDefault 和 FindIndex 选择首项的行为。
                 if (line.Event is { } clip) sourcePositions.TryAdd(clip.Id, i);
                 else if (!string.IsNullOrWhiteSpace(line.Text)) preserved++;
             }
@@ -61,7 +65,7 @@ public sealed partial class VsmDocument
         EnsureLookupVersion();
         if (!preservedLineCountValid)
         {
-            // Merely displaying the count must not allocate a per-event ID map.
+            // 只显示计数时无需为每个事件分配 ID 索引。
             preservedLineCount = Lines.Count(line => line.Event == null && !string.IsNullOrWhiteSpace(line.Text));
             preservedLineCountValid = true;
         }
@@ -83,10 +87,7 @@ public sealed partial class VsmDocument
 
     void ReplaceIndexedLine(int index, Line replacement)
     {
-        // Replace resolves the ID after any inserted proxy header, so the map is
-        // current here. Rewriting a parsed event keeps its ID, position and the
-        // preserved-line count unchanged. Refresh the stamp instead of turning
-        // a K-event edit back into K full-document index rebuilds.
+        // Replace 在插入 proxy 头之后已重新定位 ID。改写已解析事件不影响 ID、位置与保留行数，刷新修改标记即可，避免一次批量编辑反复重建索引。
         if (proxyDeclarationValid && IsProxyDeclaration(Lines[index]) != IsProxyDeclaration(replacement)) proxyDeclarationValid = false;
         Lines[index] = replacement;
         lookupVersion = Lines.GetEnumerator();

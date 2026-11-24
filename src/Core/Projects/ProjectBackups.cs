@@ -1,3 +1,5 @@
+// 管理按工程隔离的备份历史及保存事务的恢复文件。
+
 using System.Security.Cryptography;
 using System.Text;
 
@@ -61,7 +63,7 @@ internal static partial class ProjectBackups
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             File.Copy(file, target);
         }
-        // Cross-volume archives must be complete and verified before removing any original.
+        // 跨卷归档须在副本完整且校验通过后才能移除源文件。
         foreach (string file in files)
             VerifyFile(file, Path.Combine(root, Path.GetRelativePath(Path.GetDirectoryName(path)!, file)));
         foreach (string file in files)
@@ -111,7 +113,10 @@ internal static partial class ProjectBackups
                     if (originals[i] is { } bytes) File.WriteAllBytes(targets[i], bytes);
                     else File.Delete(targets[i]);
                 }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { removable = false; }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    removable = false;
+                }
             }
             throw;
         }
@@ -119,8 +124,14 @@ internal static partial class ProjectBackups
         {
             if (removable && Directory.Exists(transaction))
             {
-                try { Directory.Delete(transaction, true); }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Console.Error.WriteLine("[save] " + ex.Message); }
+                try
+                {
+                    Directory.Delete(transaction, true);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    Console.Error.WriteLine("[save] " + ex.Message);
+                }
             }
         }
     }
@@ -141,7 +152,10 @@ internal static partial class ProjectBackups
             }
             Directory.Move(temporary, Path.Combine(root, token));
         }
-        finally { if (Directory.Exists(temporary)) Directory.Delete(temporary, true); }
+        finally
+        {
+            if (Directory.Exists(temporary)) Directory.Delete(temporary, true);
+        }
     }
 
     internal static void Prune(string path)
@@ -152,9 +166,18 @@ internal static partial class ProjectBackups
             .Where(d => File.Exists(Path.Combine(d, Path.GetFileName(path))))
             .OrderByDescending(d => Path.GetFileName(d), StringComparer.Ordinal).Skip(20))
         {
-            try { Directory.Delete(folder, true); }
-            catch (IOException ex) { Console.Error.WriteLine("[backup] " + ex.Message); }
-            catch (UnauthorizedAccessException ex) { Console.Error.WriteLine("[backup] " + ex.Message); }
+            try
+            {
+                Directory.Delete(folder, true);
+            }
+            catch (IOException ex)
+            {
+                Console.Error.WriteLine("[backup] " + ex.Message);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Console.Error.WriteLine("[backup] " + ex.Message);
+            }
         }
     }
 }

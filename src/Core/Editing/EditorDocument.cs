@@ -1,3 +1,5 @@
+// 将工程、VSM、VSP 与窗口编辑的变更纳入撤销历史和保存流程。
+
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -23,18 +25,28 @@ public sealed partial class EditorDocument
     TimelineMarker[] cleanMarkers;
     string[] cleanTrackOrder;
     readonly List<TimelineMarker> markers = [];
+    /// <summary>工程时间轴上的编辑器书签。</summary>
     public IReadOnlyList<TimelineMarker> Markers => markers;
+    /// <summary>本次编辑会话导入的资源路径。</summary>
     public string[] ImportedPaths { get; }
+    /// <summary>用于保留源行和修改演出事件的文档。</summary>
     public VsmDocument Vsm { get; }
+    /// <summary>与当前 VSP 文本同步的可编辑图片文档。</summary>
     public VspDocument Images { get; }
+    /// <summary>当前可编辑的窗口动作配置。</summary>
     public WindowMotionConfig Windows { get; private set; }
+    /// <summary>当前编辑会话持有的工程配置。</summary>
     public ViewerProject Project { get; private set; }
+    /// <summary>关联的已保存工程路径。</summary>
     public string? SavedProjectPath { get; private set; }
+    /// <summary>标识编辑状态变化的修订号。</summary>
     public long Revision { get; private set; }
+    /// <summary>标识 VSM 内容版本的修订号。</summary>
     public long VsmRevision { get; private set; }
     /// <summary>源内容及轨道布局与保存快照逐一比对；撤销回到保存点后重新变为干净。</summary>
     long dirtyRevision = 0;
     bool cachedDirty;
+    /// <summary>文档相对于保存状态是否存在更改。</summary>
     public bool Dirty
     {
         get
@@ -55,15 +67,21 @@ public sealed partial class EditorDocument
             if (Vsm.Lines[i].Text != cleanVsmLines[i].Text || Vsm.Lines[i].Ending != cleanVsmLines[i].Ending) return true;
         return false;
     }
+    /// <summary>是否存在可撤销的编辑。</summary>
     public bool CanUndo => undo.Count > 0;
+    /// <summary>是否存在可重做的编辑。</summary>
     public bool CanRedo => redo.Count > 0;
+    /// <summary>最近可撤销操作的显示名称。</summary>
     public string UndoLabel => undo.Count > 0 ? undo[^1].Label : "";
+    /// <summary>下一项可重做操作的显示名称。</summary>
     public string RedoLabel => redo.Count > 0 ? redo[^1].Label : "";
 
     /// <summary>
     /// 从一个已装载的 Session 派生编辑会话：拷贝工程配置，再把各源文档原样读进来。
     /// 这里只读文本、不碰渲染资源；任何一份源读不动就直接抛错，宁可不让编辑，也不能把损坏的文件当成空文档交给用户改。
     /// </summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <exception cref="InvalidDataException">窗口配置或其关联文件无法用于编辑。</exception>
     public EditorDocument(Session session)
     {
         Project = session.Project.Copy();
@@ -95,13 +113,20 @@ public sealed partial class EditorDocument
         Images = VspDocument.FromSession(session);
         foreach (var track in CustomText.Load(Project, new Chart(), enabled: true).Tracks) texts.Add(track.Id, track.SourceText);
         cleanTexts = TextSnapshot();
-        cleanVsmLines = Vsm.Lines.ToArray(); cleanWindows = Windows.Serialize(); cleanImages = Images.Text;
+        cleanVsmLines = Vsm.Lines.ToArray();
+        cleanWindows = Windows.Serialize();
+        cleanImages = Images.Text;
         if (session.ProjectPath is { } projectPath)
         {
             SavedProjectPath = Path.GetFullPath(projectPath);
-            try { ProjectBackups.MigrateHistory(SavedProjectPath); }
+            try
+            {
+                ProjectBackups.MigrateHistory(SavedProjectPath);
+            }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            { Console.Error.WriteLine("[backup migration] " + ex.Message); }
+            {
+                Console.Error.WriteLine("[backup migration] " + ex.Message);
+            }
             foreach (string file in ProjectBackups.Files(SavedProjectPath)) savedHashes[file] = Hash(file);
         }
     }
@@ -109,11 +134,24 @@ public sealed partial class EditorDocument
     /// <summary>取一次全量快照作为撤销点。Lines 只复制数组本身，行对象是共享的不可变 record。</summary>
     Snapshot Capture(string label) => new(Vsm.Lines.ToArray(), Windows.Serialize(), markers.ToArray(), Images.Text, TextSnapshot(), Project.EditorTrackOrder.ToArray(), label);
     /// <summary>整体还原源内容和布局，避免文本、配置与轨道顺序处于不一致的中间态。Revision 自增用于重建缓存。</summary>
-    void Restore(Snapshot s) { if (!Vsm.Lines.SequenceEqual(s.Lines)) VsmRevision++; Vsm.Restore(s.Lines); Windows = WindowMotionConfig.Parse(s.Windows, Windows.Path); markers.Clear(); markers.AddRange(s.Markers); Images.Restore(s.ImageText); RestoreTexts(s.TextSources); Project.EditorTrackOrder = s.TrackOrder.ToList(); Revision++; }
+    void Restore(Snapshot s)
+    {
+        if (!Vsm.Lines.SequenceEqual(s.Lines)) VsmRevision++;
+        Vsm.Restore(s.Lines);
+        Windows = WindowMotionConfig.Parse(s.Windows, Windows.Path);
+        markers.Clear();
+        markers.AddRange(s.Markers);
+        Images.Restore(s.ImageText);
+        RestoreTexts(s.TextSources);
+        Project.EditorTrackOrder = s.TrackOrder.ToList();
+        Revision++;
+    }
     /// <summary>
     /// 所有改动的唯一入口：先取快照，change 抛异常就整体回滚，保证文档不会停在改了一半的状态。
     /// 内容没有真正变化时不压栈，免得撤销栈被空操作填满；栈上限 64，超出丢最旧的一条。任何一次成功改动都会清空重做栈。
     /// </summary>
+    /// <param name="label">撤销历史中的操作名称。</param>
+    /// <param name="change">要作为一次编辑执行的修改。</param>
     public void Change(string label, Action change)
     {
         var before = Capture(label);
@@ -122,40 +160,58 @@ public sealed partial class EditorDocument
         {
             change();
             vsmChanged = !before.Lines.SequenceEqual(Vsm.Lines);
-            // Authoring a new changeskin (including paste/source edits) must also
-            // register it in CGMK. Keep the flag and event in the same undo step.
+            // 新建 changeskin（包括粘贴与源码编辑）还要在 CGMK 注册；开关和事件归入同一个撤销步骤。
             if (vsmChanged && !WindowMotionConfig.Flag(Windows.Root, "ENABLE_SKIN_CHANGE"))
             {
-                // Source edits regenerate IDs even for untouched events. Compare
-                // authored values/counts so unrelated edits retain an explicit off.
+                // 源码编辑会为未变的事件重新分配 ID，所以按作者写入的数值和数量比较，避免无关编辑覆盖显式关闭状态。
                 var previousSkins = before.Lines.Where(line => line.Event?.Name == "changeskin")
                     .GroupBy(line => line.Event! with { Id = Guid.Empty }).ToDictionary(group => group.Key, group => group.Count());
                 foreach (var skin in Vsm.Clips.Where(clip => clip.Name == "changeskin"))
                 {
                     var key = skin with { Id = Guid.Empty };
-                    if (previousSkins.GetValueOrDefault(key) == 0) { Windows.Root["ENABLE_SKIN_CHANGE"] = true; break; }
+                    if (previousSkins.GetValueOrDefault(key) == 0)
+                    {
+                        Windows.Root["ENABLE_SKIN_CHANGE"] = true;
+                        break;
+                    }
                     previousSkins[key]--;
                 }
             }
         }
-        catch { Restore(before); throw; }
+        catch
+        {
+            Restore(before);
+            throw;
+        }
         if (!vsmChanged && before.Windows == Windows.Serialize() && before.Markers.SequenceEqual(markers) && before.ImageText == Images.Text && before.TextSources == TextSnapshot() && before.TrackOrder.SequenceEqual(Project.EditorTrackOrder)) return;
-        undo.Add(before); if (undo.Count > 64) undo.RemoveAt(0);
-        redo.Clear(); if (vsmChanged) VsmRevision++; Revision++;
+        undo.Add(before);
+        if (undo.Count > 64) undo.RemoveAt(0);
+        redo.Clear();
+        if (vsmChanged) VsmRevision++;
+        Revision++;
     }
     /// <summary>撤销：先把当前状态压进重做栈再回滚，标签跟着操作走，这样重做菜单显示的是同一次操作的名字。</summary>
     public void Undo()
     {
         if (!CanUndo) return;
-        var last = undo[^1]; undo.RemoveAt(undo.Count - 1); redo.Add(Capture(last.Label)); Restore(last);
+        var last = undo[^1];
+        undo.RemoveAt(undo.Count - 1);
+        redo.Add(Capture(last.Label));
+        Restore(last);
     }
     /// <summary>重做：与 Undo 完全对称，两边共用同一套快照，反复撤销/重做不会丢信息。</summary>
     public void Redo()
     {
         if (!CanRedo) return;
-        var last = redo[^1]; redo.RemoveAt(redo.Count - 1); undo.Add(Capture(last.Label)); Restore(last);
+        var last = redo[^1];
+        redo.RemoveAt(redo.Count - 1);
+        undo.Add(Capture(last.Label));
+        Restore(last);
     }
     /// <summary>在某一拍打标记，单位是拍。同一拍（容差 1e-9）已有标记就复用它的 Id，不制造重合的两个标记。</summary>
+    /// <param name="beat">书签所在拍。</param>
+    /// <returns>新建书签的标识。</returns>
+    /// <exception cref="FormatException">书签拍数无效。</exception>
     public Guid Mark(double beat)
     {
         if (!double.IsFinite(beat) || Math.Abs(beat) > 1e8) throw new FormatException("Invalid marker beat.");
@@ -167,26 +223,44 @@ public sealed partial class EditorDocument
         Change("Mark beat " + VsmDocument.N(beat), () => markers.Add(marker));
         return marker.Id;
     }
+    /// <summary>按书签标识从工程中移除标记。</summary>
+    /// <param name="id">书签标识。</param>
     public void RemoveMarker(Guid id) => Change("Delete marker", () => markers.RemoveAll(m => m.Id == id));
     /// <summary>改标签不换 Id，也不动拍号。标签限单行 128 字以内，控制字符会破坏工程文件与时间轴绘制。</summary>
+    /// <param name="id">书签标识。</param>
+    /// <param name="label">新的书签名称。</param>
+    /// <exception cref="FormatException">标签不是符合长度限制的单行文本。</exception>
     public void RenameMarker(Guid id, string label)
     {
         if (label.Length > 128 || label.Any(char.IsControl)) throw new FormatException("Use a single-line label up to 128 characters.");
-        Change("Rename marker", () => { int i = markers.FindIndex(m => m.Id == id); if (i >= 0) markers[i] = markers[i] with { Label = label }; });
+        Change("Rename marker", () =>
+{
+    int i = markers.FindIndex(m => m.Id == id);
+    if (i >= 0) markers[i] = markers[i] with { Label = label };
+});
     }
     /// <summary>就地替换第 index 条窗口事件。DeepClone 后再放入，避免调用方留着同一个 JsonObject 继续改动 DOM。</summary>
+    /// <param name="index">被替换的窗口动作索引。</param>
+    /// <param name="value">新的窗口动作 JSON。</param>
+    /// <exception cref="InvalidOperationException">目标窗口事件已不存在。</exception>
     public void ReplaceWindow(int index, JsonObject value)
     {
         var events = Windows.EnsureEvents();
         if (index < 0 || index >= events.Count) throw new InvalidOperationException("Window event no longer exists.");
-        CheckWindow(value); events[index] = value.DeepClone();
+        CheckWindow(value);
+        events[index] = value.DeepClone();
         Windows.EnsureCount(WindowMotionConfig.Integer(value, "w") + 1);
     }
     /// <summary>追加一条窗口事件并返回它在数组中的下标；同时把窗口总数撑到能容纳 "w" 指定的索引。</summary>
+    /// <param name="value">待添加的窗口动作 JSON。</param>
+    /// <returns>新动作在列表中的索引。</returns>
     public int AddWindow(JsonObject value)
     {
-        CheckWindow(value); Windows.EnsureCount(WindowMotionConfig.Integer(value, "w") + 1);
-        var a = Windows.EnsureEvents(); a.Add(value.DeepClone()); return a.Count - 1;
+        CheckWindow(value);
+        Windows.EnsureCount(WindowMotionConfig.Integer(value, "w") + 1);
+        var a = Windows.EnsureEvents();
+        a.Add(value.DeepClone());
+        return a.Count - 1;
     }
     /// <summary>写入前的取值校验：t 与 duration 单位是秒且必须有限，duration 不可为负；窗口索引固定 0..63，这是 ECG WindowMovement schema 的上限。</summary>
     static void CheckWindow(JsonObject e)
@@ -201,6 +275,7 @@ public sealed partial class EditorDocument
     /// 按时间给窗口事件排序后交出一份副本。ThenBy 原下标使排序稳定：同一时刻的事件保持作者写下的先后，不能重排——它们的先后决定最终生效的那一条。
     /// 未知字段随 DOM 一同保留，这里只是换顺序，不做裁剪。
     /// </summary>
+    /// <returns>根据编辑快照生成的窗口动作配置。</returns>
     public WindowMotionConfig CompiledWindows()
     {
         var c = Windows.Copy();
@@ -208,7 +283,8 @@ public sealed partial class EditorDocument
         var ordered = c.Events.Select((node, i) => (node: node?.DeepClone(), i))
             .OrderBy(x => x.node is JsonObject e ? WindowMotionConfig.Number(e, "t") : double.PositiveInfinity)
             .ThenBy(x => x.i).ToArray();
-        c.Events.Clear(); foreach (var item in ordered) c.Events.Add(item.node);
+        c.Events.Clear();
+        foreach (var item in ordered) c.Events.Add(item.node);
         return c;
     }
 
@@ -217,6 +293,11 @@ public sealed partial class EditorDocument
     /// 进程被强杀时恢复数据保留在工程目录的 .kuroaki/tmp 中。这不是跨文件的原子事务，别当成事务来依赖。
     /// 保存只记录对外部素材的引用与设置，绝不复制或修改歌曲目录里的原始音频、封面与图片。
     /// </summary>
+    /// <param name="path">工程副本的目标路径。</param>
+    /// <param name="resolveImageNameConflicts">是否允许处理图片文件名冲突。</param>
+    /// <returns>已保存的工程路径。</returns>
+    /// <exception cref="IOException">现有配套文件与预期来源冲突或无法发布工程副本。</exception>
+    /// <exception cref="InvalidDataException">生成的 VSM 无法重新解析。</exception>
     public string SaveCopy(string path, bool resolveImageNameConflicts = false)
     {
         path = Path.GetFullPath(path);
@@ -228,12 +309,17 @@ public sealed partial class EditorDocument
         string vsmPath = Path.Combine(working, stem + ".editor.vsm");
         string windowsPath = Path.Combine(working, stem + ".editor_cgmk_config.json");
         var outputWindows = CompiledWindows().AsInlineGameConfig();
-        var p = Project.Copy(); MpfScriptSources.Preserve(p); p.EditorMarkers = markers.ToList(); p.Gimmick = vsmPath; p.WindowMotion = windowsPath;
+        var p = Project.Copy();
+        MpfScriptSources.Preserve(p);
+        p.EditorMarkers = markers.ToList();
+        p.Gimmick = vsmPath;
+        p.WindowMotion = windowsPath;
         // 保存/导出的 VSM 一律使用 canonical 作者数值；编辑会话本身仍保留未触碰源行，避免无关改动污染撤销历史。
         string normalizedVsm = Vsm.NormalizedText;
         byte[] normalizedVsmBytes = Vsm.NormalizedBytes();
         // 用正式的读取器把生成的 VSM 文本再解一遍，任何源文件落盘之前先确认它读得回来；解析成功不等于渲染成功，但解析失败一定不该写出去。
-        var check = new Chart(); VsmReader.ReplaceModsText(check, normalizedVsm, vsmPath);
+        var check = new Chart();
+        VsmReader.ReplaceModsText(check, normalizedVsm, vsmPath);
         if (check.Mods.Count == 0 && Vsm.Clips.Any()) throw new InvalidDataException("Generated VSM could not be read.");
         var files = new Dictionary<string, byte[]>();
         foreach (string file in ProjectBackups.LegacyFiles(path))
@@ -252,23 +338,35 @@ public sealed partial class EditorDocument
         if (Images.HasContent)
         {
             string imageText = Images.PrepareSave(working, stem, files, relocated, resolveImageNameConflicts);
-            p.Images = Path.Combine(working, stem + ".editor.vsp"); p.ImagePathsRelativeToVsp = true;
+            p.Images = Path.Combine(working, stem + ".editor.vsp");
+            p.ImagePathsRelativeToVsp = true;
             files[p.Images] = Encoding.UTF8.GetBytes(imageText);
         }
-        else { p.Images = null; p.ImagePathsRelativeToVsp = false; }
+        else
+        {
+            p.Images = null;
+            p.ImagePathsRelativeToVsp = false;
+        }
         p.TextFiles = new(StringComparer.Ordinal);
         int textIndex = 0;
         foreach (var pair in texts)
         {
             string target = Path.Combine(working, stem + ".editor-texts", "text-" + textIndex++ + ".txt");
-            files[target] = Encoding.UTF8.GetBytes(pair.Value); p.TextFiles.Add(pair.Key, target);
+            files[target] = Encoding.UTF8.GetBytes(pair.Value);
+            p.TextFiles.Add(pair.Key, target);
         }
         // 工程文件里一律存相对于自身目录的路径，整个工程文件夹可以随意搬动；解析基准是工程文件所在目录，不是当前工作目录。
         string? Rel(string? value) => value == null ? null : Path.GetRelativePath(dir, value);
         var jsonProject = p.Copy();
-        jsonProject.Chart = Rel(p.Chart); jsonProject.Gimmick = Rel(p.Gimmick); jsonProject.WindowMotion = Rel(p.WindowMotion);
-        jsonProject.Audio = Rel(p.Audio); jsonProject.Images = Rel(p.Images); jsonProject.Jacket = Rel(p.Jacket);
-        jsonProject.FxProfile = Rel(p.FxProfile); jsonProject.GameUi = Rel(p.GameUi); jsonProject.GimmickAssets = Rel(p.GimmickAssets);
+        jsonProject.Chart = Rel(p.Chart);
+        jsonProject.Gimmick = Rel(p.Gimmick);
+        jsonProject.WindowMotion = Rel(p.WindowMotion);
+        jsonProject.Audio = Rel(p.Audio);
+        jsonProject.Images = Rel(p.Images);
+        jsonProject.Jacket = Rel(p.Jacket);
+        jsonProject.FxProfile = Rel(p.FxProfile);
+        jsonProject.GameUi = Rel(p.GameUi);
+        jsonProject.GimmickAssets = Rel(p.GimmickAssets);
         jsonProject.GimmickDefinition = Rel(p.GimmickDefinition);
         jsonProject.MpfSourceRoot = Rel(p.MpfSourceRoot);
         jsonProject.TextFiles = p.TextFiles.ToDictionary(x => x.Key, x => Rel(x.Value)!);
@@ -302,10 +400,24 @@ public sealed partial class EditorDocument
         }
         // 全部就位之后才更新哈希与四份 clean 基线，Dirty 随即变回 false；任何一步失败都不会走到这里，脏状态原样保留。
         foreach (string target in files.Keys) savedHashes[target] = Hash(target);
-        Project = p; SavedProjectPath = path; cleanVsmLines = Vsm.Lines.ToArray(); cleanWindows = Windows.Serialize(); cleanMarkers = markers.ToArray(); cleanImages = Images.Text; cleanTexts = TextSnapshot(); cleanTrackOrder = Project.EditorTrackOrder.ToArray();
-        dirtyRevision = Revision; cachedDirty = false;
-        try { ProjectBackups.ArchiveLegacy(path); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Console.Error.WriteLine("[save migration] " + ex.Message); }
+        Project = p;
+        SavedProjectPath = path;
+        cleanVsmLines = Vsm.Lines.ToArray();
+        cleanWindows = Windows.Serialize();
+        cleanMarkers = markers.ToArray();
+        cleanImages = Images.Text;
+        cleanTexts = TextSnapshot();
+        cleanTrackOrder = Project.EditorTrackOrder.ToArray();
+        dirtyRevision = Revision;
+        cachedDirty = false;
+        try
+        {
+            ProjectBackups.ArchiveLegacy(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine("[save migration] " + ex.Message);
+        }
         ProjectBackups.Prune(path);
         return path;
     }

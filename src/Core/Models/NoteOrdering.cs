@@ -8,11 +8,16 @@ namespace KuroakiGimmick.Core;
 public static class NoteOrdering
 {
     /// <summary>按时间稳定升序排序。OrderBy 保证相等键保持原有相对次序。</summary>
+    /// <param name="notes">需要就地排序的音符列表。</param>
     public static void StableSortByTime(this List<Note> notes)
     {
         bool sorted = true;
         for (int i = 1; i < notes.Count; i++)
-            if (notes[i - 1].Time > notes[i].Time) { sorted = false; break; }
+            if (notes[i - 1].Time > notes[i].Time)
+            {
+                sorted = false;
+                break;
+            }
         if (sorted) return;
         var ordered = notes.OrderBy(n => n.Time).ToArray();
         notes.Clear();

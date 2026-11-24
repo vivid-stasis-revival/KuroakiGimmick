@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace KuroakiGimmick.Core;
 
-// Register application JSON roots so NativeAOT never needs runtime-generated serializers.
+/// <summary>为工程、设置、对象定义和诊断等 JSON 根类型生成序列化元数据。</summary>
 [JsonSerializable(typeof(ViewerProject))]
 [JsonSerializable(typeof(ViewerSettings))]
 [JsonSerializable(typeof(DockLayoutFile))]

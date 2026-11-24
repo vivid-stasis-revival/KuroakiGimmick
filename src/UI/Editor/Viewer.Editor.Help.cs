@@ -1,11 +1,10 @@
+// 轨道悬停帮助卡片。它刻意不算作阻塞覆盖层 —— 时间轴不会因为卡片出现而被禁用，
+// 否则 hover 与显示会互相触发出一帧显示一帧隐藏的反馈循环。
+
 using KuroakiGimmick.Graphics;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// 轨道悬停帮助卡片。它刻意不算作阻塞覆盖层 —— 时间轴不会因为卡片出现而被禁用，
-/// 否则 hover 与显示会互相触发出一帧显示一帧隐藏的反馈循环。
-/// </summary>
 public sealed partial class Viewer
 {
     // 这些是窗口 / UI 单位下的真实 em 尺寸，不是图集单元格的大小。字体加载器按声明的 EmSize

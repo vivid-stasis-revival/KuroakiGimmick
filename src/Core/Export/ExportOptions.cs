@@ -6,14 +6,26 @@ namespace KuroakiGimmick.Core;
 /// <summary>
 /// 导出区间、帧率与画面宽度。Start/End 单位是秒。帧数在区间边界处理浮点误差，避免多导出一帧。
 /// </summary>
+/// <param name="Path">输出路径。</param>
+/// <param name="Start">导出起始秒数。</param>
+/// <param name="End">导出结束秒数。</param>
+/// <param name="Fps">每秒输出帧数。</param>
+/// <param name="Width">输出宽度，单位为像素。</param>
+/// <param name="Height">输出高度，单位为像素。</param>
+/// <param name="Notes">是否绘制音符。</param>
+/// <param name="Effects">是否应用效果。</param>
+/// <param name="Overwrite">是否允许覆盖已有文件。</param>
+/// <param name="RenderWorkers">参与渲染的工作线程数。</param>
 public sealed record ExportOptions(string Path, double Start, double End, int Fps = 60, int Width = 1920, int Height = 1080, bool Notes = true,
     bool Effects = true, bool Overwrite = false, int RenderWorkers = 1)
 {
-    // Each worker owns a GPU context. Maximum/default uses all available logical CPU cores.
+    // 各工作线程独占 GPU 上下文，数量上限及初始默认值取可用逻辑核心数。
+    /// <summary>可为视频导出配置的最大渲染线程数。</summary>
     public static int MaxRenderWorkers => Math.Max(1, Environment.ProcessorCount);
     /// <summary>要编码的总帧数，至少 1 帧。减 1e-9 是为了让刚好落在帧边界的区间不多出一帧。</summary>
-    public int FrameCount => Math.Max(1, (int) Math.Ceiling((End - Start) * Fps - 1e-9));
+    public int FrameCount => Math.Max(1, (int)Math.Ceiling((End - Start) * Fps - 1e-9));
     /// <summary>区间不超过 1 小时、帧率 1..240、分辨率必须是 320×180 到 7680×4320 之间的偶数 16:9。</summary>
+    /// <exception cref="ArgumentException">帧率、尺寸、线程数或时间范围不符合视频导出限制。</exception>
     public void Validate()
     {
         if (RenderWorkers < 1 || RenderWorkers > MaxRenderWorkers)

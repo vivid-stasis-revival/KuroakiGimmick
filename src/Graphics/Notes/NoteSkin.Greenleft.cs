@@ -25,17 +25,26 @@ public sealed partial class NoteSkin
         var texture = Texture.Load(canvas.Gpu, file);
         if (texture.Width != spec.Width || texture.Height != spec.Height)
         {
-            texture.Dispose(); throw new InvalidDataException("CGMK greenleft sprite dimensions differ from manifest: " + name);
+            texture.Dispose();
+            throw new InvalidDataException("CGMK greenleft sprite dimensions differ from manifest: " + name);
         }
-        var frame = new NoteSkinFrame { Key = name, File = file, Width = spec.Width, Height = spec.Height,
-            LocalX = -spec.OriginX, LocalY = -spec.OriginY };
-        return greenleftSources[name] = new(frame, texture, new(0,0,1,1));
+        var frame = new NoteSkinFrame
+        {
+            Key = name,
+            File = file,
+            Width = spec.Width,
+            Height = spec.Height,
+            LocalX = -spec.OriginX,
+            LocalY = -spec.OriginY
+        };
+        return greenleftSources[name] = new(frame, texture, new(0, 0, 1, 1));
     }
     void DisposeGreenleftSources()
     {
         ClearGreenleft();
         foreach (var frame in greenleftSources.Values) frame.Texture.Dispose();
-        greenleftSources.Clear(); greenleftDefinition = null;
+        greenleftSources.Clear();
+        greenleftDefinition = null;
     }
     readonly SkinFrame?[] greenleftFrames = new SkinFrame?[4];
     readonly List<Target> greenleftTargets = [];
@@ -48,10 +57,14 @@ public sealed partial class NoteSkin
         foreach (var target in greenleftTargets) target.Dispose();
         greenleftTargets.Clear();
         Array.Clear(greenleftFrames);
-        greenleftActive = false; greenleftAmount = -1;
+        greenleftActive = false;
+        greenleftAmount = -1;
     }
-    // Bake before opening the scene/field pass. The source uses normal frames as
-    // its canvas, centers Allison, and only rebuilds on round(alpha*255) changes.
+    // 在场景或玩法 pass 之前烘焙。原版以普通帧作底、Allison 居中，仅在 round(alpha×255) 变化时重建。
+    /// <summary>根据会话及当前时间准备 Greenleft 混合皮肤。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <exception cref="InvalidDataException">缺少 CGMK Greenleft 皮肤的必要帧。</exception>
     public void PrepareGreenleft(Session session, double time)
     {
         var state = session.Timeline.IsCustomGimmick ? PartialSkinBlendState.At(session.Timeline, time) : default;
@@ -70,20 +83,25 @@ public sealed partial class NoteSkin
         {
             if (normal[i] is not { } n || overlay[i] is not { } a)
                 throw new InvalidDataException("CGMK greenleft skin frame is missing.");
-            if (state.Direct) { greenleftFrames[i] = a; continue; }
+            if (state.Direct)
+            {
+                greenleftFrames[i] = a;
+                continue;
+            }
             int width = (int)n.Frame.Width, height = (int)n.Frame.Height;
             using var bake = new Target(canvas.Gpu, width, height);
-            canvas.Begin(bake, width, height, width, height, new(0,0,0,0));
-            canvas.Quad(n.Texture, new(0,0,width,height), Color.White, n.Uv);
-            canvas.Quad(a.Texture, new((width-a.Frame.Width)/2, (height-a.Frame.Height)/2,a.Frame.Width,a.Frame.Height),
+            canvas.Begin(bake, width, height, width, height, new(0, 0, 0, 0));
+            canvas.Quad(n.Texture, new(0, 0, width, height), Color.White, n.Uv);
+            canvas.Quad(a.Texture, new((width - a.Frame.Width) / 2, (height - a.Frame.Height) / 2, a.Frame.Width, a.Frame.Height),
                 Color.White.Alpha(state.Alpha), a.Uv);
             var result = new Target(canvas.Gpu, width, height);
             greenleftTargets.Add(result);
             canvas.Pass(result, bake.Texture, greenleftStraight, preserveAlpha: true);
-            // Ensure the temporary texture survives all submitted commands.
+            // LIFETIME: 让临时纹理覆盖所有已提交命令对它的使用期。
             canvas.Gpu.Submit();
-            greenleftFrames[i] = new(n.Frame, result.Texture, new(0,0,1,1));
+            greenleftFrames[i] = new(n.Frame, result.Texture, new(0, 0, 1, 1));
         }
-        greenleftAmount = state.Alpha; greenleftActive = true;
+        greenleftAmount = state.Alpha;
+        greenleftActive = true;
     }
 }

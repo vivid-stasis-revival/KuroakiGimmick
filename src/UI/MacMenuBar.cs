@@ -1,3 +1,5 @@
+// 在 macOS 上构建并维护原生菜单与编辑命令之间的关联。
+
 using System.Runtime.InteropServices;
 using KuroakiGimmick.Core;
 
@@ -11,7 +13,8 @@ internal sealed class MacMenuBar : IDisposable
     [DllImport(Objc)] static extern nint sel_registerName(string name);
     [DllImport(Objc)] static extern nint objc_allocateClassPair(nint parent, string name, nint extraBytes);
     [DllImport(Objc)] static extern void objc_registerClassPair(nint cls);
-    [DllImport(Objc)] [return: MarshalAs(UnmanagedType.I1)]
+    [DllImport(Objc)]
+    [return: MarshalAs(UnmanagedType.I1)]
     static extern bool class_addMethod(nint cls, nint selector, nint implementation, string types);
     [DllImport(Objc, EntryPoint = "objc_msgSend")] static extern nint Send(nint obj, nint selector);
     [DllImport(Objc, EntryPoint = "objc_msgSend")] static extern nint Send(nint obj, nint selector, nint arg);
@@ -40,8 +43,14 @@ internal sealed class MacMenuBar : IDisposable
     static nint String(string value)
     {
         nint utf8 = Marshal.StringToCoTaskMemUTF8(value);
-        try { return Send(objc_getClass("NSString"), Sel("stringWithUTF8String:"), utf8); }
-        finally { Marshal.FreeCoTaskMem(utf8); }
+        try
+        {
+            return Send(objc_getClass("NSString"), Sel("stringWithUTF8String:"), utf8);
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(utf8);
+        }
     }
 
     public MacMenuBar(Action<MenuCommand, string?> execute, IReadOnlyList<RecentSource.Item> recent)

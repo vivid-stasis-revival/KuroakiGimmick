@@ -1,3 +1,5 @@
+// 按时间轴更新棋盘图案并复用所需的 GPU 纹理。
+
 using KuroakiGimmick.Core;
 
 namespace KuroakiGimmick.Graphics;
@@ -15,6 +17,8 @@ public sealed class CheckerboardRenderer : IDisposable
     Checkerboard? current;
     Texture[] tiles = [];
     int generation = -1;
+    /// <summary>使用指定画布管理棋盘纹理及其绘制。</summary>
+    /// <param name="c">提交绘制命令的画布。</param>
     public CheckerboardRenderer(Canvas c)
     {
         canvas = c;
@@ -27,6 +31,12 @@ public sealed class CheckerboardRenderer : IDisposable
     /// 只在 checker mode 与 alpha 都匹配时绘制。generation 前进时增量补画缺的几代，
     /// 后退时必须清空并从第 0 代重放 —— 透明的瓦片像素会露出历史内容，跳着画结果就不对。
     /// </summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <param name="mode">棋盘显示模式。</param>
+    /// <param name="target">接收绘制的目标。</param>
+    /// <param name="width">目标宽度。</param>
+    /// <param name="height">目标高度。</param>
     public void Draw(Session session, double time, int mode, Target target, int width, int height)
     {
         var source = session.Checker;
@@ -79,12 +89,13 @@ public sealed class CheckerboardRenderer : IDisposable
             generation = wanted;
         }
         canvas.Begin(target, width, height, 320, 180);
-        // Only the native Angelstar object supplies curcolor in the source.
+        // 来源对象中只有原版 Angelstar 提供 curcolor。
         var tint = session.NativeGimmick.HasBehavior("checker-tint")
             ? Color.Hsv((float)session.Timeline.Get("curcolor", time) / 255, 1) : Color.Hex(0xFF0000);
         canvas.Quad(pattern.Texture, new(0, 0, 320, 180), tint.Alpha(alpha), shader: composite);
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
         foreach (var t in tiles)

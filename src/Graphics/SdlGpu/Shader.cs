@@ -1,3 +1,5 @@
+// 将源 shader 编译为设备资源，并按顶点布局与混合模式创建管线。
+
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -22,6 +24,10 @@ public sealed unsafe class Shader : IDisposable
     bool disposed;
     internal bool Instanced { get; }
     /// <summary>先编译再建立原生对象；第二个 stage 创建失败时释放第一个。</summary>
+    /// <param name="gpu">持有渲染资源的 GPU 设备。</param>
+    /// <param name="vertex">顶点 shader 源码。</param>
+    /// <param name="fragment">片元 shader 源码。</param>
+    /// <param name="instanced">是否使用实例化顶点布局。</param>
     public Shader(GpuDevice gpu, string vertex, string fragment, bool instanced = false)
     {
         this.gpu = gpu;
@@ -45,6 +51,7 @@ public sealed unsafe class Shader : IDisposable
     nint Create(ShaderCompiler.Compiled compiled, bool vertex)
     {
         byte[] entry = Encoding.UTF8.GetBytes(compiled.Entry + "\0");
+        // SAFETY: 创建描述按字节数组的实际长度传递 shader，入口名以 UTF-8 空字符结尾，两者在调用期间保持固定。
         fixed (byte* code = compiled.Code, e = entry)
         {
             return GpuDevice.Check(SDL_CreateGPUShader(gpu.Handle, new GPUShaderCreateInfo
@@ -72,6 +79,7 @@ public sealed unsafe class Shader : IDisposable
             pitch = Instanced ? 64u : 32u,
             input_rate = Instanced ? 1u : 0u
         };
+        // SAFETY: 栈上预留四个属性槽；普通和实例化管线按各自初始化的数量传给 SDL。
         GPUVertexAttribute* attributes = stackalloc GPUVertexAttribute[4];
         attributes[0] = new()
         {
@@ -118,14 +126,14 @@ public sealed unsafe class Shader : IDisposable
             fragment_shader = fragmentHandle,
             vertex_input_state = new()
             {
-                vertex_buffer_descriptions = (nint)( & buffer),
+                vertex_buffer_descriptions = (nint)(&buffer),
                 num_vertex_buffers = 1,
                 vertex_attributes = (nint)attributes,
                 num_vertex_attributes = Instanced ? 4u : 3u
             },
             target_info = new()
             {
-                color_target_descriptions = (nint)( & color),
+                color_target_descriptions = (nint)(&color),
                 num_color_targets = 1
             }
         };
@@ -155,6 +163,8 @@ public sealed unsafe class Shader : IDisposable
         WriteStage(fragment, FragmentUniforms, name, values);
     }
     /// <summary>同名 sampler 写入纹理单元索引；其它整型 uniform 写入两阶段参数块。</summary>
+    /// <param name="name">uniform 名称。</param>
+    /// <param name="value">要写入的整数。</param>
     public void Int(string name, int value)
     {
         int sampler = Array.IndexOf(fragment.Samplers, name);
@@ -167,9 +177,24 @@ public sealed unsafe class Shader : IDisposable
             Set(name, [value]);
         }
     }
+    /// <summary>将单个数值转换为 float 并写入指定 uniform。</summary>
+    /// <param name="n">uniform 名称。</param>
+    /// <param name="v">要写入的标量。</param>
     public void Float(string n, double v) => Set(n, [(float)v]);
+    /// <summary>将两个数值分量写入指定 uniform。</summary>
+    /// <param name="n">uniform 名称。</param>
+    /// <param name="x">第一分量。</param>
+    /// <param name="y">第二分量。</param>
     public void Vec2(string n, double x, double y) => Set(n, [(float)x, (float)y]);
+    /// <summary>将三个数值分量写入指定 uniform。</summary>
+    /// <param name="n">uniform 名称。</param>
+    /// <param name="x">第一分量。</param>
+    /// <param name="y">第二分量。</param>
+    /// <param name="z">第三分量。</param>
     public void Vec3(string n, double x, double y, double z) => Set(n, [(float)x, (float)y, (float)z]);
+    /// <summary>按 RGBA 顺序将颜色分量写入指定 uniform。</summary>
+    /// <param name="n">uniform 名称。</param>
+    /// <param name="c">RGBA 四个分量。</param>
     public void Vec4(string n, Color c) => Set(n, [c.R, c.G, c.B, c.A]);
     /// <summary>先提交仍在引用本 shader 的批次，再释放缓存的全部管线与两个 stage；重复调用不再释放。</summary>
     public void Dispose()
@@ -188,11 +213,12 @@ public sealed unsafe class Shader : IDisposable
         SDL_ReleaseGPUShader(gpu.Handle, fragmentHandle);
     }
     /// <summary>仅转换 GameMaker GLSL 接口及已存在的零除防护，不重写原滤镜公式。</summary>
+    /// <param name="source">来源 GML shader 文本。</param>
+    /// <returns>适配渲染后端的 shader 源码。</returns>
     public static string AdaptGml(string source)
     {
-        // GameMaker ES shaders may use "sample" as a local name; desktop GLSL
-        // reserves it as an interpolation qualifier. Preserve the expression.
-        if(Regex.IsMatch(source,@"\bvec[234]\s+sample\b"))source=Regex.Replace(source,@"\bsample\b","kg_sample");
+        // GameMaker ES shader 可将 sample 用作局部变量，桌面 GLSL 将其保留作插值限定符，改名时须保留表达式语义。
+        if (Regex.IsMatch(source, @"\bvec[234]\s+sample\b")) source = Regex.Replace(source, @"\bsample\b", "kg_sample");
         source = Regex.Replace(source, @"(?m)^\s*#version[^\r\n]*", "");
         source = Regex.Replace(source, @"precision\s+\w+\s+\w+\s*;", "");
         source = source.Replace("#define LOWPREC lowp", "#define LOWPREC").Replace("varying ", "in ").Replace("texture2D(",

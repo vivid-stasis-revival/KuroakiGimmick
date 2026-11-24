@@ -1,3 +1,5 @@
+// 空会话的欢迎层。所有工程解析仍由 LoadPaths 在后台执行。
+
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Graphics;
 using KuroakiGimmick.Native;
@@ -5,7 +7,6 @@ using System.Runtime.InteropServices;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>空会话的欢迎层。所有工程解析仍由 LoadPaths 在后台执行。</summary>
 public sealed partial class Viewer
 {
     bool startup, startupInput, startupLoadPending;
@@ -38,9 +39,14 @@ public sealed partial class Viewer
         recentTitles.Clear();
         RequestNativeMenuRefresh();
         if (!persistRecentProjects) return;
-        try { preferences.Persist(settingsPath); }
+        try
+        {
+            preferences.Persist(settingsPath);
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        { message = L.Get("Settings could not be saved: ") + ex.Message; }
+        {
+            message = L.Get("Settings could not be saved: ") + ex.Message;
+        }
     }
 
     /// <summary>
@@ -75,7 +81,11 @@ public sealed partial class Viewer
     void FinishStartupLoad(bool loaded)
     {
         if (!startupLoadPending) return;
-        if (loaded) { startup = false; held = click = false; }
+        if (loaded)
+        {
+            startup = false;
+            held = click = false;
+        }
         else startup = true;
         startupLoadPending = false;
     }
@@ -94,8 +104,13 @@ public sealed partial class Viewer
         }
         if (e.Type is 0x400 or 0x401 or 0x402)
         {
-            mouseX = e.X; mouseY = e.Y;
-            if (e.Type == 0x401 && e.Button == 1 && startup && !dialogOpen) { click = true; held = true; }
+            mouseX = e.X;
+            mouseY = e.Y;
+            if (e.Type == 0x401 && e.Button == 1 && startup && !dialogOpen)
+            {
+                click = true;
+                held = true;
+            }
             if (e.Type == 0x402 && e.Button == 1) held = false;
         }
         if (e.Type == 0x403 && startup)
@@ -104,7 +119,11 @@ public sealed partial class Viewer
         }
         if (e.Type == 0x300 && e.Repeat == 0 && startup)
         {
-            if (e.Scan == 41 && !dialogOpen) { startup = false; held = click = false; }
+            if (e.Scan == 41 && !dialogOpen)
+            {
+                startup = false;
+                held = click = false;
+            }
             else if (e.Scan == 18 && (e.Modifiers & 0x0CC0) != 0 && !Busy)
                 BeginStartupDialog();
         }
@@ -113,8 +132,16 @@ public sealed partial class Viewer
 
     void DrawStartup(int w, int h)
     {
-        if (!StartupVisible) { startupTipVisible = false; return; }
-        if (!startupTipVisible) { RefreshStartupTip(); startupTipVisible = true; }
+        if (!StartupVisible)
+        {
+            startupTipVisible = false;
+            return;
+        }
+        if (!startupTipVisible)
+        {
+            RefreshStartupTip();
+            startupTipVisible = true;
+        }
         Canvas.Clip(null);
         using var fade = Canvas.Opacity(startupAlpha);
         Canvas.Fill(new(0, 0, w, h), Color.Hex(0x03060B, .87f));
@@ -149,7 +176,9 @@ public sealed partial class Viewer
             DrawStartupTip(left, card.Y + 342, split - left - 25, card.Y + card.H - 90);
             if (Button(L.Get("SETTINGS"), new(left, card.Y + card.H - 69, split - left - 24, 34)))
             {
-                startup = false; OpenSettings(); click = false;
+                startup = false;
+                OpenSettings();
+                click = false;
             }
 
             Canvas.Fill(new(split, card.Y + 126, 1, card.H - 154), line);
@@ -179,7 +208,10 @@ public sealed partial class Viewer
             if (recent.Count > visibleRows)
                 Text(L.Get("Scroll for more projects"), right, card.Y + card.H - 37, 10, muted, max: rightWidth);
         }
-        finally { startupInput = false; }
+        finally
+        {
+            startupInput = false;
+        }
     }
 
     void DrawStartupTip(float x, float y, float width, float bottom)
@@ -210,6 +242,7 @@ public sealed partial class Viewer
     }
 
     /// <summary>真实 SDL 输入与 GPU 绘制的启动页检查；调用方使用 silent Viewer，测试不会写用户设置。</summary>
+    /// <param name="screenshot">用于验证启动界面的截图路径。</param>
     public void SmokeStartupUi(string screenshot)
     {
         if (!startup || !Current.IsEmpty) throw new Exception("Startup smoke requires an empty welcome session.");
@@ -229,14 +262,15 @@ public sealed partial class Viewer
         try
         {
             Draw(1440, 940);
-            // Exercise wrapping with fixed text independently of the bundled tips.
+            // 用固定文本验证自动换行，使检查独立于随包提示内容。
             startupTip = "小贴士：拖动播放头，再添加字幕。 Tips stay stable while the welcome page is visible.";
             startupTipVisible = true;
             Draw(1440, 940);
             string? shown = startupTip;
             Draw(1440, 940);
             if (startupTip != shown) throw new Exception("Welcome tip changed during drawing.");
-            Draw(800, 600); Draw(1440, 940);
+            Draw(800, 600);
+            Draw(1440, 940);
             Canvas.SavePpm(UiTarget, screenshot);
             // 断言的正是绘制循环取标题的那个函数：谱面文件名是 ENCORE，列表里必须是这首歌。
             if (RecentTitle(song) != "Scarlet Death / lexycat @ BACKSTAGE  LV.17")
@@ -244,7 +278,10 @@ public sealed partial class Viewer
                 throw new Exception("Startup recent row did not show the song: " + RecentTitle(song));
             }
         }
-        finally { Directory.Delete(song, true); }
+        finally
+        {
+            Directory.Delete(song, true);
+        }
         if (!UiBlockingOverlayVisible) throw new Exception("Startup did not block the workspace.");
         bool before = notes;
         Handle(new Sdl.Event { Type = 0x300, Scan = 17 });
@@ -263,8 +300,14 @@ public sealed partial class Viewer
         Draw(1440, 940);
         string chart = Path.GetFullPath("Samples/EditorDemo/ENCORE.vsc");
         nint dropped = Marshal.StringToCoTaskMemUTF8(chart);
-        try { Handle(new Sdl.Event { Type = 0x1000, DropData = dropped }); }
-        finally { Marshal.FreeCoTaskMem(dropped); }
+        try
+        {
+            Handle(new Sdl.Event { Type = 0x1000, DropData = dropped });
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(dropped);
+        }
         if (loading == null || !loading.Wait(TimeSpan.FromSeconds(30)))
             throw new Exception("Startup chart load did not start or timed out.");
         Update();
@@ -292,7 +335,7 @@ public sealed partial class Viewer
             Draw(1440, 940);
             Handle(new Sdl.Event { Type = 0x402, Button = 1, X = x, Y = y });
         }
-        // 1440x940: card=(240,125,960,690), recent rows begin at x=575, y=283.
+        // 界面为 1440×940 时，卡片矩形为 (240,125,960,690)，最近项目列表从 (575,283) 开始。
         Click(700, 300);
         if (loading != null || !startup) throw new Exception("Missing recent project started loading.");
         Click(700, 348);
@@ -327,7 +370,10 @@ public sealed partial class Viewer
             if (settingsPath != null && ViewerSettings.Load(settingsPath).RecentProjects.FirstOrDefault() != saved)
                 throw new Exception("Editor Save As recent entry did not persist.");
         }
-        finally { if (Directory.Exists(saveDir)) Directory.Delete(saveDir, true); }
+        finally
+        {
+            if (Directory.Exists(saveDir)) Directory.Delete(saveDir, true);
+        }
         Console.WriteLine("Startup overlay, chart/folder history, missing path, input blocking, recent load, viewer entry, editor entry and Save As passed.");
     }
 }

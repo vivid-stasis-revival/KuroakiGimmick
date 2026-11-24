@@ -1,3 +1,5 @@
+// 建立 Windows 原生菜单并将选择的命令送回工作区。
+
 using System.Runtime.InteropServices;
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Native;
@@ -15,17 +17,21 @@ internal sealed class WindowsMenuBar : IDisposable
     [return: MarshalAs(UnmanagedType.Bool)] static extern bool AppendMenu(nint menu, uint flags, nuint id, string? title);
     [DllImport("user32.dll", EntryPoint = "AppendMenuW", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)] static extern bool AppendMenuOwner(nint menu, uint flags, nuint id, nint data);
-    [DllImport("user32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)]
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
     static extern bool SetMenu(nint window, nint menu);
-    [DllImport("user32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)]
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
     static extern bool DrawMenuBar(nint window);
-    [DllImport("user32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)]
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
     static extern bool DestroyMenu(nint menu);
     [DllImport("user32.dll", SetLastError = true)] static extern uint EnableMenuItem(nint menu, uint id, uint flags);
     [DllImport("user32.dll", SetLastError = true)] static extern uint CheckMenuItem(nint menu, uint id, uint flags);
     [DllImport("user32.dll", SetLastError = true)] static extern nint GetMenu(nint window);
     [DllImport("user32.dll", SetLastError = true)] static extern int GetMenuItemCount(nint menu);
-    [DllImport("user32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)]
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
     static extern bool PostMessageW(nint window, uint message, nuint wParam, nint lParam);
 
     [StructLayout(LayoutKind.Sequential)]
@@ -75,7 +81,12 @@ internal sealed class WindowsMenuBar : IDisposable
             hook = HandleMessage;
             Sdl.SDL_SetWindowsMessageHook(hook, 0);
         }
-        catch { theme?.Dispose(); DestroyMenu(root); throw; }
+        catch
+        {
+            theme?.Dispose();
+            DestroyMenu(root);
+            throw;
+        }
     }
 
     static string Safe(string text) => text.Replace("&", "&&", StringComparison.Ordinal);

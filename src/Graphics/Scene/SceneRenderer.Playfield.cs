@@ -1,12 +1,11 @@
+// 场景合成协调器。对象背景、资源图层、轨道、固定 HUD 与后处理按显式边界组织；预览和视频导出共用此入口。
+
 using System.Numerics;
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Bridge;
 
 namespace KuroakiGimmick.Graphics;
 
-/// <summary>
-/// 场景合成协调器。对象背景、资源图层、轨道、固定 HUD 与后处理按显式边界组织；预览和视频导出共用此入口。
-/// </summary>
 public sealed partial class SceneRenderer
 {
     /// <summary>
@@ -15,7 +14,7 @@ public sealed partial class SceneRenderer
     /// Base 的裁剪外灰条不应留在原位置；Custom v1.12.7 则明确将
     /// application_surface 底部 (81..239, 165..180) 重新拷回画面，不能一起丢弃。
     /// </summary>
-    void CompositeField(Session session, double time, bool proxyMode, bool clearFooter, Target? destination=null)
+    void CompositeField(Session session, double time, bool proxyMode, bool clearFooter, Target? destination = null)
     {
         if (inspectionProxy == null) CaptureWindowField(session);
         var timeline = session.Timeline;
@@ -33,16 +32,10 @@ public sealed partial class SceneRenderer
             canvas.Quad(field.Texture, new(0, 0, 81, 180), Color.White.Alpha(1 - M("hom")), new(0, 0, 81f / 320, 1), shader: fieldComposite);
             canvas.Quad(field.Texture, new(239, 0, 81, 180), Color.White.Alpha(1 - M("hom")), new(239f / 320, 0, 81f / 320, 1),
                 shader: fieldComposite);
-            // Base Draw_64 and Other_21, and Custom Draw_74 all restore this
-            // segment before the footer's optional black mask and the proxies.
+            // Base 的 Draw_64、Other_21 及 Custom 的 Draw_74 都先恢复这一段，再绘制可选的底部黑色遮罩和 proxy。
             canvas.Quad(field.Texture, new(81, 165, 158, 15), Color.White.Alpha(1 - M("hom")), new(81f / 320, 165f / 180, 158f / 320, 15f / 180),
                 shader: fieldComposite);
-            // Custom Gimmicks v1.12.7 Draw_74 draws a BLACK rectangle over the
-            // footer AFTER restoring aft(81,165,158,15), and BEFORE any proxies.
-            // draw_rectangle_colour(..., 0): final 0 = outline=false, NOT alpha=0.
-            // Actual alpha comes from draw_set_alpha(1 - cc.mod_uialpha).
-            // With Stage4a uialpha=0 the restored gray hold background must vanish;
-            // proxy-sampled content is drawn afterwards and remains unaffected.
+            // Custom Gimmicks v1.12.7 的 Draw_74 先恢复 aft(81,165,158,15)，再画底部黑色实心矩形，最后画 proxy。draw_rectangle_colour 的末尾 0 表示不画轮廓，透明度由 1-cc.mod_uialpha 决定。Stage4a 中 uialpha=0 时应遮住灰色长条背景，之后的 proxy 采样仍可见。
             if (session.Chart.ObjectName is "obj_base_gimmick" or "obj_custom_gimmick" ||
                 session.NativeGimmick.Data is { ApplicationProxy: true, ClearProxyFooter: true })
             {
@@ -107,10 +100,9 @@ public sealed partial class SceneRenderer
             canvas.Quad(laneTexture, new(0, 0, 320, 180), Color.White.Alpha(ui));
         }
         nativeGimmick.DrawStage(session, t, GimmickStages.AfterRails, drawNotes);
-        // Sekaisen's lane layer is depth 497; white background and four portraits
-        // are 426..142, below the hold overlay at depth 71 and above the lane.
-        if(session.NativeGimmick.Data?.PlayfieldLayerDepth is { } depth)
-            nativeGimmick.DrawRoomLayers(field,session,t,maximumDepth:(int)depth);
+        // Sekaisen 轨道深度为 497，白底和四张立绘位于 426 至 142，处在轨道前、深度 71 的长条覆盖层后。
+        if (session.NativeGimmick.Data?.PlayfieldLayerDepth is { } depth)
+            nativeGimmick.DrawRoomLayers(field, session, t, maximumDepth: (int)depth);
         // GameMaker 的 image depth = 图层优先级取负。轨道装饰深度 200，判定覆盖层深度 0，
         // 音符 -350，游戏 HUD -1000；下面每个 DrawImages 区间就是按这些深度切出来的。
         DrawImages(session, t, -200, -100, field);
@@ -121,8 +113,7 @@ public sealed partial class SceneRenderer
             // 所以在这里中途合成一次，画完固定判定装饰后再回到透明的 field 目标继续。
             if (session.NativeGimmick.Data?.ApplicationProxy == true)
             {
-                // Inherited base Draw GUI samples this room asset together with
-                // the entire application; splitting it here would transform the lane twice.
+                // 继承的基础 Draw GUI 会连同整个 application surface 采样该房间素材，若在这里拆出来会对轨道应用两次变换。
                 nativeGimmick.DrawStage(session, t, GimmickStages.FixedJudgment, drawNotes);
             }
             else
@@ -133,7 +124,7 @@ public sealed partial class SceneRenderer
             }
         }
         DrawImages(session, t, -100, 0, field);
-        if(session.Chart.ObjectName=="obj_custom_gimmick")customGimmicks.DrawDfFlashes(session,t);
+        if (session.Chart.ObjectName == "obj_custom_gimmick") customGimmicks.DrawDfFlashes(session, t);
         nativeGimmick.DrawStage(session, t, GimmickStages.BeforeHoldOverlay, drawNotes);
         if (drawNotes && session.NativeGimmick.Data?.ReplaceJudgmentOverlay != true && session.NativeGimmick.Data?.Console == null)
         {
@@ -142,7 +133,7 @@ public sealed partial class SceneRenderer
             canvas.Quad(nativeSequence.HoldOverlay(session, t) ?? holdOverlay, new(0, 0, 320, 180), Color.White.Alpha(M("holdoverlayalpha")));
         }
         nativeGimmick.DrawStage(session, t, GimmickStages.BeforeNotes, drawNotes);
-        if(drawNotes)nativeGimmick.DrawOperationConsoleHoldOverlay(session,t);
+        if (drawNotes) nativeGimmick.DrawOperationConsoleHoldOverlay(session, t);
         DrawImages(session, t, 0, 10, field);
         // Custom 的旧式/具名字幕实例都位于 depth -10：判定覆盖层之后、音符和 cover (-400) 之前。
         // 放入 application surface，稍后与遮罩一起参与 Custom proxy 采样；不受 drawNotes 开关影响。
@@ -179,7 +170,7 @@ public sealed partial class SceneRenderer
             bool custom = session.Chart.ObjectName == "obj_custom_gimmick";
             // changeskin 是离散枚举轨；Timeline 在事件起点直接写 To，不做 from->to tween。
             // 所有轨道同时换整套 lane_sprites；越界由 NoteSkin 折回正常皮肤。
-            int noteSkinIndex = session.SkinChangeEnabled ? (int) M("changeskin") : 0;
+            int noteSkinIndex = session.SkinChangeEnabled ? (int)M("changeskin") : 0;
             if (NativeNoteSkinState.Name(session.NativeGimmick.Data, t, name => M(name)) is { } nativeSkin)
                 noteSkinIndex = noteSkin.Index(nativeSkin);
             var scrollByLane = noteScrollCache;
@@ -250,8 +241,7 @@ public sealed partial class SceneRenderer
             // 音符的横向运动不受影响；下边界跟随 field，在被复制/旋转成 proxy 时
             // 一起变换，而不是裁在屏幕空间上。
             canvas.Clip(new(0, 0, 320, TrackBottom));
-            // Preserve original draw ordering, clipping, blend layers and SDL_GPU output.
-            // Only the note movement numerics are replaceable by a native batch.
+            // 原生批处理只替代音符运动数值计算，绘制顺序、裁剪、混合层和 SDL_GPU 输出仍沿用原路径。
             int visibleCount = 0;
             void DrawOne(Note n, double y, double endY, double motionX)
             {
@@ -270,20 +260,31 @@ public sealed partial class SceneRenderer
                 else
                 {
                     if (!nativeGimmick.DrawMaskedStarFieldNativeNote(session, t, n.Type, n.Lane, x, (float)y, laneAlpha, (float)noteRotation) &&
-                        !(NativeNoteSkinState.At(session.NativeGimmick.Data,t,name=>M(name))?.HideTimingBumpers==true && n.Type==8))
+                        !(NativeNoteSkinState.At(session.NativeGimmick.Data, t, name => M(name))?.HideTimingBumpers == true && n.Type == 8))
                         noteSkin.Note(n.Type, n.Lane, x, (float)y, laneAlpha, (float)noteRotation, noteSkinIndex);
                 }
             }
 
             var motionParams = new RustNoteBridge.MotionParams
             {
-                Beat = beat, Alignment = alignment, Driven = driven, BeatsPerSecond = bpmAtBeat / 60,
-                Wave = wave, BeatMotion = beatMotion, Custom = custom ? 1u : 0u
+                Beat = beat,
+                Alignment = alignment,
+                Driven = driven,
+                BeatsPerSecond = bpmAtBeat / 60,
+                Wave = wave,
+                BeatMotion = beatMotion,
+                Custom = custom ? 1u : 0u
             };
             bool useRust = RustNoteBridge.Enabled;
             for (int lane = 0; lane < rustLaneInputs.Length; lane++)
-                rustLaneInputs[lane] = new() { Scroll = scrollByLane[lane], XOffset = xOffsetByLane[lane],
-                    YOffset = yOffsetByLane[lane], BoostTime = boostTimeByLane[lane], BoostDistance = boostDistanceByLane[lane] };
+                rustLaneInputs[lane] = new()
+                {
+                    Scroll = scrollByLane[lane],
+                    XOffset = xOffsetByLane[lane],
+                    YOffset = yOffsetByLane[lane],
+                    BoostTime = boostTimeByLane[lane],
+                    BoostDistance = boostDistanceByLane[lane]
+                };
 
             void EvaluateChunk(int count, bool validLanes)
             {
@@ -296,11 +297,13 @@ public sealed partial class SceneRenderer
                     using var prepare = PerformanceStats.Measure(PerformanceStats.Stage.Candidates);
                     for (int i = 0; i < count; i++)
                     {
-                        var n = rustNoteCandidates[i]; int lane = n.Type is 1 or 7 or 8 ? n.Lane + 4 : n.Lane;
+                        var n = rustNoteCandidates[i];
+                        int lane = n.Type is 1 or 7 or 8 ? n.Lane + 4 : n.Lane;
                         rustMotionInputs[i] = lane >= 0 && lane < rustLaneInputs.Length ? rustLaneInputs[lane] : new()
                         {
                             Scroll = NoteMotion.ScrollMultiplier(scrollSpeed, M("scrollind" + lane), velocity),
-                            XOffset = xOffset + M("xoffsetind" + lane), YOffset = yOffset + M("yoffsetind" + lane),
+                            XOffset = xOffset + M("xoffsetind" + lane),
+                            YOffset = yOffset + M("yoffsetind" + lane),
                             BoostTime = boostTime + M("boost_timeind" + lane),
                             BoostDistance = boostDistance == 0 ? 0 : boostDistance + M("boost_distanceind" + lane)
                         };
@@ -314,17 +317,22 @@ public sealed partial class SceneRenderer
                 for (int i = 0; i < count; i++)
                 {
                     var n = rustNoteCandidates[i];
-                    if (evaluated) { var o = rustMotionOutputs[i]; DrawOne(n, o.Y, o.EndY, o.XOffset); }
+                    if (evaluated)
+                    {
+                        var o = rustMotionOutputs[i];
+                        DrawOne(n, o.Y, o.EndY, o.XOffset);
+                    }
                     else
                     {
                         int lane = n.Type is 1 or 7 or 8 ? n.Lane + 4 : n.Lane;
                         double distance = (n.Time - scrollTime) * 1000, endDistance = (n.End - scrollTime) * 1000;
                         DrawOne(n, Y(distance, lane), Y(endDistance, lane), X(distance, lane));
                     }
-                    rustNoteCandidates[i] = null!; // do not retain an old session after a switch
+                    rustNoteCandidates[i] = null!; // 切换会话时释放对旧会话的引用。
                 }
             }
-            int chunk = 0; bool validLanes = true;
+            int chunk = 0;
+            bool validLanes = true;
             var candidates = session.NoteIndex.PreviewVisible(visualTime, latestStart, previewLayers, interactivePreview).GetEnumerator();
             bool available = true;
             while (available)
@@ -333,16 +341,23 @@ public sealed partial class SceneRenderer
                 {
                     while (chunk < MotionChunkSize && (available = candidates.MoveNext()))
                     {
-                        var entry = candidates.Current; var n = entry.Value.Note;
-                        if (n.Time * 1000 > drawUntil) { available = false; break; }
-                        rustNoteCandidates[chunk] = n; rustCandidateIndices[chunk] = (uint)candidates.CurrentIndex;
+                        var entry = candidates.Current;
+                        var n = entry.Value.Note;
+                        if (n.Time * 1000 > drawUntil)
+                        {
+                            available = false;
+                            break;
+                        }
+                        rustNoteCandidates[chunk] = n;
+                        rustCandidateIndices[chunk] = (uint)candidates.CurrentIndex;
                         int lane = n.Type is 1 or 7 or 8 ? n.Lane + 4 : n.Lane;
                         validLanes &= lane >= 0 && lane < rustLaneInputs.Length;
                         chunk++;
                     }
                 }
                 if (chunk > 0) EvaluateChunk(chunk, validLanes);
-                chunk = 0; validLanes = true;
+                chunk = 0;
+                validLanes = true;
             }
             PerformanceStats.Add(PerformanceStats.Counter.VisibleNotes, visibleCount);
             // 命中特效在原版是深度 -375 的独立实例，压在音符（-350）之上，共用同一块轨道裁剪。
@@ -350,7 +365,7 @@ public sealed partial class SceneRenderer
             canvas.Clip(null);
         }
         DrawImages(session, t, 350, 400, field);
-        nativeGimmick.DrawOperationConsoleStoryBackground(session,t);
+        nativeGimmick.DrawOperationConsoleStoryBackground(session, t);
         customGimmicks.DrawCovers(session, t);
         DrawImages(session, t, 400, 1000, field);
         canvas.Flush();

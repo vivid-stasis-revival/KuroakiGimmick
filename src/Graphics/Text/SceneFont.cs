@@ -1,3 +1,5 @@
+// 使用字体图集测量并绘制场景字幕，供预览和编辑命中共用。
+
 using System.Numerics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -13,12 +15,19 @@ public sealed class SceneFont : IDisposable
     /// <summary>page 是 pages[] 的下标，只对内置图集有效；回退到原版图集时整套字形都在同一张纹理上。</summary>
     public sealed class Glyph
     {
+        /// <summary>字形纹理所属的图集页索引。</summary>
         public int page { get; set; }
+        /// <summary>字形矩形在图集中的左边界。</summary>
         public int x { get; set; }
+        /// <summary>字形矩形在图集中的上边界。</summary>
         public int y { get; set; }
+        /// <summary>字形图像的像素宽度。</summary>
         public int w { get; set; }
+        /// <summary>字形图像的像素高度。</summary>
         public int h { get; set; }
+        /// <summary>绘制字符后笔位置的推进量。</summary>
         public float advance { get; set; }
+        /// <summary>相对于当前笔位置的绘制偏移。</summary>
         public float offset { get; set; }
     }
 
@@ -31,6 +40,8 @@ public sealed class SceneFont : IDisposable
 #if KG_SWITCH
     double lastColorDiagnostic = -100;
 #endif
+    /// <summary>使用指定 GPU 设备建立场景文字所用的字体资源。</summary>
+    /// <param name="gpu">持有渲染资源的 GPU 设备。</param>
     public SceneFont(GpuDevice gpu)
     {
         string root = Path.Combine(Paths.Assets, "SceneFont");
@@ -54,7 +65,7 @@ public sealed class SceneFont : IDisposable
     {
         var pack = session.GameUi;
         string name = pack.Data?.Fonts.ContainsKey(session.Project.GameUiFont) == true ? session.Project.GameUiFont : "fnt_monacovs";
-        string? key = pack.Ready? pack.Manifest + "|" + name : null;
+        string? key = pack.Ready ? pack.Manifest + "|" + name : null;
         if (key == originalKey)
         {
             return;
@@ -80,7 +91,7 @@ public sealed class SceneFont : IDisposable
             return new Glyph
             {
                 x = g.X,
-                y = g.Y + (int) font.AscenderOffset,
+                y = g.Y + (int)font.AscenderOffset,
                 w = g.W,
                 h = g.H,
                 advance = g.Advance * font.ScaleX,
@@ -121,6 +132,14 @@ public sealed class SceneFont : IDisposable
     /// 三向对齐与 textsep。values 为 null 时从时间轴取值；bounds 回调用于编辑器命中框，
     /// 给出的是已经过 matrix 变换的四个角点。
     /// </summary>
+    /// <param name="canvas">提交绘制命令的画布。</param>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <param name="projection">可选的场景投影矩阵。</param>
+    /// <param name="values">可选的字幕属性覆盖。</param>
+    /// <param name="ghostId">要单独处理的文本 ID。</param>
+    /// <param name="bounds">接收文字边界的集合。</param>
+    /// <param name="render">是否提交实际绘制。</param>
     public void Draw(Canvas canvas, Session session, double time, Matrix3x2? projection = null,
         Func<string, double>? values = null, string? ghostId = null, Action<string, Vector2[]>? bounds = null, bool render = true)
     {
@@ -149,12 +168,11 @@ public sealed class SceneFont : IDisposable
                 y = (float)(M("textY") + (legacy ? 0 : values?.Invoke("textY" + suffix + "b") ?? tl.Get("textY" + suffix + "b", time)));
             var rows = Wrap(text, legacy ? -1 : M("textmaxwidth") * 10);
             // sep 是原版 draw_text_ext 的基线间距；小于 0（原版写 -1）表示取字体高度。
-            float step = legacy || M("textsep") < 0 ? fontHeight : (float) M("textsep"), height = fontHeight + (rows.Count - 1) * step;
+            float step = legacy || M("textsep") < 0 ? fontHeight : (float)M("textsep"), height = fontHeight + (rows.Count - 1) * step;
             int alignH = legacy ? 1 : Mod3(M("textalignh")), alignV = legacy ? 0 : Mod3(M("textalignv"));
             float top = alignV == 1 ? -height / 2 : alignV == 2 ? -height : 0;
-            uint rgb = (uint) Math.Clamp(M(legacy ? "textcolhex" : "textcolrgb"), 0, 16777215);
-            // CGMK 1.14.2 applies col_convert(cc.mod_textcolhex): both text formats
-            // accept authored RGB. col_convertion was removed in CGMK 1.12.8.
+            uint rgb = (uint)Math.Clamp(M(legacy ? "textcolhex" : "textcolrgb"), 0, 16777215);
+            // CGMK 1.14.2 使用 col_convert(cc.mod_textcolhex)，两种字幕格式均接收作者输入的 RGB；col_convertion 已于 CGMK 1.12.8 移除。
             var color = Color.Hex(rgb).Alpha(alpha);
 #if KG_SWITCH
             if (Math.Abs(time - lastColorDiagnostic) >= 10)
@@ -164,7 +182,7 @@ public sealed class SceneFont : IDisposable
                 canvas.DebugNextVertex = true;
             }
 #endif
-            var matrix = Matrix3x2.CreateScale((float) scale) * Matrix3x2.CreateRotation(-(float) M("textrot") * MathF.PI / 180) * Matrix3x2.CreateTranslation(x, y);
+            var matrix = Matrix3x2.CreateScale((float)scale) * Matrix3x2.CreateRotation(-(float)M("textrot") * MathF.PI / 180) * Matrix3x2.CreateTranslation(x, y);
             matrix *= projection ?? Matrix3x2.Identity;
             float blockWidth = Math.Max(4, rows.Max(Width)), blockLeft = alignH == 1 ? -blockWidth / 2 : alignH == 2 ? -blockWidth : 0;
             bounds?.Invoke(track.Id, new[] { new Vector2(blockLeft, top), new Vector2(blockLeft + blockWidth, top),
@@ -180,8 +198,8 @@ public sealed class SceneFont : IDisposable
                     if (render)
                         canvas.Polygon(texture, Vector2.Transform(new(gx, gy), matrix), Vector2.Transform(new(gx + g.w * fontX, gy), matrix),
                             Vector2.Transform(new(gx, gy + g.h * fontY), matrix), Vector2.Transform(new(gx + g.w * fontX, gy + g.h * fontY),
-                            matrix), color, new(g.x / (float) texture.Width, g.y / (float) texture.Height, g.w / (float) texture.Width,
-                            g.h / (float) texture.Height));
+                            matrix), color, new(g.x / (float)texture.Width, g.y / (float)texture.Height, g.w / (float)texture.Width,
+                            g.h / (float)texture.Height));
                     left += g.advance;
                 }
                 top += step;
@@ -190,7 +208,8 @@ public sealed class SceneFont : IDisposable
     }
 
     /// <summary>对齐值先四舍五入再对 3 取模，负数同样落进 0-2：0=左/上，1=中，2=右/下。</summary>
-    static int Mod3(double v) => ((int) Math.Round(v) % 3 + 3) % 3;
+    static int Mod3(double v) => ((int)Math.Round(v) % 3 + 3) % 3;
+    /// <inheritdoc/>
     public void Dispose()
     {
         originalAtlas?.Dispose();

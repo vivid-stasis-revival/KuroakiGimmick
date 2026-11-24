@@ -54,7 +54,10 @@ internal static class MusicControlChecks
             Check(disabled.SourceNoOps.Count == 2 && !disabledChart.Diagnostics.Any(d => d.Message.Contains("Unsupported mod:")),
                 "disabled aliases retain source no-op reporting");
         }
-        finally { Directory.Delete(root, true); }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
 
         var invalidChart = Parse(source.Replace("1,430,!jumpto_beat", "1,-430,!jumpto_beat").Replace("0,0.5,!playspeed", "0,0,!playspeed"));
         var invalid = new ChartPlaybackMap(invalidChart, bpm, true);

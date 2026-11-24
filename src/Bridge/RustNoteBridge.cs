@@ -1,17 +1,15 @@
+// 将批量音符运动参数映射到 Rust ABI，并用托管公式验证或回退。
+
 using System.Runtime.InteropServices;
 using KuroakiGimmick.Core;
 
 namespace KuroakiGimmick.Bridge;
 
-/// <summary>
-/// Optional RustBridge alpha 0.1.0. One native call per visible-note batch, not per note.
-/// The original C# motion implementation is the fallback and reference oracle.
-/// No Rust object, pointer, or GPU resource survives a call.
-/// </summary>
+/// <summary>可选的 RustBridge alpha 0.1.0 按批处理可见音符。每次调用结束时不保留 Rust 对象、指针或 GPU 资源；原 C# 运动公式用于回退及差分比较。</summary>
 internal static unsafe partial class RustNoteBridge
 {
     internal static bool IndexedKernelAvailable => !indexedUnavailable && Enabled;
-    // Rust #[repr(C)] mirror; all double fields are in exactly the same order.
+    // COMPAT: 此结构镜像 Rust 的 #[repr(C)] 布局，所有 double 字段顺序都必须一致。
     [StructLayout(LayoutKind.Sequential)]
     internal struct MotionParams
     {
@@ -35,7 +33,7 @@ internal static unsafe partial class RustNoteBridge
     private const string Library = "kg_native_core";
     private static string Mode => (Environment.GetEnvironmentVariable("KG_RUST_BRIDGE") ??
         (OptimizationEngineSettings.CalculationMode == "off" ? "off" : "auto")).Trim().ToLowerInvariant();
-    // 0 not probed, 1 available, -1 failed. No expensive probing after failure.
+    // 0 表示尚未探测，1 表示可用，-1 表示已失败，失败后不再重复探测。
     private static int status;
     private static readonly object gate = new();
 
@@ -57,6 +55,7 @@ internal static unsafe partial class RustNoteBridge
         try
         {
             using var timing = PerformanceStats.Measure(PerformanceStats.Stage.Rust);
+            // SAFETY: 同时固定音符、索引、轨道输入与输出数组，指针仅在此次批处理调用内使用。
             fixed (NoteRuntimeData* n = notes)
             fixed (uint* i = indices)
             fixed (MotionInput* l = lanes)
@@ -69,17 +68,27 @@ internal static unsafe partial class RustNoteBridge
             {
                 for (int i = 0; i < count; i++)
                 {
-                    var n = notes[indices[i]]; var input = lanes[n.Lane];
-                    input.Distance = (n.Time - scrollTime) * 1000; input.EndDistance = (n.End - scrollTime) * 1000;
-                    var expected = Reference(parameters, input); var actual = outputs[i];
+                    var n = notes[indices[i]];
+                    var input = lanes[n.Lane];
+                    input.Distance = (n.Time - scrollTime) * 1000;
+                    input.EndDistance = (n.End - scrollTime) * 1000;
+                    var expected = Reference(parameters, input);
+                    var actual = outputs[i];
                     if (!Near(expected.XOffset, actual.XOffset) || !Near(expected.Y, actual.Y) || !Near(expected.EndY, actual.EndY))
                         return Disable($"Indexed motion mismatch at candidate {i}.", false);
                 }
             }
             return true;
         }
-        catch (EntryPointNotFoundException) { indexedUnavailable = true; return false; } // older compatible cdylib: use legacy batch
-        catch (Exception e) when (e is DllNotFoundException or BadImageFormatException) { return Disable(e.Message, false); }
+        catch (EntryPointNotFoundException)
+        {
+            indexedUnavailable = true;
+            return false;
+        } // COMPAT: 旧版兼容 cdylib 回退到原批处理入口。
+        catch (Exception e) when (e is DllNotFoundException or BadImageFormatException)
+        {
+            return Disable(e.Message, false);
+        }
     }
 
     internal static bool Enabled => Mode != "off" && EnsureAvailable();
@@ -167,7 +176,7 @@ internal static unsafe partial class RustNoteBridge
         return Math.Abs(a - b) <= 1e-8 * Math.Max(1, Math.Max(Math.Abs(a), Math.Abs(b)));
     }
 
-    /// <summary>The exact old per-note formulas, independent of Rust for diff testing.</summary>
+    /// <summary>独立使用原 C# 单音符公式，为 Rust 结果提供差分对照。</summary>
     private static MotionOutput Reference(MotionParams p, MotionInput n)
     {
         double Y(double distance)
@@ -194,7 +203,7 @@ internal static unsafe partial class RustNoteBridge
         };
     }
 
-    /// <summary>CLI oracle: no SDL initialization, no chart required, requires actual native library.</summary>
+    /// <summary>从命令行调用真实原生库核对结果，无需加载谱面或初始化 SDL。</summary>
     internal static void SelfTest()
     {
         EnsureAvailable(force: true);

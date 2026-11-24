@@ -1,3 +1,6 @@
+// 编辑器工作区的整体绘制：顶栏、左侧来源面板、中间预览、右侧 inspector、底部时间轴，以及阻塞模态。
+// 预览区通过 PreviewRect 把 320×180 逻辑空间映射到 UI 像素矩形；这里的所有坐标都是 UI 像素。
+
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -8,10 +11,6 @@ using KuroakiGimmick.Graphics;
 using static KuroakiGimmick.Core.Windows.WindowMotionConfig;
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// 编辑器工作区的整体绘制：顶栏、左侧来源面板、中间预览、右侧 inspector、底部时间轴，以及阻塞模态。
-/// 预览区通过 PreviewRect 把 320×180 逻辑空间映射到 UI 像素矩形；这里的所有坐标都是 UI 像素。
-/// </summary>
 public sealed partial class Viewer
 {
     /// <summary>
@@ -20,16 +19,29 @@ public sealed partial class Viewer
     /// </summary>
     void DrawEditor(int w, int h, int pw, int ph, double time)
     {
-        if (editor == null) { editorMode = false; return; }
+        if (editor == null)
+        {
+            editorMode = false;
+            return;
+        }
         Canvas.Quad(logo, new(24, 20, 46, 46), Color.White);
-        Text("KUROAKI", 82, 22, 23, white, true); Text(L.Get("EDITOR") + " / " + Paths.BuildRevision, 83, 50, 10, soft, true);
+        Text("KUROAKI", 82, 22, 23, white, true);
+        Text(L.Get("EDITOR") + " / " + Paths.BuildRevision, 83, 50, 10, soft, true);
         Text(Current.Title + (editor.Dirty ? " *" : ""), 282, 32, 16, white, max: Math.Max(0, w - 1160));
         if (EButton(L.Get("LAYOUT"), new(w - 858, 25, 90, 31), enabled: !Busy)) OpenLayout();
         if (EButton(L.Get("EXPORT"), new(w - 758, 25, 92, 31), primary: true, enabled: !Busy)) OpenChartExport();
         if (EButton(L.Get("VSM DOCS / F1"), new(w - 656, 25, 116, 31))) OpenReference();
         if (EButton(L.Get("VIEWER UI"), new(w - 530, 25, 112, 31), active: true, enabled: !Busy)) ToggleWorkspace();
-        if (EButton(L.Get("UNDO"), new(w - 409, 25, 68, 31), enabled: editor.CanUndo && !Busy)) { editor.Undo(); layoutRevision = -1; }
-        if (EButton(L.Get("REDO"), new(w - 333, 25, 68, 31), enabled: editor.CanRedo && !Busy)) { editor.Redo(); layoutRevision = -1; }
+        if (EButton(L.Get("UNDO"), new(w - 409, 25, 68, 31), enabled: editor.CanUndo && !Busy))
+        {
+            editor.Undo();
+            layoutRevision = -1;
+        }
+        if (EButton(L.Get("REDO"), new(w - 333, 25, 68, 31), enabled: editor.CanRedo && !Busy))
+        {
+            editor.Redo();
+            layoutRevision = -1;
+        }
         if (EButton(L.Get("SAVE AS"), new(w - 257, 25, 92, 31), enabled: !Busy)) SaveEditor(true);
         if (EButton(L.Get("SAVE"), new(w - 157, 25, 65, 31), primary: true, enabled: !Busy)) SaveEditor();
         if (EButton("?", new(w - 84, 25, 55, 31))) help = !help;
@@ -44,7 +56,9 @@ public sealed partial class Viewer
         {
             using var fade = Canvas.Opacity(helpAlpha);
             Canvas.Fill(new(0, 0, w, h), Color.Hex(0, .84f));
-            var r = new Rect(w / 2 - 330, h / 2 - 224 + (1 - helpAlpha) * 10, 660, 448); Canvas.Fill(r, panel); Canvas.Border(r, soft);
+            var r = new Rect(w / 2 - 330, h / 2 - 224 + (1 - helpAlpha) * 10, 660, 448);
+            Canvas.Fill(r, panel);
+            Canvas.Border(r, soft);
             Text(L.Get("EDITOR / CONTROLS"), r.X + 25, r.Y + 24, 20, white);
             string[] rows = [L.Get("E: mark exact time. Shift+E: delete target. CLEAR TARGET: release it."),
                 L.Get("ADD GIMMICK: choose a documented or custom name and event values."),
@@ -72,15 +86,26 @@ public sealed partial class Viewer
 
     }
 
-    /// <summary>One renderer dispatch for the registered editor panels, independent of native window identity.</summary>
+    /// <summary>为已注册的编辑器面板分派绘制，与原生窗口身份无关。</summary>
     void DrawEditorDockPanel(string id, Rect rect, int w, int h, int pw, int ph, double time)
     {
         switch (id)
         {
-            case "tools": editorSourceRect = rect; DrawEditorTools(rect); break;
-            case "images": editorSourceRect = rect; DrawImageSources(rect); break;
-            case "text": editorSourceRect = rect; DrawTextSources(rect); break;
-            case "preview": DrawEditorPreview(rect, w, h, pw, ph, time); break;
+            case "tools":
+                editorSourceRect = rect;
+                DrawEditorTools(rect);
+                break;
+            case "images":
+                editorSourceRect = rect;
+                DrawImageSources(rect);
+                break;
+            case "text":
+                editorSourceRect = rect;
+                DrawTextSources(rect);
+                break;
+            case "preview":
+                DrawEditorPreview(rect, w, h, pw, ph, time);
+                break;
             case "inspector":
                 editorInspectorRect = new(rect.X, rect.Y, rect.W, Math.Max(1, rect.H - 7));
                 string inspectorKey = imageInspector ? "image:" + selectedImageId + ":" + selectedImageGroup
@@ -94,28 +119,42 @@ public sealed partial class Viewer
                 }
                 using (Canvas.Opacity(motion.To("inspector", 1, .14))) DrawEditorInspector(editorInspectorRect, time);
                 break;
-            case "timeline": editorTimelineRect = rect; DrawEditTimeline(rect, time, w, h); break;
+            case "timeline":
+                editorTimelineRect = rect;
+                DrawEditTimeline(rect, time, w, h);
+                break;
             default: throw new ArgumentOutOfRangeException(nameof(id), id, "Unknown editor dock panel.");
         }
     }
 
-    /// <summary>Draw the shared Scene/Image/Text preview in any dock panel rectangle.</summary>
+    /// <summary>在指定的停靠面板区域绘制共用的场景、图片或文本预览。</summary>
     void DrawEditorPreview(Rect dockPreview, int w, int h, int pw, int ph, double time)
     {
         float previewX = dockPreview.X + PreviewHorizontalPadding, previewW = Math.Max(1, dockPreview.W - 2 * PreviewHorizontalPadding),
             previewH = Math.Max(1, dockPreview.H - 66), previewTop = dockPreview.Y;
-        // The dock clips to its body: keep the entire toolbar inside that boundary.
+        // 停靠面板裁剪到内容区域，整个工具栏都需放在边界内。
         float toolbarScale = Math.Min(1, previewW / 342), toolbarX = previewX + previewW - 342 * toolbarScale;
         float titleWidth = Math.Max(0, toolbarX - previewX - 12);
         if (titleWidth > 0)
             Text(textCanvas ? L.Get("TEXT CANVAS / LOCAL") : imageCanvas ? L.Get("IMAGE CANVAS / LOCAL COORDINATES") : L.Get("PREVIEW / SAME RENDERER"), previewX, previewTop + 8, 11, muted, true, titleWidth);
         if (EButton(L.Get("IMAGE CANVAS"), new(toolbarX, previewTop + 2, 130 * toolbarScale, 25), active: imageCanvas, enabled: Current.Images.Items.Count > 0))
-        { imageCanvas = !imageCanvas; textCanvas = false; if (imageCanvas) desktopPreview = false; }
-        if (EButton(desktopPreview ? L.Get("DESKTOP") : L.Get("SCENE"), new(toolbarX + 138 * toolbarScale, previewTop + 2, 94 * toolbarScale, 25), active: desktopPreview, key: "editor-desktop")) { if (textCanvas || imageCanvas) desktopPreview = false; else desktopPreview = !desktopPreview; imageCanvas = textCanvas = false; }
+        {
+            imageCanvas = !imageCanvas;
+            textCanvas = false;
+            if (imageCanvas) desktopPreview = false;
+        }
+        if (EButton(desktopPreview ? L.Get("DESKTOP") : L.Get("SCENE"), new(toolbarX + 138 * toolbarScale, previewTop + 2, 94 * toolbarScale, 25), active: desktopPreview, key: "editor-desktop"))
+        {
+            if (textCanvas || imageCanvas) desktopPreview = false;
+            else desktopPreview = !desktopPreview;
+            imageCanvas = textCanvas = false;
+        }
         if (EButton(nativeWindows != null ? L.Get("LIVE: ON") : L.Get("LIVE: OFF"), new(toolbarX + 238 * toolbarScale, previewTop + 2, 104 * toolbarScale, 25), active: nativeWindows != null, key: "editor-live")) ToggleNativeWindows();
         var frame = new Rect(previewX, previewTop + 31, previewW, previewH);
-        previewFrame = frame; previewImage = Canvas.PreviewRect(frame, pw / (float)w, ph / (float)h, false);
-        Canvas.Fill(frame, Color.Hex(0x030205)); Canvas.Border(frame, line);
+        previewFrame = frame;
+        previewImage = Canvas.PreviewRect(frame, pw / (float)w, ph / (float)h, false);
+        Canvas.Fill(frame, Color.Hex(0x030205));
+        Canvas.Border(frame, line);
         using (Canvas.Unfaded())
         {
             if (textCanvas) DrawTextCanvas(previewImage, time);
@@ -158,11 +197,11 @@ public sealed partial class Viewer
         if (DockingEnabled) workspaceManager.Editor.Activate(activeTab);
         if (activeTab != beforeTab && persistRecentProjects) SaveSettings();
         var body = new Rect(r.X, r.Y + 35, r.W, Math.Max(1, r.H - 35));
-        if (textSources) DrawTextSources(body); else if (imageSources) DrawImageSources(body); else DrawEditorTools(body);
+        if (textSources) DrawTextSources(body);
+        else if (imageSources) DrawImageSources(body);
+        else DrawEditorTools(body);
     }
-    // One scrollable coordinate system for both panels and the controls below them.
-    // Keep layout and wheel bounds in sync. The expanded Window Movement footer
-    // also needs room beyond its last text baseline (the old 566 clipped it).
+    // 两个面板及下方控件共用滚动坐标与滚轮边界。展开窗口动作后需在末行基线后预留空间，旧高度 566 会裁掉底部。
     const float ProxySidebarExpandedHeight = 349;
     static float EditorToolsSettingsOffset(bool proxyExpanded, bool windowsExpanded) =>
         (windowsExpanded ? 520 : 348) + (proxyExpanded ? ProxySidebarExpandedHeight : 0);
@@ -178,7 +217,7 @@ public sealed partial class Viewer
         float proxyOffset = proxyPanelExpanded ? ProxySidebarExpandedHeight : 0;
         float contentHeight = EditorToolsContentHeight(proxyPanelExpanded, windowToolsExpanded);
         int proxyCount = EditableProxyCount;
-        if (newProxy >= proxyCount) newProxy = -1; // undo/delete may shrink the declared range
+        if (newProxy >= proxyCount) newProxy = -1; // 撤销或删除可能缩小已声明的范围。
         editorSourceScroll = Math.Clamp(editorSourceScroll, 0, Math.Max(0, contentHeight - r.H));
         float y = r.Y - editorSourceScroll, x = r.X, half = (r.W - 6) / 2;
         Canvas.Clip(r);
@@ -194,9 +233,12 @@ public sealed partial class Viewer
         if (SourceButton(L.Get("+ FILES"), new(x + half + 6, y + 18, half, 28), enabled: !Busy)) ChooseOpen(true);
         if (SourceButton(L.Get("ADD GIMMICK..."), new(x, y + 54, r.W, 28))) OpenAddGimmick();
         if (SourceButton(L.Get("+ IMAGE / DROP IMAGE"), new(x, y + 90, r.W, 30), primary: true, enabled: !Busy)) ChooseImageImport();
-        if (SourceButton(L.Get("PRESET >"), new(x, y + 128, half, 28))) { templateIndex = (templateIndex + 1) % ModTemplates.Length; customMod = ModTemplates[templateIndex]; }
-        // Clicking the current target expands/collapses the in-sidebar list. No global
-        // backdrop, no input capture, and no risk of accidentally editing the chart below.
+        if (SourceButton(L.Get("PRESET >"), new(x, y + 128, half, 28)))
+        {
+            templateIndex = (templateIndex + 1) % ModTemplates.Length;
+            customMod = ModTemplates[templateIndex];
+        }
+        // 单击当前目标可展开或收起侧栏列表，无需全屏背景或捕获输入，避免编辑到下方谱面。
         string proxyTitle = (proxyPanelExpanded ? "v " : "> ") +
             (newProxy < 0 ? L.Get("GLOBAL") : "P" + newProxy);
         if (SourceButton(proxyTitle, new(x + half + 6, y + 128, half - 27, 28),
@@ -214,8 +256,7 @@ public sealed partial class Viewer
         }
         if (proxyPanelExpanded && editor != null)
         {
-            // In-flow layout: 16 entries per page in two columns, 8 rows. Only
-            // source buttons entirely visible inside the tools clipping region can fire.
+            // 列表在布局流中分页，每页两列八行共 16 项。只有完全落在工具区裁剪范围内的按钮能响应输入。
             float baseY = y + 164;
             int pages = Math.Max(1, (proxyCount + 15) / 16);
             proxyPickerPage = Math.Clamp(proxyPickerPage, 0, pages - 1);
@@ -244,8 +285,7 @@ public sealed partial class Viewer
                     FocusProxyTrack(index);
                 }
             }
-            // Authoring actions deliberately remain in the same source panel,
-            // targeting the explicitly selected proxy rather than an old hovered clip.
+            // 创作命令留在同一来源面板，作用于显式选中的 proxy，避免使用旧悬停事件。
             string[] mods = ["prx", "pry", "prrz", "przm"];
             string[] labels = ["+ X", "+ Y", "+ ROT", "+ SCALE"];
             for (int i = 0; i < mods.Length; i++)
@@ -265,9 +305,7 @@ public sealed partial class Viewer
         if (newProxy >= 0 && newProxy < proxyCount)
         {
             bool hasAlpha = EditorHasProxyAlpha(newProxy);
-            // Base and Custom share the same actual initial state: PRA=0.
-            // The previous Custom-only +PRA path assumed pra=1 at startup,
-            // which is false because loadMods creates proxies after Create.
+            // Base 与 Custom 初始 PRA 都为 0。loadMods 在 Create 后才创建代理，不能假定 Custom 启动时 pra=1。
             if (SourceButton(L.Get("INITIALIZE PRA") + " / P" + newProxy, new(x, y + proxyOffset + 249, r.W, 26), enabled: !hasAlpha && !Busy)) EnableSelectedProxy();
             Text(hasAlpha ? L.Get("PRA defined / edit its track to change visibility") : L.Get("PRA defaults to 0 / initialize to make this proxy visible"),
                 x, y + proxyOffset + 282, 10, muted, max: r.W);
@@ -286,7 +324,12 @@ public sealed partial class Viewer
         if (windowToolsExpanded)
         {
             if (SourceButton(L.Get("WINDOW ") + newWindow, new(x, y + proxyOffset + 347, r.W, 26)))
-                OpenValue(L.Get("WindowMovement index (0..63)"), newWindow.ToString(), v => { int n = int.Parse(v, CultureInfo.InvariantCulture); if (n is < 0 or > 63) throw new FormatException(L.Get("Use 0..63.")); newWindow = n; });
+                OpenValue(L.Get("WindowMovement index (0..63)"), newWindow.ToString(), v =>
+{
+    int n = int.Parse(v, CultureInfo.InvariantCulture);
+    if (n is < 0 or > 63) throw new FormatException(L.Get("Use 0..63."));
+    newWindow = n;
+});
             string[] labels = [L.Get("MOVE / DANCE"), L.Get("RESIZE"), L.Get("SHOW / HIDE"), L.Get("Z ORDER"), L.Get("CONTENT SOURCE")];
             for (int i = 0; i < Operations.Length; i++)
             {
@@ -301,10 +344,13 @@ public sealed partial class Viewer
                     editor.Change(L.Get("Edit proxy bindings"), () => editor.Windows.Root[BindingsKey] = a.DeepClone());
                 });
         }
-        // Must include the expanded Proxy panel. Previously settings and the
-        // scroll hint still used the collapsed Y, overpainting proxy rows 10-13.
+        // 计算下方设置与滚动提示的位置时须包含展开的 Proxy 面板，否则会覆盖第 10 至 13 行。
         float settingsY = EditorToolsSettingsOffset(proxyPanelExpanded, windowToolsExpanded);
-        if (SourceButton(L.Get("SETTINGS / LANGUAGE"), new(x, y + settingsY, r.W, 28), enabled: !Busy)) { OpenSettings(); click = false; }
+        if (SourceButton(L.Get("SETTINGS / LANGUAGE"), new(x, y + settingsY, r.W, 28), enabled: !Busy))
+        {
+            OpenSettings();
+            click = false;
+        }
         Text(L.Get("Scroll for more controls"), x, y + settingsY + 40, 10, muted);
         Canvas.Clip(null);
         if (contentHeight > r.H)
@@ -322,7 +368,8 @@ public sealed partial class Viewer
     void DrawDesktop(Rect frame, double time)
     {
         var desk = Canvas.PreviewRect(frame, 1, 1, false);
-        Canvas.Clip(frame); Canvas.Fill(desk, Color.Hex(0x121B26));
+        Canvas.Clip(frame);
+        Canvas.Fill(desk, Color.Hex(0x121B26));
         for (int i = 1; i < 8; i++) Canvas.Line(desk.X + desk.W * i / 8, desk.Y, desk.X + desk.W * i / 8, desk.Y + desk.H, 1, Color.Hex(0x273343));
         Text(L.Format($"VIRTUAL DESKTOP / {windowDesktopW} x {windowDesktopH}"), desk.X + 7, desk.Y + 7, 10, muted, true);
         foreach (var p in WindowPoses(time).Where(p => p.Visible).OrderBy(p => p.Z))
@@ -334,7 +381,11 @@ public sealed partial class Viewer
             Canvas.Fill(r, Color.Hex(0x050507));
             if (!Renderer.DrawWindowSource(Current, time, p, r)) Text(L.Get("SOURCE ") + p.Source + L.Get(" UNAVAILABLE"), r.X + 5, r.Y + 23, 10, soft, max: r.W - 10);
             Canvas.Border(r, soft);
-            if (p.Border) { Canvas.Fill(new(r.X, r.Y - 16, r.W, 16), panel); Text(p.Title + " [" + p.Id + "]", r.X + 4, r.Y - 14, 10, white, max: r.W - 8); }
+            if (p.Border)
+            {
+                Canvas.Fill(new(r.X, r.Y - 16, r.W, 16), panel);
+                Text(p.Title + " [" + p.Id + "]", r.X + 4, r.Y - 14, 10, white, max: r.W - 8);
+            }
         }
         Canvas.Clip(null);
     }
@@ -347,16 +398,33 @@ public sealed partial class Viewer
     {
         if (editor == null) return;
         // 就地编辑的两份本帧状态在这里归零：字段顺序（Tab 用）每帧重建，可见性要等本帧真的把输入框画出来才成立。
-        inlineFields.Clear(); inlineVisible = false;
-        if (textInspector && selectedTextId != null && editor.TextSources.ContainsKey(selectedTextId)) { DrawTextInspector(r); return; }
+        inlineFields.Clear();
+        inlineVisible = false;
+        if (textInspector && selectedTextId != null && editor.TextSources.ContainsKey(selectedTextId))
+        {
+            DrawTextInspector(r);
+            return;
+        }
         EnsureImageModel();
         if (selectedImageId != null)
         {
             float half = (r.W - 6) / 2;
-            if (EButton(L.Get("IMAGE"), new(r.X, r.Y, half, 28), active: imageInspector)) { imageInspector = true; inspectorScroll = 0; }
-            if (EButton(L.Get("EVENT"), new(r.X + half + 6, r.Y, half, 28), active: !imageInspector)) { imageInspector = false; inspectorScroll = 0; }
+            if (EButton(L.Get("IMAGE"), new(r.X, r.Y, half, 28), active: imageInspector))
+            {
+                imageInspector = true;
+                inspectorScroll = 0;
+            }
+            if (EButton(L.Get("EVENT"), new(r.X + half + 6, r.Y, half, 28), active: !imageInspector))
+            {
+                imageInspector = false;
+                inspectorScroll = 0;
+            }
             r = new(r.X, r.Y + 38, r.W, Math.Max(1, r.H - 38));
-            if (imageInspector) { DrawImageInspector(r); return; }
+            if (imageInspector)
+            {
+                DrawImageInspector(r);
+                return;
+            }
         }
         DrawRawEditorInspector(r, time);
     }
@@ -370,7 +438,11 @@ public sealed partial class Viewer
     {
         if (editor == null) return;
         // 选中了多个片段时换成批量面板：改一次字段就落到整组上，而不是只改 inspector 正在显示的那一个。
-        if (BatchSelection) { DrawBatchClipInspector(r); return; }
+        if (BatchSelection)
+        {
+            DrawBatchClipInspector(r);
+            return;
+        }
         Label(L.Get("EDIT EVENT / NOT RUNTIME VALUE"), r.X, r.Y);
         if (EButton(L.Get("DUP"), new(r.X, r.Y + 22, 65, 25))) DuplicateSelection();
         if (EButton(L.Get("DELETE"), new(r.X + 71, r.Y + 22, 76, 25))) DeleteSelection();
@@ -380,7 +452,8 @@ public sealed partial class Viewer
         float shownScroll = motion.To("inspector-scroll", inspectorScroll, .13);
         void Field(string name, string value, Action<string> action)
         {
-            float row = fieldCount++ - shownScroll; float y = r.Y + 57 + row * 31;
+            float row = fieldCount++ - shownScroll;
+            float y = r.Y + 57 + row * 31;
             if (row < 0 || y + 27 > r.Y + r.H - 31) return;
             ValueField(name, value, r.X, y, r.W, action);
         }
@@ -388,7 +461,8 @@ public sealed partial class Viewer
         void Row(string label, Action? run)
         {
             int index = fieldCount++;
-            float row = index - shownScroll; float y = r.Y + 57 + row * 31;
+            float row = index - shownScroll;
+            float y = r.Y + 57 + row * 31;
             if (row < 0 || y + 27 > r.Y + r.H - 31) return;
             if (run == null) Text(label, r.X + 2, y + 8, 11, muted, max: r.W - 4);
             else if (EButton(label, new(r.X, y, r.W, 27), key: "inspector-row:" + index)) run();
@@ -396,12 +470,21 @@ public sealed partial class Viewer
         if (selectedClip is Guid id && EditorFindClip(id) is { } c)
         {
             Field(L.Get("Mod"), c.Name, v => EditClip(m => m with { Name = v }, L.Get("Change mod")));
-            Field(L.Get("Beat"), VsmDocument.Ui(c.Beat), v => { double b = VsmDocument.Number(v); EditClip(m => m with { Beat = b, RepeatEnd = m.RepeatEnd + b - m.Beat }, L.Get("Set beat")); });
+            Field(L.Get("Beat"), VsmDocument.Ui(c.Beat), v =>
+{
+    double b = VsmDocument.Number(v);
+    EditClip(m => m with { Beat = b, RepeatEnd = m.RepeatEnd + b - m.Beat }, L.Get("Set beat"));
+});
             Field(L.Get("Duration / beat"), VsmDocument.Ui(c.Duration), v => EditClip(m => m with { Duration = VsmDocument.Number(v) }, L.Get("Set duration")));
             Field(L.Get("From / _"), VsmDocument.UiValue(c.From), v => EditClip(m => m with { From = v }, L.Get("Set from")));
             Field(L.Get("To / _"), VsmDocument.UiValue(c.To), v => EditClip(m => m with { To = v }, L.Get("Set to")));
             Field(L.Get("Ease"), c.Ease, v => EditClip(m => m with { Ease = Easings.Normalize(v) }, L.Get("Set ease")));
-            Field(L.Get("Proxy / -1 global"), c.Proxy.ToString(), v => { int p = int.Parse(v, CultureInfo.InvariantCulture); if (p >= EditableProxyCount) throw new FormatException(L.Get("Proxy exceeds !proxies.")); EditClip(m => m with { Proxy = p }, L.Get("Set proxy")); });
+            Field(L.Get("Proxy / -1 global"), c.Proxy.ToString(), v =>
+{
+    int p = int.Parse(v, CultureInfo.InvariantCulture);
+    if (p >= EditableProxyCount) throw new FormatException(L.Get("Proxy exceeds !proxies."));
+    EditClip(m => m with { Proxy = p }, L.Get("Set proxy"));
+});
             if (c.RepeatEnd is double end)
             {
                 Field(L.Get("Repeat end"), VsmDocument.Ui(end), v => EditClip(m => m with { RepeatEnd = VsmDocument.Number(v) }, L.Get("Set repeat end")));
@@ -426,7 +509,11 @@ public sealed partial class Viewer
             foreach (var pair in ev.ToArray())
             {
                 string key = pair.Key;
-                if (key == "op") { Field(L.Get("Operation"), pair.Value?.ToString() ?? "", _ => throw new FormatException(L.Get("Add the desired operation instead of retyping its schema."))); continue; }
+                if (key == "op")
+                {
+                    Field(L.Get("Operation"), pair.Value?.ToString() ?? "", _ => throw new FormatException(L.Get("Add the desired operation instead of retyping its schema.")));
+                    continue;
+                }
                 string shown = pair.Value?.ToString() ?? "null";
                 Field(key + (key is "t" or "dur" or "easeDur" ? L.Get(" / sec") : ""), shown, v => EditWindow(e =>
                 {
@@ -436,7 +523,8 @@ public sealed partial class Viewer
                     else e[key] = VsmDocument.Number(v);
                 }, L.Get("Window: ") + key));
             }
-            int wi = Integer(ev, "w"); var style = editor.Windows.Style(wi);
+            int wi = Integer(ev, "w");
+            var style = editor.Windows.Style(wi);
             Field(L.Get("Window title"), style.Title, v => ChangeWindowStyle(wi, v, null));
             Field(L.Get("Window border"), style.Border.ToString(), v => ChangeWindowStyle(wi, null, bool.Parse(v)));
             Text(L.Get("WINDOW EVENT #") + (selectedWindowEvent + 1) + L.Get(" / JSON seconds"), r.X, r.Y + r.H - 22, 10, soft, true, r.W);
@@ -466,7 +554,9 @@ public sealed partial class Viewer
             var a = (JsonArray)settingsObject["windows"]!;
             while (a.Count <= index) a.Add((JsonNode)new JsonObject());
             if (a[index] is not JsonObject) a[index] = new JsonObject();
-            var o = (JsonObject)a[index]!; if (title != null) o["title"] = title; if (border != null) o["border"] = border.Value;
+            var o = (JsonObject)a[index]!;
+            if (title != null) o["title"] = title;
+            if (border != null) o["border"] = border.Value;
         });
     }
 
@@ -482,24 +572,38 @@ public sealed partial class Viewer
         {
             using var fade = Canvas.Opacity(discardAlpha);
             Canvas.Fill(new(0, 0, w, h), Color.Hex(0, .85f));
-            var r = new Rect(w / 2 - 290, h / 2 - 90 + (1 - discardAlpha) * 10, 580, 180); Canvas.Fill(r, panel); Canvas.Border(r, soft);
+            var r = new Rect(w / 2 - 290, h / 2 - 90 + (1 - discardAlpha) * 10, 580, 180);
+            Canvas.Fill(r, panel);
+            Canvas.Border(r, soft);
             Text(L.Get("UNSAVED EDITOR CHANGES"), r.X + 24, r.Y + 23, 19, white);
             Text(L.Get("Save a copy before leaving, discard edits, or cancel."), r.X + 24, r.Y + 64, 13, muted);
             modalInput = true;
             if (EButton(L.Get("SAVE FIRST"), new(r.X + 24, r.Y + 118, 162, 33), primary: true))
             {
-                var after = pendingDiscard; pendingDiscard = null;
-                SaveEditor(after: () => { editor = null; after?.Invoke(); });
+                var after = pendingDiscard;
+                pendingDiscard = null;
+                SaveEditor(after: () =>
+{
+    editor = null;
+    after?.Invoke();
+});
             }
             if (EButton(L.Get("DISCARD"), new(r.X + 202, r.Y + 118, 162, 33)))
-            { var action = pendingDiscard; pendingDiscard = null; editor = null; action?.Invoke(); }
+            {
+                var action = pendingDiscard;
+                pendingDiscard = null;
+                editor = null;
+                action?.Invoke();
+            }
             if (EButton(L.Get("CANCEL"), new(r.X + 380, r.Y + 118, 174, 33))) pendingDiscard = null;
             modalInput = false;
         }
         if (!modalActive && valueAlpha <= .001f) return;
         using var modalFade = Canvas.Opacity(valueAlpha);
         Canvas.Fill(new(0, 0, w, h), Color.Hex(0, .88f));
-        var box = new Rect(w / 2 - 380, h / 2 - 130 + (1 - valueAlpha) * 10, 760, 260); Canvas.Fill(box, panel); Canvas.Border(box, soft);
+        var box = new Rect(w / 2 - 380, h / 2 - 130 + (1 - valueAlpha) * 10, 760, 260);
+        Canvas.Fill(box, panel);
+        Canvas.Border(box, soft);
         Text(modalTitle, box.X + 24, box.Y + 24, 18, white, max: box.W - 48);
         Canvas.Fill(new(box.X + 24, box.Y + 70, box.W - 48, 47), modalSelectAll ? Color.Hex(0x40263C) : Color.Hex(0x07060A));
         Text(modalValue.Length > 100 ? "..." + modalValue[^97..] : modalValue, box.X + 34, box.Y + 86, 15, white, true, box.W - 68);

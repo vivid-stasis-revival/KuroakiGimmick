@@ -1,3 +1,5 @@
+// 管理经典工作区的固定面板布局和停靠模式切换。
+
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Graphics;
 
@@ -11,8 +13,9 @@ public sealed partial class Viewer
     {
         enabled &= WorkspaceWindowManager.SupportsDetachedWindows;
         if (preferences.DockableWorkspaceEnabled == enabled) return;
-        if (!enabled) SaveSettings(); // Snapshot native geometry before hiding it.
-        CancelDockDrag(); EndDockSplit(true);
+        if (!enabled) SaveSettings(); // 隐藏窗口前先保存原生几何位置和尺寸。
+        CancelDockDrag();
+        EndDockSplit(true);
         if (resizingLayout != 0) EndLayoutResize();
         preferences.DockableWorkspaceEnabled = enabled;
         held = click = seeking = editorScrub = false;
@@ -20,8 +23,7 @@ public sealed partial class Viewer
         SaveSettings();
     }
 
-    // The classic UI uses its original fixed columns and adjustable split, independently
-    // of every saved dock root. Disabling docking never destroys a custom workspace.
+    // 经典界面保留固定列和可调分割，独立于已保存的停靠根；关闭停靠仍保留自定义工作区。
     void SolveClassicPanels(int w, int h, bool editorWorkspace)
     {
         var g = workspaceGeometry;
@@ -52,7 +54,8 @@ public sealed partial class Viewer
         using var fade = Canvas.Opacity(layoutAlpha);
         Canvas.Fill(new(0, 0, w, h), Color.Hex(0, .88f));
         Rect r = new(w / 2f - 365, h / 2f - 260, 730, 520);
-        Canvas.Fill(r, panel); Canvas.Border(r, soft);
+        Canvas.Fill(r, panel);
+        Canvas.Border(r, soft);
         Text(L.Get("LAYOUT / UI SCALE"), r.X + 26, r.Y + 22, 22, white);
         layoutInput = true;
         try
@@ -65,7 +68,12 @@ public sealed partial class Viewer
             if (Button("150%", new(r.X + 564, r.Y + 68, 130, 34))) SetUiScale(1.5);
             Text(L.Get("Follow display DPI"), r.X + 26, r.Y + 125, 15, white);
             if (Button(LayoutOptions.FollowDisplayScale ? L.Get("ON") : L.Get("OFF"), new(r.X + 248, r.Y + 114, 194, 32), active: LayoutOptions.FollowDisplayScale))
-            { var before = Viewport(); LayoutOptions.FollowDisplayScale = !LayoutOptions.FollowDisplayScale; ReprojectPointer(before); SaveSettings(); }
+            {
+                var before = Viewport();
+                LayoutOptions.FollowDisplayScale = !LayoutOptions.FollowDisplayScale;
+                ReprojectPointer(before);
+                SaveSettings();
+            }
             var vp = Viewport();
             Text(vp.FitLimited ? L.Get("Zoom limited to keep controls visible. Enlarge the window for more zoom.") : L.Get("Ctrl/Cmd +/-: scale. Ctrl/Cmd+0: reset. Mouse coordinates follow the same scale."),
                 r.X + 26, r.Y + 163, 12, vp.FitLimited ? soft : muted, max: 678);
@@ -73,19 +81,30 @@ public sealed partial class Viewer
             string[] names = [L.Get("PREVIEW"), L.Get("BALANCED"), L.Get("TIMELINE")];
             for (int i = 0; i < names.Length; i++)
                 if (Button(names[i], new(r.X + 248 + i * 150, r.Y + 193, 143, 34)))
-                { LayoutOptions.EditorPreviewFraction = new[] { .82, .52, .18 }[i]; LayoutOptions.ViewerPreviewFraction = new[] { .82, .60, .25 }[i]; SaveSettings(); click = false; }
+                {
+                    LayoutOptions.EditorPreviewFraction = new[] { .82, .52, .18 }[i];
+                    LayoutOptions.ViewerPreviewFraction = new[] { .82, .60, .25 }[i];
+                    SaveSettings();
+                    click = false;
+                }
             Text(L.Get("Drag side dividers to resize panels; drag the bar below the preview to resize it."), r.X + 26, r.Y + 246, 13, muted, max: 678);
             Text(L.Get("Double-click a divider to reset it. Esc cancels a resize. Layout is saved per device."), r.X + 26, r.Y + 270, 13, muted, max: 678);
             Text(L.Get("Scene resolution"), r.X + 26, r.Y + 318, 15, white);
             int[] sizes = [320, 640, 1280, 1920];
             for (int i = 0; i < sizes.Length; i++)
                 if (Button(sizes[i].ToString(), new(r.X + 248 + i * 112, r.Y + 305, 104, 34), active: Current.Project.RenderWidth == sizes[i]))
-                    { Current.Project.RenderWidth = sizes[i]; SaveSettings(); }
+                {
+                    Current.Project.RenderWidth = sizes[i];
+                    SaveSettings();
+                }
             Text(L.Get("Preview panel size and UI scale do not change song geometry or MP4 dimensions."), r.X + 26, r.Y + 360, 13, muted, max: 678);
             Text(L.Get("Scene resolution is separate: higher settings use more GPU memory."), r.X + 26, r.Y + 385, 13, muted, max: 678);
             if (Button(L.Get("RESTORE DEFAULT LAYOUT"), new(r.X + 26, r.Y + 444, 230, 40))) ResetCurrentWorkspace();
             if (Button(L.Get("DONE"), new(r.X + 478, r.Y + 444, 216, 40), primary: true)) CloseLayout();
         }
-        finally { layoutInput = false; }
+        finally
+        {
+            layoutInput = false;
+        }
     }
 }

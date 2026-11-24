@@ -7,24 +7,27 @@ public sealed partial class Canvas
     bool capturingInstances;
     internal void StartInstanceCapture(Texture texture)
     {
-        Flush(); Select(texture, NoteInstances); capturingInstances = true;
+        Flush();
+        Select(texture, NoteInstances);
+        capturingInstances = true;
     }
     internal int FinishInstanceCapture(ref float[] buffer)
     {
         capturingInstances = false;
         int count = vertices.Count;
         if (buffer.Length < count) Array.Resize(ref buffer, Math.Max(count, Math.Max(64, buffer.Length * 2)));
-        CollectionsMarshal.AsSpan(vertices).CopyTo(buffer); vertices.Clear();
+        CollectionsMarshal.AsSpan(vertices).CopyTo(buffer);
+        vertices.Clear();
         return count;
     }
     internal void AppendInstances(Texture texture, ReadOnlySpan<float> data)
     {
         if (data.IsEmpty) return;
-        Select(texture, NoteInstances); vertices.AddRange(data);
+        Select(texture, NoteInstances);
+        vertices.AddRange(data);
         if (vertices.Count >= 16 * 8192) Flush();
     }
-    // One 64-byte record per sprite, rather than six 32-byte vertices.
-    // All backends consume the same four vec4 instance attributes. instance_step_rate stays zero (SDL reserved).
+    // 每个精灵用一条 64 字节实例记录，四个 vec4 属性供所有后端读取，替代六个 32 字节顶点。SDL 保留的 instance_step_rate 固定为零。
     internal const string NoteInstanceVertexSource = """
         #version 450
         layout(location=0) in vec4 a_origin;
@@ -56,15 +59,27 @@ public sealed partial class Canvas
         }
         Select(texture, instanceShader ?? NoteInstances);
         int offset = vertices.Count;
-        // SetCount + one span write avoids sixteen List.Add capacity checks per instance.
+        // 先设定数量再通过 Span 写入，避免每个实例执行十六次 List.Add 容量检查。
         if (vertices.Capacity < offset + 16) vertices.Capacity = Math.Max(offset + 16, checked(vertices.Capacity * 2));
         CollectionsMarshal.SetCount(vertices, offset + 16);
         Span<float> data = CollectionsMarshal.AsSpan(vertices).Slice(offset, 16);
-        data[0] = x; data[1] = y; data[2] = local.X; data[3] = local.Y;
-        data[4] = local.W; data[5] = local.H; data[6] = cosine; data[7] = sine;
-        data[8] = uv.X; data[9] = uv.Y; data[10] = uv.W; data[11] = uv.H;
-        data[12] = color.R; data[13] = color.G; data[14] = color.B; data[15] = color.A * presentationOpacity;
-        // Bound the temporary Canvas stream; GpuDevice preserves contiguous ordering when merging these chunks.
+        data[0] = x;
+        data[1] = y;
+        data[2] = local.X;
+        data[3] = local.Y;
+        data[4] = local.W;
+        data[5] = local.H;
+        data[6] = cosine;
+        data[7] = sine;
+        data[8] = uv.X;
+        data[9] = uv.Y;
+        data[10] = uv.W;
+        data[11] = uv.H;
+        data[12] = color.R;
+        data[13] = color.G;
+        data[14] = color.B;
+        data[15] = color.A * presentationOpacity;
+        // 限制 Canvas 临时数据流的大小，交由 GpuDevice 按原有连续顺序合并块。
         if (!capturingInstances && vertices.Count >= 16 * 8192) Flush();
     }
 }

@@ -8,6 +8,10 @@ public sealed class ImageResourceBudget
 {
     private readonly Dictionary<string, (int Width, int Height)> checkedImages = new(StringComparer.Ordinal);
     private long decodedBytes;
+    /// <summary>检查图片尺寸与加载预算，并复用已经校验的尺寸。</summary>
+    /// <param name="path">图片文件路径。</param>
+    /// <returns>通过预算检查的图像像素宽高。</returns>
+    /// <exception cref="InvalidDataException">图片格式、尺寸或大小超过资源预算。</exception>
     public (int Width, int Height) Check(string path)
     {
         if (checkedImages.TryGetValue(path, out var known))

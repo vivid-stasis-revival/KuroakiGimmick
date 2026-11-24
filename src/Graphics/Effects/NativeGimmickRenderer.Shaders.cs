@@ -1,3 +1,5 @@
+// 对后处理目标执行 shader 并释放中间目标。
+
 using KuroakiGimmick.Core;
 
 namespace KuroakiGimmick.Graphics;
@@ -10,6 +12,10 @@ public sealed partial class NativeGimmickRenderer
     /// 全屏后处理。选择器要求是有限、整数且落在 int 范围内的值，并且能对应到已定义的 post mode；任何一步不满足都写诊断。
     /// 失败时复制输入，绝不能把上一帧残留的离屏纹理当成当前输出。
     /// </summary>
+    /// <param name="output">接收绘制结果的目标。</param>
+    /// <param name="input">作为输入画面的纹理。</param>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void RenderPost(Target output, Texture input, Session session, double time)
     {
         Prepare(session);
@@ -66,7 +72,7 @@ public sealed partial class NativeGimmickRenderer
     /// </summary>
     private bool ApplyShader(Target output, Texture input, Session session, double time, GimmickShaderMode mode, bool preserveAlpha = false)
     {
-        var pinned=new List<Texture>();
+        var pinned = new List<Texture>();
         if (current == null || !current.IsModeAvailable(mode) || failedModes.Contains(mode) || !shaders.TryGetValue(mode.Shader, out var shader))
         {
             return false;
@@ -92,7 +98,8 @@ public sealed partial class NativeGimmickRenderer
                     return false;
                 }
                 samplers.Add((name, image));
-                PinImage(image);pinned.Add(image);
+                PinImage(image);
+                pinned.Add(image);
             }
             canvas.Flush();
             for (int index = 0; index < samplers.Count; index++)
@@ -115,7 +122,7 @@ public sealed partial class NativeGimmickRenderer
                             program.Vec3(name, values[0], values[1], values[2]);
                             break;
                         case 4:
-                            program.Vec4(name, new((float) values[0], (float) values[1], (float) values[2], (float) values[3]));
+                            program.Vec4(name, new((float)values[0], (float)values[1], (float)values[2], (float)values[3]));
                             break;
                     }
                 }
@@ -126,7 +133,7 @@ public sealed partial class NativeGimmickRenderer
                     // GameMaker 生成的滤镜都依赖这个约定俗成的 <name>TexelSize 配套 uniform。
                     program.Vec2(sampler.Name + "TexelSize", 1.0 / sampler.Image.Width, 1.0 / sampler.Image.Height);
                 }
-            }, preserveAlpha:preserveAlpha);
+            }, preserveAlpha: preserveAlpha);
             return true;
         }
         catch (Exception exception) when (ResourceFiles.IsResourceError(exception))
@@ -135,7 +142,10 @@ public sealed partial class NativeGimmickRenderer
             current.Fail("shader/" + mode.Shader, exception.Message);
             return false;
         }
-        finally {foreach(var image in pinned)UnpinImage(image);}
+        finally
+        {
+            foreach (var image in pinned) UnpinImage(image);
+        }
     }
 }
 

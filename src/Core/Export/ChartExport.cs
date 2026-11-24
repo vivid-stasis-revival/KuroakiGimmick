@@ -1,3 +1,5 @@
+// 将导出快照转换为具体文件计划，再按计划写入演出文件及其依赖。
+
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -18,6 +20,9 @@ public static class ChartExport
     static readonly HashSet<string> ToolDirectories = new(StringComparer.OrdinalIgnoreCase)
     { ".kuroaki", ".git", ".svn", "__MACOSX", "node_modules", "bin", "obj", "dist", ".vs", ".idea" };
     /// <summary>判断 <paramref name="path"/> 是否等于 <paramref name="directory"/> 或位于其内部；用于阻止导出目标与源目录相互嵌套。</summary>
+    /// <param name="path">候选路径。</param>
+    /// <param name="directory">参照目录。</param>
+    /// <returns>路径等于该目录或位于其下时为 true。</returns>
     public static bool Inside(string path, string directory) =>
         Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar).Equals(Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar), PathComparison) ||
         Path.GetFullPath(path).StartsWith(Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, PathComparison);
@@ -26,9 +31,13 @@ public static class ChartExport
     {
         using var stream = File.OpenRead(path);
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        byte[] buffer = new byte[128 * 1024]; int read;
+        byte[] buffer = new byte[128 * 1024];
+        int read;
         while ((read = stream.Read(buffer)) > 0)
-        { cancellation.ThrowIfCancellationRequested(); hash.AppendData(buffer, 0, read); }
+        {
+            cancellation.ThrowIfCancellationRequested();
+            hash.AppendData(buffer, 0, read);
+        }
         return Convert.ToHexString(hash.GetHashAndReset());
     }
     static void NoLinks(string path)
@@ -68,6 +77,15 @@ public static class ChartExport
     /// 只做规划：确定每个输出项的字节来源、长度和 SHA-256，并收集需要呈现给用户的警告，不写任何文件。
     /// 任何冲突（同名映射、未允许覆盖的目标、要覆盖源文件、路径不可移植、含符号链接）都在这里抛出，让 Write 阶段没有意外。
     /// </summary>
+    /// <param name="input">已捕获的导出输入。</param>
+    /// <param name="kind">导出形态。</param>
+    /// <param name="destination">导出目标路径。</param>
+    /// <param name="cancellation">用于请求取消本次操作的令牌。</param>
+    /// <param name="overwrite">是否允许替换已有输出文件。</param>
+    /// <param name="putImageGimmickIntoAssetsFolder">是否将图片汇集到 Assets 子目录。</param>
+    /// <returns>包含输出清单及诊断的导出计划。</returns>
+    /// <exception cref="FileNotFoundException">导出所需的资源或声明文件缺失。</exception>
+    /// <exception cref="IOException">导出名称冲突、目标不安全或整包大小超限。</exception>
     public static ChartExportPlan Prepare(ChartExportInput input, ChartExportKind kind, string destination,
         CancellationToken cancellation = default, bool overwrite = false, bool putImageGimmickIntoAssetsFolder = false)
     {
@@ -81,7 +99,9 @@ public static class ChartExport
         }
         void Copy(string name, string path, bool replace = false)
         {
-            cancellation.ThrowIfCancellationRequested(); name = Portable(name); path = Path.GetFullPath(path);
+            cancellation.ThrowIfCancellationRequested();
+            name = Portable(name);
+            path = Path.GetFullPath(path);
             if (!File.Exists(path)) throw new FileNotFoundException("Export dependency missing.", path);
             NoLinks(path);
             if (files.TryGetValue(name, out var prior))
@@ -110,7 +130,7 @@ public static class ChartExport
             else
             {
                 fileName = Path.GetFileName(path);
-                // Older projects may have lost the imported filename and retained only a SHA staging name.
+                // 旧版工程可能只保留了以 SHA 命名的暂存文件，原始导入文件名已缺失。
                 string basis = Path.GetFileNameWithoutExtension(fileName);
                 if (EditorAssetPath(path) && basis.Length == 64 && basis.All(Uri.IsHexDigit))
                 {
@@ -130,7 +150,10 @@ public static class ChartExport
                     && HashFile(path, cancellation) == existing.Sha256)
                     return existing.Name;
             }
-            try { Copy(name, path); }
+            try
+            {
+                Copy(name, path);
+            }
             catch (IOException ex) when (ex.Message.StartsWith("Two resources map to the same output name:", StringComparison.Ordinal))
             {
                 throw new IOException("Two image gimmick resources have the same original filename. Rename one before export: " + fileName, ex);
@@ -144,7 +167,8 @@ public static class ChartExport
             else if (input.Images != null)
             {
                 if (!File.Exists(input.Images)) throw new FileNotFoundException("VSP dependency missing.", input.Images);
-                NoLinks(input.Images); body = File.ReadAllText(input.Images);
+                NoLinks(input.Images);
+                body = File.ReadAllText(input.Images);
             }
             else throw new InvalidOperationException("VSP export requires an attached or authored VSP.");
             string? root = input.ImageRoot;
@@ -209,10 +233,9 @@ public static class ChartExport
                 if (name != null) Dependency(Path.GetFullPath(name.Replace('\\', Path.DirectorySeparatorChar), root));
             foreach (string name in new[] { stem + ".vsv", "GLOBAL.vsv" })
                 if (SongFiles.Existing(root, name) is { } path) Dependency(path);
-            var sourceChart = new Chart(); VsmReader.ReplaceModsText(sourceChart, input.VsmText, "export.vsm");
-            // MPF files are external per-difficulty programs, not embedded in the
-            // VSM. Preserve the selected difficulty override (or GLOBAL fallback)
-            // in Chart Folder exports; do not silently omit its runtime dependency.
+            var sourceChart = new Chart();
+            VsmReader.ReplaceModsText(sourceChart, input.VsmText, "export.vsm");
+            // MPF 按难度保存在 VSM 之外，Chart Folder 导出须包括实际选中的难度脚本或 GLOBAL 回退文件。
             var mpfSources = MpfScriptSources.Resolve(input.Project);
             warnings.AddRange(mpfSources.Errors);
             int includedMpf = 0;
@@ -220,8 +243,7 @@ public static class ChartExport
             {
                 if (mpfSources.Files.TryGetValue(function, out string? sourceMpf))
                 {
-                    // Source scripts can live beside an independently attached VSM.
-                    // Export under the target difficulty so reopening uses the same selected program.
+                    // 脚本可能与独立附加的 VSM 同目录。按目标难度导出，使重新打开时选中同一程序。
                     Copy("cmpf/" + stem + "." + function + ".vsmpf", sourceMpf);
                     includedMpf++;
                 }
@@ -235,10 +257,13 @@ public static class ChartExport
                 Dependency(story);
             var project = input.Project.Copy();
             project.Chart = Path.GetRelativePath(root, chart).Replace('\\', '/');
-            project.MpfSourceRoot = "."; project.MpfSourceDifficulty = stem;
-            project.Gimmick = stem + ".vsm"; project.WindowMotion = stem + "_cgmk_config.json";
+            project.MpfSourceRoot = ".";
+            project.MpfSourceDifficulty = stem;
+            project.Gimmick = stem + ".vsm";
+            project.WindowMotion = stem + "_cgmk_config.json";
             // 当前难度的编辑内容覆盖依赖同名项，其它难度不参与导出。
-            Bytes(project.Gimmick, input.VsmBytes); Bytes(project.WindowMotion, configBytes);
+            Bytes(project.Gimmick, input.VsmBytes);
+            Bytes(project.WindowMotion, configBytes);
             if (input.TextSources != null)
             {
                 project.TextFiles = new(StringComparer.Ordinal);
@@ -247,7 +272,8 @@ public static class ChartExport
                 {
                     string name = Portable(stem + "_text" + (pair.Key.Length == 0 ? "" : "_" + pair.Key) + ".txt");
                     if (project.TextFiles.Values.Contains(name, StringComparer.OrdinalIgnoreCase)) throw new IOException("Text IDs collide on the target platform.");
-                    Bytes(name, Encoding.UTF8.GetBytes(pair.Value)); project.TextFiles.Add(pair.Key, name);
+                    Bytes(name, Encoding.UTF8.GetBytes(pair.Value));
+                    project.TextFiles.Add(pair.Key, name);
                 }
             }
             else
@@ -256,7 +282,8 @@ public static class ChartExport
                 foreach (var track in CustomText.Load(input.Project, sourceChart, enabled: true).Tracks)
                 {
                     string name = Portable(stem + "_text" + (track.Id.Length == 0 ? "" : "_" + track.Id) + ".txt");
-                    Copy(name, track.Path); project.TextFiles.Add(track.Id, name);
+                    Copy(name, track.Path);
+                    project.TextFiles.Add(track.Id, name);
                 }
             }
             // 非 VSP 资源保留原目录语义；VSP 图片单独走 ImageResource，绝不再把 .kuroaki、暂存目录或路径哈希泄漏到成品。
@@ -265,13 +292,15 @@ public static class ChartExport
                 path = Path.GetFullPath(path);
                 string name = Inside(path, root) && !ToolPath(path) && !IgnoreFile(path) ? Path.GetRelativePath(root, path).Replace('\\', '/') :
                     "resources/" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(path)))[..12].ToLowerInvariant() + "_" + Path.GetFileName(path);
-                Copy(name, path); return name;
+                Copy(name, path);
+                return name;
             }
             if (input.ImageText != null || input.Images != null)
             {
-                // Shared with standalone VSP export: rewrite every resource to a portable author-facing filename.
+                // 与独立 VSP 导出共用资源改写规则，产物使用可移植、可辨认的文件名。
                 string body = RewrittenVsp();
-                project.Images = stem + ".vsp"; project.ImagePathsRelativeToVsp = false;
+                project.Images = stem + ".vsp";
+                project.ImagePathsRelativeToVsp = false;
                 Bytes(project.Images, Encoding.UTF8.GetBytes(body));
                 warnings.Add(putImageGimmickIntoAssetsFolder
                     ? "Image gimmick resources are exported as Assets/<original filename>."
@@ -279,9 +308,14 @@ public static class ChartExport
                 if (legacyImageNameFallback)
                     warnings.Add("Legacy hashed editor image names were exported using their VSP image IDs because older projects did not preserve the original filenames.");
             }
-            else { project.Images = null; project.ImagePathsRelativeToVsp = false; }
+            else
+            {
+                project.Images = null;
+                project.ImagePathsRelativeToVsp = false;
+            }
             string? OptionalResource(string? path) => path == null ? null : Resource(path);
-            project.Audio = OptionalResource(project.Audio); project.Jacket = OptionalResource(project.Jacket);
+            project.Audio = OptionalResource(project.Audio);
+            project.Jacket = OptionalResource(project.Jacket);
             if (input.Project.Audio != null && !Inside(input.Project.Audio, root))
                 warnings.Add("Attached external audio is included for Kuroaki; game song metadata is not rewritten.");
             // 这些 manifest 自身可能引用任意文件。对未知 schema 不能声称已经重定基准，因此要求它们本来就在歌曲目录内。
@@ -293,16 +327,16 @@ public static class ChartExport
                 if (File.Exists(path)) Dependency(path);
                 return Path.GetRelativePath(root, path).Replace('\\', '/');
             }
-            project.FxProfile = InternalOnly(project.FxProfile); project.GameUi = InternalOnly(project.GameUi);
-            project.GimmickAssets = InternalOnly(project.GimmickAssets); project.GimmickDefinition = InternalOnly(project.GimmickDefinition);
+            project.FxProfile = InternalOnly(project.FxProfile);
+            project.GameUi = InternalOnly(project.GameUi);
+            project.GimmickAssets = InternalOnly(project.GimmickAssets);
+            project.GimmickDefinition = InternalOnly(project.GimmickDefinition);
             Bytes("Kuroaki.sgv.json", Encoding.UTF8.GetBytes(AppJson.Serialize(project, ViewerProject.Json)));
             warnings.Add("Includes the current chart and its referenced resources only. Other difficulties, unrelated files and editor backups are excluded.");
             warnings.Add("Kuroaki.sgv.json retains E markers. Game compatibility still depends on the target game and required mods.");
             if (chart.EndsWith(".vsc", StringComparison.OrdinalIgnoreCase))
             {
-                // Notes are read-only, so Chart Folder must copy the source VSC byte-for-byte. The detected dialect
-                // exists to make the compatibility contract explicit and to prevent a future writer from silently
-                // upgrading Legacy projects merely because K/G understands the CSM 3.4 fifth column.
+                // 音符只读，Chart Folder 按字节复制源 VSC。记录来源方言，可防止后续写出器因支持 CSM 3.4 第五列而意外升级 Legacy 文件。
                 warnings.Add(input.VscDialect == VscDialect.Csm340
                     ? "CSM 3.4 VSC detected from the source fifth column; the source VSC is copied byte-for-byte and remains CSM 3.4 format."
                     : "Legacy VSC detected; the source VSC is copied byte-for-byte and no CSM 3.4 modExtra column is added.");
@@ -330,11 +364,18 @@ public static class ChartExport
     }
 
     /// <summary>先暂存并校验全部字节，再发布；覆盖时备份旧文件，失败则回滚。</summary>
+    /// <param name="plan">要执行的导出计划。</param>
+    /// <param name="cancellation">用于请求取消本次操作的令牌。</param>
+    /// <param name="progress">发布文件时报告进度的回调。</param>
+    /// <exception cref="OperationCanceledException">在暂存、校验或逐文件发布期间观察到取消请求。</exception>
+    /// <exception cref="IOException">目标不允许写入、源数据与计划不符或文件无法发布。</exception>
     public static void Write(ChartExportPlan plan, CancellationToken cancellation = default, Action<string>? progress = null)
     {
         bool folder = plan.Kind == ChartExportKind.ChartFolder;
+        // 1. 在目标附近准备暂存目录，并记录需要在失败时恢复的文件。
         string parent = Path.GetDirectoryName(plan.Destination)!;
-        Directory.CreateDirectory(parent); NoLinks(parent);
+        Directory.CreateDirectory(parent);
+        NoLinks(parent);
         string stage = Path.Combine(parent, ".kuroaki-export-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(stage);
         var committed = new List<(string Path, ChartExportPlan.Item Item)>();
@@ -344,9 +385,11 @@ public static class ChartExport
         bool succeeded = false;
         try
         {
+            // 2. 在暂存区完成所有文件的写入，并逐项核对计划中的长度和 SHA-256。
             for (int i = 0; i < plan.Files.Count; i++)
             {
-                cancellation.ThrowIfCancellationRequested(); var item = plan.Files[i];
+                cancellation.ThrowIfCancellationRequested();
+                var item = plan.Files[i];
                 progress?.Invoke($"Export {i + 1}/{plan.Files.Count}: {item.Name}");
                 string target = Path.GetFullPath(Portable(item.Name), stage);
                 // 即便 Portable 已校验过，落地前再确认一次没有逃出暂存目录。
@@ -360,8 +403,13 @@ public static class ChartExport
                         string source = item.Source ?? throw new InvalidDataException("Missing export source.");
                         NoLinks(source);
                         using var input = File.OpenRead(source);
-                        byte[] buffer = new byte[128 * 1024]; int read;
-                        while ((read = input.Read(buffer)) > 0) { cancellation.ThrowIfCancellationRequested(); output.Write(buffer, 0, read); }
+                        byte[] buffer = new byte[128 * 1024];
+                        int read;
+                        while ((read = input.Read(buffer)) > 0)
+                        {
+                            cancellation.ThrowIfCancellationRequested();
+                            output.Write(buffer, 0, read);
+                        }
                     }
                     output.Flush(true);
                 }
@@ -370,6 +418,7 @@ public static class ChartExport
                     throw new IOException("Source changed while exporting; no output committed: " + item.Name);
             }
             cancellation.ThrowIfCancellationRequested();
+            // 3. 新目录整体发布；已有目录先复查各目标，再逐个备份和发布。
             if (folder && !Directory.Exists(plan.Destination))
             {
                 NoLinks(plan.Destination);
@@ -382,7 +431,8 @@ public static class ChartExport
                 foreach (var item in plan.Files)
                 {
                     string target = Path.Combine(root, item.Name);
-                    NoLinks(target); ExportFiles.Validate(target, plan.Overwrite);
+                    NoLinks(target);
+                    ExportFiles.Validate(target, plan.Overwrite);
                 }
                 // 已有目录按文件合并，不删除未包含在本次计划中的文件。
                 foreach (var item in plan.Files)
@@ -395,7 +445,11 @@ public static class ChartExport
                     var missing = new Stack<string>();
                     for (string? dir = Path.GetDirectoryName(target); dir != null && !Directory.Exists(dir); dir = Path.GetDirectoryName(dir))
                         missing.Push(dir);
-                    while (missing.TryPop(out var dir)) { Directory.CreateDirectory(dir); createdDirectories.Add(dir); }
+                    while (missing.TryPop(out var dir))
+                    {
+                        Directory.CreateDirectory(dir);
+                        createdDirectories.Add(dir);
+                    }
                     if (plan.Overwrite && File.Exists(target))
                     {
                         Directory.CreateDirectory(backupRoot);
@@ -413,23 +467,39 @@ public static class ChartExport
         catch (Exception failure)
         {
             var rollbackErrors = new List<Exception>();
+            // 按发布的逆序清理已提交条目，再恢复此前被替换的文件。
             foreach (var (path, item) in committed.AsEnumerable().Reverse())
             {
                 try
                 {
                     if (File.Exists(path) && HashFile(path) == item.Sha256) File.Delete(path);
                 }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { rollbackErrors.Add(ex); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    rollbackErrors.Add(ex);
+                }
             }
             foreach (var (target, backup) in backups)
             {
-                try { File.Move(backup, target, false); }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { rollbackErrors.Add(ex); }
+                try
+                {
+                    File.Move(backup, target, false);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    rollbackErrors.Add(ex);
+                }
             }
             foreach (string dir in createdDirectories.AsEnumerable().Reverse())
             {
-                try { if (!Directory.EnumerateFileSystemEntries(dir).Any()) Directory.Delete(dir); }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { rollbackErrors.Add(ex); }
+                try
+                {
+                    if (!Directory.EnumerateFileSystemEntries(dir).Any()) Directory.Delete(dir);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    rollbackErrors.Add(ex);
+                }
             }
             if (rollbackErrors.Count > 0)
                 throw new AggregateException("Export failed; recovery files retained at " + backupRoot, new[] { failure }.Concat(rollbackErrors));

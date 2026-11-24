@@ -1,3 +1,5 @@
+// 绘制精灵形式的歌词文字。
+
 using KuroakiGimmick.Core;
 
 namespace KuroakiGimmick.Graphics;

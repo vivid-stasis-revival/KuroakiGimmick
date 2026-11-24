@@ -1,3 +1,6 @@
+// 文本对象的源列表与检视面板。文本分两类：id 为空的 legacy 文本（用 textcolhex，没有对齐/行距/换行宽度）
+// 和具名文本（用 textcolrgb，属性更全），两边的字段集合在这里就分好，不要合并。
+
 using System.Numerics;
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Core.Editing;
@@ -6,10 +9,6 @@ using KuroakiGimmick.Native;
 
 namespace KuroakiGimmick.UI;
 
-/// <summary>
-/// 文本对象的源列表与检视面板。文本分两类：id 为空的 legacy 文本（用 textcolhex，没有对齐/行距/换行宽度）
-/// 和具名文本（用 textcolrgb，属性更全），两边的字段集合在这里就分好，不要合并。
-/// </summary>
 public sealed partial class Viewer
 {
     bool textSources, textInspector, textCanvas;
@@ -41,8 +40,16 @@ public sealed partial class Viewer
     {
         CancelSceneDirectGesture();
         if (textDrag != null) Sdl.SDL_CaptureMouse(false);
-        textDrag = null; textDragValues = null; selectedTextId = null; textCache = null; textRevision = -1; textAnimation = null; pendingTextAdd = false;
-        textSources = textInspector = textCanvas = false; textListScroll = 0; textZoom = 1;
+        textDrag = null;
+        textDragValues = null;
+        selectedTextId = null;
+        textCache = null;
+        textRevision = -1;
+        textAnimation = null;
+        pendingTextAdd = false;
+        textSources = textInspector = textCanvas = false;
+        textListScroll = 0;
+        textZoom = 1;
         expandedTextTracks.Clear();
     }
     /// <summary>
@@ -53,9 +60,11 @@ public sealed partial class Viewer
     {
         if (editor == null) return;
         if (textRevision == editor.Revision && textMap == Current.Timeline.Bpm) return;
-        textCache = editor.EditableTexts(); textSampler = new(editor.Vsm, Current.Timeline.Bpm);
+        textCache = editor.EditableTexts();
+        textSampler = new(editor.Vsm, Current.Timeline.Bpm);
         if (textAnimation is Guid animation && EditorFindClip(animation) == null) textAnimation = null;
-        textMap = Current.Timeline.Bpm; textRevision = editor.Revision;
+        textMap = Current.Timeline.Bpm;
+        textRevision = editor.Revision;
     }
     /// <summary>
     /// 执行一次文本编辑并统一善后：成功则让布局失效重排，失败只把异常转成提示文字。
@@ -63,8 +72,16 @@ public sealed partial class Viewer
     /// </summary>
     void TextAction(Action action)
     {
-        try { action(); layoutRevision = -1; message = L.Get("Text updated / undo available"); }
-        catch (Exception ex) { message = L.Get("Text edit rejected: ") + ex.Message; }
+        try
+        {
+            action();
+            layoutRevision = -1;
+            message = L.Get("Text updated / undo available");
+        }
+        catch (Exception ex)
+        {
+            message = L.Get("Text edit rejected: ") + ex.Message;
+        }
     }
     /// <summary>
     /// 选中一个文本对象，并把 image 侧的选择和桌面预览一并关掉——两套检视面板共用同一块区域，不能同时开。
@@ -73,13 +90,23 @@ public sealed partial class Viewer
     void SelectText(string id, bool canvas = true, double? atBeat = null)
     {
         if (editor == null) return;
-        EnsureTexts(); selectedTextId = id; textSources = textInspector = true; textCanvas = canvas;
+        EnsureTexts();
+        selectedTextId = id;
+        textSources = textInspector = true;
+        textCanvas = canvas;
         workspaceManager.Editor.Activate("text");
         imageSources = imageInspector = imageCanvas = desktopPreview = false;
-        selectedImageId = null; selectedImageGroup = null;
-        selectedClip = null; textAnimation = null; selectedWindowEvent = -1; inspectorScroll = 0;
-        textAt = atBeat ?? editor.InitialTextBeat(id); transport.SetPlaying(false); transport.Seek(Current.Timeline.Bpm.Time(textAt));
-        layoutRevision = -1; RebuildEditTracks();
+        selectedImageId = null;
+        selectedImageGroup = null;
+        selectedClip = null;
+        textAnimation = null;
+        selectedWindowEvent = -1;
+        inspectorScroll = 0;
+        textAt = atBeat ?? editor.InitialTextBeat(id);
+        transport.SetPlaying(false);
+        transport.Seek(Current.Timeline.Bpm.Time(textAt));
+        layoutRevision = -1;
+        RebuildEditTracks();
         trackScroll = Math.Max(0, editTracks.FindIndex(t => t.TextId == id));
         motion.Snap("timeline-track-scroll", trackScroll);
     }
@@ -92,7 +119,8 @@ public sealed partial class Viewer
         double beat = InsertionBeat;
         OpenValue(L.Get("New text (paste multiline text; {n} also starts a new line)"), "Text", value =>
         {
-            string id = editor.AddText(value.Replace("{n}", "\n"), beat, true); SelectText(id);
+            string id = editor.AddText(value.Replace("{n}", "\n"), beat, true);
+            SelectText(id);
         }, preserveWhitespace: true);
     }
     /// <summary>
@@ -108,7 +136,10 @@ public sealed partial class Viewer
         {
             if (Current.Chart.ObjectName != "obj_custom_gimmick" || !SongFiles.Config(editor.Project, "ENABLE_TEXT"))
                 OpenValue(L.Get("Adding text enables Custom + ENABLE_TEXT. Type YES to continue."), "", value =>
-                { if (value != "YES") throw new FormatException(L.Get("Type YES to enable text authoring.")); pendingTextAdd = true; });
+                {
+                    if (value != "YES") throw new FormatException(L.Get("Type YES to enable text authoring."));
+                    pendingTextAdd = true;
+                });
             else AddTextObject();
         }
         Text(L.Get("TEXT OBJECTS / ") + textCache.Tracks.Count, r.X, r.Y + 41, 11, muted, max: r.W);
@@ -116,7 +147,8 @@ public sealed partial class Viewer
         textListScroll = Math.Clamp(textListScroll, 0, Math.Max(0, textCache.Tracks.Count - visible));
         for (int i = textListScroll; i < Math.Min(textCache.Tracks.Count, textListScroll + visible); i++)
         {
-            var track = textCache.Tracks[i]; float y = r.Y + 64 + (i - textListScroll) * 58;
+            var track = textCache.Tracks[i];
+            float y = r.Y + 64 + (i - textListScroll) * 58;
             if (EButton(ImageShortText(track.Id.Length == 0 ? L.Get("LEGACY TEXT") : track.Id, r.W - 12), new(r.X, y, r.W, 28),
                 active: selectedTextId == track.Id, key: "text-source:" + track.Id)) SelectText(track.Id);
             string preview = track.At(Current.Timeline.Bpm.Beat(transport.Position)).Replace('\n', ' ');
@@ -150,9 +182,11 @@ public sealed partial class Viewer
     /// </summary>
     void SelectTextAnimation(VsmDocument.Clip clip, bool end)
     {
-        textAnimation = clip.Id; textAnimationEnd = end;
+        textAnimation = clip.Id;
+        textAnimationEnd = end;
         textAt = end ? Current.Timeline.Bpm.Beat(Current.Timeline.Bpm.Time(clip.Beat) + clip.Duration * 60 / Current.Timeline.Bpm.BpmAtBeat(clip.Beat)) : clip.Beat;
-        transport.SetPlaying(false); transport.Seek(Current.Timeline.Bpm.Time(textAt));
+        transport.SetPlaying(false);
+        transport.Seek(Current.Timeline.Bpm.Time(textAt));
     }
     void AddTextCueHere()
     {
@@ -179,17 +213,38 @@ public sealed partial class Viewer
         EnsureTexts();
         if (editor == null || selectedTextId == null || textCache == null || textSampler == null) return;
         string id = selectedTextId;
-        var track = textCache.Tracks.FirstOrDefault(t => t.Id == id); if (track == null) return;
+        var track = textCache.Tracks.FirstOrDefault(t => t.Id == id);
+        if (track == null) return;
         Label(L.Get("TEXT / ") + (id.Length == 0 ? L.Get("LEGACY") : ImageShortText(id, r.W - 110)), r.X, r.Y);
         if (EButton("^", new(r.X + r.W - 59, r.Y - 4, 26, 23))) inspectorScroll = Math.Max(0, inspectorScroll - 1);
         if (EButton("v", new(r.X + r.W - 27, r.Y - 4, 26, 23))) inspectorScroll++;
         float half = (r.W - 6) / 2;
-        if (EButton(L.Get("INITIAL"), new(r.X, r.Y + 24, half, 27))) { textAnimation = null; textAt = editor.InitialTextBeat(id); transport.SetPlaying(false); transport.Seek(Current.Timeline.Bpm.Time(textAt)); }
-        if (EButton(L.Get("KEY HERE"), new(r.X + half + 6, r.Y + 24, half, 27))) { textAnimation = null; textAt = InsertionBeat; transport.SetPlaying(false); transport.Seek(Current.Timeline.Bpm.Time(textAt)); }
-        if (EButton(L.Get("TEXT CANVAS"), new(r.X, r.Y + 58, half, 27), active: textCanvas)) { textCanvas = true; imageCanvas = desktopPreview = false; }
+        if (EButton(L.Get("INITIAL"), new(r.X, r.Y + 24, half, 27)))
+        {
+            textAnimation = null;
+            textAt = editor.InitialTextBeat(id);
+            transport.SetPlaying(false);
+            transport.Seek(Current.Timeline.Bpm.Time(textAt));
+        }
+        if (EButton(L.Get("KEY HERE"), new(r.X + half + 6, r.Y + 24, half, 27)))
+        {
+            textAnimation = null;
+            textAt = InsertionBeat;
+            transport.SetPlaying(false);
+            transport.Seek(Current.Timeline.Bpm.Time(textAt));
+        }
+        if (EButton(L.Get("TEXT CANVAS"), new(r.X, r.Y + 58, half, 27), active: textCanvas))
+        {
+            textCanvas = true;
+            imageCanvas = desktopPreview = false;
+        }
         if (EButton(L.Get("SCENE"), new(r.X + half + 6, r.Y + 58, half, 27), active: !textCanvas)) textCanvas = false;
         int rows = 0, visible = Math.Max(1, (int)((r.H - 120) / 32));
-        bool Row(out float y) { y = r.Y + 95 + (rows++ - inspectorScroll) * 32; return y >= r.Y + 95 && y + 28 <= r.Y + r.H - 25; }
+        bool Row(out float y)
+        {
+            y = r.Y + 95 + (rows++ - inspectorScroll) * 32;
+            return y >= r.Y + 95 && y + 28 <= r.Y + r.H - 25;
+        }
         void Field(string label, string value, Action<string> apply, bool preserveWhitespace = false)
         {
             if (!Row(out float y)) return;
@@ -198,8 +253,17 @@ public sealed partial class Viewer
                 preserveWhitespace: preserveWhitespace, enabled: !transport.Playing, labelSize: 11, escapeNewlines: preserveWhitespace);
         }
         void Button(string label, Action action)
-        { if (Row(out float y) && EButton(label, new(r.X, y, r.W, 27), enabled: !transport.Playing, key: "text-action:" + label)) TextAction(action); }
-        Field(L.Get("At / beat"), VsmDocument.Ui(textAt), value => { double beat = VsmDocument.Number(value); if (Math.Abs(beat) > 1e8) throw new FormatException(L.Get("Beat out of range.")); textAnimation = null; textAt = beat; transport.Seek(Current.Timeline.Bpm.Time(beat)); });
+        {
+            if (Row(out float y) && EButton(label, new(r.X, y, r.W, 27), enabled: !transport.Playing, key: "text-action:" + label)) TextAction(action);
+        }
+        Field(L.Get("At / beat"), VsmDocument.Ui(textAt), value =>
+{
+    double beat = VsmDocument.Number(value);
+    if (Math.Abs(beat) > 1e8) throw new FormatException(L.Get("Beat out of range."));
+    textAnimation = null;
+    textAt = beat;
+    transport.Seek(Current.Timeline.Bpm.Time(beat));
+});
         if (textAnimation is Guid animId && EditorFindClip(animId) is { } animation)
         {
             Button(L.Get("EDIT START") + (!textAnimationEnd ? " *" : ""), () => SelectTextAnimation(animation, false));
@@ -212,9 +276,22 @@ public sealed partial class Viewer
         foreach (string kind in new[] { "textX", "textY", "textscale", "textrot", "textalp", id.Length == 0 ? "textcolhex" : "textcolrgb" }
             .Concat(id.Length == 0 ? Array.Empty<string>() : new[] { "textalignh", "textalignv", "textsep", "textmaxwidth" }))
         {
-            string key = kind; double current = textSampler.Get(key, id, textAt);
-            string label = key switch { "textX" => "X", "textY" => "Y", "textscale" => L.Get("Scale %"), "textrot" => L.Get("Rotation"), "textalp" => L.Get("Opacity %"),
-                "textcolrgb" => L.Get("RGB hex"), "textcolhex" => L.Get("Color hex"), "textalignh" => L.Get("Align H 0/1/2"), "textalignv" => L.Get("Align V 0/1/2"), "textsep" => L.Get("Line gap (-1)"), _ => L.Get("Wrap chars") };
+            string key = kind;
+            double current = textSampler.Get(key, id, textAt);
+            string label = key switch
+            {
+                "textX" => "X",
+                "textY" => "Y",
+                "textscale" => L.Get("Scale %"),
+                "textrot" => L.Get("Rotation"),
+                "textalp" => L.Get("Opacity %"),
+                "textcolrgb" => L.Get("RGB hex"),
+                "textcolhex" => L.Get("Color hex"),
+                "textalignh" => L.Get("Align H 0/1/2"),
+                "textalignv" => L.Get("Align V 0/1/2"),
+                "textsep" => L.Get("Line gap (-1)"),
+                _ => L.Get("Wrap chars")
+            };
             bool color = key is "textcolrgb" or "textcolhex", percent = key is "textscale" or "textalp";
             Field(label, color ? ((uint)Math.Clamp(current, 0, 16777215)).ToString("X6") : (percent ? current * 100 : current).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), value =>
             {
@@ -223,14 +300,35 @@ public sealed partial class Viewer
             });
         }
         Button(L.Get("CENTER X + Y"), () => CommitTextValues(new Dictionary<string, double> { ["textX"] = 160, ["textY"] = 90 }));
-        Field(L.Get("Duration / beat"), VsmDocument.Ui(textDuration), value => { double n = VsmDocument.Number(value); if (n <= 0 || n > 1e8) throw new FormatException(L.Get("Use a positive duration.")); textDuration = n; });
-        Field(L.Get("Easing"), textEase, value => { if (!Easings.IsKnown(value)) throw new FormatException(L.Get("Unknown easing.")); textEase = Easings.Normalize(value); });
-        Button(L.Get("+ MOVE ANIMATION"), () => { CommitTextValues(new Dictionary<string, double> { ["textX"] = textSampler.Get("textX", id, textAt) + 40,
-            ["textY"] = textSampler.Get("textY", id, textAt) }, textDuration); });
+        Field(L.Get("Duration / beat"), VsmDocument.Ui(textDuration), value =>
+{
+    double n = VsmDocument.Number(value);
+    if (n <= 0 || n > 1e8) throw new FormatException(L.Get("Use a positive duration."));
+    textDuration = n;
+});
+        Field(L.Get("Easing"), textEase, value =>
+{
+    if (!Easings.IsKnown(value)) throw new FormatException(L.Get("Unknown easing."));
+    textEase = Easings.Normalize(value);
+});
+        Button(L.Get("+ MOVE ANIMATION"), () =>
+        {
+            CommitTextValues(new Dictionary<string, double>
+            {
+                ["textX"] = textSampler.Get("textX", id, textAt) + 40,
+                ["textY"] = textSampler.Get("textY", id, textAt)
+            }, textDuration);
+        });
         Button(L.Get("+ FADE OUT"), () => CommitTextValues(new Dictionary<string, double> { ["textalp"] = 0 }, textDuration));
         Button(L.Get("+ FADE IN"), () => editor.SetTextProperties(id, textAt, new Dictionary<string, double> { ["textalp"] = 1 },
             Current.Timeline.Bpm, textDuration, textEase, new Dictionary<string, double> { ["textalp"] = 0 }));
-        Button(L.Get("RAW ANIMATION EVENTS"), () => { expandedTextTracks.Add(id); layoutRevision = -1; textInspector = false; selectedClip = editor.Vsm.Clips.FirstOrDefault(c => CustomText.TryMod(c.Name, out _, out var target) && target == id)?.Id; });
+        Button(L.Get("RAW ANIMATION EVENTS"), () =>
+{
+    expandedTextTracks.Add(id);
+    layoutRevision = -1;
+    textInspector = false;
+    selectedClip = editor.Vsm.Clips.FirstOrDefault(c => CustomText.TryMod(c.Name, out _, out var target) && target == id)?.Id;
+});
         EnsureTimelineClipIndex();
         var animations = timelineTextAnimations.GetValueOrDefault(id) ?? [];
         int firstAnimation = Math.Clamp(inspectorScroll - rows, 0, animations.Length);
@@ -248,7 +346,13 @@ public sealed partial class Viewer
         for (int i = firstCue; i < endCue; i++)
         {
             var selected = track.Cues[i];
-            Button(L.Get("CUE @ ") + VsmDocument.Ui(selected.Beat) + " / " + ImageShortText(selected.Text.Replace('\n', ' '), r.W * .45f, 11), () => { textAnimation = null; textAt = selected.Beat; transport.Seek(Current.Timeline.Bpm.Time(textAt)); inspectorScroll = 0; });
+            Button(L.Get("CUE @ ") + VsmDocument.Ui(selected.Beat) + " / " + ImageShortText(selected.Text.Replace('\n', ' '), r.W * .45f, 11), () =>
+{
+    textAnimation = null;
+    textAt = selected.Beat;
+    transport.Seek(Current.Timeline.Bpm.Time(textAt));
+    inspectorScroll = 0;
+});
         }
         rows += track.Cues.Count - endCue;
         // Content 显示的是目标拍之前最后一条仍然生效的 cue。移动/删除也必须针对同一条，
@@ -259,7 +363,9 @@ public sealed partial class Viewer
         {
             if (activeCue == null) throw new InvalidOperationException(L.Get("No text cue exists at or before the target beat."));
             double beat = VsmDocument.Number(value);
-            editor.MoveTextCue(id, activeCue.Beat, beat); textAt = beat; transport.Seek(Current.Timeline.Bpm.Time(beat));
+            editor.MoveTextCue(id, activeCue.Beat, beat);
+            textAt = beat;
+            transport.Seek(Current.Timeline.Bpm.Time(beat));
         });
         Button(L.Get("DELETE CUE AT TARGET"), () =>
         {

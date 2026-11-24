@@ -1,3 +1,5 @@
+// 重置工作区、恢复面板并管理布局预设。
+
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Graphics;
 using KuroakiGimmick.Native;
@@ -24,10 +26,15 @@ public sealed partial class Viewer
     float PreviewHorizontalPadding => DockingEnabled && activeWorkspaceWindow.Main
         ? 14 - PanelRegistry.SidebarGutter : 14;
     bool LayoutVisible => layoutOpen || layoutAlpha > .001f;
-    void ResetDockWorkspaces() { workspaceManager.ResetAll(); editorDockTabRestored = false; }
+    void ResetDockWorkspaces()
+    {
+        workspaceManager.ResetAll();
+        editorDockTabRestored = false;
+    }
     void ResetCurrentWorkspace()
     {
-        CancelDockDrag(); EndDockSplit(true);
+        CancelDockDrag();
+        EndDockSplit(true);
         if (resizingLayout != 0) EndLayoutResize();
         if (DockingEnabled) workspaceManager.ResetCurrent();
         LayoutOptions.SetSideWidth(editorMode, true, 194);
@@ -39,7 +46,11 @@ public sealed partial class Viewer
             imageSources = textSources = false;
             editorDockTabRestored = false;
         }
-        else { LayoutOptions.ViewerPreviewFraction = .72; diagnostics = false; }
+        else
+        {
+            LayoutOptions.ViewerPreviewFraction = .72;
+            diagnostics = false;
+        }
         SaveSettings();
     }
     void RestoreHiddenPanels()
@@ -56,7 +67,11 @@ public sealed partial class Viewer
         string root = "dock-" + Guid.NewGuid().ToString("N");
         var layout = workspaceManager.Current;
         if (!layout.AddWindow(root)) return;
-        if (!layout.Move(id, root, null, DockSide.Center)) { layout.CloseWindow(root); return; }
+        if (!layout.Move(id, root, null, DockSide.Center))
+        {
+            layout.CloseWindow(root);
+            return;
+        }
         held = click = false;
         SaveSettings();
     }
@@ -65,9 +80,14 @@ public sealed partial class Viewer
         string prefix = editorMode ? "editor:" : "viewer:";
         var presets = preferences.WorkspacePresets ??= new(StringComparer.Ordinal);
         if (!save && !presets.Keys.Any(k => k.StartsWith(prefix, StringComparison.Ordinal)))
-        { message = L.Get("No saved workspace for this mode."); return; }
+        {
+            message = L.Get("No saved workspace for this mode.");
+            return;
+        }
         string suggestion = save ? "My Workspace" : presets.Keys.First(k => k.StartsWith(prefix, StringComparison.Ordinal))[prefix.Length..];
-        layoutOpen = false; layoutAlpha = 0; held = click = false;
+        layoutOpen = false;
+        layoutAlpha = 0;
+        held = click = false;
         OpenValue(save ? L.Get("Save workspace name") : L.Get("Load workspace name"), suggestion, name =>
         {
             name = name.Trim();
@@ -93,12 +113,13 @@ public sealed partial class Viewer
     DockTabs? EditorSourceTabs() => workspaceManager.Editor.Roots[DockLayout.MainWindow].Node is
         DockSplit { First: DockSplit { First: DockTabs tabs } } ? tabs : null;
 
-    /// <summary>Bridge the existing resize preferences into the editor's default dock tree.</summary>
+    /// <summary>将已有栏宽偏好映射到编辑器的默认停靠树。</summary>
     void SyncEditorDock(int w, int h) => workspaceManager.SyncLegacyEditorGeometry(w, h, workspaceGeometry);
 
     (Rect Source, Rect Preview, Rect Inspector, Rect Timeline) EditorDockRects(int w, int h)
     {
-        dockPanelRects.Clear(); dockSplitterRects.Clear();
+        dockPanelRects.Clear();
+        dockSplitterRects.Clear();
         if (!DockingEnabled) SolveClassicPanels(w, h, true);
         else
         {
@@ -116,7 +137,8 @@ public sealed partial class Viewer
     }
     (Rect Sources, Rect Preview, Rect Transport, Rect Right) ViewerDockRects(int w, int h)
     {
-        dockPanelRects.Clear(); dockSplitterRects.Clear();
+        dockPanelRects.Clear();
+        dockSplitterRects.Clear();
         if (!DockingEnabled) SolveClassicPanels(w, h, false);
         else
         {
@@ -147,25 +169,38 @@ public sealed partial class Viewer
         if (e.Type is 0x400 or 0x401 or 0x402)
         {
             var point = PanelContext.FromNative(e.X, e.Y, viewport);
-            e.X = point.X; e.Y = point.Y;
+            e.X = point.X;
+            e.Y = point.Y;
         }
-        if (e.Type is 0x1000 or 0x1003 or 0x1004) { e.DropX *= viewport.InputScaleX; e.DropY *= viewport.InputScaleY; }
+        if (e.Type is 0x1000 or 0x1003 or 0x1004)
+        {
+            e.DropX *= viewport.InputScaleX;
+            e.DropY *= viewport.InputScaleY;
+        }
         return e;
     }
     /// <summary>打开布局面板时清掉所有进行中的按住 / 拖动状态，避免面板下方的控件继承一次残留的按下。</summary>
     void OpenLayout()
     {
         if (UiOverlayVisible || Busy) return;
-        layoutOpen = true; held = click = seeking = editorScrub = false;
-        trackHelpWHeld = false; hoveredEditTrack = null;
+        layoutOpen = true;
+        held = click = seeking = editorScrub = false;
+        trackHelpWHeld = false;
+        hoveredEditTrack = null;
     }
-    void CloseLayout() { layoutOpen = false; SaveSettings(); held = click = false; }
+    void CloseLayout()
+    {
+        layoutOpen = false;
+        SaveSettings();
+        held = click = false;
+    }
     /// <summary>UI 缩放限定在 .75–2.5；先取改动前的 viewport，改完再重投影指针。</summary>
     void SetUiScale(double value)
     {
         var before = Viewport();
         LayoutOptions.UiScale = Math.Clamp(value, .75, 2.5);
-        ReprojectPointer(before); SaveSettings();
+        ReprojectPointer(before);
+        SaveSettings();
     }
     void ReprojectPointer(UiViewport previous)
     {
@@ -187,8 +222,13 @@ public sealed partial class Viewer
         {
             if (e.Type is 0x400 or 0x401 or 0x402)
             {
-                mouseX = e.X; mouseY = e.Y;
-                if (e.Type == 0x401 && e.Button == 1 && layoutOpen) { held = true; click = true; }
+                mouseX = e.X;
+                mouseY = e.Y;
+                if (e.Type == 0x401 && e.Button == 1 && layoutOpen)
+                {
+                    held = true;
+                    click = true;
+                }
                 if (e.Type == 0x402 && e.Button == 1) held = false;
             }
             if (e.Type == 0x300 && e.Repeat == 0 && e.Scan == 41 && layoutOpen) CloseLayout();
@@ -199,13 +239,16 @@ public sealed partial class Viewer
             if (e.Type == 0x400)
             {
                 // 增量以拖动开始时实际显示的几何为基准，而不是偏好值；否则被 clamp 过的面板会在按下瞬间跳动。
-                mouseX = e.X; mouseY = e.Y; var d = WindowSize();
+                mouseX = e.X;
+                mouseY = e.Y;
+                var d = WindowSize();
                 if (resizingLayout == 1) LayoutOptions.SetSideWidth(editorMode, true, resizeShownWidth + e.X - resizeStartX);
                 else if (resizingLayout == 2) LayoutOptions.SetSideWidth(editorMode, false, resizeShownWidth - e.X + resizeStartX);
                 else if (resizingLayout == 4) LayoutOptions.TrackLabelWidth = Math.Clamp(resizeShownWidth + e.X - resizeStartX, 180, 500);
                 else if (editorMode) LayoutOptions.EditorPreviewFraction = WorkspaceGeometry.Fraction(resizeShownSplit + e.Y - resizeStartY, d.H, true);
                 else LayoutOptions.ViewerPreviewFraction = WorkspaceGeometry.Fraction(resizeShownSplit + e.Y - resizeStartY, d.H, false);
-                click = false; return true;
+                click = false;
+                return true;
             }
             if (e.Type == 0x300 && e.Scan == 41)
             {
@@ -214,18 +257,35 @@ public sealed partial class Viewer
                 else if (resizingLayout == 4) LayoutOptions.TrackLabelWidth = resizeStartWidth;
                 else if (editorMode) LayoutOptions.EditorPreviewFraction = resizeStartFraction;
                 else LayoutOptions.ViewerPreviewFraction = resizeStartFraction;
-                EndLayoutResize(); return true;
+                EndLayoutResize();
+                return true;
             }
-            if (e.Type == 0x402 && e.Button == 1) { EndLayoutResize(); return true; }
+            if (e.Type == 0x402 && e.Button == 1)
+            {
+                EndLayoutResize();
+                return true;
+            }
             return e.Type is not (0x100 or Sdl.WindowCloseRequested);
         }
         if (UiOverlayVisible || Busy || dialogOpen || editDrag != null || ImageGestureActive) return false;
         // command + 等号/小键盘加（46/87）放大，command + 减号/小键盘减（45/86）缩小，command + 0（39）复位；步长 .125。
         if (e.Type == 0x300 && e.Repeat == 0 && (e.Modifiers & 0x0CC0) != 0)
         {
-            if (e.Scan is 46 or 87) { SetUiScale(LayoutOptions.UiScale + .125); return true; }
-            if (e.Scan is 45 or 86) { SetUiScale(LayoutOptions.UiScale - .125); return true; }
-            if (e.Scan == 39) { SetUiScale(1); return true; }
+            if (e.Scan is 46 or 87)
+            {
+                SetUiScale(LayoutOptions.UiScale + .125);
+                return true;
+            }
+            if (e.Scan is 45 or 86)
+            {
+                SetUiScale(LayoutOptions.UiScale - .125);
+                return true;
+            }
+            if (e.Scan == 39)
+            {
+                SetUiScale(1);
+                return true;
+            }
         }
         var hoveredSource = dockPanelRects.FirstOrDefault(p => p.Active &&
             (p.Panel is "tools" or "images" or "text") && p.Rect.Contains(mouseX, mouseY));
@@ -238,9 +298,7 @@ public sealed partial class Viewer
                 imageListScroll = Math.Max(0, imageListScroll - (int)Math.Round(e.WheelY));
             else
             {
-                // Use exactly the same content height as DrawEditorTools.
-                // Keeping a second literal here caused controls at the bottom
-                // of expanded Proxy/Window Movement to become unreachable.
+                // 内容高度须与 DrawEditorTools 一致；重复写死高度曾使展开 Proxy 或 Window Movement 后的下方控件无法到达。
                 float contentHeight = EditorToolsContentHeight(proxyPanelExpanded, windowToolsExpanded);
                 float bodyHeight = Math.Max(1, hoveredSource.Rect.H - 30);
                 editorSourceScroll = Math.Clamp(editorSourceScroll - e.WheelY * 36,
@@ -261,20 +319,30 @@ public sealed partial class Viewer
             else if (hit == 4) LayoutOptions.TrackLabelWidth = 224;
             else if (editorMode) LayoutOptions.EditorPreviewFraction = .52;
             else LayoutOptions.ViewerPreviewFraction = .72;
-            SaveSettings(); click = false; return true;
+            SaveSettings();
+            click = false;
+            return true;
         }
         resizingLayout = hit;
-        resizeStartX = e.X; resizeStartY = e.Y; resizeShownSplit = workspaceGeometry.SplitY;
+        resizeStartX = e.X;
+        resizeStartY = e.Y;
+        resizeShownSplit = workspaceGeometry.SplitY;
         resizeShownWidth = hit == 1 ? workspaceGeometry.LeftWidth : hit == 2 ? workspaceGeometry.RightWidth : LayoutOptions.TrackLabelWidth;
         resizeStartWidth = hit == 1 ? LayoutOptions.SideWidth(editorMode, true) : hit == 2 ? LayoutOptions.SideWidth(editorMode, false) : LayoutOptions.TrackLabelWidth;
         resizeStartFraction = editorMode ? LayoutOptions.EditorPreviewFraction : LayoutOptions.ViewerPreviewFraction;
-        held = click = seeking = editorScrub = false; trackHelpWHeld = false; hoveredEditTrack = null;
-        Sdl.SDL_CaptureMouse(true); return true;
+        held = click = seeking = editorScrub = false;
+        trackHelpWHeld = false;
+        hoveredEditTrack = null;
+        Sdl.SDL_CaptureMouse(true);
+        return true;
     }
     /// <summary>结束拖动：释放鼠标捕获并落盘。任何拖动退出路径（抬起、Esc、失焦、Dispose）都必须经过这里，否则捕获会泄漏。</summary>
     void EndLayoutResize()
     {
-        resizingLayout = 0; held = click = false; Sdl.SDL_CaptureMouse(false); SaveSettings();
+        resizingLayout = 0;
+        held = click = false;
+        Sdl.SDL_CaptureMouse(false);
+        SaveSettings();
     }
     /// <summary>分隔条只在没有阻塞覆盖层时绘制；hover 与拖动中只改配色，命中矩形不变。</summary>
     void DrawLayoutGrips()
@@ -292,7 +360,8 @@ public sealed partial class Viewer
         }
         if (!DockingEnabled)
         {
-            Grip(workspaceGeometry.LeftGrip, 1, true); Grip(workspaceGeometry.RightGrip, 2, true);
+            Grip(workspaceGeometry.LeftGrip, 1, true);
+            Grip(workspaceGeometry.RightGrip, 2, true);
             Grip(workspaceGeometry.HorizontalGrip, 3, false);
         }
         if (editorMode && editor != null && trackLabelGrip.H > 0) Grip(trackLabelGrip, 4, true);
@@ -303,12 +372,17 @@ public sealed partial class Viewer
     /// </summary>
     void DrawLayout(int w, int h)
     {
-        if (!DockingEnabled) { DrawClassicLayout(w, h); return; }
+        if (!DockingEnabled)
+        {
+            DrawClassicLayout(w, h);
+            return;
+        }
         if (!LayoutVisible) return;
         using var fade = Canvas.Opacity(layoutAlpha);
         Canvas.Fill(new(0, 0, w, h), Color.Hex(0, .88f));
         Rect r = new(w / 2f - 365, h / 2f - 345, 730, 690);
-        Canvas.Fill(r, panel); Canvas.Border(r, soft);
+        Canvas.Fill(r, panel);
+        Canvas.Border(r, soft);
         Text(L.Get("LAYOUT / UI SCALE"), r.X + 26, r.Y + 22, 22, white);
         layoutInput = true;
         try
@@ -321,7 +395,12 @@ public sealed partial class Viewer
             if (Button("150%", new(r.X + 564, r.Y + 68, 130, 34))) SetUiScale(1.5);
             Text(L.Get("Follow display DPI"), r.X + 26, r.Y + 125, 15, white);
             if (Button(LayoutOptions.FollowDisplayScale ? L.Get("ON") : L.Get("OFF"), new(r.X + 248, r.Y + 114, 194, 32), active: LayoutOptions.FollowDisplayScale))
-            { var before = Viewport(); LayoutOptions.FollowDisplayScale = !LayoutOptions.FollowDisplayScale; ReprojectPointer(before); SaveSettings(); }
+            {
+                var before = Viewport();
+                LayoutOptions.FollowDisplayScale = !LayoutOptions.FollowDisplayScale;
+                ReprojectPointer(before);
+                SaveSettings();
+            }
             var vp = Viewport();
             Text(vp.FitLimited ? L.Get("Zoom limited to keep controls visible. Enlarge the window for more zoom.") : L.Get("Ctrl/Cmd +/-: scale. Ctrl/Cmd+0: reset. Mouse coordinates follow the same scale."),
                 r.X + 26, r.Y + 163, 12, vp.FitLimited ? soft : muted, max: 678);
@@ -333,7 +412,8 @@ public sealed partial class Viewer
                     workspaceManager.ResetCurrent();
                     if (editorMode) LayoutOptions.EditorPreviewFraction = new[] { .82, .52, .18 }[i];
                     else LayoutOptions.ViewerPreviewFraction = new[] { .82, .60, .25 }[i];
-                    SaveSettings(); click = false;
+                    SaveSettings();
+                    click = false;
                 }
             Text(L.Get("Drag side dividers to resize panels; drag the bar below the preview to resize it."), r.X + 26, r.Y + 246, 13, muted, max: 678);
             Text(L.Get("Double-click a divider to reset it. Esc cancels a resize. Layout is saved per device."), r.X + 26, r.Y + 270, 13, muted, max: 678);
@@ -341,7 +421,10 @@ public sealed partial class Viewer
             int[] sizes = [320, 640, 1280, 1920];
             for (int i = 0; i < sizes.Length; i++)
                 if (Button(sizes[i].ToString(), new(r.X + 248 + i * 112, r.Y + 305, 104, 34), active: Current.Project.RenderWidth == sizes[i]))
-                    { Current.Project.RenderWidth = sizes[i]; SaveSettings(); }
+                {
+                    Current.Project.RenderWidth = sizes[i];
+                    SaveSettings();
+                }
             Text(L.Get("Preview panel size and UI scale do not change song geometry or MP4 dimensions."), r.X + 26, r.Y + 360, 13, muted, max: 678);
             Text(L.Get("Scene resolution is separate: higher settings use more GPU memory."), r.X + 26, r.Y + 385, 13, muted, max: 678);
             Text(L.Get("Focus a detached window, then use Ctrl/Cmd +/- or 0 for its own UI scale."),
@@ -363,10 +446,19 @@ public sealed partial class Viewer
             if (Button(L.Get("LOAD WORKSPACE"), new(r.X + 252, r.Y + 568, 218, 34))) OpenWorkspacePresetName(false);
             if (Button(L.Get("RESTORE DEFAULT LAYOUT"), new(r.X + 26, r.Y + 620, 150, 40))) ResetCurrentWorkspace();
             if (Button(L.Get("RESET ALL"), new(r.X + 184, r.Y + 620, 150, 40)))
-            { var before = Viewport(); preferences.Workspace = new(); ResetDockWorkspaces(); ReprojectPointer(before); SaveSettings(); }
+            {
+                var before = Viewport();
+                preferences.Workspace = new();
+                ResetDockWorkspaces();
+                ReprojectPointer(before);
+                SaveSettings();
+            }
             if (Button(L.Get("SHOW HIDDEN"), new(r.X + 342, r.Y + 620, 150, 40))) RestoreHiddenPanels();
             if (Button(L.Get("DONE"), new(r.X + 500, r.Y + 620, 194, 40), primary: true)) CloseLayout();
         }
-        finally { layoutInput = false; }
+        finally
+        {
+            layoutInput = false;
+        }
     }
 }

@@ -1,3 +1,5 @@
+// 根据窗口动作采样结果呈现独立的原生预览窗口。
+
 using KuroakiGimmick.Core;
 using KuroakiGimmick.Core.Windows;
 using KuroakiGimmick.Native;
@@ -23,14 +25,23 @@ public sealed class NativeWindowPreview : IDisposable
     readonly nint owner;
     readonly Dictionary<int, Entry> windows = [];
     string orderKey = "";
-    /// 构造时记下宿主窗口所在显示器的桌面矩形，作为所有窗口坐标的参考系；不随后续换屏更新。
+    /// <summary>构造时记录宿主窗口所在显示器的桌面矩形，作为所有窗口坐标的参考系；不随后续换屏更新。</summary>
     public Sdl.IntRect Bounds { get; }
+    /// <summary>当前是否有原生预览窗口。</summary>
     public bool HasWindows => windows.Count > 0;
+    /// <summary>为给定宿主和设备建立窗口动作预览。</summary>
+    /// <param name="gpu">持有渲染资源的 GPU 设备。</param>
+    /// <param name="owner">宿主窗口的 SDL 句柄。</param>
     public NativeWindowPreview(GpuDevice gpu, nint owner)
     {
-        this.gpu = gpu; this.owner = owner;
-        Sdl.Require(Sdl.SDL_GetDisplayBounds(Sdl.SDL_GetDisplayForWindow(owner), out var b)); Bounds = b;
+        this.gpu = gpu;
+        this.owner = owner;
+        Sdl.Require(Sdl.SDL_GetDisplayBounds(Sdl.SDL_GetDisplayForWindow(owner), out var b));
+        Bounds = b;
     }
+    /// <summary>检查事件窗口是否属于该预览实例。</summary>
+    /// <param name="id">SDL 窗口 ID。</param>
+    /// <returns>该 ID 已在窗口动作预览中登记时为 true。</returns>
     public bool Owns(uint id) => windows.Values.Any(w => Sdl.SDL_GetWindowID(w.Handle) == id);
     /// <summary>
     /// 把这一帧的窗口姿态同步到真实窗口：多出来的窗口先关，缺的按需创建，其余只下发变化的属性。
@@ -38,6 +49,11 @@ public sealed class NativeWindowPreview : IDisposable
     /// 姿态坐标是 16:9 参考矩形内的归一化值（X/Y 为中心点），最多处理 64 个窗口；
     /// 非有限数值直接跳过，不去夹紧成 0。
     /// </summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
+    /// <param name="poses">采样后的窗口姿态。</param>
+    /// <param name="canvas">提交绘制命令的画布。</param>
+    /// <param name="renderer">合成场景的渲染器。</param>
     public void Present(Session session, double time, IReadOnlyList<WindowPose> poses, Canvas canvas, SceneRenderer renderer)
     {
         double cw = Math.Min(Bounds.w, Bounds.h * 16.0 / 9), ch = cw * 9 / 16;
@@ -53,28 +69,53 @@ public sealed class NativeWindowPreview : IDisposable
                 nint handle = Sdl.CreateGpuWindow(p.Title, 640, 360, Sdl.SDL_WINDOW_HIDDEN | Sdl.SDL_WINDOW_HIGH_PIXEL_DENSITY);
                 if (handle == 0) throw new InvalidOperationException(Sdl.Error);
                 if (!Sdl.SDL_ClaimWindowForGPUDevice(gpu.Handle, handle))
-                { Sdl.SDL_DestroyWindow(handle); throw new InvalidOperationException(Sdl.Error); }
-                entry = new(handle); windows.Add(p.Id, entry);
+                {
+                    Sdl.SDL_DestroyWindow(handle);
+                    throw new InvalidOperationException(Sdl.Error);
+                }
+                entry = new(handle);
+                windows.Add(p.Id, entry);
                 // 帧率由编辑器宿主窗口控制。附加窗口不能各自再等一个刷新间隔，否则每多一个窗口就多掉一帧，
                 // 所以支持 Immediate 就用 Immediate，不支持才退回 VSync。
                 var mode = Sdl.SDL_WindowSupportsGPUPresentMode(gpu.Handle, handle, Sdl.GpuPresentMode.Immediate)
                     ? Sdl.GpuPresentMode.Immediate : Sdl.GpuPresentMode.VSync;
                 Sdl.Require(Sdl.SDL_SetGPUSwapchainParameters(gpu.Handle, handle, Sdl.GpuSwapchainComposition.Sdr, mode));
             }
-            if (entry.Title != p.Title) { Sdl.Require(Sdl.SDL_SetWindowTitle(entry.Handle, p.Title)); entry.Title = p.Title; }
-            if (entry.Border != p.Border) { Sdl.Require(Sdl.SDL_SetWindowBordered(entry.Handle, p.Border)); entry.Border = p.Border; }
+            if (entry.Title != p.Title)
+            {
+                Sdl.Require(Sdl.SDL_SetWindowTitle(entry.Handle, p.Title));
+                entry.Title = p.Title;
+            }
+            if (entry.Border != p.Border)
+            {
+                Sdl.Require(Sdl.SDL_SetWindowBordered(entry.Handle, p.Border));
+                entry.Border = p.Border;
+            }
             if (!p.Visible)
             {
-                if (entry.Visible) Sdl.Require(Sdl.SDL_HideWindow(entry.Handle)); entry.Visible = false; continue;
+                if (entry.Visible) Sdl.Require(Sdl.SDL_HideWindow(entry.Handle));
+                entry.Visible = false;
+                continue;
             }
             // 这里的安全夹紧只影响呈现，不回写编写的数值。极端的离屏编排仍原样保存在文档里。
             int w = (int)Math.Clamp(Math.Round(p.Width * cw), 16, Math.Min(8192, cw * 4));
             int h = (int)Math.Clamp(Math.Round(p.Height * ch), 16, Math.Min(8192, ch * 4));
             int x = (int)Math.Clamp(Math.Round(ox + p.X * cw - w / 2.0), -100000, 100000);
             int y = (int)Math.Clamp(Math.Round(oy + p.Y * ch - h / 2.0), -100000, 100000);
-            if (w != entry.W || h != entry.H) { Sdl.Require(Sdl.SDL_SetWindowSize(entry.Handle, w, h)); entry.W = w; entry.H = h; }
-            if (x != entry.X || y != entry.Y) { Sdl.Require(Sdl.SDL_SetWindowPosition(entry.Handle, x, y)); entry.X = x; entry.Y = y; }
-            if (!entry.Visible) Sdl.Require(Sdl.SDL_ShowWindow(entry.Handle)); entry.Visible = true;
+            if (w != entry.W || h != entry.H)
+            {
+                Sdl.Require(Sdl.SDL_SetWindowSize(entry.Handle, w, h));
+                entry.W = w;
+                entry.H = h;
+            }
+            if (x != entry.X || y != entry.Y)
+            {
+                Sdl.Require(Sdl.SDL_SetWindowPosition(entry.Handle, x, y));
+                entry.X = x;
+                entry.Y = y;
+            }
+            if (!entry.Visible) Sdl.Require(Sdl.SDL_ShowWindow(entry.Handle));
+            entry.Visible = true;
             Sdl.Require(Sdl.SDL_GetWindowSizeInPixels(entry.Handle, out int pw, out int ph));
             if (pw <= 0 || ph <= 0) continue;
             canvas.Begin(null, pw, ph, w, h, Color.Hex(0x050507));
@@ -85,7 +126,8 @@ public sealed class NativeWindowPreview : IDisposable
                 canvas.Line(0, 0, w, h, 2, Color.Hex(0x5A2638));
                 canvas.Line(w, 0, 0, h, 2, Color.Hex(0x5A2638));
             }
-            canvas.Flush(); gpu.Submit(true, entry.Handle);
+            canvas.Flush();
+            gpu.Submit(true, entry.Handle);
         }
         string key = string.Join(",", poses.Where(p => p.Visible).OrderBy(p => p.Z).Select(p => p.Id));
         if (key != orderKey)
@@ -103,8 +145,14 @@ public sealed class NativeWindowPreview : IDisposable
     void Close(int id)
     {
         if (!windows.Remove(id, out var e)) return;
-        gpu.Submit(); Sdl.Require(Sdl.SDL_WaitForGPUSwapchain(gpu.Handle, e.Handle));
-        Sdl.SDL_ReleaseWindowFromGPUDevice(gpu.Handle, e.Handle); Sdl.SDL_DestroyWindow(e.Handle);
+        gpu.Submit();
+        Sdl.Require(Sdl.SDL_WaitForGPUSwapchain(gpu.Handle, e.Handle));
+        Sdl.SDL_ReleaseWindowFromGPUDevice(gpu.Handle, e.Handle);
+        Sdl.SDL_DestroyWindow(e.Handle);
     }
-    public void Dispose() { foreach (int id in windows.Keys.ToArray()) Close(id); }
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        foreach (int id in windows.Keys.ToArray()) Close(id);
+    }
 }

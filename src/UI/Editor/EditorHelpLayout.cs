@@ -1,3 +1,5 @@
+// 将编辑器帮助内容排版为可绘制、可滚动的区域。
+
 using System.Globalization;
 using System.Text;
 
@@ -86,8 +88,16 @@ internal static class EditorHelpLayout
         {
             bool wordElement = element.Length == 1 &&
                 (char.IsAsciiLetterOrDigit(element[0]) || element[0] is '_' or '.' or '/' or '-');
-            if (wordElement) { word.Append(element); continue; }
-            if (word.Length > 0) { yield return word.ToString(); word.Clear(); }
+            if (wordElement)
+            {
+                word.Append(element);
+                continue;
+            }
+            if (word.Length > 0)
+            {
+                yield return word.ToString();
+                word.Clear();
+            }
             yield return element;
         }
         if (word.Length > 0) yield return word.ToString();

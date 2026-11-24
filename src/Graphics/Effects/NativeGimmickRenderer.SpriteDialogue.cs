@@ -29,7 +29,9 @@ public sealed partial class NativeGimmickRenderer
             (float)(sprite.Width * scale), (float)(sprite.Height * scale)), Color.White.Alpha(alpha));
     }
 
-    /// <summary>o_pictured_2_pics is at depth 750, behind the source depth701 ambient particles and depth700 jacket.</summary>
+    /// <summary>o_pictured_2_pics 位于深度 750，在深度 701 的环境粒子及深度 700 的曲绘之后。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void DrawSpriteDialogueBackground(Session session, double time)
     {
         if (PreparePictured(session) is not { } state) return;
@@ -38,7 +40,9 @@ public sealed partial class NativeGimmickRenderer
         canvas.Flush();
     }
 
-    /// <summary>Negative-depth normal Draw events, after source normal HUD and before Draw GUI Begin's post pass.</summary>
+    /// <summary>负深度普通 Draw 事件位于常规 HUD 之后、Draw GUI Begin 后处理之前。</summary>
+    /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
+    /// <param name="time">采样时刻，单位为秒。</param>
     public void DrawSpriteDialogueForeground(Session session, double time)
     {
         if (PreparePictured(session) is not { } state) return;
@@ -57,9 +61,7 @@ public sealed partial class NativeGimmickRenderer
             if (index > 0 && index < speech.Length + 1)
             {
                 string text = speech[(int)index - 1];
-                // Source texture-page crops are width2 for letters and width1
-                // for blank space/comma frames. font_add_sprite adds sep2 to
-                // every glyph, including the final one in string_width.
+                // 源纹理页中的字母裁剪宽 2，空格和逗号帧宽 1；font_add_sprite 对每个字形加间距 2，string_width 包含末字间距。
                 double Shift(char letter) => letter is ' ' or ',' ? 3 : 4;
                 double pen = 186 - text.Sum(Shift) / 2;
                 foreach (char letter in text)

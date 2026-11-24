@@ -8,10 +8,15 @@ namespace KuroakiGimmick.Core;
 /// </summary>
 public sealed class GimmickShaderMode
 {
+    /// <summary>该 pass 使用的 shader 键。</summary>
     public string Shader { get; set; } = "";
+    /// <summary>按 uniform 名称提供一至四个标量表达式。</summary>
     public Dictionary<string, GimmickScalar[]> Uniforms { get; set; } = [];
+    /// <summary>从 sampler 名称到已声明精灵或纹理的映射。</summary>
     public Dictionary<string, string> Samplers { get; set; } = [];
+    /// <summary>使用线性过滤的 sampler 名称。</summary>
     public string[] LinearSamplers { get; set; } = [];
+    /// <summary>使用边缘钳制寻址的 sampler 名称。</summary>
     public string[] ClampSamplers { get; set; } = [];
 }
 
