@@ -34,6 +34,7 @@ public sealed partial class Viewer
     Guid? activeMarker;
     ChartExportKind exportKind;
     ChartExportPlan? chartExportPlan;
+    (string FileName, Action Retry)? imageSaveConflict;
     Task<ChartExportPlan>? chartExportPrepare;
     Task? chartExportWrite;
     CancellationTokenSource? chartExportCancellation;
@@ -260,12 +261,14 @@ public sealed partial class Viewer
     {
         if (!WorkflowVisible)
         {
+            imageSaveConflict = null;
             sourceOwner = null; sourceVsm = sourceVsp = null;
             return;
         }
         using var fade = Canvas.Opacity(workflowAlpha);
         Canvas.Clip(null); Canvas.Fill(new(0, 0, w, h), Color.Hex(0, .88f));
         if (displayedWorkflow == "source") { DrawSourceEditor(w, h); return; }
+        if (displayedWorkflow == "save-image-conflict") { DrawImageSaveConflict(w, h); return; }
 #if !KG_MOBILE && !KG_SWITCH
         if (displayedWorkflow == "chart-size-warning") { DrawChartSizeWarning(w, h); return; }
 #endif
@@ -280,6 +283,27 @@ public sealed partial class Viewer
             var lines = EditorHelpLayout.Wrap(workflowError, box.W - 48, s => fonts.Measure(s, 13)).Take(2).ToArray();
             for (int i = 0; i < lines.Length; i++) Text(lines[i], box.X + 24, box.Y + box.H - 105 + i * 20, 13, soft);
         }
+    }
+
+    void DrawImageSaveConflict(int w, int h)
+    {
+        if (imageSaveConflict is not { } conflict) return;
+        float width = Math.Min(600, w - 32);
+        var box = new Rect((w - width) / 2, (h - 210) / 2, width, 210);
+        Canvas.Fill(box, panel); Canvas.Border(box, soft);
+        Text(L.Get("CONFLICTING IMAGE FILENAMES"), box.X + 20, box.Y + 20, 19, white, max: width - 40);
+        Text(conflict.FileName, box.X + 20, box.Y + 55, 14, soft, max: width - 40);
+        var lines = EditorHelpLayout.Wrap(L.Get("Force save gives the conflicting images distinct filenames and updates their references."),
+            width - 40, s => fonts.Measure(s, 13));
+        int row = 0;
+        foreach (string lineText in lines.Take(3)) Text(lineText, box.X + 20, box.Y + 84 + row++ * 18, 13, muted);
+        float buttonWidth = (width - 50) / 2;
+        if (WorkflowButton(L.Get("FORCE SAVE"), new(box.X + 20, box.Y + 155, buttonWidth, 35), primary: true))
+        {
+            workflow = "";
+            conflict.Retry();
+        }
+        if (WorkflowButton(L.Get("CANCEL"), new(box.X + 30 + buttonWidth, box.Y + 155, buttonWidth, 35))) workflow = "";
     }
     void DrawAddGimmick(Rect box)
     {

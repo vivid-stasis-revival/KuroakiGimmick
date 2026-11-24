@@ -56,13 +56,12 @@ public sealed partial class EditorDocument
     }
 
     /// <summary>删除图片声明以及所有明确属于该图片的 VSM 事件。一次 Change 完成，因此 Undo 会把两边一起恢复。</summary>
-    public void DeleteImage(CustomImages.Item item)
+    public void DeleteImage(string id)
     {
-        RequireImage(item.Id);
-        Change("Delete image: " + item.Id, () =>
+        Change("Delete image: " + id, () =>
         {
-            Images.Remove(item);
-            Vsm.DeleteImageEvents(item.Id);
+            Images.Remove(id);
+            Vsm.DeleteImageEvents(id);
         });
     }
 }

@@ -25,43 +25,48 @@ public sealed partial class Viewer
         return value + "...";
     }
     /// <summary>
-    /// 左侧 image 源列表，只列 VSP 里声明过的 id。每行带首帧缩略图（按 Frames 取横向切片的第一格）。
+    /// 左侧图片列表以 VSP 声明为准，资源缺失时仍可选中并删除。可加载的图片显示首帧缩略图。
     /// HIDE / LOCK 只影响编辑期的画布显示与可选中性，不写进文档，场景渲染与导出不受影响。
     /// </summary>
     void DrawImageSources(Rect r)
     {
         EnsureImageModel();
         if (EButton(L.Get("+ IMAGE / DROP IMAGE"), new(r.X, r.Y, r.W, 30), primary: true, enabled: !Busy)) ChooseImageImport();
-        var items = Current.Images.Items.Where(i => declaredImageIds.Contains(i.Id)).ToArray();
-        Text(items.Length + L.Get(" IMAGE OBJECTS"), r.X + 5, r.Y + 40, 12, muted);
+        var resources = Current.Images.Items.ToDictionary(item => item.Id, StringComparer.Ordinal);
+        var ids = Current.Images.Items.Select(item => item.Id).Where(declaredImageIds.Contains)
+            .Concat(declaredImageIds.Where(id => !resources.ContainsKey(id))).ToArray();
+        Text(ids.Length + L.Get(" IMAGE OBJECTS"), r.X + 5, r.Y + 40, 12, muted);
         float listY = r.Y + 64, bottom = r.Y + r.H - 42; int visible = Math.Max(1, (int)((bottom - listY) / 61));
-        imageListScroll = Math.Clamp(imageListScroll, 0, Math.Max(0, items.Length - visible));
+        imageListScroll = Math.Clamp(imageListScroll, 0, Math.Max(0, ids.Length - visible));
         Canvas.Clip(new(r.X, listY, r.W, Math.Max(1, bottom - listY)));
-        for (int index = imageListScroll; index < Math.Min(items.Length, imageListScroll + visible); index++)
+        for (int index = imageListScroll; index < Math.Min(ids.Length, imageListScroll + visible); index++)
         {
-            var item = items[index]; float y = listY + (index - imageListScroll) * 61;
-            bool selected = selectedImageId == item.Id;
+            string id = ids[index]; float y = listY + (index - imageListScroll) * 61;
+            bool selected = selectedImageId == id;
             var box = new Rect(r.X, y, r.W, 58); Canvas.Fill(box, selected ? Mix(Theme.PanelRaised, Theme.Accent, .3f) : Theme.PanelAlt);
             Canvas.Border(box, selected ? soft : line);
-            var texture = Renderer.AuthoringImageTexture(Current, item.Asset);
-            if (texture != null)
+            Text(ImageShortText(id, r.W - 58), r.X + 50, y + 9, 12, white, true);
+            if (resources.TryGetValue(id, out var item))
             {
-                float fit = Math.Min(36f / (item.Asset.Width / (float)item.Frames), 36f / item.Asset.Height);
-                Canvas.Quad(texture, new(r.X + 6, y + 10, item.Asset.Width / (float)item.Frames * fit, item.Asset.Height * fit),
-                    Color.White, new(0, 0, 1f / item.Frames, 1));
+                if (Renderer.AuthoringImageTexture(Current, item.Asset) is { } texture)
+                {
+                    float fit = Math.Min(36f / (item.Asset.Width / (float)item.Frames), 36f / item.Asset.Height);
+                    Canvas.Quad(texture, new(r.X + 6, y + 10, item.Asset.Width / (float)item.Frames * fit, item.Asset.Height * fit),
+                        Color.White, new(0, 0, 1f / item.Frames, 1));
+                }
+                if (EButton(hiddenImageItems.Contains(id) ? L.Get("SHOW") : L.Get("HIDE"), new(r.X + 50, y + 29, 53, 22), key: "image-visible:" + id))
+                { if (!hiddenImageItems.Add(id)) hiddenImageItems.Remove(id); }
+                if (EButton(lockedImageItems.Contains(id) ? L.Get("UNLOCK") : L.Get("LOCK"), new(r.X + 109, y + 29, 65, 22), key: "image-lock:" + id))
+                { if (!lockedImageItems.Add(id)) lockedImageItems.Remove(id); }
             }
-            Text(ImageShortText(item.Id, r.W - 58), r.X + 50, y + 9, 12, white, true);
-            if (EButton(hiddenImageItems.Contains(item.Id) ? L.Get("SHOW") : L.Get("HIDE"), new(r.X + 50, y + 29, 53, 22), key: "image-visible:" + item.Id))
-            { if (!hiddenImageItems.Add(item.Id)) hiddenImageItems.Remove(item.Id); }
-            if (EButton(lockedImageItems.Contains(item.Id) ? L.Get("UNLOCK") : L.Get("LOCK"), new(r.X + 109, y + 29, 65, 22), key: "image-lock:" + item.Id))
-            { if (!lockedImageItems.Add(item.Id)) lockedImageItems.Remove(item.Id); }
+            else Text(L.Get("Image resource unavailable"), r.X + 50, y + 33, 11, muted, max: r.W - 58);
             if (click && !Busy && !UiOverlayVisible && box.Contains(mouseX, mouseY))
-            { SelectImageObject(item.Id); FocusImageTrack(item.Id, ImageEditBeat); click = false; }
+            { SelectImageObject(id); FocusImageTrack(id, ImageEditBeat); click = false; }
         }
         Canvas.Clip(null);
-        if (items.Length == 0) Text(L.Get("Drop an image to begin."), r.X + 5, listY + 20, 12, muted, max: r.W - 10);
-        Text(L.Get("HIDE / LOCK affect editing only."), r.X + 5, bottom + 6, 10, muted, max: r.W - 10);
-        Text(L.Get("Scene / exports stay unchanged."), r.X + 5, bottom + 23, 10, muted, max: r.W - 10);
+        if (ids.Length == 0) Text(L.Get("Drop an image to begin."), r.X + 5, listY + 20, 12, muted, max: r.W - 10);
+        if (EButton(L.Get("DELETE IMAGE"), new(r.X, bottom + 6, r.W, 30), enabled: selectedImageId != null && !Busy && !ImageGestureActive))
+            ImageAction(DeleteSelectedImage);
     }
     /// <summary>
     /// image 检视面板。显示值做过换算：scale 与 alpha 以百分比显示（存的是倍率 / 0~1），X/Y 与旋转是逻辑单位和度。
@@ -148,7 +153,8 @@ public sealed partial class Viewer
         }, L.Get("FRAME VIEW"), FrameImageObject, leftEnabled: Can(ImageChannels.Scale));
         Pair(L.Get("LOCK RATIO"), () => imageAspectLock = !imageAspectLock, L.Get("PATH LINES"), () => imagePathVisible = !imagePathVisible, imageAspectLock, imagePathVisible);
         Pair(L.Get("LINK JOINTS"), () => imageLinkNeighbors = !imageLinkNeighbors, L.Get("SOLO"), () => imageSolo = !imageSolo, imageLinkNeighbors, imageSolo);
-        Pair(L.Get("REPLACE IMAGE"), ChooseImageReplacement, L.Get("DELETE IMAGE"), DeleteSelectedImage, enabled: !Busy && !ImageGestureActive);
+        Pair(L.Get("REPLACE IMAGE"), ChooseImageReplacement, L.Get("DELETE IMAGE"), DeleteSelectedImage,
+            leftEnabled: ActiveImageItem != null && !Busy && !ImageGestureActive, rightEnabled: !Busy && !ImageGestureActive);
         if (Row(out float rawTracksY) && EButton(L.Get("RAW TRACKS"), new(r.X, rawTracksY, r.W, 27), enabled: !Busy && !ImageGestureActive))
         { expandedImageTracks.Add(id); layoutRevision = -1; imageInspector = false; FocusImageTrack(id, ImageEditBeat); }
         Pair(L.Get("CANVAS"), () => { imageCanvas = true; desktopPreview = false; }, L.Get("SCENE"), () => imageCanvas = false, imageCanvas, !imageCanvas);
@@ -181,15 +187,11 @@ public sealed partial class Viewer
     /// <summary>删除当前图片声明和它的所有图片 mod。撤销由 EditorDocument 的同一个快照同时恢复 VSP 与 VSM。</summary>
     void DeleteSelectedImage()
     {
-        if (editor == null || ActiveImageItem is not { } item) return;
-        string id = item.Id;
-        ImageAction(() =>
-        {
-            editor.DeleteImage(item);
-            hiddenImageItems.Remove(id); lockedImageItems.Remove(id); expandedImageTracks.Remove(id);
-            selectedImageId = null; selectedImageGroup = selectedClip = null; imagePoseTarget = ImagePoseTarget.Initial;
-            imageInspector = false; layoutRevision = -1; inspectorScroll = 0;
-            message = L.Get("Deleted image: ") + id;
-        });
+        if (editor == null || selectedImageId is not { } id) return;
+        editor.DeleteImage(id);
+        hiddenImageItems.Remove(id); lockedImageItems.Remove(id); expandedImageTracks.Remove(id);
+        selectedImageId = null; selectedImageGroup = selectedClip = null; imagePoseTarget = ImagePoseTarget.Initial;
+        imageInspector = false; layoutRevision = -1; inspectorScroll = 0;
+        message = L.Get("Deleted image: ") + id;
     }
 }

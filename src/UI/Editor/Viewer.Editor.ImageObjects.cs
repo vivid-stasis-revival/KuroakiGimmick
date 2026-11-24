@@ -52,7 +52,7 @@ public sealed partial class Viewer
         if (imageModelOwner == editor && imageModelRevision == editor.Revision && ReferenceEquals(imageModelMap, Current.Timeline.Bpm)) return;
         imageModelOwner = editor; imageModelRevision = editor.Revision; imageModelMap = Current.Timeline.Bpm;
         imageSampler = new(editor.Vsm, Current.Timeline.Bpm);
-        declaredImageIds = editor.Images.Ids(); imageGroups.Clear();
+        declaredImageIds = new(editor.Images.DeclaredIds(), StringComparer.Ordinal); imageGroups.Clear();
         if (selectedImageId != null && !declaredImageIds.Contains(selectedImageId))
         { selectedImageId = null; selectedImageGroup = null; imageInspector = false; }
     }

@@ -217,7 +217,7 @@ public sealed partial class EditorDocument
     /// 进程被强杀时恢复数据保留在工程目录的 .kuroaki/tmp 中。这不是跨文件的原子事务，别当成事务来依赖。
     /// 保存只记录对外部素材的引用与设置，绝不复制或修改歌曲目录里的原始音频、封面与图片。
     /// </summary>
-    public string SaveCopy(string path)
+    public string SaveCopy(string path, bool resolveImageNameConflicts = false)
     {
         path = Path.GetFullPath(path);
         if (!path.EndsWith(".sgv.json", StringComparison.OrdinalIgnoreCase)) path += ".sgv.json";
@@ -251,7 +251,7 @@ public sealed partial class EditorDocument
         }
         if (Images.HasContent)
         {
-            string imageText = Images.PrepareSave(working, stem, files, relocated);
+            string imageText = Images.PrepareSave(working, stem, files, relocated, resolveImageNameConflicts);
             p.Images = Path.Combine(working, stem + ".editor.vsp"); p.ImagePathsRelativeToVsp = true;
             files[p.Images] = Encoding.UTF8.GetBytes(imageText);
         }
@@ -285,17 +285,20 @@ public sealed partial class EditorDocument
             if (File.Exists(target) && !savedHashes.ContainsKey(target))
                 throw new IOException("A companion file already exists. Choose a new project name: " + target);
         }
+        string RewriteImages(string text) => VspDocument.Rewrite(text, value =>
+        {
+            string full = Path.GetFullPath(value.Replace('\\', Path.DirectorySeparatorChar), Images.ResourceRoot);
+            return relocated.TryGetValue(full, out var target) ? Path.GetRelativePath(Images.ResourceRoot, target) : value;
+        });
+        string savedImageText = relocated.Count == 0 ? Images.Text : RewriteImages(Images.Text);
+        var savedUndo = relocated.Count == 0 ? null : undo.Select(s => s with { ImageText = RewriteImages(s.ImageText) }).ToArray();
+        var savedRedo = relocated.Count == 0 ? null : redo.Select(s => s with { ImageText = RewriteImages(s.ImageText) }).ToArray();
         ProjectBackups.Write(path, files);
         if (relocated.Count > 0)
         {
-            string RewriteImages(string text) => VspDocument.Rewrite(text, value =>
-            {
-                string full = Path.GetFullPath(value.Replace('\\', Path.DirectorySeparatorChar), Images.ResourceRoot);
-                return relocated.TryGetValue(full, out var target) ? Path.GetRelativePath(Images.ResourceRoot, target) : value;
-            });
-            Images.Restore(RewriteImages(Images.Text));
-            for (int i = 0; i < undo.Count; i++) undo[i] = undo[i] with { ImageText = RewriteImages(undo[i].ImageText) };
-            for (int i = 0; i < redo.Count; i++) redo[i] = redo[i] with { ImageText = RewriteImages(redo[i].ImageText) };
+            Images.Restore(savedImageText);
+            for (int i = 0; i < undo.Count; i++) undo[i] = savedUndo![i];
+            for (int i = 0; i < redo.Count; i++) redo[i] = savedRedo![i];
         }
         // 全部就位之后才更新哈希与四份 clean 基线，Dirty 随即变回 false；任何一步失败都不会走到这里，脏状态原样保留。
         foreach (string target in files.Keys) savedHashes[target] = Hash(target);

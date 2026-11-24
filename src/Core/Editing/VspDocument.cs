@@ -36,12 +36,24 @@ public sealed class VspDocument
     }
     /// <summary>撤销/重做时整份文本回滚到旧快照；staged 里的暂存图片不清除，因为回滚后还可能再被重做引用。</summary>
     public void Restore(string text) => Text = text;
-    /// <summary>ID 在 VSP 中按大小写无关比较，新建 ID 时必须用这个集合判重，否则会与仅大小写不同的已有声明冲突。</summary>
-    public HashSet<string> Ids()
+    /// <summary>新建 ID 时按大小写无关判重，避免产生只有大小写不同的 ID。</summary>
+    public HashSet<string> Ids() => new(DeclaredIds(), StringComparer.OrdinalIgnoreCase);
+
+    internal IEnumerable<string> DeclaredIds()
     {
-        var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (Match m in Regex.Matches(Text, @"(?m)^\s*(?:static|animated)\s*,\s*([^,\r\n]+)")) ids.Add(m.Groups[1].Value.Trim());
-        return ids;
+        string section = "";
+        foreach (Match row in Regex.Matches(Text, @"[^\r\n]+"))
+        {
+            string line = row.Value.Trim();
+            if (line.StartsWith('#')) section = line;
+            else if (section == "#Image" && !line.EndsWith(':') && ImageDeclarationId(line) is { } id) yield return id;
+        }
+    }
+
+    static string? ImageDeclarationId(string line)
+    {
+        string[] fields = line.Split(',', 3, StringSplitOptions.TrimEntries);
+        return fields.Length >= 2 && fields[0] is ("static" or "animated") && fields[1].Length > 0 ? fields[1] : null;
     }
     /// <summary>
     /// 暂存图片的原始文件名快照。Chart Folder 导出只拿这份不可变映射恢复用户拖进来的名字，
@@ -198,7 +210,7 @@ public sealed class VspDocument
     /// 删除一张图片的 VSP 声明。若它是该 layer 的最后一张图，同时移除已经空掉的 Image 标签和 #Layer 声明；
     /// 其它行逐字保留。这里故意不清 staged：撤销后同一暂存资源仍必须能再次保存。
     /// </summary>
-    public void Remove(CustomImages.Item item)
+    public void Remove(string id)
     {
         var rows = Regex.Matches(Text, @"([^\r\n]*)(\r\n|\r|\n|$)").Cast<Match>()
             .Where(m => m.Length > 0).Select(m => (Text: m.Groups[1].Value, Ending: m.Groups[2].Value)).ToList();
@@ -210,16 +222,14 @@ public sealed class VspDocument
             if (trimmed.StartsWith('#')) { section = trimmed; imageLayer = ""; continue; }
             if (section != "#Image" || trimmed.Length == 0 || trimmed.StartsWith("//", StringComparison.Ordinal)) continue;
             if (trimmed.EndsWith(':')) { imageLayer = trimmed[..^1].Trim(); continue; }
-            string[] fields = trimmed.Split(',').Select(x => x.Trim()).ToArray();
-            if (fields.Length >= 4 && fields[0] is ("static" or "animated") &&
-                string.Equals(fields[1], item.Id, StringComparison.OrdinalIgnoreCase))
+            if (ImageDeclarationId(trimmed) == id)
             {
                 matches++; targetLayer = imageLayer; keep[i] = false;
             }
         }
-        if (matches != 1 || targetLayer.Length == 0) throw new InvalidOperationException("Image delete requires one unambiguous VSP declaration.");
+        if (matches != 1) throw new InvalidOperationException("Image delete requires one unambiguous VSP declaration.");
 
-        bool targetLayerStillUsed = false; section = imageLayer = "";
+        bool targetLayerStillUsed = targetLayer.Length == 0; section = imageLayer = "";
         for (int i = 0; i < rows.Count; i++)
         {
             if (!keep[i]) continue;
@@ -227,8 +237,7 @@ public sealed class VspDocument
             if (trimmed.StartsWith('#')) { section = trimmed; imageLayer = ""; continue; }
             if (section != "#Image" || trimmed.Length == 0 || trimmed.StartsWith("//", StringComparison.Ordinal)) continue;
             if (trimmed.EndsWith(':')) { imageLayer = trimmed[..^1].Trim(); continue; }
-            string[] fields = trimmed.Split(',').Select(x => x.Trim()).ToArray();
-            if (imageLayer == targetLayer && fields.Length >= 4 && fields[0] is ("static" or "animated"))
+            if (imageLayer == targetLayer && ImageDeclarationId(trimmed) != null)
             { targetLayerStillUsed = true; break; }
         }
         if (!targetLayerStillUsed)
@@ -282,24 +291,63 @@ public sealed class VspDocument
     /// 随工程另存的 VSP 一律使用相对自身目录的路径，因此整份文档要按新目录重算一遍相对路径。
     /// 只复制本次导入的暂存图片，不会把歌曲目录里既有的图片一并搬走；落盘前用 SHA-256 复核暂存文件未被外部改动。
     /// </summary>
-    public string PrepareSave(string directory, string stem, Dictionary<string, byte[]> files, IReadOnlyDictionary<string, string>? relocated = null)
+    public string PrepareSave(string directory, string stem, Dictionary<string, byte[]> files,
+        Dictionary<string, string>? relocated = null, bool resolveNameConflicts = false)
     {
+        string assets = Path.Combine(directory, stem + ".editor-assets");
+        var occupied = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string target in files.Keys)
+            if (Path.GetDirectoryName(target) == assets) occupied.TryAdd(Path.GetFileName(target), target);
+        if (Directory.Exists(assets))
+            foreach (string entry in Directory.EnumerateFileSystemEntries(assets)) occupied.TryAdd(Path.GetFileName(entry), entry);
+
         return RewriteResources(path =>
         {
-            string target = relocated?.GetValueOrDefault(path) ?? path;
-            if (staged.TryGetValue(path, out var image))
+            if (relocated?.TryGetValue(path, out var moved) == true) return Path.GetRelativePath(directory, moved);
+            if (!staged.TryGetValue(path, out var image)) return Path.GetRelativePath(directory, path);
+
+            string name = OriginalFileName(image);
+            byte[] data = File.ReadAllBytes(path);
+            string sha = Convert.ToHexString(SHA256.HashData(data)).ToLowerInvariant();
+            if (sha != image.Sha256) throw new IOException("Staged image changed: " + image.OriginalPath);
+
+            string Target(string fileName) => occupied.GetValueOrDefault(fileName) ?? Path.Combine(assets, fileName);
+            bool CanUse(string target, out bool needsWrite)
             {
-                // 工程内部仍放 editor-assets，但文件名保留用户拖入时的原名。这样工程重开后导出仍能恢复
-                // dawn_hd_gloom.png，而不是只能看到 SHA-256 或 image-imports/0.png。
-                target = Path.Combine(directory, stem + ".editor-assets", OriginalFileName(image));
-                byte[] data = File.ReadAllBytes(path);
-                string sha = Convert.ToHexString(SHA256.HashData(data)).ToLowerInvariant();
-                if (sha != image.Sha256) throw new IOException("Staged image changed: " + image.OriginalPath);
-                if (files.TryGetValue(target, out var prior) && !prior.AsSpan().SequenceEqual(data))
-                    throw new IOException("Two imported images use the same original filename with different contents: " + Path.GetFileName(target));
-                files[target] = data;
+                needsWrite = false;
+                if (files.TryGetValue(target, out var planned)) return planned.AsSpan().SequenceEqual(data);
+                var existing = new FileInfo(target);
+                if (existing.LinkTarget != null || Directory.Exists(target)) return false;
+                if (!existing.Exists)
+                {
+                    needsWrite = true;
+                    return true;
+                }
+                if (existing.Length != data.LongLength) return false;
+                using var input = existing.OpenRead();
+                return Convert.ToHexString(SHA256.HashData(input)).Equals(sha, StringComparison.OrdinalIgnoreCase);
             }
+
+            string target = Target(name);
+            bool needsWrite;
+            for (int suffix = 2; !CanUse(target, out needsWrite); suffix++)
+            {
+                if (!resolveNameConflicts) throw new ImageSaveConflictException(name);
+                string basis = Path.GetFileNameWithoutExtension(name), extension = Path.GetExtension(name);
+                string alternate = $"{basis}_{suffix}{extension}";
+                if (Encoding.UTF8.GetByteCount(alternate) > 255) alternate = $"image-{sha[..12]}_{suffix}{extension}";
+                target = Target(alternate);
+            }
+            if (needsWrite) files.Add(target, data);
+            occupied[Path.GetFileName(target)] = target;
+            // Keep renamed resources in the live document and its undo history after a successful save.
+            if (relocated != null && Path.GetFileName(target) != name) relocated[path] = target;
             return Path.GetRelativePath(directory, target);
         });
     }
+}
+
+internal sealed class ImageSaveConflictException(string fileName) : IOException("Conflicting image filename: " + fileName)
+{
+    public string FileName { get; } = fileName;
 }

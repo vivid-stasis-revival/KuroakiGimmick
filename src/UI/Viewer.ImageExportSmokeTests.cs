@@ -53,8 +53,72 @@ public sealed partial class Viewer
                 if (!File.ReadAllBytes(output).AsSpan().SequenceEqual(File.ReadAllBytes(original)))
                     throw new InvalidOperationException("Export changed image content.");
             }
+            SmokeImageSaveAndDelete(root, chart, original);
         }
         finally { Directory.Delete(root, true); }
         Console.WriteLine("PASS shared images: repeated import, original filename/case, save deduplication, VSP/Chart Folder exports, root/Assets references and bytes");
+    }
+
+    static void SmokeImageSaveAndDelete(string root, string chart, string original)
+    {
+        void Check(bool ok, string problem)
+        {
+            if (!ok) throw new InvalidOperationException(problem);
+        }
+
+        string second = Path.Combine(root, "other", Path.GetFileName(original));
+        Directory.CreateDirectory(Path.GetDirectoryName(second)!);
+        using (var stream = File.Create(second))
+            new StbImageWriteSharp.ImageWriter().WritePng([255, 0, 0, 255], 1, 1, StbImageWriteSharp.ColorComponents.RedGreenBlueAlpha, stream);
+        using var batch = ImageImportBatch.Prepare([original, second, second]);
+
+        string vsm = Path.ChangeExtension(chart, ".vsm"), vsp = Path.ChangeExtension(chart, ".vsp");
+        const string vsmText = "!obj:obj_custom_gimmick\n0,0,linear,0,1,imgalp_missing,-1\n0,0,linear,0,1,imgalp_shared,-1\n";
+        const string vspText = "#Layer\nshared_layer,1000\n#Image\nshared_layer:\nstatic,missing,unavailable.png,0\nstatic,shared,num2.PNG,0\n";
+        File.WriteAllText(vsm, vsmText);
+        File.WriteAllText(vsp, vspText);
+        File.WriteAllText(Path.Combine(Path.GetDirectoryName(chart)!, "cgmk_config.json"), "{\"JACKET_MANAGE_MODE\":\"normal\"}");
+        var project = new ViewerProject { Chart = chart, Gimmick = vsm, Images = vsp, Profile = "core", RoomPreset = "none", GameUiEnabled = false };
+        var session = new Session(project);
+        var doc = new EditorDocument(session);
+        Check(session.Images.Items.All(item => item.Id != "missing") && doc.Images.DeclaredIds().Contains("missing"), "Missing image declaration could not be selected.");
+        doc.DeleteImage("missing");
+        Check(!doc.Images.Ids().Contains("missing") && doc.Images.Ids().Contains("shared") && doc.Images.Text.Contains("shared_layer,1000")
+            && !doc.Vsm.Text.Contains("imgalp_missing") && doc.Vsm.Text.Contains("imgalp_shared"), "Deleting a missing image changed another image or left its own events.");
+        doc.Undo();
+        Check(doc.Images.Text == vspText && doc.Vsm.Text == vsmText, "Undo did not restore both VSP and VSM.");
+        doc.Redo();
+
+        string[] ids = doc.ImportImages(batch, 4, false).ToArray();
+        string destination = Path.Combine(root, "duplicate.sgv.json");
+        string occupied = Path.Combine(ProjectBackups.WorkingFolder(destination), "duplicate.editor-assets", "num2_2.PNG");
+        Directory.CreateDirectory(Path.GetDirectoryName(occupied)!);
+        File.WriteAllText(occupied, "unrelated existing file");
+        try
+        {
+            doc.SaveCopy(destination);
+            throw new InvalidOperationException("Saving a collision did not request confirmation.");
+        }
+        catch (ImageSaveConflictException ex) { Check(ex.FileName == "num2.PNG", "Wrong image conflict reported."); }
+        Check(doc.Dirty && !File.Exists(destination), "Conflicting save wrote a project or lost the dirty state.");
+
+        doc.SaveCopy(destination, resolveImageNameConflicts: true);
+        doc.SaveCopy(destination);
+        var reopened = new Session(Session.ReadProject(destination, out _), destination);
+        var paths = ids.Select(id => reopened.Images.Items.Single(item => item.Id == id).Asset.Path).ToArray();
+        Check(!doc.Dirty && paths[0] != paths[1] && paths[1] == paths[2] && Path.GetFileName(paths[1]) == "num2_3.PNG",
+            "Force save did not persist distinct paths or deduplicate the shared image.");
+        Check(File.ReadAllBytes(paths[0]).AsSpan().SequenceEqual(File.ReadAllBytes(original))
+            && File.ReadAllBytes(paths[1]).AsSpan().SequenceEqual(File.ReadAllBytes(second))
+            && File.ReadAllText(occupied) == "unrelated existing file", "Force save changed an image or overwrote an existing file.");
+
+        doc.DeleteImage(ids[1]);
+        Check(!doc.Images.Ids().Contains(ids[1]) && doc.Images.Ids().Contains(ids[2]) && File.Exists(paths[1]),
+            "Deleting one image instance broke a shared image resource.");
+        doc.Undo();
+        doc.SaveCopy(destination);
+        Check(File.ReadAllText(doc.Project.Images!).Contains("num2_3.PNG") && File.ReadAllText(vsp) == vspText && File.ReadAllText(vsm) == vsmText,
+            "Undo after force save lost the renamed path or changed source files.");
+        Console.WriteLine("PASS image deletion and force save: missing/shared images, undo/redo, filename conflict, retained bytes and project reopen");
     }
 }

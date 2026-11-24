@@ -290,12 +290,12 @@ public sealed partial class Viewer
         Dialog(true, Path.Combine(dir, filename), paths => SaveEditorAt(paths[0], after));
     }
     /// <summary>Save 与 Save As 共用的成功提交点；只有 SaveCopy 真正完成才更新最近工程。</summary>
-    void SaveEditorAt(string path, Action? after = null)
+    void SaveEditorAt(string path, Action? after = null, bool resolveImageNameConflicts = false)
     {
-        if (editor == null) return;
+        if (editor is not { } document) return;
         try
         {
-            string saved = editor.SaveCopy(path);
+            string saved = document.SaveCopy(path, resolveImageNameConflicts);
             RememberRecentSource(saved);
             // 保存之后再次挂载 / 重新加载时必须用刚写出的伴生文件，而不是导入时的 VSM 路径。
             Current.Project.EditorMarkers = editor.Markers.ToList();
@@ -306,6 +306,16 @@ public sealed partial class Viewer
             Current.Project.ImagePathsRelativeToVsp = editor.Project.ImagePathsRelativeToVsp;
             renderedRevision = -1;
             message = L.Get("Saved editor project: ") + saved; after?.Invoke();
+        }
+        catch (ImageSaveConflictException ex) when (!resolveImageNameConflicts)
+        {
+            imageSaveConflict = (ex.FileName, () =>
+            {
+                if (ReferenceEquals(editor, document)) SaveEditorAt(path, after, resolveImageNameConflicts: true);
+            });
+            transport.SetPlaying(false); held = click = editorScrub = false;
+            workflowError = ""; workflow = displayedWorkflow = "save-image-conflict";
+            motion.Snap("workflow", 0);
         }
         catch (Exception ex) { message = L.Get("Save failed: ") + ex.Message; }
     }

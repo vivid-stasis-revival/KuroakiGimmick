@@ -248,10 +248,6 @@ public sealed partial class NativeGimmickRenderer : IDisposable
         }
         if (!double.IsFinite(frameValue)) return;
         int frame = (int)((frameValue % sprite.Frames.Count + sprite.Frames.Count) % sprite.Frames.Count);
-        if (Image(drawing.Sprite, frame) is not { } texture)
-        {
-            return;
-        }
         double V(string property) => drawing.Value(property, age, session.Timeline, time);
         double x = V("x"), y = V("y");
         double packedColor = drawing.Bindings.TryGetValue("color", out var colorBinding)
@@ -286,6 +282,11 @@ public sealed partial class NativeGimmickRenderer : IDisposable
             return;
         }
         if(Math.Abs(scaleX)<=drawing.MinimumAbsScale || Math.Abs(scaleY)<=drawing.MinimumAbsScale)return;
+        // Invisible movie/animation frames must not decode or upload GPU images.
+        if (Image(drawing.Sprite, frame) is not { } texture)
+        {
+            return;
+        }
         var transform = Matrix3x2.CreateTranslation(-sprite.OriginX, -sprite.OriginY) * Matrix3x2.CreateScale((float)scaleX,
             (float)scaleY) * Matrix3x2.CreateRotation((float)(-(angle % 360) * Math.PI / 180)) * Matrix3x2.CreateTranslation((float)x, (float)y);
         canvas.Polygon(texture, Vector2.Transform(new(0, 0), transform), Vector2.Transform(new(sprite.Width, 0), transform),
