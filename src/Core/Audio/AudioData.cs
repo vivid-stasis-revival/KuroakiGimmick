@@ -39,11 +39,34 @@ public sealed record AudioData(float[] Samples, int Rate, int Channels)
         Console.Error.WriteLine("[KG Audio] engine=legacy (NVorbis for OGG, FFmpeg for other formats)");
         if (Path.GetExtension(path).Equals(".ogg", StringComparison.OrdinalIgnoreCase))
         {
-            using var reader = new NVorbis.VorbisReader(path);
+            using var input = File.OpenRead(path);
+            using var container = new NVorbis.Ogg.ContainerReader(input, closeOnDispose: false);
+            NVorbis.Contracts.IPacketProvider? vorbis = null;
+            container.NewStreamCallback = stream =>
+            {
+                if (vorbis != null) return false;
+                var header = stream.PeekNextPacket();
+                if (header == null) return false;
+                try
+                {
+                    // Ogg 中 Theora 和 Vorbis 各有独立的逻辑流。按低位在前读取 0x01 和 ASCII “vorbis”，保留首包供解码器使用。
+                    const ulong vorbisIdentification = 0x736962726F7601;
+                    if (header.TryPeekBits(56, out int bits) != vorbisIdentification || bits != 56) return false;
+                    vorbis = stream;
+                    return true;
+                }
+                finally
+                {
+                    header.Done();
+                }
+            };
+            if (!container.TryInit() || vorbis == null)
+                throw new InvalidDataException("Ogg file contains no Vorbis audio stream.");
+            using var reader = new NVorbis.StreamDecoder(vorbis);
             int count = ValidateSampleCount(checked(reader.TotalSamples * reader.Channels));
             var samples = new float[count];
             int offset = 0, n;
-            while (offset < samples.Length && (n = reader.ReadSamples(samples, offset, samples.Length - offset)) > 0)
+            while (offset < samples.Length && (n = reader.Read(samples, offset, samples.Length - offset)) > 0)
             {
                 offset += n;
             }
