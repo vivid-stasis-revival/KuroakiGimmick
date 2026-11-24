@@ -43,6 +43,31 @@ public sealed partial class Viewer
                     }
                 }
         }
-        Console.WriteLine("PASS #49 GPU glow: GameMaker bm_max accumulation, 1/5 passes, zero/half/full intensity, 320/640 render widths");
+        // 原版半径以 surface 像素计。亮块的物理尺寸相同时，两种分辨率下的局部光晕应相同。
+        Parameter("g_GlowQuality", 1);
+        Parameter("g_GlowRadius", 12);
+        byte[]? reference = null;
+        foreach (int width in new[] { 320, 640 })
+        {
+            int height = width * 9 / 16;
+            fx.Resize(width, height);
+            source.Resize(width, height);
+            output.Resize(width, height);
+            Canvas.Begin(source, width, height, width, height, Color.Hex(0));
+            Canvas.Fill(new(width / 2 - 4, height / 2 - 4, 8, 8), Color.White);
+            fx.RunGlow(output, source.Texture, layer, 1);
+            byte[] pixels = Canvas.Read(output);
+            var patch = new byte[48 * 48];
+            for (int y = 0; y < 48; y++)
+                for (int x = 0; x < 48; x++)
+                    patch[y * 48 + x] = pixels[((height / 2 - 24 + y) * width + width / 2 - 24 + x) * 4];
+
+            if (patch[24 * 48 + 29] == 0 || patch[24 * 48 + 47] != 0)
+                throw new InvalidOperationException("Glow must reach the neighboring background and leave distant black pixels black.");
+            if (reference != null && !patch.SequenceEqual(reference))
+                throw new InvalidOperationException("Glow radius changed in surface pixels when the render width doubled.");
+            reference = patch;
+        }
+        Console.WriteLine("PASS #49 GPU glow: bm_max accumulation, intensity, local halo and surface-pixel radius at 320/640 widths");
     }
 }

@@ -347,7 +347,8 @@ public sealed class CustomEffects : IDisposable
             {
                 s.Float("g_GlowRadius", radius);
                 s.Float("g_GlowGamma", layer.Number("g_GlowGamma"));
-                s.Vec2("gm_pSurfaceTexelSize", 1.0 / 320, 1.0 / 180);
+                // 原版 layer_end 以 surf_width、surf_height 换算 texel；半径的单位是源纹理像素。
+                s.Vec2("gm_pSurfaceTexelSize", 1.0 / previous.Width, 1.0 / previous.Height);
             });
             Bind(blurred.Texture, 1);
             var acc = i % 2 == 0 ? glowAccumA : glowAccumB;
