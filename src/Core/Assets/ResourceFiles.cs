@@ -26,39 +26,8 @@ public static class ResourceFiles
     /// <returns>通过边界检查的完整路径。</returns>
     /// <exception cref="InvalidDataException">路径不符合相对资源约定，或符号链接逃出根目录。</exception>
     /// <exception cref="FileNotFoundException">所需资源不存在。</exception>
-    public static string ContainedFile(string root, string relative)
-    {
-        if (string.IsNullOrWhiteSpace(relative) || Path.IsPathRooted(relative) || relative.Contains('\\') || relative.Contains(':')
-            || relative.Split('/').Any(part => part is ".." or "." or ""))
-        {
-            throw new InvalidDataException("Expected a relative resource path: " + relative);
-        }
-        var directory = new DirectoryInfo(root);
-        string canonicalRoot = directory.ResolveLinkTarget(true)?.FullName ?? directory.FullName;
-        string current = canonicalRoot;
-        string[] pieces = relative.Split('/');
-        for (int index = 0; index < pieces.Length; index++)
-        {
-            current = Path.Combine(current, pieces[index]);
-            FileSystemInfo item = index == pieces.Length - 1 ? new FileInfo(current) : new DirectoryInfo(current);
-            if (!item.Exists)
-            {
-                throw new FileNotFoundException("Missing resource: " + relative, current);
-            }
-            current = item.ResolveLinkTarget(true)?.FullName ?? item.FullName;
-            string local = Path.GetRelativePath(canonicalRoot, current);
-            if (Path.IsPathRooted(local) || local == ".." || local.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
-            {
-                throw new InvalidDataException("Resource symlink escapes its declared directory: " + relative);
-            }
-        }
-        if (!File.Exists(current))
-        {
-            throw new FileNotFoundException("Missing resource: " + relative, current);
-        }
-        return current;
-    }
-
+    public static string ContainedFile(string root, string relative) =>
+        KenomaGMK.Core.VsbExtraMods.ContainedFile(root, relative);
     /// <summary>按字节上限读取文本；0 字节同样算无效，不把空文件当成缺省配置。</summary>
     /// <param name="path">文本文件路径。</param>
     /// <param name="limit">允许读取的字节上限。</param>

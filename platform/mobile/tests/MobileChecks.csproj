@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework Condition="'$(KuroakiTestFramework)' == ''">net9.0</TargetFramework>
+    <TargetFramework Condition="'$(KuroakiTestFramework)' == ''">net10.0</TargetFramework>
     <TargetFramework Condition="'$(KuroakiTestFramework)' != ''">$(KuroakiTestFramework)</TargetFramework>
     <OutputType>Exe</OutputType>
     <StartupObject>KuroakiGimmick.MobileChecks.Checks</StartupObject>

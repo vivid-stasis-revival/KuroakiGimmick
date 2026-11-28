@@ -1,3 +1,4 @@
+using Uniform = KenomaGMK.SDL3.ShaderUniform;
 // 保留 GLSL 运算表达式，只改写 uniform、sampler 和输入输出声明。
 
 using System.Runtime.InteropServices;
@@ -11,6 +12,8 @@ namespace KuroakiGimmick.Graphics;
 
 internal static unsafe partial class ShaderCompiler
 {
+    internal static readonly KenomaGMK.SDL3.ShaderLibrary SharedLibrary = new(KenomaGMK.SDL3.ShaderCompilationOptions.Load());
+
     internal static bool TargetIosMsl { get; set; }
     // 为既有 HLSL/MSL 校验调用方保留的兼容重载。
     internal static Translation Translate(string source, bool vertex, bool metal) =>

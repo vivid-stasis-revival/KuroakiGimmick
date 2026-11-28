@@ -9,10 +9,13 @@ case "$(uname -s)" in
   *) echo 'Windows: use scripts/build-rustbridge.ps1 instead' >&2; exit 2 ;;
 esac
 # dotnet build (no RID) keeps a JIT fallback build available for fast verification.
-dotnet build -c Release -p:PublishAot=false
-out="bin/Release/net8.0"
+dotnet build -c Release -p:PublishAot=false -p:KenomaBuildNative=true
+out="bin/Release/net10.0"
 mkdir -p "$out"
 cp "rust/kg-native-core/target/release/$name" "$out/$name"
+for native in ThirdParty/KenomaGMK/rust/kenoma-native/target/*/release/libkenoma_native.*; do
+    [ -f "$native" ] && cp "$native" "$out/"
+done
 KG_RUST_BRIDGE=verify dotnet run -c Release --no-build -- --rust-bridge-test
 KG_RUST_ENGINE=verify dotnet run -c Release --no-build -- --rust-engine-test
 KG_RUST_ENGINE=verify dotnet run -c Release --no-build -- --rust-timeline-test

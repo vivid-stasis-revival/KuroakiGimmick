@@ -25,12 +25,101 @@ public sealed unsafe partial class GpuDevice : IDisposable
     /// <summary>本设备需要生成的 shader 字节码格式，由驱动决定；不同后端的字节码不可互换。</summary>
     public GpuShaderFormat ShaderFormat { get; private set; } = GpuShaderFormat.Invalid;
 
+    /// <summary>窗口交换链颜色格式；离屏设备使用 RGBA8。</summary>
+    public uint SwapchainFormat { get; private set; } = Rgba8;
+
     /// <summary>当前设备是否使用 Metal 后端。</summary>
     public bool Metal => Driver.Equals("metal", StringComparison.OrdinalIgnoreCase);
     /// <summary>当前设备是否使用 Direct3D 12 后端。</summary>
     public bool Direct3D12 => Driver.Equals("direct3d12", StringComparison.OrdinalIgnoreCase);
     /// <summary>当前设备是否使用 Vulkan 后端。</summary>
     public bool Vulkan => Driver.Equals("vulkan", StringComparison.OrdinalIgnoreCase);
+
+    // 每个设备单独拥有已登记程序的 GPU 句柄，离屏导出与主窗口使用同一份转换缓存。
+    private readonly Dictionary<string,(ShaderCompiler.Compiled Program,nint Handle)> builtins = [];
+    private string PackDirectory => Path.Combine(KuroakiGimmick.Core.Paths.Assets,"KenomaShaders");
+    bool shaderStartupComplete;
+    internal bool ShaderStartupComplete => shaderStartupComplete;
+
+    private (ShaderCompiler.Compiled Program,nint Handle) LoadStage(string key)
+    {
+        if (builtins.TryGetValue(key,out var existing)) return existing;
+        using var stream = File.OpenRead(Path.Combine(PackDirectory,key+".ksp"));
+        var pack = KenomaGMK.SDL3.PortableShader.Read(stream);
+        var output = pack.Prepare(ShaderCompiler.SharedLibrary,(uint)ShaderFormat);
+        var program = new ShaderCompiler.Compiled(output.Code,output.Entry,output.Uniforms,output.Samplers,"",ShaderFormat);
+        ShaderCompiler.SharedLibrary.RecordShaderPreparation(
+            ShaderCompiler.SharedLibrary.Options.Mode == KenomaGMK.SDL3.ShaderCompilationMode.OnDemand,
+            builtIn: true, unexpected: shaderStartupComplete);
+        var result = (program,Shader.Create(this,program,pack.Vertex, builtIn: true));
+        builtins.Add(key,result);
+        return result;
+    }
+
+    internal (ShaderCompiler.Compiled Program,nint Handle,bool Owned) Stage(string source,bool vertex, bool builtIn)
+    {
+        string key = SwitchShaderPack.Key(source,vertex);
+        if (builtins.TryGetValue(key,out var existing)) return (existing.Program,existing.Handle,false);
+        if (Directory.Exists(PackDirectory) && File.Exists(Path.Combine(PackDirectory,key+".ksp")))
+        {
+            var loaded=LoadStage(key);
+            return (loaded.Program,loaded.Handle,false);
+        }
+        var program=ShaderCompiler.Compile(source,vertex,ShaderFormat);
+        ShaderCompiler.SharedLibrary.RecordShaderPreparation(
+            ShaderCompiler.SharedLibrary.Options.Mode == KenomaGMK.SDL3.ShaderCompilationMode.OnDemand,
+            builtIn, unexpected: shaderStartupComplete);
+        return (program,Shader.Create(this,program,vertex,builtIn),true);
+    }
+
+    private void PrepareStages()
+    {
+        if (ShaderCompiler.SharedLibrary.Options.Mode != KenomaGMK.SDL3.ShaderCompilationMode.Startup || !Directory.Exists(PackDirectory)) return;
+        var timer=System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            var paths = Directory.GetFiles(PackDirectory,"*.ksp");
+            for (int i = 0; i < paths.Length; i++)
+            {
+                LoadStage(Path.GetFileNameWithoutExtension(paths[i]));
+                Console.WriteLine($"[KenomaGMK] Prepared shader {i+1}/{paths.Length}");
+            }
+        }
+        catch { ReleaseStages(); throw; }
+        Console.WriteLine($"[KenomaGMK] {Driver}: {builtins.Count} GPU shaders, cache hits={ShaderCompiler.SharedLibrary.Hits} misses={ShaderCompiler.SharedLibrary.Misses}, {timer.Elapsed.TotalMilliseconds:F2} ms");
+    }
+
+    private void ReleaseStages()
+    {
+        foreach (var item in builtins.Values) SDL_ReleaseGPUShader(Handle,item.Handle);
+        builtins.Clear();
+    }
+
+    public void MarkShaderStartupComplete() => shaderStartupComplete = true;
+
+    internal void PrewarmPipeline(Shader shader, params (BlendFactor Source, BlendFactor Destination)[] descriptions)
+    {
+        shader.Prewarm(descriptions);
+    }
+
+    /// <summary>当前设备实际创建的 Shader、管线及缓存诊断。</summary>
+    public KenomaGMK.SDL3.ShaderLibrary ShaderDiagnostics => ShaderCompiler.SharedLibrary;
+
+    /// <summary>输出本设备当前的真实 Shader 与管线计数；所有数字来自实际创建路径，不参与渲染逻辑。</summary>
+    /// <param name="output">接收诊断行的文本输出；为 null 时使用控制台。</param>
+    public void ReportShaderDiagnostics(TextWriter? output = null)
+    {
+        output ??= Console.Out;
+        var d = ShaderCompiler.SharedLibrary;
+        output.WriteLine(
+            $"[KenomaGMK] shader diagnostics: startup={shaderStartupComplete} builtinStages={builtins.Count} " +
+            $"registered={d.RegisteredShaderStages} prepared={d.PreparedShaderStages} keys={d.UniqueShaderStageKeys} " +
+            $"gpuShaders={d.GpuShaderCreations} pipelines={d.GraphicsPipelineCreations} pipelineCacheHits={d.PipelineCacheHits} " +
+            $"diskHits={d.Hits} memoryHits={d.MemoryHits} conversions={d.BackendConversions} " +
+            $"unexpectedPrep={d.UnexpectedBuiltInShaderPreparations} unexpectedShaders={d.UnexpectedBuiltInShaderCreations} " +
+            $"unexpectedPipelines={d.UnexpectedBuiltInPipelineCreations}");
+    }
+
 
     readonly nint window;
     readonly bool hidden;
@@ -98,6 +187,7 @@ public sealed unsafe partial class GpuDevice : IDisposable
         {
             Driver = GetGpuDriverName(Handle);
             ShaderFormat = SelectShaderFormat(Driver, SDL_GetGPUShaderFormats(Handle));
+            PrepareStages();
         }
         catch
         {
@@ -119,8 +209,9 @@ public sealed unsafe partial class GpuDevice : IDisposable
         {
             Driver = GetGpuDriverName(Handle);
             ShaderFormat = SelectShaderFormat(Driver, SDL_GetGPUShaderFormats(Handle));
-
-            Require(SDL_SetGPUAllowedFramesInFlight(Handle, 2));
+            SwapchainFormat = SDL_GetGPUSwapchainTextureFormat(Handle, window);
+            if (SwapchainFormat == 0) SwapchainFormat = Rgba8;
+            PrepareStages();
             // 隐藏窗口只用于离屏导出：后端支持时走 Immediate，不让 VSync 把导出速度压到刷新率。
             var mode = hidden && SDL_WindowSupportsGPUPresentMode(Handle, window,
                 GpuPresentMode.Immediate) ? GpuPresentMode.Immediate : GpuPresentMode.VSync;
@@ -128,6 +219,7 @@ public sealed unsafe partial class GpuDevice : IDisposable
         }
         catch
         {
+            ReleaseStages();
             DestroyGpuDeviceForWindow(Handle, window);
             Handle = 0;
             throw;
@@ -353,6 +445,7 @@ public sealed unsafe partial class GpuDevice : IDisposable
                 if (slot.Vertex != 0) SDL_ReleaseGPUBuffer(Handle, slot.Vertex);
                 if (slot.Upload != 0) SDL_ReleaseGPUTransferBuffer(Handle, slot.Upload);
             }
+            ReleaseStages();
             DestroyGpuDeviceForWindow(Handle, window);
             Handle = 0;
         }

@@ -90,7 +90,7 @@ public sealed partial class SceneRenderer : IDisposable
 
     // slash_anycol 持续区间每帧只展开当前仍可见的实例；复用列表避免渲染循环反复分配。
     readonly List<(double Time, uint Seed, int Index)> slashInstanceCache = [];
-    Texture? jacketTexture;
+    JacketTexture? jacketTexture;
     string? jacketPath;
     /// <summary>创建场景合成使用的渲染资源与子渲染器。</summary>
     /// <param name="c">提交绘制命令的画布。</param>
@@ -115,6 +115,7 @@ public sealed partial class SceneRenderer : IDisposable
         // 使 lane/音符的 alpha 只被乘一次。把它折进 Basic、或当成冗余删掉，都会让 alpha 被乘两次。
         fieldComposite = new(g, Canvas.VertexSource,
             CompositeFragmentSource);
+        proxyGuideShader = new(g, ProxyVertexSource(true), ProxyGuideFragmentSource);
         scene = new(g, 320, 180);
         field = new(g, 320, 180);
         Final = new(g, 320, 180);
@@ -515,7 +516,7 @@ public sealed partial class SceneRenderer : IDisposable
         windowField?.Dispose();
         proxyShader.Dispose();
         projectiveProxyShader.Dispose();
-        proxyGuideShader?.Dispose();
+        proxyGuideShader.Dispose();
         proxyInspection?.Dispose();
         fieldComposite.Dispose();
     }

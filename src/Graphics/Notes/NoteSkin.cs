@@ -38,6 +38,8 @@ public sealed partial class NoteSkin : IDisposable
     public NoteSkin(Canvas canvas)
     {
         this.canvas = canvas;
+        greenleftStraight = new(canvas.Gpu, Canvas.VertexSource, GreenleftStraightSource);
+        greenleftStraight.Prewarm(GpuDevice.Rgba8, (BlendFactor.One, BlendFactor.Zero));
         Reload();
     }
 
@@ -178,16 +180,8 @@ public sealed partial class NoteSkin : IDisposable
         }
         // obj_note_rendering：精灵原点不对称，当旋转后的原点越过左半边/下半边时，
         // 需要一像素的位置补正才能和原版对齐。这不是"魔数"，去掉会整体偏移一像素。
-        float angle = ((rotation % 360) + 360) % 360;
-        if (bumper && (angle + 90) % 360 >= 180)
-        {
-            x += 1;
-        }
-        if (angle >= 180)
-        {
-            y += 1;
-        }
-        Draw(frame, x, y, alpha, rotation);
+        var anchor = KenomaGMK.Graphics.Notes.NoteGeometry.SpriteAnchor(x, y, rotation, bumper);
+        Draw(frame, anchor.X, anchor.Y, alpha, rotation);
     }
 
     /// <summary>
@@ -206,30 +200,16 @@ public sealed partial class NoteSkin : IDisposable
     /// <param name="skin">皮肤在 changeskin 表中的索引。</param>
     public void Hold(int lane, float x, float startY, float endY, double alpha, bool pressed = false, int skin = 0)
     {
-        // 原版尾帽的锚点比它的音符位置低六像素。
-        endY += 6;
-        float top = Math.Min(startY, endY), bottom = Math.Max(startY, endY);
-        // obj_pressed_holds 只画剩下的尾帽。两个锚点都截到 140；
-        // body 在判定线处到 144。
-        if (pressed)
+        var hold = new KenomaGMK.Graphics.Notes.HoldGeometry(startY, endY, pressed);
+        if (hold.ClipBody(-8, 188, out float visibleTop, out float height, out float relY, out float relH) &&
+            CachedHold(holdBodies, lane, skin) is { } body)
         {
-            top = Math.Min(top, 140);
-            bottom = Math.Min(bottom, 140);
-        }
-        float bodyTop = top + 4, bodyBottom = pressed ? bottom + 4 : bottom - 3;
-        float visibleTop = Math.Max(-8, bodyTop), visibleBottom = Math.Min(188, bodyBottom);
-        if (visibleBottom > visibleTop && CachedHold(holdBodies, lane, skin) is { } body)
-        {
-            float relY = (visibleTop - bodyTop) / (bodyBottom - bodyTop);
-            float relH = (visibleBottom - visibleTop) / (bodyBottom - bodyTop);
             var uv = RelativeUv(body, 0, relY, 1, relH);
-            canvas.NoteSprite(body.Texture, x + body.Frame.LocalX, visibleTop, new(0, 0, body.Frame.Width, visibleBottom - visibleTop), Color.White.Alpha(alpha), uv);
+            canvas.NoteSprite(body.Texture, x + body.Frame.LocalX, visibleTop, new(0, 0, body.Frame.Width, height), Color.White.Alpha(alpha), uv);
         }
-        Draw(CachedHold(holdHeads, lane, skin), x, top, alpha, 0);
-        if (!pressed)
-        {
-            Draw(CachedHold(holdEnds, lane, skin), x, bottom, alpha, 0);
-        }
+        // 原版 draw 事件先画 hold_start（下侧），最后画 hold_end（上侧）。按住后只剩上侧。
+        if (!pressed) Draw(CachedHold(holdHeads, lane, skin), x, hold.Lower, alpha, 0);
+        Draw(CachedHold(holdEnds, lane, skin), x, hold.Upper, alpha, 0);
     }
 
     int Skin(int skin) => skin > 0 && skin < profile.SkinNames.Count ? skin : 0;

@@ -1,8 +1,10 @@
 namespace KuroakiGimmick.Core;
 
 /// <summary>原生分层演出的资源与 mod 角色表；按角色名索引，和对象名、曲名无关。</summary>
-public sealed class NativeSequenceDefinition
+public sealed class NativeSequenceDefinition : KenomaGMK.Runtime.Sequence.IStorySequence
 {
+    IReadOnlyList<KenomaGMK.Runtime.Sequence.StoryCue> KenomaGMK.Runtime.Sequence.IStorySequence.Story => Story;
+    IReadOnlyList<KenomaGMK.Runtime.Sequence.StoryWindow> KenomaGMK.Runtime.Sequence.IStorySequence.StoryWindows => StoryWindows;
     /// <summary>从剧情角色键到精灵资源键的映射。</summary>
     public Dictionary<string, string> Sprites { get; set; } = [];
     /// <summary>从逻辑角色键到实际 mod 名称的映射。</summary>
@@ -42,7 +44,7 @@ public sealed class NativeSequenceDefinition
     /// <param name="FormatPlayerName">是否替换文本中的玩家名。</param>
     /// <param name="Clear">是否清除已有台词。</param>
     public sealed record StoryCue(double Time, string Trigger, string Speaker, string Text, double Speed = 1,
-        bool FormatPlayerName = false, bool Clear = false);
+        bool FormatPlayerName = false, bool Clear = false) : KenomaGMK.Runtime.Sequence.StoryCue(Time, Trigger, Speaker, Text, Speed, FormatPlayerName, Clear);
     /// <summary>对话出现或清除的提示序列。</summary>
     public List<StoryCue> Story { get; set; } = [];
     /// <summary>由剧情触发的音频片段。</summary>
@@ -80,7 +82,7 @@ public sealed class NativeSequenceDefinition
     /// <param name="ExitFrom">退场动画的起始纵坐标。</param>
     /// <param name="ExitSeconds">退场持续秒数。</param>
     public sealed record StoryWindow(string Trigger, double Start, double? Clear = null, double? Destroy = null,
-        double ExitFrom = 122, double ExitSeconds = 1);
+        double ExitFrom = 122, double ExitSeconds = 1) : KenomaGMK.Runtime.Sequence.StoryWindow(Trigger, Start, Clear, Destroy, ExitFrom, ExitSeconds);
     /// <summary>剧情文本框的出入场时间窗口。</summary>
     public List<StoryWindow> StoryWindows { get; set; } = [];
     /// <summary>可选的结尾淡出时刻。</summary>

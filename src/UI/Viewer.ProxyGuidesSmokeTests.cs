@@ -74,7 +74,7 @@ public sealed partial class Viewer
             }
             """;
         using var oracle = new Shader(Canvas.Gpu, originalVertex,
-            Shader.AdaptGml(File.ReadAllText(Path.Combine(Paths.Assets, "Shaders", "proxy.frag"))));
+            Shader.AdaptGml(File.ReadAllText(Path.Combine(Paths.Assets, "Shaders", "proxy.frag"))), builtIn: false);
         using var expected = new Target(Canvas.Gpu, 320, 180);
         using var actual = new Target(Canvas.Gpu, 320, 180);
         string maskMods = Mod("shcl", .47) + Mod("shcr", .38) + Mod("shfl", .035) + Mod("shfr", .02) +

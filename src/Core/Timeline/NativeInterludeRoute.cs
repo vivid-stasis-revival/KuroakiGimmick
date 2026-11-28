@@ -163,9 +163,10 @@ public sealed class NativeInterludeSchedule
                 if (action.Kind == "clear-text") Sequence.Story.Add(new(time, "interlude", step.Speaker, "", Clear: true));
             }
             if (step.Text != null) Sequence.Story.Add(new(time, "interlude", step.Speaker, step.Text));
-            int length = System.Text.RegularExpressions.Regex.Replace(step.Text ?? "", "`[a-z]+\\{[^}]*\\}", "").Length;
-            double duration = step.Duration ?? (step.Text == null ? step.Actions.Select(a => a.Duration).DefaultIfEmpty(0).Max()
-                : Math.Max(definition.MinimumCueSeconds, length / definition.CharactersPerSecond + definition.PaddingSeconds));
+            double actionDuration = step.Duration == null && step.Text == null
+                ? step.Actions.Select(a => a.Duration).DefaultIfEmpty(0).Max() : 0;
+            double duration = KenomaGMK.Runtime.Interludes.InterludeTiming.PreviewDuration(step.Duration,
+                step.Text, actionDuration, definition.MinimumCueSeconds, definition.CharactersPerSecond, definition.PaddingSeconds);
             time += duration;
         }
         ResumeTime = resume ?? time;
@@ -181,90 +182,15 @@ public sealed class NativeInterludeSchedule
     /// <returns>当前背景、色调与立绘的采样结果。</returns>
     public NativeInterludeState Sample(double age, double songTime, bool keepVisible = false)
     {
-        var portraits = new Dictionary<string, PortraitState>(StringComparer.Ordinal);
-        string? background = Definition.BackgroundSprite;
-        uint tintColor = 0xffffff;
-        var tint = new Tween(0, 0, 0, 0, "linear");
+        var scene = new KenomaGMK.Runtime.Sequence.PortraitScene(Definition.BackgroundSprite);
         foreach (var item in Actions)
         {
             if (item.Time > age) break;
-            var action = item.Action;
-            double at = item.Time;
-            portraits.TryGetValue(action.Id ?? "", out var portrait);
-            switch (action.Kind)
-            {
-                case "background":
-                    background = action.Sprite;
-                    break;
-                case "portrait-create":
-                    portraits[action.Id!] = new(action.Sprite!, action.X ?? 0, action.Y ?? 0, action.Scale, action.Mirror) { Frame = action.Frame };
-                    break;
-                case "portrait-frame" when portrait != null:
-                    portrait.Frame = action.Frame;
-                    break;
-                case "portrait-flip" when portrait != null:
-                    portrait.Mirror = !portrait.Mirror;
-                    if (action.Bounce)
-                    {
-                        portrait.X = new(portrait.X.At(at), portrait.DestinationX, at, 2.0 / 3, "outExpo");
-                        portrait.Y = new(portrait.Y.At(at) + 10, portrait.DestinationY, at, 2.0 / 3, "outExpo");
-                    }
-                    break;
-                case "portrait-change" when portrait != null:
-                    portrait.Sprite = action.Sprite!;
-                    if (action.Bounce)
-                    {
-                        portrait.X = new(portrait.X.At(at), portrait.DestinationX, at, 2.0 / 3, "outExpo");
-                        portrait.Y = new(portrait.Y.At(at) + 10, portrait.DestinationY, at, 2.0 / 3, "outExpo");
-                    }
-                    break;
-                case "portrait-move" when portrait != null:
-                    double x = action.X ?? portrait.X.At(at), y = action.Y is null or 0 ? portrait.Y.At(at) : action.Y.Value;
-                    portrait.X = new(portrait.X.At(at), x, at, action.Duration, "outQuint");
-                    portrait.Y = new(portrait.Y.At(at), y, at, action.Duration, "outQuint");
-                    portrait.DestinationX = x;
-                    portrait.DestinationY = y;
-                    if (action.Mirror)
-                    {
-                        portrait.Mirror = !portrait.Mirror;
-                        portrait.X = new(portrait.X.At(at), portrait.DestinationX, at, 2.0 / 3, "outExpo");
-                        portrait.Y = new(portrait.Y.At(at) + 10, portrait.DestinationY, at, 2.0 / 3, "outExpo");
-                    }
-                    break;
-                case "portrait-alpha" when portrait != null:
-                    portrait.Alpha = new(action.From ?? portrait.Alpha.At(at), action.To, at, action.Duration, "linear");
-                    break;
-                case "portrait-destroy":
-                    if (action.Id == null) portraits.Clear();
-                    else portraits.Remove(action.Id);
-                    break;
-                case "tint-color":
-                    tintColor = action.ColorBgr;
-                    break;
-                case "tint":
-                    tint = new(action.From ?? tint.At(at), action.To, at, action.Duration, "linear");
-                    break;
-                case "background-destroy":
-                    background = null;
-                    break;
-            }
+            scene.Apply(item.Action, item.Time);
         }
-        return new(Definition, Sequence, age, songTime, !keepVisible && age >= ResumeTime, background, tintColor, tint.At(age),
-            portraits.Select(pair => new NativeInterludePortrait(pair.Value.Sprite, pair.Value.X.At(age), pair.Value.Y.At(age),
-                pair.Value.Scale, pair.Value.Mirror, pair.Value.Alpha.At(age), pair.Value.Frame)).ToArray());
-    }
-
-    sealed record Tween(double From, double To, double Start, double Duration, string Ease)
-    {
-        public double At(double time) => Duration <= 0 ? To : From + (To - From) * Easings.Eval(Ease, (time - Start) / Duration);
-    }
-    sealed class PortraitState(string sprite, double x, double y, double scale, bool mirror)
-    {
-        public string Sprite = sprite;
-        public Tween X = new(x, x, 0, 0, "linear"), Y = new(y, y, 0, 0, "linear"), Alpha = new(1, 1, 0, 0, "linear");
-        public double Scale = scale, DestinationX = x, DestinationY = y;
-        public bool Mirror = mirror;
-        public int Frame;
+        return new(Definition, Sequence, age, songTime, !keepVisible && age >= ResumeTime, scene.Background,
+            scene.TintColor, scene.TintAt(age), scene.At(age).Select(p =>
+                new NativeInterludePortrait(p.Sprite, p.X, p.Y, p.Scale, p.Mirror, p.Alpha, p.Frame)).ToArray());
     }
 }
 

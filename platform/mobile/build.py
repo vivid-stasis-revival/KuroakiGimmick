@@ -102,11 +102,11 @@ def main():
     for platform in platforms:
         assets = ROOT / "dist/mobile-assets" / platform
         if assets.exists(): shutil.rmtree(assets)
-        shutil.copytree(args.assets, assets, ignore=shutil.ignore_patterns("SwitchShaders", "MobileShaders"))
+        shutil.copytree(args.assets, assets, ignore=shutil.ignore_patterns("SwitchShaders", "MobileShaders", "KenomaShaders"))
         # Copy the selected complete Assets next to the host baker so it scans the same shaders.
         if (baker / "Assets").exists(): shutil.rmtree(baker / "Assets")
-        shutil.copytree(args.assets, baker / "Assets", ignore=shutil.ignore_patterns("SwitchShaders", "MobileShaders"))
-        run(args.baker_dotnet, baker / "KuroakiGimmick.dll", "--bake-mobile-shaders", platform, assets / "MobileShaders",
+        shutil.copytree(args.assets, baker / "Assets", ignore=shutil.ignore_patterns("SwitchShaders", "MobileShaders", "KenomaShaders"))
+        run(args.baker_dotnet, baker / "KuroakiGimmick.dll", "--bake-mobile-shaders", "portable", assets / "KenomaShaders",
             *[p.resolve() for p in args.shader_root])
         digest = hashlib.sha256()
         for file in sorted(assets.rglob("*")):

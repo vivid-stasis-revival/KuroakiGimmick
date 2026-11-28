@@ -43,6 +43,7 @@ public sealed partial class NativeGimmickRenderer : IDisposable
         mask = new(canvas.Gpu, 320, 180);
         roomLayerComposite = new(canvas.Gpu, Canvas.VertexSource,
             "#version 330 core\nin vec2 v_vTexcoord;in vec4 v_vColour;uniform sampler2D gm_BaseTexture;out vec4 fragColor;void main(){vec4 c=texture(gm_BaseTexture,v_vTexcoord);if(c.a>0.)c.rgb/=c.a;fragColor=c*v_vColour;}");
+        starcrashNoteMix = new(canvas.Gpu, Canvas.VertexSource, StarcrashMixFragment);
     }
 
     /// <summary>先 Flush 再缩放两块离屏目标，避免仍在队列中的批次引用旧尺寸纹理。</summary>
@@ -74,7 +75,7 @@ public sealed partial class NativeGimmickRenderer : IDisposable
         {
             try
             {
-                shaders[name] = new(canvas.Gpu, Canvas.VertexSource, Shader.AdaptGml(source));
+                shaders[name] = new(canvas.Gpu, Canvas.VertexSource, Shader.AdaptGml(source), builtIn: false);
             }
             catch (InvalidOperationException exception)
             {
@@ -335,8 +336,6 @@ public sealed partial class NativeGimmickRenderer : IDisposable
         sceneStoryTimeline = null;
         sceneStoryState = null;
         sceneStoryTime = double.NaN;
-        starcrashNoteMix?.Dispose();
-        starcrashNoteMix = null;
         foreach (var image in textures.Values)
         {
             image.Dispose();
@@ -370,6 +369,7 @@ public sealed partial class NativeGimmickRenderer : IDisposable
         DisposeDesktopTargets();
         DisposeFilterChainTargets();
         mask.Dispose();
+        starcrashNoteMix.Dispose();
         roomLayerComposite.Dispose();
     }
 }

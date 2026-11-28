@@ -99,7 +99,7 @@ public sealed class JacketAssets
                 }
                 using var stream = File.OpenRead(path);
                 var info = ImageInfo.FromStream(stream) ?? throw new InvalidDataException("Unsupported or corrupt cover.");
-                if (info.Width < 1 || info.Height < 1 || ChartLoadLimits.Exceeds(info.Width, 16384) || ChartLoadLimits.Exceeds(info.Height, 16384) || ChartLoadLimits.Exceeds(checked((long)info.Width * info.Height * 4), 64 * 1024 * 1024))
+                if (info.Width < 1 || info.Height < 1 || ChartLoadLimits.Exceeds(checked((long)info.Width * info.Height * 4), 64 * 1024 * 1024))
                 {
                     throw new InvalidDataException("Cover dimensions exceed the 64 MiB decoded limit.");
                 }

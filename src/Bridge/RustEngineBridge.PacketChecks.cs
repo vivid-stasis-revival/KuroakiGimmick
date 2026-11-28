@@ -20,12 +20,12 @@ internal static unsafe partial class RustEngineBridge
             throw new InvalidOperationException("Native packet validation did not reject: " + expected);
         }
         using (ChartLoadLimits.Override(false))
-            Reject(() => ValidatePacketLength((nuint)MaxPacketBytes + 1), "512 MiB budget");
+            Reject(() => Reader.ValidatePacketLength(512u * 1024 * 1024 + 1), "512 MiB budget");
 #if !KG_MOBILE && !KG_SWITCH
         if (!Environment.Is64BitProcess) return;
         long largeLength = (long)int.MaxValue + 4097;
         using var unlimited = ChartLoadLimits.Override(true);
-        if (ValidatePacketLength((nuint)largeLength) != largeLength)
+        if (Reader.ValidatePacketLength((nuint)largeLength) != largeLength)
             throw new InvalidOperationException("Unlimited native packets still have an array-size cap.");
         string path = Path.Combine(Path.GetTempPath(), "kg-native-packet-" + Guid.NewGuid().ToString("N"));
         try
@@ -52,7 +52,7 @@ internal static unsafe partial class RustEngineBridge
                 if (stream.ReadByte() != 0x5a) throw new InvalidOperationException("Native stream cannot read beyond 2 GiB.");
                 stream.Position = 0;
                 // 真实解码器应到达结构校验阶段，不能先因托管数组分配或长度上限中断。
-                Reject(() => DecodeChart(stream, "packet-size"), "Trailing bytes");
+                Reject(() => Reader.ReadPacket(stream, "packet-size"), "Trailing bytes");
             }
             finally
             {

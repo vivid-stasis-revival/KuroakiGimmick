@@ -28,7 +28,7 @@ public sealed class InfoCardRenderer : IDisposable
 
     Target? target;
     Target? panelPattern;
-    Texture? jacket;
+    JacketTexture? jacket;
     string? jacketPath;
 
     /// <summary>条的颜色随数值从浅到深；200 以上的部分另用白色压在上面，与原版统计面板的读法一致。</summary>
@@ -95,7 +95,7 @@ public sealed class InfoCardRenderer : IDisposable
                 // 封面损坏不应该让整张卡片画不出来，退回 NO JACKET 占位。
                 try
                 {
-                    jacket = Texture.Load(canvas.Gpu, card.JacketPath);
+                    jacket = new JacketTexture(canvas.Gpu, card.JacketPath, linear: false);
                 }
                 catch (Exception ex) when (ex is IOException or InvalidDataException)
                 {
@@ -124,7 +124,7 @@ public sealed class InfoCardRenderer : IDisposable
         float factor = Math.Min(440f / sourceWidth, 440f / jacket.Height);
         float w = Math.Max(1, Round(sourceWidth * factor)), h = Math.Max(1, Round(jacket.Height * factor));
         // 信息卡使用曲绘第 0 帧，避免把整条水平动画帧当作一幅超宽图拉伸。
-        canvas.Quad(jacket, new(54 + (440 - w) / 2, 100 + (440 - h) / 2, w, h), Color.White, new(0, 0, 1f / frames, 1));
+        jacket.Draw(canvas, new(54 + (440 - w) / 2, 100 + (440 - h) / 2, w, h), Color.White, 0, frames);
     }
 
     void DrawHeader(Canvas canvas, Fonts fonts, SongInfoCard card)

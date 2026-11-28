@@ -30,7 +30,7 @@ internal static unsafe partial class RustNoteBridge
     }
 
     private const uint Abi = 0x00010000;
-    private const string Library = "kg_native_core";
+    private const string Library = "kenoma_native";
     private static string Mode => (Environment.GetEnvironmentVariable("KG_RUST_BRIDGE") ??
         (OptimizationEngineSettings.CalculationMode == "off" ? "off" : "auto")).Trim().ToLowerInvariant();
     // 0 表示尚未探测，1 表示可用，-1 表示已失败，失败后不再重复探测。

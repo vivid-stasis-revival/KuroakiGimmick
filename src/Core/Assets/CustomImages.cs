@@ -36,32 +36,10 @@ public sealed class CustomImages
     public List<Item> Items { get; } = [];
     /// <summary>以键索引的图片资源与尺寸。</summary>
     public Dictionary<string, Asset> Files { get; } = new(StringComparer.Ordinal);
-    static readonly HashSet<string> Kinds = new("imgx imgy imgxb imgyb imgxtime imgytime imgrot imgscalex imgscaley imgscaleytime imgskewx imgskewy imgcolrgb imgalp imgidx".Split(' '));
-    /// <summary>将图片属性轨道名拆分为属性种类与图片 ID。</summary>
-    /// <param name="name">完整属性名。</param>
-    /// <param name="kind">输出解析到的图片属性类型。</param>
-    /// <param name="id">输出图片 ID。</param>
-    /// <returns>名称符合图片属性约定时为 true。</returns>
-    public static bool TryMod(string name, out string kind, out string id)
-    {
-        int split = name.IndexOf('_');
-        kind = split < 0 ? name : name[..split];
-        id = split < 0 ? "" : name[(split + 1)..];
-        return id.Length > 0 && Kinds.Contains(kind);
-    }
-
-    /// <summary>未声明轨道时的原版默认值；160/90 是 320×180 逻辑空间的中心，573613 是原版表示该项未设置的哨兵值。</summary>
-    /// <param name="kind">图片属性键。</param>
-    /// <returns>该属性在首次写入前的值。</returns>
-    public static double Default(string kind) => kind switch
-    {
-        "imgx" => 160,
-        "imgy" => 90,
-        "imgxtime" or "imgytime" or "imgscaleytime" => 573613,
-        "imgscalex" or "imgscaley" or "imgalp" => 1,
-        "imgcolrgb" => 16777215,
-        _ => 0
-    };
+    /// <summary>按公共图片轨道属性表拆分属性和 ID。</summary>
+    public static bool TryMod(string name, out string kind, out string id) => KenomaGMK.Core.VspImages.TryMod(name, out kind, out id);
+    /// <summary>返回原版图片轨道的初值或未设置时间项的哨兵。</summary>
+    public static double Default(string kind) => KenomaGMK.Core.VspImages.Default(kind);
     /// <summary>从工程路径或编辑快照读取 VSP 图层、资源与声明。</summary>
     /// <param name="p">当前工程的路径与呈现配置。</param>
     /// <param name="chart">提供音符、演出事件及诊断的谱面。</param>
@@ -71,198 +49,20 @@ public sealed class CustomImages
     public static CustomImages Load(ViewerProject p, Chart chart, string? editedText = null, string? resourceRoot = null)
     {
         var result = new CustomImages();
-        if (p.Chart == null && p.Gimmick == null && p.Images == null)
-        {
-            return result;
-        }
-        string basis = p.Chart ?? p.Gimmick ?? p.Images!;
-        var root = System.IO.Path.GetDirectoryName(basis)!;
-        if (p.Images != null)
-        {
-            result.Path = p.Images;
-        }
-        else
-        {
-            var difficulty = System.IO.Path.GetFileNameWithoutExtension(basis);
-            // gimmick_output 的文件名可能是 _ENCORE_song；真实谱面名始终优先。
-            if (p.Chart == null && difficulty.StartsWith('_'))
-            {
-                difficulty = difficulty.TrimStart('_').Split('_')[0];
-            }
-            result.Path = new[]
-            {
-                difficulty + ".vsp",
-                "GLOBAL.vsp"
-            }.Select(x => System.IO.Path.Combine(root, x)).FirstOrDefault(File.Exists);
-        }
-        if (result.Path == null && editedText != null) result.Path = System.IO.Path.Combine(root, System.IO.Path.GetFileNameWithoutExtension(basis) + ".vsp");
-        if (result.Path == null)
-        {
-            return result;
-        }
-        result.Path = System.IO.Path.GetFullPath(result.Path);
-        // 素材路径相对谱面目录解析，即使 .vsp 是单独附加的也一样。
-        if (p.Chart == null || p.ImagePathsRelativeToVsp)
-        {
-            root = System.IO.Path.GetDirectoryName(result.Path)!;
-        }
-        if (resourceRoot != null) root = System.IO.Path.GetFullPath(resourceRoot);
-        var layers = new Dictionary<string, double>(StringComparer.Ordinal);
-        string section = "", layer = "";
-        int line = 0;
-        double Number(string s)
-        {
-            if (!double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var n) || !double.IsFinite(n))
-            {
-                throw new InvalidDataException("Invalid number: " + s);
-            }
-            return n;
-        }
-        try
-        {
-            if (ChartLoadLimits.Exceeds(editedText != null ? System.Text.Encoding.UTF8.GetByteCount(editedText) : new FileInfo(result.Path).Length, 16 * 1024 * 1024))
-            {
-                throw new InvalidDataException("VSP exceeds 16 MiB.");
-            }
-            IEnumerable<string> lines = editedText != null ? editedText.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n') : File.ReadLines(result.Path);
-            foreach (var raw in lines)
-            {
-                line++;
-                var text = raw.Trim();
-                if (text.Length == 0 || text.StartsWith("//"))
-                {
-                    continue;
-                }
-                try
-                {
-                    if (text.StartsWith('#'))
-                    {
-                        section = text[1..];
-                        continue;
-                    }
-                    var args = text.Split(',').Select(x => x.Trim()).ToArray();
-                    if (section == "Layer")
-                    {
-                        if (args.Length != 2 || args[0].Length == 0)
-                        {
-                            throw new InvalidDataException("Layer needs name,priority.");
-                        }
-                        if (!layers.TryAdd(args[0], Math.Clamp(Number(args[1]), -15999, 15999)))
-                        {
-                            throw new InvalidDataException("Duplicate layer: " + args[0]);
-                        }
-                    }
-                    else if (section == "Image")
-                    {
-                        if (text.EndsWith(':'))
-                        {
-                            layer = text[..^1].Trim();
-                            continue;
-                        }
-                        if (!layers.TryGetValue(layer, out var layerPriority))
-                        {
-                            throw new InvalidDataException("Undeclared layer: " + layer);
-                        }
-                        if (args.Length < 4 || args[0] is not ("static" or "animated"))
-                        {
-                            throw new InvalidDataException("Expected static/animated image declaration.");
-                        }
-                        bool animated = args[0] == "animated";
-                        int optional = animated ? 5 : 4;
-                        if (args.Length < optional || args.Length > optional + 3)
-                        {
-                            throw new InvalidDataException("Wrong image column count.");
-                        }
-                        if (ChartLoadLimits.Exceeds((long)result.Items.Count + 1, 4096))
-                        {
-                            throw new InvalidDataException("Image declaration limit is 4096.");
-                        }
-                        string id = args[1];
-                        if (id.Length == 0 || chart.ImageNames.Contains(id))
-                        {
-                            throw new InvalidDataException("Empty or duplicate image ID: " + id);
-                        }
-                        var frameNumber = animated ? Number(args[4]) : 1;
-                        if (frameNumber != Math.Truncate(frameNumber) || frameNumber is < 1 or > 8192)
-                        {
-                            throw new InvalidDataException("Invalid frame count.");
-                        }
-                        int frames = (int)frameNumber;
-                        double priority = Number(args[3]);
-                        string path = System.IO.Path.GetFullPath(args[2].Replace('\\', System.IO.Path.DirectorySeparatorChar), root);
-                        if (!result.Files.TryGetValue(path, out var asset))
-                        {
-                            if (!File.Exists(path))
-                            {
-                                throw new FileNotFoundException("Missing image: " + path);
-                            }
-                            if (ChartLoadLimits.Exceeds(new FileInfo(path).Length, 64 * 1024 * 1024))
-                            {
-                                throw new InvalidDataException("Image exceeds 64 MiB: " + path);
-                            }
-                            using var stream = File.OpenRead(path);
-                            var info = ImageInfo.FromStream(stream) ?? throw new InvalidDataException("Unsupported or corrupt image: " + path);
-                            long bytes = checked((long)info.Width * info.Height * 4);
-                            if (info.Width < 1 || info.Height < 1 || ChartLoadLimits.Exceeds(info.Width, 16384) || ChartLoadLimits.Exceeds(info.Height, 16384) || ChartLoadLimits.Exceeds(bytes, 64 * 1024 * 1024))
-                            {
-                                throw new InvalidDataException("Image dimensions or per-image 64 MiB decoded limit exceeded: " + path);
-                            }
-                            asset = new(path, info.Width, info.Height);
-                            result.Files.Add(path, asset);
-                        }
-                        if (asset.Width % frames != 0)
-                        {
-                            throw new InvalidDataException("Strip width must divide evenly by frame count: " + id);
-                        }
-                        double width = args.Length > optional ? Number(args[optional]) : -1,
-                            height = args.Length > optional + 1 ? Number(args[optional + 1]) : -1;
-                        if (width == -1)
-                        {
-                            width = asset.Width / frames;
-                        }
-                        if (height == -1)
-                        {
-                            height = asset.Height;
-                        }
-                        if (width <= 0 || height <= 0 || width > 100000 || height > 100000)
-                        {
-                            throw new InvalidDataException("Invalid initial image size: " + id);
-                        }
-                        double lane = args.Length > optional + 2 ? Math.Round(Number(args[optional + 2]), MidpointRounding.AwayFromZero) : 0;
-                        if (lane is < 0 or > 6)
-                        {
-                            throw new InvalidDataException("Lane must be 0..6.");
-                        }
-                        result.Items.Add(new(id, layer, layerPriority, priority, line, asset, frames, width, height, (int)lane));
-                        chart.ImageNames.Add(id);
-                    }
-                    else
-                    {
-                        throw new InvalidDataException("Expected #Layer or #Image section.");
-                    }
-                }
-                catch (Exception ex) when (ex is IOException or InvalidDataException or ArgumentException or InvalidOperationException or UnauthorizedAccessException)
-                {
-                    chart.Diagnostics.Add(new(result.Path, line, ex.Message, true));
-                }
-            }
-        }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
-        {
-            chart.Diagnostics.Add(new(result.Path, line, ex.Message, true));
-        }
-        var order = layers.Keys.Select((name, i) => (name, i)).ToDictionary(x => x.name, x => x.i);
-        var sorted = result.Items.OrderBy(x => x.LayerPriority).ThenBy(x => order[x.Layer]).ThenBy(x => x.Priority).ThenBy(x => x.Order).ToArray();
-        result.Items.Clear();
-        result.Items.AddRange(sorted);
-        if (new[]
-        {
-            "GLOBAL.vsv",
-            System.IO.Path.GetFileNameWithoutExtension(basis) + ".vsv"
-        }.Any(x => File.Exists(System.IO.Path.Combine(root, x))))
-        {
-            chart.Diagnostics.Add(new("images", 0, "VSV scroll warps are not implemented; image time offsets use unwarped chart time."));
-        }
+        var parsed = new KenomaGMK.Core.Chart();
+        parsed.ImageNames.UnionWith(chart.ImageNames);
+        var declarations = SongFiles.Resources(p).LoadImages(parsed, static stream =>
+            ImageInfo.FromStream(stream) is { } info ? (info.Width, info.Height) : null,
+            ChartLoadLimits.Unlimited, editedText, resourceRoot);
+        if (declarations == null) return result;
+        result.Path = declarations.Path;
+        foreach (var (key, asset) in declarations.Files)
+            result.Files.Add(key, new(asset.Path, asset.Width, asset.Height));
+        foreach (var item in declarations.Items)
+            result.Items.Add(new(item.Id, item.Layer, item.LayerPriority, item.Priority, item.Order,
+                result.Files[item.Asset.Path], item.Frames, item.Width, item.Height, item.Lane));
+        chart.ImageNames.UnionWith(parsed.ImageNames);
+        foreach (var d in parsed.Diagnostics) chart.Diagnostics.Add(new(d.Source, d.Line, d.Message, d.Error));
         return result;
     }
 
@@ -282,44 +82,20 @@ public sealed class CustomImages
     /// <returns>按绘制顺序排列的可见图片及其姿态。</returns>
     public IEnumerable<(Item Image, Pose Pose)> At(Timeline timeline, double time, IReadOnlyDictionary<string, double>? valueOverrides = null)
     {
+        var tracks = new ImageTracks(timeline,time,valueOverrides);
         foreach (var item in Items)
         {
-            double M(string kind) => valueOverrides != null && valueOverrides.TryGetValue(kind + "_" + item.Id, out double value)
-                ? value : timeline.Get(kind + "_" + item.Id, time);
-            double alpha = M("imgalp");
-            if (alpha <= 0)
-            {
-                continue;
-            }
-            // 1.14.1 的 o_csm_sprite_drawer.Draw 每张图独立初始化。
-            // 未设置的时间项不能继承前一张图的滚动偏移或缩放。
-            double xt = 0, yt = 0, ys = 1;
-            if (M("imgxtime") != 573613)
-            {
-                xt = NoteX(timeline, time, item.Lane, M("imgxtime"));
-            }
-            if (M("imgytime") != 573613)
-            {
-                yt = NoteY(timeline, time, item.Lane, M("imgytime"));
-            }
-            if (M("imgscaleytime") != 573613)
-            {
-                ys = (NoteY(timeline, time, item.Lane, M("imgscaleytime")) - NoteY(timeline, time, item.Lane, 0)) / item.Height;
-            }
-            var matrix = Matrix3x2.CreateScale((float)(item.Width * M("imgscalex")),
-                (float)(item.Height * M("imgscaley") * ys)) * new Matrix3x2(1, (float)M("imgskewy"), (float)M("imgskewx"), 1, 0,
-                0) * Matrix3x2.CreateRotation((float)(M("imgrot") * Math.PI / 180)) * Matrix3x2.CreateTranslation((float)(M("imgx") + M("imgxb") + xt),
-                (float)(M("imgy") + M("imgyb") + yt));
-            double frame = Math.Max(0, Math.Round(M("imgidx"), MidpointRounding.AwayFromZero)) % item.Frames;
-            if (!float.IsFinite(matrix.M11) || !float.IsFinite(matrix.M22) || !float.IsFinite(matrix.M31) || !float.IsFinite(matrix.M32))
-            {
-                continue;
-            }
-            yield return (item, new(matrix, (int)frame, (uint)Math.Clamp(M("imgcolrgb"), 0, 16777215), alpha));
+            if (KenomaGMK.Graphics.Scene.CustomImagePose.TryEvaluate(item.Id,item.Width,item.Height,item.Frames,item.Lane,tracks,out var pose))
+                yield return (item,new(pose.Matrix,pose.Frame,pose.Rgb,pose.Alpha));
         }
     }
 
-    static double NoteX(Timeline t, double time, int lane, double distance) => NoteMotion.X(t, time, lane, distance);
-    static double NoteY(Timeline t, double time, int lane, double distance) => NoteMotion.Y(t, time, lane, distance);
+    readonly record struct ImageTracks(Timeline Timeline,double Time,IReadOnlyDictionary<string,double>? Overrides)
+        : KenomaGMK.Graphics.Scene.ICustomImageTracks
+    {
+        public double Get(string name) => Overrides != null && Overrides.TryGetValue(name,out double value)
+            ? value : Timeline.Get(name,Time);
+        public double NoteX(int lane,double distance) => NoteMotion.X(Timeline,Time,lane,distance);
+        public double NoteY(int lane,double distance) => NoteMotion.Y(Timeline,Time,lane,distance);
+    }
 }
-

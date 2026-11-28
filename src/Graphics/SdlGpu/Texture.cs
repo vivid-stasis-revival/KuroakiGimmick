@@ -9,8 +9,9 @@ namespace KuroakiGimmick.Graphics;
 public sealed class Texture : IDisposable
 {
     /// <summary>SDL GPU 纹理的原生句柄。</summary>
-    public nint Id { get; private set; }
-    internal nint Sampler { get; private set; }
+    public nint Id => owned.Handle;
+    internal nint Sampler => owned.Sampler;
+    readonly KenomaGMK.SDL3.Texture2D owned;
     /// <summary>纹理基础级的像素宽度。</summary>
     public int Width { get; }
     /// <summary>纹理基础级的像素高度。</summary>
@@ -38,30 +39,10 @@ public sealed class Texture : IDisposable
         {
             throw new ArgumentException("Invalid RGBA texture dimensions/data.");
         }
-        Id = GpuDevice.Check(SDL_CreateGPUTexture(gpu.Handle, new GPUTextureCreateInfo
-        {
-            format = GpuDevice.Rgba8,
-            // usage 3 = SAMPLER|COLOR_TARGET，1 = 仅 SAMPLER：只有不带像素的纹理才允许被渲染。
-            usage = pixels == null ? 3u : 1u,
-            width = (uint)width,
-            height = (uint)height,
-            layer_count_or_depth = 1,
-            num_levels = (uint)MipLevels
-        }), "Create GPU texture");
+        owned = new(gpu.Handle, width, height, GpuDevice.Rgba8, pixels == null, MipLevels,
+            new KenomaGMK.SDL3.TextureSampling(repeat, linear));
         try
         {
-            // SDL_GPU 原生枚举：filter 0=NEAREST、1=LINEAR；address mode 0=REPEAT、2=CLAMP_TO_EDGE。
-            Sampler = GpuDevice.Check(SDL_CreateGPUSampler(gpu.Handle, new GPUSamplerCreateInfo
-            {
-                min_filter = linear ? 1u : 0u,
-                mag_filter = linear ? 1u : 0u,
-                mipmap_mode = MipLevels > 1 ? 1u : 0u,
-                address_mode_u = repeat ? 0u : 2u,
-                address_mode_v = repeat ? 0u : 2u,
-                address_mode_w = repeat ? 0u : 2u,
-                min_lod = 0,
-                max_lod = MipLevels - 1
-            }), "Create GPU sampler");
             if (pixels != null)
             {
                 // 高分辨率位图字体在 100% DPI 的 Windows 上只占 9-12 物理像素，
@@ -80,12 +61,7 @@ public sealed class Texture : IDisposable
         }
         catch
         {
-            if (Sampler != 0)
-            {
-                SDL_ReleaseGPUSampler(gpu.Handle, Sampler);
-            }
-            SDL_ReleaseGPUTexture(gpu.Handle, Id);
-            Id = Sampler = 0;
+            owned.Dispose();
             throw;
         }
     }
@@ -195,8 +171,9 @@ public sealed class Texture : IDisposable
             return;
         }
         gpu.Forget(this);
-        SDL_ReleaseGPUSampler(gpu.Handle, Sampler);
-        SDL_ReleaseGPUTexture(gpu.Handle, Id);
-        Id = Sampler = 0;
+        ReleaseUnbound();
     }
+
+    // 仅在宿主已清除待提交引用或候选纹理尚未发布时直接回收。
+    internal void ReleaseUnbound() => owned.Dispose();
 }

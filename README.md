@@ -6,7 +6,7 @@
 
 在同一条时间轴上编排 gimmick、图片、字幕、场景效果和窗口运动，并在歌曲场景中检查实际表现。
 
-![Version](https://img.shields.io/badge/version-0.1.5_%2F_18.5-94cddd?style=flat-square)
+![Version](https://img.shields.io/badge/version-0.2.0_%2F_27.0-94cddd?style=flat-square)
 ![.NET](https://img.shields.io/badge/.NET-8-b5a3e8?style=flat-square)
 ![Renderer](https://img.shields.io/badge/renderer-SDL3_GPU-94cddd?style=flat-square)
 ![Engine](https://img.shields.io/badge/engine-C%23_%2B_Rust-b5a3e8?style=flat-square)
@@ -72,7 +72,7 @@ KuroakiGimmick 的重点是**演出**，而不只是把 VSM 文本换一种方�
 
 ## 下载与平台支持
 
-当前版本为 **v0.1.5 / Build 18.5**，构建序号为 `1850`。
+当前版本为 **v0.2.0 / Build 27.0**，构建序号为 `2700`。
 
 [前往 GitHub Releases](https://github.com/vivid-stasis-revival/KuroakiGimmick/releases)
 
@@ -157,7 +157,7 @@ Nightly 用于提供最近的功能、兼容性改进和 Bug 修复。
 
 | 项目 | 要求 |
 | --- | --- |
-| .NET | 桌面源码构建使用 .NET 8 SDK |
+| .NET | 桌面源码构建使用 .NET 10 SDK |
 | Rust | stable 工具链，用于 Optimization Engine 和正式发行构建 |
 | Windows | Direct3D 12 / SDL3 GPU |
 | macOS | Metal / SDL3 GPU |
@@ -237,7 +237,7 @@ python3 scripts/prepare_resource_pack.py switch \
   --output /private/Kuroaki-Switch-Assets.zip
 ```
 
-资源准备需要相应的桌面 Shader 编译依赖及 .NET 9 SDK／运行时。
+资源准备需要相应的桌面 Shader 编译依赖及 .NET 10 SDK／运行时。
 
 如果自制歌曲使用额外 Shader，可以通过 `--shader-root` 指定歌曲资源目录。
 
@@ -688,7 +688,7 @@ dotnet run -c Release --no-build -- \
 
 ## 构建与发布
 
-当前应用版本为 **v0.1.5 / Build 18.5**。
+当前应用版本为 **v0.2.0 / Build 27.0**。
 
 最终版本号以 [KuroakiGimmick.csproj](KuroakiGimmick.csproj) 为准。
 
@@ -745,9 +745,9 @@ iOS 构建生成未签名 IPA，需要用户自行完成安装签名。
 
 Switch 使用固定版本的 [NroForge](https://github.com/BennettNotFound/NroForge) 工具链构建 NRO，不需要为 GitHub CI 额外提供专用的自托管 Switch 构建机器。
 
-移动端工程使用 .NET 10 及对应的 Android/iOS 工具链；Switch 采用独立的 .NET 9 目标和平台构建流程。
+移动端工程使用 .NET 10 及对应的 Android/iOS 工具链；Switch 目标同样统一为 .NET 10，平台运行库仍需对应验证。
 
-它们与普通桌面 .NET 8 发行流程并不完全相同。
+它们与普通桌面 .NET 10 发行流程并不完全相同。
 
 CI 只负责公开代码和允许分发的资源，不会自动下载、嵌入或上传原版游戏的私有素材。
 

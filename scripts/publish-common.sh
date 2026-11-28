@@ -40,7 +40,12 @@ kg_publish() {
     esac
     echo "Publish ${rid} / Release / self-contained / single-file=${single_file}"
     echo "日志：${log}"
+    local kenoma_native=false
+    case "${rid}" in
+        osx-*) kenoma_native=true ;;
+    esac
     "${KG_DOTNET}" publish "${KG_ROOT}/KuroakiGimmick.csproj" -c Release -r "${rid}" \
+        "-p:KenomaBuildNative=${kenoma_native}" \
         --self-contained true --nologo -o "${binary}" \
         -p:UseAppHost=true "-p:PublishSingleFile=${single_file}" \
         "-p:IncludeNativeLibrariesForSelfExtract=${single_file}" -p:PublishTrimmed=false \
@@ -49,6 +54,7 @@ kg_publish() {
     kg_rust_publish "${rid}" "${binary}"
     case "${rid}" in
         osx-*)
+            [ -s "${binary}/libkenoma_native.dylib" ] || { echo '发布结果缺少 libkenoma_native.dylib。' >&2; return 1; }
             [ -s "${binary}/libkg_native_core.dylib" ] || { echo "缺少 macOS Rust 原生库。" >&2; return 1; }
             [ -f "${binary}/KuroakiGimmick" ] || { echo '发布结果缺少 macOS apphost。' >&2; return 1; }
             # 单文件托管程序只有一个主可执行文件；kg_native_core.dylib 是必须同目录分发的 Rust 库。
@@ -72,7 +78,7 @@ kg_publish() {
 </dict></plist>
 PLIST
             mv "${binary}/Assets" "${package}/Assets"
-            for shared in Samples Integrations; do
+            for shared in Integrations; do
                 [ ! -d "${binary}/${shared}" ] || mv "${binary}/${shared}" "${package}/${shared}"
             done
             # 真实 dotnet publish 已经给出 0755，这一步只是保证 zip 里的执行位稳定。
@@ -92,7 +98,9 @@ PLIST
         [ -f "${package}/Assets/Documentation/${reference_asset}" ] || { echo "发布结果缺少语法手册：${reference_asset}" >&2; return 1; }
     done
     for item in LICENSE README.md CHANGELOG.md THIRD_PARTY_NOTICES.md; do cp "${KG_ROOT}/${item}" "${package}/${item}"; done
-    cp -R "${KG_ROOT}/ThirdParty" "${package}/ThirdParty"
+    mkdir -p "${package}/ThirdParty"
+    rsync -a --exclude=/KenomaGMK/ "${KG_ROOT}/ThirdParty/" "${package}/ThirdParty/"
+    cp -R "${KG_ROOT}/ThirdParty/KenomaGMK/licenses" "${package}/ThirdParty/KenomaGMK-licenses"
     # FFmpeg is optional for preview, required for video export. If explicitly
     # supplied, the caller must provide a binary for the TARGET architecture.
     if [ -n "${KUROAKI_FFMPEG:-}" ]; then

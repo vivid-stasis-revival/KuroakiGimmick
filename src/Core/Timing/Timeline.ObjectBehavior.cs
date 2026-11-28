@@ -7,7 +7,6 @@ public sealed partial class Timeline
     /// <summary>一条逐帧绑定：区间用拍，Value 是有界标量表达式，求值时才换算成秒。</summary>
     private sealed record FrameBinding(double StartBeat, double EndBeat, GimmickScalar Value);
     private readonly Dictionary<string, List<FrameBinding>> frameBindings = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, double> firstCallbacks = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<double>> callbackTimes = new(StringComparer.Ordinal);
     /// <summary>原版逻辑 tick 固定 60 Hz。粒子计时和速度都按 tick 定义，不随显示器帧率变化；改成按帧步进会改变轨迹。</summary>
     private const int LogicTicksPerSecond = 60;
@@ -19,8 +18,6 @@ public sealed partial class Timeline
     {
         foreach (var callback in Callbacks)
         {
-            // 只记第一次触发时刻：回调 fade 的起点由首次触发决定，后续同名回调不重启淡入。
-            firstCallbacks.TryAdd(callback.Name, callback.Time);
             if (!callbackTimes.TryGetValue(callback.Name, out var times)) callbackTimes[callback.Name] = times = [];
             times.Add(callback.Time);
         }

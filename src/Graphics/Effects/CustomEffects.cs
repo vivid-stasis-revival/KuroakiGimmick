@@ -17,8 +17,7 @@ public sealed class CustomEffects : IDisposable
 
     readonly Canvas canvas;
     /// <summary>房间与公共 FX 用到的全部 shader，构造时一次性加载，运行期不重建。</summary>
-    readonly Shader main, glow, combine, water, posterize, roomPosterize, heat, largeBlur, colourise, hue, colourBalance, contrast, film, edge;
-    Shader? nativeTwirl, nativeZoom;
+    readonly Shader main, glow, combine, water, posterize, roomPosterize, heat, largeBlur, colourise, hue, colourBalance, contrast, film, edge, nativeTwirl, nativeZoom;
     /// <summary>glow 的两块模糊中转目标，按 i%2 交替使用；辉光累积另有 glowAccumA/B 一对，两对合起来才构成完整的 ping-pong。</summary>
     readonly Target[] blur;
     readonly Target combined, glowAccumA, glowAccumB, distorted, quantized;
@@ -50,6 +49,8 @@ public sealed class CustomEffects : IDisposable
             CombineFragmentSource);
         posterize = new(gpu, Canvas.VertexSource,
             PosterizeFragmentSource);
+        nativeTwirl = Load("native-twirl.frag");
+        nativeZoom = Load("native-zoom.frag");
         blur = Enumerable.Range(0, 2).Select(_ => new Target(gpu, 320, 180)).ToArray();
         combined = new(gpu, 320, 180);
         glowAccumA = new(gpu, 320, 180);
@@ -161,10 +162,8 @@ public sealed class CustomEffects : IDisposable
             "_filter_colour_balance" => colourBalance,
             "_filter_contrast" => contrast,
             "_filter_posterise" => roomPosterize,
-            "_filter_twirl_distort" => nativeTwirl ??= new(canvas.Gpu, Canvas.VertexSource,
-                Shader.AdaptGml(File.ReadAllText(Path.Combine(Paths.Assets, "Shaders", "native-twirl.frag")))),
-            "_filter_zoom_blur" => nativeZoom ??= new(canvas.Gpu, Canvas.VertexSource,
-                Shader.AdaptGml(File.ReadAllText(Path.Combine(Paths.Assets, "Shaders", "native-zoom.frag")))),
+            "_filter_twirl_distort" => nativeTwirl,
+            "_filter_zoom_blur" => nativeZoom,
             _ => throw new InvalidDataException("Unknown source FX filter")
         };
         Texture? tex = layer.TexturePath == null ? null : Noise(layer);
@@ -337,15 +336,14 @@ public sealed class CustomEffects : IDisposable
             return;
         }
         int count = (int)layer.Number("g_GlowQuality");
-        double mult = Math.Pow(layer.Number("g_GlowRadius"), 1.0 / count), radius = mult;
-        double tint = Math.Floor(Math.Clamp(intensity, 0, 1) * 255) / 255;
+        var passes = new KenomaGMK.Graphics.GlowPasses<double>(layer.Number("g_GlowRadius"), count, intensity);
         Texture previous = input, accumulated = input;
         for (int i = 0; i < count; i++)
         {
             var blurred = blur[i % 2];
             canvas.Pass(blurred, previous, glow, s =>
             {
-                s.Float("g_GlowRadius", radius);
+                s.Float("g_GlowRadius", passes.Radius);
                 s.Float("g_GlowGamma", layer.Number("g_GlowGamma"));
                 // 原版 layer_end 以 surf_width、surf_height 换算 texel；半径的单位是源纹理像素。
                 s.Vec2("gm_pSurfaceTexelSize", 1.0 / previous.Width, 1.0 / previous.Height);
@@ -355,12 +353,12 @@ public sealed class CustomEffects : IDisposable
             canvas.Pass(acc, accumulated, combine, s =>
             {
                 s.Int("blurred", 1);
-                s.Float("intensity", tint);
+                s.Float("intensity", passes.Tint);
             });
             accumulated = acc.Texture;
             previous = blurred.Texture;
             // 半径逐遍取反号，与原版一致；去掉负号会让辉光偏向一侧。
-            radius *= -mult;
+            passes.Advance();
         }
         canvas.Pass(output, accumulated, canvas.Basic);
     }
@@ -585,8 +583,8 @@ public sealed class CustomEffects : IDisposable
         hue.Dispose();
         colourBalance.Dispose();
         contrast.Dispose();
-        nativeTwirl?.Dispose();
-        nativeZoom?.Dispose();
+        nativeTwirl.Dispose();
+        nativeZoom.Dispose();
         glowAccumA.Dispose();
         glowAccumB.Dispose();
         foreach (var t in blur)

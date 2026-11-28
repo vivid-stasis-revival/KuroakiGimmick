@@ -88,7 +88,7 @@ internal static class Program
             if (args.Contains("--mpf-test"))
             {
                 MpfScriptChecks.Run();
-                MpfLanguageChecks.Run();
+                // MPF 语言回归由 KenomaGMK 的 Runtime.Tests 单独执行。
                 MpfRuntimeChecks.Run();
                 Cgmk1141Checks.Run();
                 Cgmk1142Checks.Run();

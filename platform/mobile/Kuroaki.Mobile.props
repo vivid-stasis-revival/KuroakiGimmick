@@ -12,11 +12,15 @@
     <InvariantGlobalization>false</InvariantGlobalization>
     <AssemblyName>KuroakiGimmick</AssemblyName>
     <RootNamespace>KuroakiGimmick</RootNamespace>
-    <Version>0.1.5</Version>
-    <InformationalVersion Condition="'$(InformationalVersion)' == ''">v0.1.5 / 18.5</InformationalVersion>
+    <Version>0.2.0</Version>
+    <InformationalVersion Condition="'$(InformationalVersion)' == ''">v0.2.0 / 27.0</InformationalVersion>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="$(KGRoot)/src/**/*.cs" />
+    <Compile Include="$(KGRoot)/src/**/*.cs" Exclude="$(KGRoot)/src/Core/Timing/MpfScriptLanguage.cs;$(KGRoot)/src/Core/Diagnostics/MpfLanguageChecks.cs" />
+    <Using Include="KenomaGMK.Runtime.Mpf.MpfScriptLanguage" Alias="MpfScriptLanguage" />
+    <ProjectReference Include="$(KGRoot)/ThirdParty/KenomaGMK/src/KenomaGMK.Core/KenomaGMK.Core.csproj" />
+    <ProjectReference Include="$(KGRoot)/ThirdParty/KenomaGMK/src/KenomaGMK.Runtime/KenomaGMK.Runtime.csproj" />
+    <ProjectReference Include="$(KGRoot)/ThirdParty/KenomaGMK/src/KenomaGMK.Native/KenomaGMK.Native.csproj" />
     <EmbeddedResource Include="$(KGRoot)/Assets/tips.json" LogicalName="KuroakiGimmick.Tips.json" Condition="Exists('$(KGRoot)/Assets/tips.json')" />
     <EmbeddedResource Include="$(KGRoot)/src/UI/Localization/*.json" LogicalName="KuroakiGimmick.Localization.%(Filename)%(Extension)" />
     <EmbeddedResource Include="$(KGRoot)/Resources/Fonts/*.ttf" LogicalName="KuroakiGimmick.Fonts.%(Filename)%(Extension)" />
@@ -25,6 +29,10 @@
     <EmbeddedResource Include="$(KGRoot)/Assets/Catalog/legacy-per-frame-bindings.json" LogicalName="KuroakiGimmick.LegacyPerFrameBindings.json" Condition="Exists('$(KGRoot)/Assets/Catalog/legacy-per-frame-bindings.json')" />
     <EmbeddedResource Include="$(KGRoot)/Assets/Catalog/jackets.json" LogicalName="KuroakiGimmick.JacketCatalog.json" Condition="Exists('$(KGRoot)/Assets/Catalog/jackets.json')" />
     <EmbeddedResource Include="$(KGRoot)/Assets/Catalog/room-associations.json" LogicalName="KuroakiGimmick.RoomAssociations.json" Condition="Exists('$(KGRoot)/Assets/Catalog/room-associations.json')" />
+    <ProjectReference Include="$(KGRoot)/ThirdParty/KenomaGMK/src/KenomaGMK.SDL3/KenomaGMK.SDL3.csproj">
+      <AdditionalProperties Condition="'$(KGMobilePlatform)'=='android'">KenomaShaderRid=android-arm64</AdditionalProperties>
+      <AdditionalProperties Condition="'$(KGMobilePlatform)'=='ios'">KenomaStaticSdl=true;KenomaShaderRid=ios-arm64</AdditionalProperties>
+    </ProjectReference>
     <PackageReference Include="StbImageSharp" Version="2.30.16" />
     <PackageReference Include="StbImageWriteSharp" Version="1.16.7" />
     <PackageReference Include="NVorbis" Version="0.10.5" />

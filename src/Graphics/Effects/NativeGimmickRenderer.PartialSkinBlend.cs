@@ -7,7 +7,7 @@ namespace KuroakiGimmick.Graphics;
 
 public sealed partial class NativeGimmickRenderer
 {
-    Shader? starcrashNoteMix;
+    Shader starcrashNoteMix;
     const string StarcrashMixFragment = """
         #version 330 core
         in vec2 v_vTexcoord;in vec4 v_vColour;
@@ -34,9 +34,7 @@ public sealed partial class NativeGimmickRenderer
         if (!state.Direct)
         {
             if (!current.Sprites.TryGetValue(normal, out var origin) || Image(normal) is not { } source) return;
-            starcrashNoteMix ??= new(canvas.Gpu, Canvas.VertexSource, StarcrashMixFragment);
             canvas.Flush();
-            canvas.Gpu.BindTexture(1, source);
             starcrashNoteMix.Int("normalTexture", 1);
             starcrashNoteMix.Float("blendAmount", state.Alpha);
             starcrashNoteMix.Vec4("normalUv", new((origin.OriginX - target.OriginX) / (float)origin.Width,
@@ -70,10 +68,8 @@ public sealed partial class NativeGimmickRenderer
         if (!state.Active || !(type is 0 or 6 && lane is 0 or 1 || type is 1 or 7 or 8 && lane == 0)) return false;
         if (type is 6 or 7) return true; // 来源 lane_sprites 在这些地雷槽使用 sp_empty。
         Prepare(session);
-        float angle = ((rotation % 360) + 360) % 360;
-        if (type is 1 or 8 && (angle + 90) % 360 >= 180) x++;
-        if (angle >= 180) y++;
-        StarcrashersMixedSprite(session, state, type == 0 ? "chip" : type == 1 ? "bumper" : "bumper_timing", x, y, alpha, rotation);
+        var anchor = KenomaGMK.Graphics.Notes.NoteGeometry.SpriteAnchor(x, y, rotation, type is 1 or 8);
+        StarcrashersMixedSprite(session, state, type == 0 ? "chip" : type == 1 ? "bumper" : "bumper_timing", anchor.X, anchor.Y, alpha, rotation);
         return true;
     }
 
@@ -93,17 +89,11 @@ public sealed partial class NativeGimmickRenderer
         var state = PartialSkinBlendState.At(session.Timeline, time);
         if (!state.Active) return false;
         Prepare(session);
-        endY += 6;
-        float top = Math.Min(startY, endY), bottom = Math.Max(startY, endY);
-        if (pressed)
-        {
-            top = Math.Min(top, 140);
-            bottom = Math.Min(bottom, 140);
-        }
-        float visibleTop = Math.Max(-8, top + 4), visibleBottom = Math.Min(188, pressed ? bottom + 4 : bottom - 3);
-        if (visibleBottom > visibleTop) StarcrashersMixedSprite(session, state, "hold", x, visibleTop, alpha, scaleY: visibleBottom - visibleTop);
-        StarcrashersMixedSprite(session, state, "chip", x, top, alpha);
-        if (!pressed) StarcrashersMixedSprite(session, state, "chip", x, bottom, alpha);
+        var hold = new KenomaGMK.Graphics.Notes.HoldGeometry(startY, endY, pressed);
+        if (hold.ClipBody(-8, 188, out float visibleTop, out float height, out _, out _))
+            StarcrashersMixedSprite(session, state, "hold", x, visibleTop, alpha, scaleY: height);
+        if (!pressed) StarcrashersMixedSprite(session, state, "chip", x, hold.Lower, alpha);
+        StarcrashersMixedSprite(session, state, "chip", x, hold.Upper, alpha);
         return true;
     }
 }

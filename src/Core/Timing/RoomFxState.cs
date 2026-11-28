@@ -14,7 +14,7 @@ public static class RoomFxState
     /// <param name="threshold">用于判断是否启用的阈值。</param>
     /// <returns>到达阈值或落在边界容差内时为 true。</returns>
     public static bool Enabled(double value, double threshold = .5) =>
-        value > threshold || Math.Abs(value - threshold) <= 1e-9;
+        KenomaGMK.Runtime.Effects.RoomVisibility.Enabled(value, threshold);
 
     /// <summary>
     /// 回退优先级：显式 VisibilityMod（非自制对象）→ 按层名的原版规则 → 房间初始 Visible。
@@ -30,20 +30,7 @@ public static class RoomFxState
     public static bool IsForegroundActive(GameFxProfile.Layer layer, bool customObject, bool nonBaseFxEnabled, bool nativeColorControls,
         Func<string, double> mod)
     {
-        if (!layer.Enabled)
-        {
-            return false;
-        }
-        if (layer.VisibilityMod != null && !customObject) return Enabled(mod(layer.VisibilityMod));
-        return layer.Name switch
-        {
-            "FX_film" => Enabled(mod("fx_film")),
-            "FX_edge" => customObject && nonBaseFxEnabled ? Enabled(mod("fx_edge")) : layer.Visible,
-            "FX_chroma" or "FX_contrast" or "FX_glow" => layer.Visible,
-            "FX_red" => customObject ? nonBaseFxEnabled && Enabled(mod("fx_red")) : nativeColorControls ? Enabled(mod("fx_red")) : layer.Visible,
-            "FX_hue" or "FX_underwater" => (!customObject || nonBaseFxEnabled) && layer.Visible,
-            "FX_posterize" => mod("fx_posterize_vis") != 0,
-            _ => layer.Depth < 0 && layer.Visible
-        };
+        return KenomaGMK.Runtime.Effects.RoomVisibility.Active(layer.Name, layer.Enabled, layer.Visible,
+            layer.Depth, layer.VisibilityMod, customObject, nonBaseFxEnabled, nativeColorControls, true, mod);
     }
 }

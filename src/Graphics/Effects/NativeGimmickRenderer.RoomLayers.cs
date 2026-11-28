@@ -17,7 +17,8 @@ public sealed partial class NativeGimmickRenderer
         Prepare(session);
         if (current?.Data is not { } definition || definition.RoomLayers.Count == 0) return;
         canvas.Begin(scene, scene.Texture.Width, scene.Texture.Height, 320, 180);
-        foreach (var layer in definition.RoomLayers.Where(l => l.Depth > minimumDepth && l.Depth <= maximumDepth).OrderByDescending(l => l.Depth))
+        var priorities = KenomaGMK.Graphics.Scene.LayerRange.FromDescendingDepth(minimumDepth, maximumDepth);
+        foreach (var layer in definition.RoomLayers.Where(l => priorities.Includes(-(double)l.Depth)).OrderByDescending(l => l.Depth))
         {
             foreach (var drawing in layer.Drawings) Draw(session, drawing, time, time, -1);
             if (layer.Drawings.Count > 0 && layer.Sprite == null) continue;

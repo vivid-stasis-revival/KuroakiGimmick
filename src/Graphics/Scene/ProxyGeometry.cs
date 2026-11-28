@@ -74,17 +74,8 @@ public readonly record struct ProxyGeometry
         double y = M("pry") + M("pryb") + M("pryc") + M("pryd");
         float angle = (float)((M("prrz") + M("prrzb")) * timeline.Get("rotdir", time));
         if (mode00) angle = (float)(M("prrz") + M("prrzb"));
-        float left = 113 - (float)M("shxa"), right = 208 + (float)M("shxa"), top = 0, bottom = 165;
-        if (!mode00 && (!ProxyCropDefaults.Matches(M("prct"), .08) || M("prcb") != 0))
-        {
-            top = (float)(180 * M("prcb") - 1);
-            bottom = (float)(180 - Math.Ceiling(180 * M("prct")));
-        }
-        if (!mode00 && (!ProxyCropDefaults.Matches(M("prcl"), .35) || !ProxyCropDefaults.Matches(M("prcr"), .35)))
-        {
-            left = (float)M("prcl");
-            right = (float)M("prcr");
-        }
+        var crop = KenomaGMK.Graphics.ProxyCrop.Sample(mode00, M("shxa"), M("prct"), M("prcb"), M("prcl"), M("prcr"));
+        float left = crop.Left, right = crop.Right, top = crop.Top, bottom = crop.Bottom;
         var origin = new Vector2(custom ? 160 - (float)M("shxa") : 160, 82);
         var affine = Matrix3x2.CreateTranslation(-origin) * Matrix3x2.CreateScale((float)sx, (float)sy) *
             Matrix3x2.CreateRotation((custom ? angle : -angle) * MathF.PI / 180) *
@@ -148,32 +139,24 @@ public readonly record struct ProxyGeometry
         shader.Vec4("proxyRowW", new(m.M14, m.M24, m.M34, m.M44));
     }
 
+    KenomaGMK.Graphics.ProxyProjection Geometry => new(Projection, Renderable);
+
     /// <summary>计算尚未按 W 分量归一化的投影坐标。</summary>
     /// <param name="source">源画布上的二维点。</param>
     /// <returns>透视除法前的齐次坐标。</returns>
-    public Vector4 Homogeneous(Vector2 source) => Vector4.Transform(new Vector4(source, 0, 1), Projection);
+    public Vector4 Homogeneous(Vector2 source) => Geometry.Homogeneous(source);
     /// <summary>将源点投影到画布，检查 W 分量和输出坐标的有效性。</summary>
     /// <param name="source">源画布上的点。</param>
     /// <param name="point">输出的画布投影坐标。</param>
     /// <returns>投影分量有限且 W 有效时为 true。</returns>
-    public bool TryProject(Vector2 source, out Vector2 point)
-    {
-        var p = Homogeneous(source);
-        point = new(p.X / p.W, p.Y / p.W);
-        return p.W > .00001f && float.IsFinite(point.X) && float.IsFinite(point.Y);
-    }
+    public bool TryProject(Vector2 source, out Vector2 point) =>
+        Geometry.TryProject(source, out point);
     /// <summary>反转投影矩阵以恢复源坐标，不可逆或投影无效时返回 false。</summary>
     /// <param name="point">画布中的投影点。</param>
     /// <param name="source">输出恢复的源坐标。</param>
     /// <returns>矩阵可逆且恢复坐标有效时为 true。</returns>
-    public bool TryUnproject(Vector2 point, out Vector2 source)
-    {
-        source = default;
-        if (!Matrix4x4.Invert(Projection, out var inverse)) return false;
-        var p = Vector4.Transform(new Vector4(point, 0, 1), inverse);
-        source = new(p.X / p.W, p.Y / p.W);
-        return p.W > .00001f && float.IsFinite(source.X) && float.IsFinite(source.Y);
-    }
+    public bool TryUnproject(Vector2 point, out Vector2 source) =>
+        Geometry.TryUnproject(point, out source);
 
     /// <summary>先裁剪再除以 W，避免跨过相机平面的透视边缘产生无穷坐标。</summary>
     /// <param name="sourceA">源线段起点。</param>
@@ -181,82 +164,16 @@ public readonly record struct ProxyGeometry
     /// <param name="a">输出裁剪后的起点。</param>
     /// <param name="b">输出裁剪后的终点。</param>
     /// <returns>裁剪后仍有有效可见线段时为 true。</returns>
-    public bool ClipSegment(Vector2 sourceA, Vector2 sourceB, out Vector2 a, out Vector2 b)
-    {
-        var p = Homogeneous(sourceA);
-        var q = Homogeneous(sourceB);
-        a = b = default;
-        if (!Renderable) return false;
-        for (int plane = 0; plane < 5; plane++)
-        {
-            float Distance(Vector4 v) => plane switch
-            { 0 => v.W - .00001f, 1 => v.X, 2 => 320 * v.W - v.X, 3 => v.Y, _ => 180 * v.W - v.Y };
-            float dp = Distance(p), dq = Distance(q);
-            if (dp < 0 && dq < 0) return false;
-            if (dp < 0 || dq < 0)
-            {
-                var intersection = Vector4.Lerp(p, q, dp / (dp - dq));
-                if (dp < 0) p = intersection;
-                else q = intersection;
-            }
-        }
-        a = new(p.X / p.W, p.Y / p.W);
-        b = new(q.X / q.W, q.Y / q.W);
-        return float.IsFinite(a.X) && float.IsFinite(a.Y) && float.IsFinite(b.X) && float.IsFinite(b.Y);
-    }
+    public bool ClipSegment(Vector2 sourceA, Vector2 sourceB, out Vector2 a, out Vector2 b) =>
+        Geometry.ClipSegment(sourceA, sourceB, out a, out b);
 
     /// <summary>在齐次空间裁剪源区域的可见多边形，再进行透视除法。矩形依次裁剪到视口和相机平面后，九个顶点足以容纳结果。</summary>
     /// <param name="source">源画布上的矩形。</param>
     /// <param name="output">接收裁剪后多边形顶点的缓冲区。</param>
     /// <returns>有效可见顶点数，无可见区域时返回 0。</returns>
     /// <exception cref="ArgumentException">输出缓冲区无法容纳九个顶点。</exception>
-    public int ClipRegion(Rect source, Span<Vector2> output)
-    {
-        if (output.Length < 9) throw new ArgumentException("Proxy clip output needs nine vertices.", nameof(output));
-        if (!Renderable || source.W <= 0 || source.H <= 0 ||
-            !float.IsFinite(source.X + source.W) || !float.IsFinite(source.Y + source.H)) return 0;
-        Span<Vector4> points = stackalloc Vector4[12], scratch = stackalloc Vector4[12];
-        points[0] = Homogeneous(new(source.X, source.Y));
-        points[1] = Homogeneous(new(source.X + source.W, source.Y));
-        points[2] = Homogeneous(new(source.X + source.W, source.Y + source.H));
-        points[3] = Homogeneous(new(source.X, source.Y + source.H));
-        int count = 4;
-        for (int plane = 0; plane < 5 && count > 0; plane++)
-        {
-            float Distance(Vector4 v) => plane switch
-            { 0 => v.W - .00001f, 1 => v.X, 2 => 320 * v.W - v.X, 3 => v.Y, _ => 180 * v.W - v.Y };
-            int nextCount = 0;
-            var previous = points[count - 1];
-            float previousDistance = Distance(previous);
-            for (int i = 0; i < count; i++)
-            {
-                var current = points[i];
-                float distance = Distance(current);
-                if (previousDistance >= 0 != (distance >= 0))
-                    scratch[nextCount++] = Vector4.Lerp(previous, current, previousDistance / (previousDistance - distance));
-                if (distance >= 0) scratch[nextCount++] = current;
-                previous = current;
-                previousDistance = distance;
-            }
-            var swap = points;
-            points = scratch;
-            scratch = swap;
-            count = nextCount;
-        }
-        float area = 0;
-        for (int i = 0; i < count; i++)
-        {
-            output[i] = new(points[i].X / points[i].W, points[i].Y / points[i].W);
-            if (!float.IsFinite(output[i].X) || !float.IsFinite(output[i].Y)) return 0;
-        }
-        for (int i = 0; i < count; i++)
-        {
-            var a = output[i];
-            var b = output[(i + 1) % count];
-            area += a.X * b.Y - a.Y * b.X;
-        }
-        return Math.Abs(area) > .0001f ? count : 0;
-    }
+    public int ClipRegion(Rect source, Span<Vector2> output) =>
+        Geometry.ClipRegion(new(source.X, source.Y, source.X + source.W, source.Y + source.H), output);
 }
 
 /// <summary>遮罩使用整块画布的 UV，独立于有方向的 proxy 源裁剪框。</summary>

@@ -11,8 +11,8 @@
     <ApplicationTitle>Kuroaki/Gimmick</ApplicationTitle>
     <AppIcon>AppIcon</AppIcon>
     <BundleOriginalResources>false</BundleOriginalResources>
-    <ApplicationVersion>1850</ApplicationVersion>
-    <ApplicationDisplayVersion>0.1.5</ApplicationDisplayVersion>
+    <ApplicationVersion>2700</ApplicationVersion>
+    <ApplicationDisplayVersion>0.2.0</ApplicationDisplayVersion>
     <EnableCodeSigning>false</EnableCodeSigning>
     <BuildIpa>false</BuildIpa>
     <TrimMode>copy</TrimMode>
@@ -29,6 +29,11 @@
       <IsCxx>false</IsCxx>
       <Frameworks>AVFoundation AudioToolbox CoreAudio CoreFoundation CoreGraphics CoreHaptics CoreMedia CoreMotion Foundation GameController Metal QuartzCore UIKit UniformTypeIdentifiers</Frameworks>
       <LinkerFlags>-liconv</LinkerFlags>
+    </NativeReference>
+  </ItemGroup>
+  <ItemGroup>
+    <NativeReference Include="$(KGRoot)/ThirdParty/KenomaGMK/runtimes/ios-arm64/native/libkenoma_shadercross.a">
+      <Kind>Static</Kind><ForceLoad>true</ForceLoad><IsCxx>true</IsCxx>
     </NativeReference>
   </ItemGroup>
 </Project>

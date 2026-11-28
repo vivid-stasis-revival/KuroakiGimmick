@@ -140,6 +140,19 @@ public static class GimmickCatalog
     public static string[] ReadExtraMods(string objectName, string? songRoot = null, string? explicitPath = null, string profile = "auto",
         string? assetsRoot = null)
     {
+        // 默认查找共用谱面目录、共享清单、内嵌表的优先级；完整对象解析仍由 KG 的 schema 校验。
+        if (explicitPath == null && profile is "auto" or "core")
+        {
+            var table = KenomaGMK.Core.VsbExtraMods.Resolve(objectName, songRoot,
+                Path.Combine(assetsRoot ?? Paths.Assets, "Gimmicks"),
+                name => builtIns.Value.FirstOrDefault(x => x.Data.ObjectName == name).Data?.ExtraMods ?? [],
+                ChartLoadLimits.Unlimited, static (json, name) =>
+                {
+                    var definition = GimmickDefinitionReader.Read(json);
+                    return definition.ObjectName == name && definition.ExtraMods is { Length: <= 127 } ids ? ids : [];
+                });
+            return table is string[] values ? (string[])values.Clone() : table.ToArray();
+        }
         try
         {
             var source = Resolve(objectName, songRoot, explicitPath, profile, assetsRoot);
