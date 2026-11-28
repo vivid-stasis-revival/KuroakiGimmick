@@ -454,8 +454,8 @@ jobs:
             find release-assets -maxdepth 1 -type f -name 'KuroakiGimmick-*.zip' -print | sort
           )
 
-          if (( ${#assets[@]} != 6 )); then
-            echo "Expected exactly 6 release archives, found ${#assets[@]}." >&2
+          if (( ${#assets[@]} != 5 )); then
+            echo "Expected exactly 5 release archives, found ${#assets[@]}." >&2
             printf 'Found: %s\n' "${assets[@]:-<none>}" >&2
             exit 1
           fi
