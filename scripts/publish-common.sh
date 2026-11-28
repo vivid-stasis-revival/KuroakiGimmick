@@ -98,9 +98,7 @@ PLIST
         [ -f "${package}/Assets/Documentation/${reference_asset}" ] || { echo "发布结果缺少语法手册：${reference_asset}" >&2; return 1; }
     done
     for item in LICENSE README.md CHANGELOG.md THIRD_PARTY_NOTICES.md; do cp "${KG_ROOT}/${item}" "${package}/${item}"; done
-    mkdir -p "${package}/ThirdParty"
-    rsync -a --exclude=/KenomaGMK/ "${KG_ROOT}/ThirdParty/" "${package}/ThirdParty/"
-    cp -R "${KG_ROOT}/ThirdParty/KenomaGMK/licenses" "${package}/ThirdParty/KenomaGMK-licenses"
+    python3 "${KG_ROOT}/scripts/ci/stage_third_party.py" "${package}/ThirdParty"
     # FFmpeg is optional for preview, required for video export. If explicitly
     # supplied, the caller must provide a binary for the TARGET architecture.
     if [ -n "${KUROAKI_FFMPEG:-}" ]; then

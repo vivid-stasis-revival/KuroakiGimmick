@@ -1,6 +1,8 @@
 # External resource installation
 
-CI packages contain the application, public application branding, fonts/notices and built-in shader code. Game assets are private: they are neither downloaded by Actions nor committed, embedded, or uploaded with builds. A program package alone cannot open the editor without a matching resource pack.
+CI packages contain the application, public application branding, fonts and notices. Private game assets and the compiled built-in shader bytecode (`KenomaShaders`, `MobileShaders`, `SwitchShaders`) are not downloaded, committed, embedded in CI packages, or uploaded. A program package alone cannot open the editor without a matching resource pack.
+
+Desktop packs should include `Assets/KenomaShaders` so the Startup shader prewarm can use the baked stages. Without it, the application falls back to compiling `Assets/Shaders` GLSL on first use; behavior is functionally similar but the startup timing guarantee does not apply.
 
 Desktop CI Release archives (Windows x64, macOS ARM64, Linux x64) include a checksum-verified GPL-licensed FFmpeg CLI beside the executable, including `libx264` for MP4 output. No separate FFmpeg install is required for these archives. Private game assets remain external. Local builds may still use `KUROAKI_FFMPEG` or the system `PATH`.
 
@@ -20,6 +22,7 @@ The 18.1.x resource packs use v2 object definitions. Use an application containi
 Install .NET SDK/runtime 9 and the project's desktop shader compiler dependencies. From the repository:
 
 ```sh
+python3 scripts/prepare_resource_pack.py desktop --assets /private/Assets --output /private/Kuroaki-Desktop-Assets.zip
 python3 scripts/prepare_resource_pack.py android --assets /private/Assets --output /private/Kuroaki-Android-Assets.zip
 python3 scripts/prepare_resource_pack.py ios --assets /private/Assets --output /private/Kuroaki-iOS-Assets.zip
 python3 scripts/prepare_resource_pack.py switch --assets /private/Assets --output /private/Kuroaki-Switch-Assets.zip

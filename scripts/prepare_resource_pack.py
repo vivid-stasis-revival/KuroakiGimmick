@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('platform', choices=['android', 'ios', 'switch'])
+    p.add_argument('platform', choices=['android', 'ios', 'switch', 'desktop'])
     p.add_argument('--assets', type=Path, required=True)
     p.add_argument('--output', type=Path, required=True)
     p.add_argument('--dotnet', default='dotnet')

@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tarfile
 import urllib.request
 import zipfile
@@ -156,7 +157,7 @@ def main():
             artifacts.append({"file": output.name, "bytes": output.stat().st_size, "sha256": hashlib.sha256(output.read_bytes()).hexdigest()})
     (args.output / "BUILD-INFO.json").write_text(json.dumps({"port": "Mobile experimental r1", "sdl": SDL_VERSION,
         "artifacts": artifacts, "external_assets": args.external_assets, "physical_device_tested": False}, indent=2) + "\n")
-    shutil.copytree(ROOT / "ThirdParty", args.output / "ThirdParty")
+    subprocess.run([sys.executable, str(ROOT / "scripts/ci/stage_third_party.py"), str(args.output / "ThirdParty")], check=True)
     shutil.copy2(ROOT / "LICENSE", args.output / "LICENSE")
     shutil.copy2(ROOT / "THIRD_PARTY_NOTICES.md", args.output / "THIRD_PARTY_NOTICES.md")
     shutil.copy2(ROOT / "platform/mobile/README.md", args.output / "README.md")

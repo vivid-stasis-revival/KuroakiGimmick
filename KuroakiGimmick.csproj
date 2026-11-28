@@ -226,6 +226,7 @@
 
   <ItemGroup>
     <Compile Include="src/**/*.cs" />
+    <InternalsVisibleTo Include="Regression" />
     <ProjectReference Include="ThirdParty/KenomaGMK/src/KenomaGMK.Core/KenomaGMK.Core.csproj" />
     <Compile Remove="src/Core/Timing/MpfScriptLanguage.cs;src/Core/Diagnostics/MpfLanguageChecks.cs" />
     <ProjectReference Include="ThirdParty/KenomaGMK/src/KenomaGMK.Runtime/KenomaGMK.Runtime.csproj" />

@@ -7,7 +7,7 @@
 在同一条时间轴上编排 gimmick、图片、字幕、场景效果和窗口运动，并在歌曲场景中检查实际表现。
 
 ![Version](https://img.shields.io/badge/version-0.2.0_%2F_27.0-94cddd?style=flat-square)
-![.NET](https://img.shields.io/badge/.NET-8-b5a3e8?style=flat-square)
+![.NET](https://img.shields.io/badge/.NET-10-b5a3e8?style=flat-square)
 ![Renderer](https://img.shields.io/badge/renderer-SDL3_GPU-94cddd?style=flat-square)
 ![Engine](https://img.shields.io/badge/engine-C%23_%2B_Rust-b5a3e8?style=flat-square)
 ![Language](https://img.shields.io/badge/UI-中文_%2F_English-e8a4bd?style=flat-square)

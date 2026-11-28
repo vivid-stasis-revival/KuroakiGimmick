@@ -212,6 +212,7 @@ public sealed unsafe partial class GpuDevice : IDisposable
             SwapchainFormat = SDL_GetGPUSwapchainTextureFormat(Handle, window);
             if (SwapchainFormat == 0) SwapchainFormat = Rgba8;
             PrepareStages();
+            Require(SDL_SetGPUAllowedFramesInFlight(Handle, 2));
             // 隐藏窗口只用于离屏导出：后端支持时走 Immediate，不让 VSync 把导出速度压到刷新率。
             var mode = hidden && SDL_WindowSupportsGPUPresentMode(Handle, window,
                 GpuPresentMode.Immediate) ? GpuPresentMode.Immediate : GpuPresentMode.VSync;

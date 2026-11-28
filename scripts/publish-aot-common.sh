@@ -135,9 +135,7 @@ PLIST
         [ -f "${package}/${asset}" ] || { echo "发布结果缺少资源：${asset}" >&2; return 1; }
     done
     for item in LICENSE README.md CHANGELOG.md THIRD_PARTY_NOTICES.md; do cp "${KG_AOT_ROOT}/${item}" "${package}/${item}"; done
-    mkdir -p "${package}/ThirdParty"
-    rsync -a --exclude=/KenomaGMK/ "${KG_AOT_ROOT}/ThirdParty/" "${package}/ThirdParty/"
-    cp -R "${KG_AOT_ROOT}/ThirdParty/KenomaGMK/licenses" "${package}/ThirdParty/KenomaGMK-licenses"
+    python3 "${KG_AOT_ROOT}/scripts/ci/stage_third_party.py" "${package}/ThirdParty"
     if [ -n "${KUROAKI_FFMPEG:-}" ]; then
         [ -f "${KUROAKI_FFMPEG}" ] || { echo 'KUROAKI_FFMPEG 文件不存在。' >&2; return 1; }
         case "${rid}" in

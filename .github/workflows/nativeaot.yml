@@ -198,7 +198,8 @@ jobs:
           output='artifacts/${{ matrix.rid }}'
           cp LICENSE README.md CHANGELOG.md THIRD_PARTY_NOTICES.md "$output/"
           cp docs/EXTERNAL_ASSETS.md "$output/INSTALL-ASSETS.md"
-          cp -R ThirdParty "$output/"
+          python3 scripts/ci/stage_third_party.py "$output/ThirdParty"
+          test ! -d "$output/ThirdParty/KenomaGMK"
           test ! -d "$output/docs"
           test ! -d "$output/tests"
 
