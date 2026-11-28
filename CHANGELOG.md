@@ -6,6 +6,7 @@
 
 - 内置 Shader 与图形管线改为启动预热：Canvas、场景、RoomFX、烟花、Greenleft、Proxy Guides 与编辑器时间轴在构造期创建固定 Shader；Basic 与实例化音符按 RGBA8/交换链格式预热实际混合组合。动态对象 Shader 仍按需创建并单独分类。
 - 桌面、Shader Baker、测试、公共 KenomaGMK 库与辅助工具统一升级到 .NET 10（`net10.0`）；Android/iOS 保持 `net10.0-android` / `net10.0-ios`。
+- CI 不再构建或发布 Nintendo Switch NRO；`platform/switch` 代码保留，供手动构建与后续运行库验证。
 - 启动完成后通过实际计数确认内置 Shader 转换、GPU Shader 创建与管线创建均为 0；KG macOS ARM64 NativeAOT 成品已实际运行并完成 45 秒场景快照对照。
 - 应用版本为 `v0.2.0 / 27.0`，构建序号 `2700`，同步桌面及移动端版本信息。
 - 已知：完整 Regression 仍在既有的编辑器备份路径断言处中断，与本次 Shader 改动无关；Android 本轮产物未签名，iOS 为 ad-hoc 测试包。

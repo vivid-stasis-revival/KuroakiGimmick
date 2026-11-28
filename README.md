@@ -85,9 +85,9 @@ KuroakiGimmick 的重点是**演出**，而不只是把 VSM 文本换一种方�
 | **Linux x64** | Vulkan / SDL3 GPU | 已完成 CI 构建，实际设备与驱动兼容性仍需验证 |
 | **Android arm64** | 移动端图形后端 | 实验性支持，提供已签名 APK |
 | **iOS / iPadOS arm64** | 移动端图形后端 | 实验性支持，提供未签名 IPA |
-| **Nintendo Switch** | Horizon 平台适配 | 实验性支持，提供 NRO |
+| **Nintendo Switch** | Horizon 平台适配 | 平台代码保留；当前 CI/发布不构建 NRO |
 
-六个平台均已纳入 GitHub Actions 构建与发布流程。
+五个平台纳入 GitHub Actions 构建与发布流程；Switch 平台代码保留，但不再作为 CI/发布目标。
 
 但这里需要明确区分：
 
@@ -735,7 +735,6 @@ GitHub Actions 当前构建：
 - Linux x64 NativeAOT
 - Android arm64 APK
 - iOS arm64 IPA
-- Nintendo Switch NRO
 
 构建流程包含相应的依赖准备、资源排除、原生库检查及自动化测试。
 
@@ -743,9 +742,9 @@ Android 使用 CI 中配置的签名材料生成已签名 APK。
 
 iOS 构建生成未签名 IPA，需要用户自行完成安装签名。
 
-Switch 使用固定版本的 [NroForge](https://github.com/BennettNotFound/NroForge) 工具链构建 NRO，不需要为 GitHub CI 额外提供专用的自托管 Switch 构建机器。
+Switch 平台代码仍保留，但当前 CI/发布不再构建 NRO；需要时可用固定版本的 [NroForge](https://github.com/BennettNotFound/NroForge) 手动构建。
 
-移动端工程使用 .NET 10 及对应的 Android/iOS 工具链；Switch 目标同样统一为 .NET 10，平台运行库仍需对应验证。
+移动端工程使用 .NET 10 及对应的 Android/iOS 工具链；Switch 目标代码也统一为 .NET 10，但当前 CI 不构建，平台运行库仍未验证。
 
 它们与普通桌面 .NET 10 发行流程并不完全相同。
 
