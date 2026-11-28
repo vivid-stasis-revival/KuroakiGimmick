@@ -1,6 +1,6 @@
 # 移动端与 Horizon 适配状态
 
-桌面应用使用 `net8.0`。交接包中的 .NET 10 iOS/Android 工程、UIKit/SDL 入口和 Switch 原生入口现已接入。Windows、macOS、Linux、Android 与 iOS 已在 GitHub CI 完成构建；设备验证仍待完成。Switch CI 已接入 NroForge，须以完整 K/G 构建结果及实机测试分别判断可用性。
+桌面应用与公共库使用 `net10.0`。iOS/Android 工程、UIKit/SDL 入口和 Switch 原生入口已接入。Windows、macOS、Linux、Android 与 iOS 已在 GitHub CI 完成构建；设备验证仍待完成。Switch CI 构建已移除，`platform/switch` 代码保留供手动构建，须以完整 K/G 构建结果及实机测试分别判断可用性。
 
 ## 已包含的接口
 
@@ -17,9 +17,8 @@
 
 ```sh
 dotnet build KuroakiGimmick.csproj -c Release -p:PublishAot=false
-dotnet bin/Release/net8.0/KuroakiGimmick.dll --bake-mobile-shaders ios /path/to/ios/MobileShaders
-dotnet bin/Release/net8.0/KuroakiGimmick.dll --bake-mobile-shaders android /path/to/android/MobileShaders
-dotnet bin/Release/net8.0/KuroakiGimmick.dll --bake-switch-shaders /path/to/switch/SwitchShaders
+dotnet bin/Release/net10.0/KuroakiGimmick.dll --bake-mobile-shaders portable /path/to/KenomaShaders
+dotnet bin/Release/net10.0/KuroakiGimmick.dll --bake-mobile-shaders portable /path/to/KenomaShaders
 ```
 
 输出目录后可附加歌曲资源目录；工具会扫描 `.frag` 和 `.fsh`。两个移动平台应使用不同输出目录。运行时需要与对应平台匹配的着色器包；修改 GLSL 后须重新生成。预编译集合包含当前版本的音符实例化和代理辅助线着色器。

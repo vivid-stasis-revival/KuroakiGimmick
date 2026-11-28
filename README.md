@@ -217,7 +217,6 @@ NativeAOT 发行包包含可执行程序、SDL3、Shader 相关原生依赖与�
 
 同时将发行包附带的 `mono` 目录复制到 SD 卡根目录，并使用完整应用模式运行 NRO。
 
-Switch 资源包需要包含对应的 `SwitchShaders`。
 
 ### 生成平台资源包
 

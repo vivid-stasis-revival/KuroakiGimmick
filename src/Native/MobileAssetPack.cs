@@ -47,7 +47,7 @@ internal static class MobileAssetPack
             string assets = Directory.Exists(Path.Combine(staging, "Assets")) ? Path.Combine(staging, "Assets") : staging;
             if (!Ready(assets)) throw new InvalidDataException("ZIP must contain Assets/Brand and a complete note skin.");
             if (!Directory.Exists(Path.Combine(assets, "MobileShaders")) && !Directory.Exists(Path.Combine(assets,"KenomaShaders")))
-                throw new InvalidDataException("Use a resource pack prepared for Android/iOS with MobileShaders.");
+                throw new InvalidDataException("Use a resource pack prepared with Assets/KenomaShaders.");
             // 保留已有的不完整或用户自行创建的目录，以免丢失其中的文件。
             string backup = destination + "-previous-" + Guid.NewGuid().ToString("N");
             bool hadPrevious = Directory.Exists(destination);

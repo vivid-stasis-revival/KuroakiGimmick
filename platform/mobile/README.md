@@ -50,8 +50,8 @@ python3 platform/mobile/build.py ios --simulator --output dist/KG-Mobile-simulat
 ## 自定义 shader
 
 ```bash
-dotnet dist/mobile-baker/KuroakiGimmick.dll --bake-mobile-shaders android /path/to/Song/MobileShaders/android /path/to/Song
-dotnet dist/mobile-baker/KuroakiGimmick.dll --bake-mobile-shaders ios /path/to/Song/MobileShaders/ios /path/to/Song
+dotnet dist/mobile-baker/KuroakiGimmick.dll --bake-mobile-shaders portable /path/to/Song/KenomaShaders /path/to/Song
+dotnet dist/mobile-baker/KuroakiGimmick.dll --bake-mobile-shaders portable /path/to/Song/KenomaShaders /path/to/Song
 ```
 
 导入会挑选本平台的 `.kgms` 放入可写缓存。缓存校验格式、原始 shader 源码、uniform/sampler 布局和 payload；缺失或过期缓存报错，手机不调用桌面 shaderc/SPIRV-Cross。

@@ -49,7 +49,7 @@ public sealed class MainActivity : Org.Libsdl.App.SDLActivity
             Console.SetError(TextWriter.Synchronized(new StreamWriter(Path.Combine(root, "UserData", "mobile.log"), append: true) { AutoFlush = true }));
             MobilePlatform.InstallShaders(assetsRoot);
             string installed = MobileAssetPack.Ready(assetsRoot) ? assetsRoot : Path.Combine(root, "Assets");
-            string importMessage = "This app does not include game assets. Select your Android resource ZIP (Assets and MobileShaders).";
+            string importMessage = "This app does not include game assets. Select your Android resource ZIP (Assets and KenomaShaders).";
             while (!MobileAssetPack.Ready(installed))
             {
                 using var ready = new ManualResetEventSlim();
