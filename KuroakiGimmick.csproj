@@ -352,7 +352,7 @@
     </PropertyGroup>
     <RemoveDir Directories="$(KenomaBakeOutput)" />
     <Exec WorkingDirectory="$(MSBuildProjectDirectory)" EnvironmentVariables="DOTNET_ROLL_FORWARD=Major"
-          Command="dotnet run --project &quot;$(MSBuildProjectFullPath)&quot; -c Release -p:KuroakiShaderBaker=true -p:KuroakiExternalAssets=true -p:NuGetAudit=false -- --bake-mobile-shaders portable &quot;$(KenomaBakeOutput)&quot; &quot;$(TargetDir)Assets&quot;" />
+          Command="dotnet run --project &quot;$(MSBuildProjectFullPath)&quot; -c Release -p:KuroakiShaderBaker=true -p:KuroakiExternalAssets=true -p:NuGetAudit=false -p:IntermediateOutputPath=obj/kenoma-baker/$(Configuration)/$(TargetFramework)/ --no-restore -- --bake-mobile-shaders portable &quot;$(KenomaBakeOutput)&quot; &quot;$(TargetDir)Assets&quot;" />
     <ItemGroup>
       <KenomaBakedStage Include="$(KenomaBakeOutput)/*.ksp" />
       <ResolvedFileToPublish Include="@(KenomaBakedStage)" RelativePath="Assets/KenomaShaders/%(KenomaBakedStage.Filename)%(KenomaBakedStage.Extension)" CopyToPublishDirectory="Always" ExcludeFromSingleFile="true" />

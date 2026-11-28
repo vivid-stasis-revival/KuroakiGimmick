@@ -81,7 +81,7 @@ kg_aot_publish() {
         --self-contained true --nologo -o "${output_arg}" \
         -p:PublishAot=true -p:PublishSingleFile=false \
         -p:DebugType=None -p:DebugSymbols=false \
-        "-p:NuGetLockFilePath=${lock_arg}" 2>&1 | tee "${log}"
+        "-p:NuGetLockFilePath=${lock_arg}" -m:1 --disable-build-servers 2>&1 | tee "${log}"
     kg_rust_publish "${rid}" "${binary}"
     [ ! -e "${binary}/KuroakiGimmick.deps.json" ] && [ ! -e "${binary}/KuroakiGimmick.runtimeconfig.json" ] \
         || { echo '发布结果包含 .NET 运行时配置文件，NativeAOT 未生效。' >&2; return 1; }

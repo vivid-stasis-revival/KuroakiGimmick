@@ -50,7 +50,7 @@ kg_publish() {
         -p:UseAppHost=true "-p:PublishSingleFile=${single_file}" \
         "-p:IncludeNativeLibrariesForSelfExtract=${single_file}" -p:PublishTrimmed=false \
         -p:PublishReadyToRun=false -p:DebugType=None -p:DebugSymbols=false \
-        "-p:NuGetLockFilePath=${KG_STAGE}/publish.lock.json" 2>&1 | tee "${log}"
+        "-p:NuGetLockFilePath=${KG_STAGE}/publish.lock.json" -m:1 --disable-build-servers 2>&1 | tee "${log}"
     kg_rust_publish "${rid}" "${binary}"
     case "${rid}" in
         osx-*)

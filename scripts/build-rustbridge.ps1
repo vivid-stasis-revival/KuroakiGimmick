@@ -4,7 +4,7 @@ cargo test --manifest-path rust/kg-native-core/Cargo.toml
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 cargo build --release --manifest-path rust/kg-native-core/Cargo.toml
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-dotnet build -c Release -p:PublishAot=false -p:KenomaBuildNative=true
+dotnet build -c Release -p:PublishAot=false -p:KenomaBuildNative=true -m:1
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $out = 'bin/Release/net10.0'
 New-Item -ItemType Directory -Force -Path $out | Out-Null

@@ -164,6 +164,7 @@ jobs:
         shell: bash
         env:
           BUILD_LABEL: ${{ needs.detect.outputs.build_label }}
+          MSBUILDDISABLENODEREUSE: 1
         run: |
           set -euo pipefail
 
@@ -176,6 +177,7 @@ jobs:
             -p:PublishSingleFile=false \
             -p:KenomaBuildNative=true \
             "-p:InformationalVersion=${BUILD_LABEL}" \
+            -m:1 --disable-build-servers \
             -o 'artifacts/${{ matrix.rid }}'
 
       - name: Build and stage matching Rust Optimization Engine
