@@ -96,7 +96,7 @@ def main():
     source = sdl_source()
     baker = ROOT / "dist/mobile-baker"
     run(args.baker_dotnet, "build", ROOT / "KuroakiGimmick.csproj", "-c", "Release", "-p:KuroakiShaderBaker=true",
-        "-p:KuroakiExternalAssets=true", "-p:BaseIntermediateOutputPath=dist/mobile-baker-obj/", "-p:NuGetLockFilePath=dist/mobile-baker.lock.json", "-o", baker)
+        "-p:KuroakiExternalAssets=true", "-p:IntermediateOutputPath=obj/mobile-baker/", "-p:NuGetLockFilePath=dist/mobile-baker.lock.json", "-o", baker)
     platforms = ["android", "ios"] if args.platform == "both" else [args.platform]
     artifacts = []
     for platform in platforms:

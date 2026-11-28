@@ -280,7 +280,7 @@
     <PackageReference Include="StbImageSharp" Version="2.30.16" />
     <PackageReference Include="StbImageWriteSharp" Version="1.16.7" />
 
-    <ProjectReference Include="ThirdParty/KenomaGMK/src/KenomaGMK.SDL3/KenomaGMK.SDL3.csproj"><AdditionalProperties Condition="'$(RuntimeIdentifier)'!=''">KenomaShaderRid=$(RuntimeIdentifier)</AdditionalProperties></ProjectReference>
+    <ProjectReference Include="ThirdParty/KenomaGMK/src/KenomaGMK.SDL3/KenomaGMK.SDL3.csproj" />
     <PackageReference Include="NVorbis" Version="0.10.5" />
     <PackageReference Include="StbTrueTypeSharp" Version="1.26.13" />
   </ItemGroup>
