@@ -110,6 +110,7 @@ jobs:
             shaderc: shaderc_shared.dll
             spirv_cross: spirv-cross.dll
             rust_core: kg_native_core.dll
+            kenoma_native: kenoma_native.dll
 
           - runner: macos-15
             rid: osx-arm64
@@ -118,6 +119,7 @@ jobs:
             shaderc: libshaderc_shared.dylib
             spirv_cross: libspirv-cross.dylib
             rust_core: libkg_native_core.dylib
+            kenoma_native: libkenoma_native.dylib
 
           - runner: ubuntu-24.04
             rid: linux-x64
@@ -126,9 +128,12 @@ jobs:
             shaderc: libshaderc_shared.so
             spirv_cross: libspirv-cross.so
             rust_core: libkg_native_core.so
+            kenoma_native: libkenoma_native.so
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - name: Install Linux native build dependencies
         if: runner.os == 'Linux'
@@ -141,7 +146,7 @@ jobs:
       - uses: actions/setup-dotnet@v6
         id: dotnet
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
 
       - name: Select the installed SDK
         shell: bash
@@ -169,6 +174,7 @@ jobs:
             -p:KuroakiExternalAssets=true \
             -p:PublishAot=true \
             -p:PublishSingleFile=false \
+            -p:KenomaBuildNative=true \
             "-p:InformationalVersion=${BUILD_LABEL}" \
             -o 'artifacts/${{ matrix.rid }}'
 
@@ -206,6 +212,7 @@ jobs:
           test -f 'artifacts/${{ matrix.rid }}/${{ matrix.shaderc }}'
           test -f 'artifacts/${{ matrix.rid }}/${{ matrix.spirv_cross }}'
           test -s 'artifacts/${{ matrix.rid }}/${{ matrix.rust_core }}'
+          test -s 'artifacts/${{ matrix.rid }}/${{ matrix.kenoma_native }}'
           case '${{ matrix.rid }}' in
             win-*) test -s 'artifacts/${{ matrix.rid }}/ffmpeg.exe' ;;
             *) test -x 'artifacts/${{ matrix.rid }}/ffmpeg' ;;
@@ -309,10 +316,11 @@ jobs:
             runner: macos-15
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: |
-            9.0.x
             10.0.101
       - name: Select pinned mobile SDK
         shell: bash
@@ -395,9 +403,10 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          submodules: recursive
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '9.0.102'
+          dotnet-version: '10.0.101'
       - name: Publish current Switch managed source without private assets
         run: bash scripts/ci/prepare_switch.sh
       - name: Check out pinned NroForge toolchain and license notices
