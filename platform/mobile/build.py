@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tarfile
 import urllib.request
 import zipfile
@@ -96,17 +97,17 @@ def main():
     source = sdl_source()
     baker = ROOT / "dist/mobile-baker"
     run(args.baker_dotnet, "build", ROOT / "KuroakiGimmick.csproj", "-c", "Release", "-p:KuroakiShaderBaker=true",
-        "-p:KuroakiExternalAssets=true", "-p:BaseIntermediateOutputPath=dist/mobile-baker-obj/", "-p:NuGetLockFilePath=dist/mobile-baker.lock.json", "-o", baker)
+        "-p:KuroakiExternalAssets=true", "-p:IntermediateOutputPath=obj/mobile-baker/", "-p:NuGetLockFilePath=dist/mobile-baker.lock.json", "-o", baker)
     platforms = ["android", "ios"] if args.platform == "both" else [args.platform]
     artifacts = []
     for platform in platforms:
         assets = ROOT / "dist/mobile-assets" / platform
         if assets.exists(): shutil.rmtree(assets)
-        shutil.copytree(args.assets, assets, ignore=shutil.ignore_patterns("SwitchShaders", "MobileShaders"))
+        shutil.copytree(args.assets, assets, ignore=shutil.ignore_patterns("SwitchShaders", "MobileShaders", "KenomaShaders"))
         # Copy the selected complete Assets next to the host baker so it scans the same shaders.
         if (baker / "Assets").exists(): shutil.rmtree(baker / "Assets")
-        shutil.copytree(args.assets, baker / "Assets", ignore=shutil.ignore_patterns("SwitchShaders", "MobileShaders"))
-        run(args.baker_dotnet, baker / "KuroakiGimmick.dll", "--bake-mobile-shaders", platform, assets / "MobileShaders",
+        shutil.copytree(args.assets, baker / "Assets", ignore=shutil.ignore_patterns("SwitchShaders", "MobileShaders", "KenomaShaders"))
+        run(args.baker_dotnet, baker / "KuroakiGimmick.dll", "--bake-mobile-shaders", "portable", assets / "KenomaShaders",
             *[p.resolve() for p in args.shader_root])
         digest = hashlib.sha256()
         for file in sorted(assets.rglob("*")):
@@ -156,7 +157,7 @@ def main():
             artifacts.append({"file": output.name, "bytes": output.stat().st_size, "sha256": hashlib.sha256(output.read_bytes()).hexdigest()})
     (args.output / "BUILD-INFO.json").write_text(json.dumps({"port": "Mobile experimental r1", "sdl": SDL_VERSION,
         "artifacts": artifacts, "external_assets": args.external_assets, "physical_device_tested": False}, indent=2) + "\n")
-    shutil.copytree(ROOT / "ThirdParty", args.output / "ThirdParty")
+    subprocess.run([sys.executable, str(ROOT / "scripts/ci/stage_third_party.py"), str(args.output / "ThirdParty")], check=True)
     shutil.copy2(ROOT / "LICENSE", args.output / "LICENSE")
     shutil.copy2(ROOT / "THIRD_PARTY_NOTICES.md", args.output / "THIRD_PARTY_NOTICES.md")
     shutil.copy2(ROOT / "platform/mobile/README.md", args.output / "README.md")

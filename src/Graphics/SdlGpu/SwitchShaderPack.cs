@@ -1,3 +1,4 @@
+using KenomaGMK.SDL3;
 using System.Text;
 using KuroakiGimmick.Core;
 using static KuroakiGimmick.Native.Sdl;
@@ -7,71 +8,23 @@ namespace KuroakiGimmick.Graphics;
 // 使用带版本的二进制缓存格式，使解释器无需通过反射解析 JSON。
 internal static class SwitchShaderPack
 {
-    const int Magic = 0x5053474b; // KGSP
-    const int Version = 1;
-    internal static string Key(string source, bool vertex)
-    {
-        // 此值用于查找缓存。以托管算术避免 mono-nx 引入 OpenSSL，每次加载还要比对完整原始源码。
-        ulong a = 14695981039346656037UL, b = 1099511628211UL;
-        foreach (byte value in Encoding.UTF8.GetBytes((vertex ? "V\n" : "F\n") + source))
-        {
-            a = unchecked((a ^ value) * 1099511628211UL);
-            b = unchecked((b ^ value) * 14029467366897019727UL);
-            b = (b << 13) | (b >> 51);
-        }
-        return a.ToString("X16") + b.ToString("X16");
-    }
+    internal static string Key(string source, bool vertex) => ShaderPack.Key(source, vertex);
 
     internal static ShaderCompiler.Compiled Load(string source, bool vertex)
     {
         string path = Path.Combine(Paths.Assets, "SwitchShaders", Key(source, vertex) + ".kgsp");
         if (!File.Exists(path))
             throw new InvalidOperationException($"Missing Switch shader {Path.GetFileName(path)}. Re-bake this source on desktop.");
-        using var r = new BinaryReader(File.OpenRead(path), Encoding.UTF8);
-        if (r.ReadInt32() != Magic || r.ReadInt32() != Version || r.ReadBoolean() != vertex || r.ReadString() != source)
-            throw new InvalidDataException("Stale or corrupt Switch shader pack: " + path);
-        string entry = r.ReadString();
-        int count = Count(r, 1024);
-        var uniforms = new ShaderCompiler.Uniform[count];
-        for (int i = 0; i < count; i++) uniforms[i] = new(r.ReadString(), r.ReadString(), r.ReadInt32());
-        count = Count(r, 1024);
-        var samplers = new string[count];
-        for (int i = 0; i < count; i++) samplers[i] = r.ReadString();
-        string native = r.ReadString();
-        int length = Count(r, 16 * 1024 * 1024);
-        byte[] code = r.ReadBytes(length);
-        if (code.Length != length || length < 20 || length % 4 != 0 || BitConverter.ToUInt32(code) != 0x07230203 || r.BaseStream.Position != r.BaseStream.Length)
-            throw new InvalidDataException("Invalid SPIR-V payload: " + path);
-        return new(code, entry, uniforms, samplers, native, GpuShaderFormat.SpirV);
+        using var input = File.OpenRead(path);
+        var compiled = ShaderPack.Read(input, ShaderPackKind.Switch, source, vertex, (PackedShaderFormat)GpuShaderFormat.SpirV);
+        return new(compiled.Code, compiled.Entry, compiled.Uniforms, compiled.Samplers, compiled.NativeSource, GpuShaderFormat.SpirV);
     }
-
-    static int Count(BinaryReader r, int max)
-    {
-        int count = r.ReadInt32();
-        return count is >= 0 && count <= max ? count : throw new InvalidDataException("Invalid shader pack length.");
-    }
-
     static void Write(string directory, string source, bool vertex)
     {
         var compiled = ShaderCompiler.Compile(source, vertex, GpuShaderFormat.SpirV);
-        using var w = new BinaryWriter(File.Create(Path.Combine(directory, Key(source, vertex) + ".kgsp")), Encoding.UTF8);
-        w.Write(Magic);
-        w.Write(Version);
-        w.Write(vertex);
-        w.Write(source);
-        w.Write(compiled.Entry);
-        w.Write(compiled.Uniforms.Length);
-        foreach (var u in compiled.Uniforms)
-        {
-            w.Write(u.Name);
-            w.Write(u.Type);
-            w.Write(u.Offset);
-        }
-        w.Write(compiled.Samplers.Length);
-        foreach (var sampler in compiled.Samplers) w.Write(sampler);
-        w.Write(compiled.NativeSource);
-        w.Write(compiled.Code.Length);
-        w.Write(compiled.Code);
+        using var output = File.Create(Path.Combine(directory, Key(source, vertex) + ".kgsp"));
+        ShaderPack.Write(output, ShaderPackKind.Switch, source, vertex,
+            new(compiled.Code, compiled.Entry, compiled.Uniforms, compiled.Samplers, compiled.NativeSource, (PackedShaderFormat)compiled.Format));
     }
 
     internal static void Bake(string directory, IEnumerable<string> extraDirectories)
@@ -94,9 +47,8 @@ internal static class SwitchShaderPack
         foreach (var root in new[] { Paths.Assets }.Concat(extraDirectories))
         {
             if (!Directory.Exists(root)) throw new DirectoryNotFoundException(root);
-            foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
-                if (Path.GetExtension(file).ToLowerInvariant() is ".frag" or ".fsh")
-                    sources.Add((Shader.AdaptGml(File.ReadAllText(file)), false));
+            foreach (var file in GameMakerShader.EnumerateFragments(root))
+                sources.Add((Shader.AdaptGml(File.ReadAllText(file)), false));
         }
         foreach (var (source, vertex) in sources) Write(directory, source, vertex);
         Console.WriteLine($"Baked {sources.Count} Switch shaders to {Path.GetFullPath(directory)}");

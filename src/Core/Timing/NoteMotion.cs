@@ -13,7 +13,7 @@ public static class NoteMotion
     /// <param name="laneScroll">轨道流速乘数。</param>
     /// <param name="velocity">velocity 轨道值。</param>
     /// <returns>完整的滚动速度乘数。</returns>
-    public static double ScrollMultiplier(double scrollSpeed, double laneScroll, double velocity) => scrollSpeed * laneScroll * velocity;
+    public static double ScrollMultiplier(double scrollSpeed, double laneScroll, double velocity) => KenomaGMK.Core.NoteMovement.ScrollMultiplier(scrollSpeed,laneScroll,velocity);
 
     /// <summary>保守估计未来音符的可见截止时间，单位为毫秒。越过 boost 过渡后，纵坐标由线性项和有界的 wave、boost 项组成。</summary>
     /// <param name="alignment">判定对齐偏移。</param>
@@ -28,15 +28,7 @@ public static class NoteMotion
     /// <returns>保守可见性截止距离，单位为毫秒；无法取有限界时为正无穷。</returns>
     public static double FutureDistance(double alignment, double yOffset, double driven, double beatsPerSecond,
         double scroll, double wave, double boostTime, double boostDistance, bool custom)
-    {
-        if (scroll == 0) return double.PositiveInfinity;
-        double center = alignment + 144 + yOffset * .1 * scroll - driven * beatsPerSecond * 22 * scroll;
-        double radius = Math.Abs(wave * .2) + Math.Abs(boostDistance);
-        double distance = (scroll > 0 ? center + 25 + radius : 205 - center + radius) / (.1 * Math.Abs(scroll));
-        // Custom boost 在 bt 之前按三次曲线计算，此后其幅值以 bd 的绝对值为界。
-        distance = Math.Max(distance, custom ? Math.Max(0, boostTime) : 0);
-        return double.IsFinite(distance) ? distance + 1e-6 : double.PositiveInfinity;
-    }
+        => KenomaGMK.Core.NoteMovement.FutureDistance(alignment,yOffset,driven,beatsPerSecond,scroll,wave,boostTime,boostDistance,custom);
 
     /// <summary>横向偏移。以两拍为周期、0.3 拍相位提前的原版律动包络；distance 单位毫秒，结果在 320×180 逻辑空间。</summary>
     /// <param name="t">用于采样轨道和回调的时间轴。</param>
@@ -54,19 +46,7 @@ public static class NoteMotion
     /// <param name="beatMotion">beat 轨道的运动强度。</param>
     /// <returns>逻辑空间中的横向偏移。</returns>
     public static double XFromValues(double beatAtTime, double distance, double xOffset, double beatMotion)
-    {
-        if (beatMotion == 0 && double.IsFinite(beatAtTime) && double.IsFinite(distance)) return xOffset;
-        double beat = (beatAtTime + .3) % 2, f = beat % 1, amount = 0;
-        if (f < .3)
-        {
-            amount = Math.Pow(f / .3, 2);
-        }
-        else if (f < .7)
-        {
-            amount = 1 - Math.Pow((f - .3) / .4, 2);
-        }
-        return xOffset + beatMotion / 100 * 11 * amount * (beat < 1 ? 1 : -1) * Math.Sin(distance / 60 + Math.PI / 2);
-    }
+        => KenomaGMK.Core.NoteMovement.XFromValues(beatAtTime,distance,xOffset,beatMotion);
 
     /// <summary>
     /// vivid/stasis 6.2.2.2 NoteModsY 的公共滚动项。velocity 不是额外位移，而是与 scrollspeed / scrollind
@@ -81,10 +61,7 @@ public static class NoteMotion
     /// <param name="wave">波形强度。</param>
     /// <returns>按公共滚动项得到的逻辑纵坐标。</returns>
     public static double YFromScroll(double distance, double yOffset, double driven, double beatsPerSecond, double scroll, double wave)
-    {
-        return 144 - (((distance - yOffset) * .1) + driven * beatsPerSecond * 22) * scroll
-            - (wave == 0 && double.IsFinite(distance) ? 0 : wave * .2 * Math.Sin(distance * .006578947368421052));
-    }
+        => KenomaGMK.Core.NoteMovement.YFromScroll(distance,yOffset,driven,beatsPerSecond,scroll,wave);
 
     /// <summary>纵向位置。144 是判定线的 y，0.1 是毫秒到逻辑像素的原版系数；这些数值不是可调参数。</summary>
     /// <param name="t">用于采样轨道和回调的时间轴。</param>
@@ -102,7 +79,7 @@ public static class NoteMotion
         if (M("boost_distance") != 0)
         {
             double bt = M("boost_time") + M("boost_timeind" + lane), bd = M("boost_distance") + M("boost_distanceind" + lane);
-            y += -bd + (distance < bt && bt > 0 ? bd * Math.Pow((bt - distance) / bt, 3) : 0);
+            y += KenomaGMK.Core.NoteMovement.CustomBoost(distance,bt,bd);
         }
         return y;
     }

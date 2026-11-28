@@ -12,7 +12,13 @@ public sealed partial class CustomGimmickRenderer : IDisposable
     readonly HashSet<string> failed = [];
     /// <summary>为自定义对象建立使用指定画布的精灵渲染器。</summary>
     /// <param name="canvas">提交绘制命令的画布。</param>
-    public CustomGimmickRenderer(Canvas canvas) => this.canvas = canvas;
+    public CustomGimmickRenderer(Canvas canvas)
+    {
+        this.canvas = canvas;
+        fireworkCutout = new(canvas.Gpu, Canvas.VertexSource, FireworkCutoutSource);
+        fireworkCutout.Prewarm((BlendFactor.InverseDestinationColor, BlendFactor.InverseSourceColor));
+        fireworkComposite = new(canvas.Gpu, Canvas.VertexSource, FireworkCompositeSource);
+    }
     /// <summary>按精灵名取纹理；路径必须落在 CustomGimmicks 目录内且通过预算检查，分配前先 Flush。失败写入诊断并记名，后续直接返回 null。</summary>
     Texture? Image(Session session, string name)
     {
@@ -116,8 +122,8 @@ public sealed partial class CustomGimmickRenderer : IDisposable
     public void Dispose()
     {
         fireworkMask?.Dispose();
-        fireworkCutout?.Dispose();
-        fireworkComposite?.Dispose();
+        fireworkCutout.Dispose();
+        fireworkComposite.Dispose();
         foreach (var texture in textures.Values) texture.Dispose();
         textures.Clear();
     }

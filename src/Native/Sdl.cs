@@ -285,7 +285,7 @@ public static partial class Sdl
                 return GpuShaderFormat.Msl;
 
             if (OperatingSystem.IsWindows())
-                return GpuShaderFormat.Dxbc | GpuShaderFormat.SpirV;
+                return GpuShaderFormat.Dxil | GpuShaderFormat.SpirV;
 
             if (OperatingSystem.IsLinux()) return GpuShaderFormat.SpirV;
 

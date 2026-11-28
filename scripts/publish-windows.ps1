@@ -31,16 +31,19 @@ foreach ($Cpu in $Architectures) {
             "-p:NuGetLockFilePath=$Stage/publish.lock.json" 2>&1 | Tee-Object -FilePath $Log
         if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed; see $Log" }
         Build-KgRustNative -Rid $Rid -OutputPath $Package
-        foreach ($Required in @('KuroakiGimmick.exe','kg_native_core.dll','Assets/GameUI/game-ui.gameui.json','Assets/Fonts/cjk-editor.png','Assets/Fonts/cjk-editor.json','Assets/Fonts/editor-help-sans.png','Assets/Fonts/editor-help-sans.json','Assets/Fonts/editor-help-sans-bold.png','Assets/Fonts/editor-help-sans-bold.json','Assets/GimmickExtras/scene_gameplay.runtime.fx.json','Assets/Documentation/vsm-reference.json')) {
+        foreach ($Required in @('KuroakiGimmick.exe','kg_native_core.dll','SDL3_shadercross.dll','dxcompiler.dll','dxil.dll','spirv-cross.dll','Assets/GameUI/game-ui.gameui.json','Assets/Fonts/cjk-editor.png','Assets/Fonts/cjk-editor.json','Assets/Fonts/editor-help-sans.png','Assets/Fonts/editor-help-sans.json','Assets/Fonts/editor-help-sans-bold.png','Assets/Fonts/editor-help-sans-bold.json','Assets/GimmickExtras/scene_gameplay.runtime.fx.json','Assets/Documentation/vsm-reference.json')) {
             if (-not (Test-Path (Join-Path $Package $Required))) { throw "Publish output missing: $Required" }
         }
         # The managed app is single-file; the Rust DLL is a required sidecar native library.
         # Other loose .dll/.deps.json/.runtimeconfig.json still indicate a broken package.
-        $LooseBuildFiles = @(Get-ChildItem -LiteralPath $Package -File | Where-Object { $_.Extension -in @('.dll','.json','.pdb') -and $_.Name -ne 'kg_native_core.dll' })
+        $LooseBuildFiles = @(Get-ChildItem -LiteralPath $Package -File | Where-Object { $_.Extension -in @('.dll','.json','.pdb') -and $_.Name -notin @('kg_native_core.dll','SDL3_shadercross.dll','dxcompiler.dll','dxil.dll','spirv-cross.dll') })
         if ($LooseBuildFiles.Count -gt 0) { throw "Single-file output leaked build files: $($LooseBuildFiles.Name -join ', ')" }
-        foreach ($Item in @('LICENSE','README.md','CHANGELOG.md','THIRD_PARTY_NOTICES.md','ThirdParty')) {
+        foreach ($Item in @('LICENSE','README.md','CHANGELOG.md','THIRD_PARTY_NOTICES.md')) {
             Copy-Item -LiteralPath (Join-Path $ProjectRoot $Item) -Destination $Package -Recurse
         }
+        $Notices = New-Item -ItemType Directory -Path (Join-Path $Package 'ThirdParty') -Force
+        Get-ChildItem (Join-Path $ProjectRoot 'ThirdParty') | Where-Object Name -ne 'KenomaGMK' | Copy-Item -Destination $Notices -Recurse -Force
+        Copy-Item (Join-Path $ProjectRoot 'ThirdParty/KenomaGMK/licenses') (Join-Path $Notices 'KenomaGMK-licenses') -Recurse
         if ($env:KUROAKI_FFMPEG) {
             Copy-Item -LiteralPath $env:KUROAKI_FFMPEG -Destination (Join-Path $Package 'ffmpeg.exe')
         }

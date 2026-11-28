@@ -38,19 +38,21 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
       - name: Rust unit tests
         run: cargo test --manifest-path rust/kg-native-core/Cargo.toml
       - name: Rust cdylib
         run: cargo build --release --manifest-path rust/kg-native-core/Cargo.toml
       - name: Compile existing C# UI + SDL renderer
-        run: dotnet build -c Release -p:PublishAot=false
+        run: dotnet build -c Release -p:PublishAot=false -p:KenomaBuildNative=true -m:1 --disable-build-servers
       - name: Copy native library for managed test
         shell: bash
-        run: cp "rust/kg-native-core/target/release/${{ matrix.library }}" bin/Release/net8.0/
+        run: cp "rust/kg-native-core/target/release/${{ matrix.library }}" bin/Release/net10.0/
       - name: Differential motion self-test (32,768 comparisons)
         shell: bash
         run: dotnet run -c Release --no-build -- --rust-bridge-test
@@ -82,19 +84,19 @@ jobs:
           KG_RUST_AUDIO_REQUIRED: '1'
       - name: NativeAOT publish (macOS ARM64)
         if: runner.os == 'macOS'
-        run: dotnet publish -c Release -r osx-arm64 -p:PublishAot=true
+        run: dotnet publish -c Release -r osx-arm64 -p:PublishAot=true -p:KenomaBuildNative=true -m:1 --disable-build-servers
       - name: NativeAOT RustBridge load and differential test
         if: runner.os == 'macOS'
         shell: bash
         run: |
-          cp rust/kg-native-core/target/release/libkg_native_core.dylib bin/Release/net8.0/osx-arm64/publish/
-          DYLD_LIBRARY_PATH="$PWD/bin/Release/net8.0/osx-arm64/publish" KG_RUST_BRIDGE=verify \
-            bin/Release/net8.0/osx-arm64/publish/KuroakiGimmick --rust-bridge-test
-          DYLD_LIBRARY_PATH="$PWD/bin/Release/net8.0/osx-arm64/publish" KG_RUST_ENGINE=verify \
-            bin/Release/net8.0/osx-arm64/publish/KuroakiGimmick --rust-engine-test
-          DYLD_LIBRARY_PATH="$PWD/bin/Release/net8.0/osx-arm64/publish" KG_RUST_ENGINE=verify \
-            bin/Release/net8.0/osx-arm64/publish/KuroakiGimmick --rust-timeline-test
-          DYLD_LIBRARY_PATH="$PWD/bin/Release/net8.0/osx-arm64/publish" \
-            bin/Release/net8.0/osx-arm64/publish/KuroakiGimmick --large-chart-test
-          DYLD_LIBRARY_PATH="$PWD/bin/Release/net8.0/osx-arm64/publish" KG_RUST_AUDIO_REQUIRED=1 \
-            bin/Release/net8.0/osx-arm64/publish/KuroakiGimmick --rust-audio-test
+          cp rust/kg-native-core/target/release/libkg_native_core.dylib bin/Release/net10.0/osx-arm64/publish/
+          DYLD_LIBRARY_PATH="$PWD/bin/Release/net10.0/osx-arm64/publish" KG_RUST_BRIDGE=verify \
+            bin/Release/net10.0/osx-arm64/publish/KuroakiGimmick --rust-bridge-test
+          DYLD_LIBRARY_PATH="$PWD/bin/Release/net10.0/osx-arm64/publish" KG_RUST_ENGINE=verify \
+            bin/Release/net10.0/osx-arm64/publish/KuroakiGimmick --rust-engine-test
+          DYLD_LIBRARY_PATH="$PWD/bin/Release/net10.0/osx-arm64/publish" KG_RUST_ENGINE=verify \
+            bin/Release/net10.0/osx-arm64/publish/KuroakiGimmick --rust-timeline-test
+          DYLD_LIBRARY_PATH="$PWD/bin/Release/net10.0/osx-arm64/publish" \
+            bin/Release/net10.0/osx-arm64/publish/KuroakiGimmick --large-chart-test
+          DYLD_LIBRARY_PATH="$PWD/bin/Release/net10.0/osx-arm64/publish" KG_RUST_AUDIO_REQUIRED=1 \
+            bin/Release/net10.0/osx-arm64/publish/KuroakiGimmick --rust-audio-test

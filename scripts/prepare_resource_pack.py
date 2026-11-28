@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('platform', choices=['android', 'ios', 'switch'])
+    p.add_argument('platform', choices=['android', 'ios', 'switch', 'desktop'])
     p.add_argument('--assets', type=Path, required=True)
     p.add_argument('--output', type=Path, required=True)
     p.add_argument('--dotnet', default='dotnet')
@@ -31,9 +31,9 @@ def main():
             f'-p:BaseIntermediateOutputPath={stage}/obj/', f'-p:NuGetLockFilePath={stage}/packages.lock.json',
             '-o', str(baker)], cwd=ROOT, check=True)
         shutil.rmtree(baker / 'Assets', ignore_errors=True)
-        shutil.copytree(assets, baker / 'Assets', ignore=shutil.ignore_patterns('SwitchShaders', 'MobileShaders'))
-        destination = baker / 'Assets' / ('SwitchShaders' if args.platform == 'switch' else 'MobileShaders')
-        command = ['--bake-switch-shaders'] if args.platform == 'switch' else ['--bake-mobile-shaders', args.platform]
+        shutil.copytree(assets, baker / 'Assets', ignore=shutil.ignore_patterns('SwitchShaders', 'MobileShaders', 'KenomaShaders'))
+        destination = baker / 'Assets' / ('SwitchShaders' if args.platform == 'switch' else 'KenomaShaders')
+        command = ['--bake-switch-shaders'] if args.platform == 'switch' else ['--bake-mobile-shaders', 'portable']
         subprocess.run([args.dotnet, str(baker / 'KuroakiGimmick.dll'), *command, str(destination),
             *[str(x.resolve()) for x in args.shader_root]], check=True)
         output.parent.mkdir(parents=True, exist_ok=True)

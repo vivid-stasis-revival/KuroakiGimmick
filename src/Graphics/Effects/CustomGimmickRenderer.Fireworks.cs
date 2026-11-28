@@ -5,7 +5,7 @@ namespace KuroakiGimmick.Graphics;
 public sealed partial class CustomGimmickRenderer
 {
     Target? fireworkMask;
-    Shader? fireworkCutout, fireworkComposite;
+    Shader fireworkCutout, fireworkComposite;
     internal const string FireworkCutoutSource = """
         #version 330 core
         in vec2 v_vTexcoord; in vec4 v_vColour;
@@ -42,8 +42,6 @@ public sealed partial class CustomGimmickRenderer
             .OrderBy(f => time < f.Burst ? 0 : 1).ThenBy(f => time < f.Burst ? f.Launch : f.Burst).ToArray();
         if (visible.Length == 0) return;
         fireworkMask ??= new(canvas.Gpu, 320, 180);
-        fireworkCutout ??= new(canvas.Gpu, Canvas.VertexSource, FireworkCutoutSource);
-        fireworkComposite ??= new(canvas.Gpu, Canvas.VertexSource, FireworkCompositeSource);
         // 同色对象在同一原生分辨率遮罩上执行 XOR；重叠后为黑色的区域在合成时透明。
         foreach (var group in visible.GroupBy(f => timeline.CustomFireworkColor(time < f.Burst ? time : f.Burst, time >= f.Burst)))
         {

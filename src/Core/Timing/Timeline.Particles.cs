@@ -7,22 +7,11 @@ public sealed partial class Timeline
     /// <summary>侧边爆发粒子：跟随 particlexpower/particleypower 的整体位移，寿命固定 4 秒（240 个 60 Hz tick）。</summary>
     void BuildSideBursts(double duration)
     {
-        int added = 0;
-        foreach (var e in chart.Mods.Where(e => e.Name is "pburstleft" or "pburstright").OrderBy(e => e.Beat).ThenBy(e => e.Order))
+        var events = chart.Mods.Where(e=>e.Name is "pburstleft" or "pburstright").OrderBy(e=>e.Beat).ThenBy(e=>e.Order)
+            .Select(e=>new KenomaGMK.Runtime.Particles.BurstEvent(e.Name,Bpm.Time(e.Beat),e.From,e.To,e.Order));
+        KenomaGMK.Runtime.Particles.BurstSchedule.Side(events,duration,d=>chart.Diagnostics.Add(new(d.Source,d.Line,d.Message,d.Error)),(e,groups)=>
         {
-            double time = Bpm.Time(e.Beat);
-            if (time > duration || e.To <= 0)
-            {
-                continue;
-            }
-            // GML 的 repeat 用的是四舍五入后的次数（与 InitMisc 的 for 循环不同）。
-            double groups = Math.Round(e.To, MidpointRounding.ToEven);
-            if (groups > 4096 || added + groups * 2 > 100000)
-            {
-                chart.Diagnostics.Add(new("particles", e.Order + 1,
-                    "Side burst exceeds 4096 groups/event or 100000 particles/session; callback skipped.", true));
-                continue;
-            }
+            double time=e.Time;
             // 左右爆发的原版发射点 x=130/190，方向相反；这些都在 320×180 逻辑空间里。
             float x = e.Name == "pburstleft" ? 130 : 190, dir = e.Name == "pburstleft" ? -1 : 1, speed = (float)Get("pburstspeed", time);
             for (int group = 0; group < groups; group++)
@@ -48,28 +37,20 @@ public sealed partial class Timeline
                         }
                     }
                     Particles.Add(new(time, x, y, vx, 0, (int)Math.Min(3, Hash(seed + 3 + i * 2) * 4), 0, 0, death, true, 4, true));
-                    added++;
                 }
             }
-        }
+        });
     }
 
     /// <summary>plaudite 爆发粒子：一次性触发与倒计时重复触发两条路径，都按 60 Hz tick 推进。</summary>
     void BuildBursts(double duration)
     {
-        int added = 0;
-        bool budgetReported = false;
-        var events = chart.Mods.Where(e => e.Name == "plaudite_pburst" && e.Proxy == -1).OrderBy(e => e.Beat).ThenBy(e => e.Order).ToArray();
-        void Emit(double time, double groups, uint seedBase)
+        var events = chart.Mods.Where(e=>e.Name=="plaudite_pburst"&&e.Proxy==-1).OrderBy(e=>e.Beat).ThenBy(e=>e.Order)
+            .Select(e=>new KenomaGMK.Runtime.Particles.BurstEvent(e.Name,Bpm.Time(e.Beat),e.From,e.To,e.Order));
+        KenomaGMK.Runtime.Particles.BurstSchedule.Plaudite(events,duration,d=>chart.Diagnostics.Add(new(d.Source,d.Line,d.Message,d.Error)),(time,groups,seedBase)=>
         {
-            if (groups > 4096 || added + Math.Ceiling(groups) * 2 > 100000)
-            {
-                if (!budgetReported) chart.Diagnostics.Add(new("particles", 0, "Particle burst budget exceeded (4096 groups/event or 100000 particles/session); excess emissions omitted.", true));
-                budgetReported = true;
-                return;
-            }
             float speed = (float)Get("pburstspeed", time);
-            for (int group = 0; group < Math.Ceiling(groups); group++)
+            for (int group = 0; group < groups; group++)
             {
                 uint seed = unchecked(seedBase + (uint)group * 19 + 8191);
                 float x = Math.Min(320, MathF.Floor(Hash(seed) * 321));
@@ -81,35 +62,9 @@ public sealed partial class Timeline
                     if (vy > 0) death = Math.Min(death, time + (Math.Floor(240 / vy) + 1) / 60);
                     else if (vy < 0) death = Math.Min(death, time + (Math.Floor(40 / -vy) + 1) / 60);
                     Particles.Add(new(time, x, -10, 0, vy, (int)Math.Min(3, Hash(seed + 2 + i * 3) * 4), 0, 0, death, true));
-                    added++;
                 }
             }
-        }
-        foreach (var e in events.Where(e => e.From <= 0 && e.To > 0))
-        {
-            double time = Bpm.Time(e.Beat);
-            if (time <= duration) Emit(time, e.To, unchecked((uint)e.Order * 3079));
-        }
-        var repeated = events.Where(e => e.From > 0).Select(e => (Start: Bpm.Time(e.Beat), Milliseconds: e.To, e.Order)).ToArray();
-        if (repeated.Length == 0) return;
-        var active = new List<(double Start, double Milliseconds, int Order)>();
-        int cursor = 0;
-        double countdown = -.01;
-        // cc 先更新已有的倒计时 tween，再派发新回调。
-        // 并存的 tween 保持源顺序：后声明的短 tween 可能先结束，而更早的长 tween 仍然存活。
-        for (int tick = 0; tick <= Math.Ceiling(duration * 60); tick++)
-        {
-            double time = tick / 60.0;
-            foreach (var e in active)
-            {
-                double progress = e.Milliseconds <= 0 ? 1 : Math.Clamp((time - e.Start) * 1000 / e.Milliseconds, 0, 1);
-                countdown = e.Milliseconds + (-.01 - e.Milliseconds) * progress;
-            }
-            active.RemoveAll(e => time >= e.Start + Math.Max(0, e.Milliseconds) / 1000);
-            while (cursor < repeated.Length && repeated[cursor].Start <= time) active.Add(repeated[cursor++]);
-            // 倒计时高于 0.5 才继续发射：这是原版的判定阈值，不是随手选的容差。
-            if (countdown >= .5) Emit(time, 1, unchecked((uint)tick * 1031 + 93017));
-        }
+        });
     }
 
     /// <summary>

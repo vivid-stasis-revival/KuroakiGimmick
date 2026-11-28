@@ -5,13 +5,13 @@ namespace KuroakiGimmick.Core;
 /// <summary>
 /// 拍数与秒之间的分段线性映射。OffsetMs 只在时间域应用一次；FixedBpm 显式忽略谱内变速，否则保留原始变速点。
 /// </summary>
-public sealed class BpmMap
+public sealed class BpmMap : KenomaGMK.Core.IBeatClock
 {
     /// <summary>分段起点：Time 秒、Beat 拍、Bpm 为该段之后生效的速度；两个数组按 Time 与 Beat 同时升序。</summary>
     /// <param name="Time">分段起始秒数。</param>
     /// <param name="Beat">对应的起始拍。</param>
     /// <param name="Bpm">本段每分钟拍数。</param>
-    public record Segment(double Time, double Beat, double Bpm);
+    public record Segment(double Time, double Beat, double Bpm) : KenomaGMK.Core.ITempoSegment;
     /// <summary>按时间和拍数排列的变速锚点。</summary>
     public List<Segment> Segments { get; } = [];
     readonly double offset;
@@ -27,81 +27,27 @@ public sealed class BpmMap
     public BpmMap(Chart chart, double bpm, double offsetMs, double? fixedBpm = null,
         IReadOnlyList<GimmickBpmPoint>? nativePoints = null)
     {
-        // 1. 校验初始及固定 BPM，并将工程偏移从毫秒转换为秒。
-        if (!double.IsFinite(bpm) || bpm <= 0 || bpm > 10000)
-        {
-            throw new InvalidDataException("BPM must be between 0 and 10000.");
-        }
-        if (!double.IsFinite(offsetMs) || Math.Abs(offsetMs) > 3_600_000)
-        {
-            throw new InvalidDataException("Offset is out of range.");
-        }
-        if (fixedBpm is { } fixedValue && (!double.IsFinite(fixedValue) || fixedValue <= 0 || fixedValue > 10000))
-        {
-            throw new InvalidDataException("Invalid fixed BPM.");
-        }
+        KenomaGMK.Core.BpmMap.ValidateArguments(bpm, offsetMs, fixedBpm);
         IsFixed = fixedBpm.HasValue;
-        // offset 只在这里从毫秒转成秒并保存一次，Time/Beat 各自加减一次，别处不得重复应用。
         offset = offsetMs / 1000;
-        // 2. 未锁定 BPM 时优先展开来源对象的变速表。
-        if (!fixedBpm.HasValue && nativePoints is { Count: > 0 })
+        // 对象变速表优先于原生谱面快路径；固定 BPM 始终覆盖对象变速表。
+        if ((IsFixed || nativePoints is not { Count: > 0 }) &&
+            RustEngineBridge.TryBuildBpm(chart, bpm, offsetMs, fixedBpm, out var native) && native != null)
         {
-            double previousBeat = 0, previousBpm = 60, time = 0;
-            foreach (var point in nativePoints)
-            {
-                if (point == null || !double.IsFinite(point.Beat) || point.Beat < previousBeat
-                    || !double.IsFinite(point.Bpm) || point.Bpm <= 0 || point.Bpm > 10000)
-                    throw new InvalidDataException("Invalid native BPM override.");
-                time += (point.Beat - previousBeat) * 60 / previousBpm;
-                if (Segments.Count > 0 && point.Beat == Segments[^1].Beat)
-                    Segments[^1] = new(time, point.Beat, point.Bpm);
-                else Segments.Add(new(time, point.Beat, point.Bpm));
-                previousBeat = point.Beat;
-                previousBpm = point.Bpm;
-            }
-            if (nativePoints[0].Beat != 0) throw new InvalidDataException("Native BPM override must start at beat zero.");
+            Segments.AddRange(native);
             return;
         }
-        // 3. 尝试由 Rust 构建分段；未取得结果时继续使用托管实现。
-        if (RustEngineBridge.TryBuildBpm(chart, bpm, offsetMs, fixedBpm, out var nativeSegments) && nativeSegments != null)
+        var points = IsFixed ? null : nativePoints?.Select(p => p == null ? null! :
+            new KenomaGMK.Core.GimmickBpmPoint(p.Beat, p.Bpm)).ToArray();
+        var map = KenomaGMK.Core.BpmMap.FromChanges(Changes(), bpm, offsetMs, fixedBpm, points);
+        Segments.EnsureCapacity(map.Segments.Count);
+        foreach (var seg in map.Segments) Segments.Add(new(seg.Time, seg.Beat, seg.Bpm));
+
+        IEnumerable<(double Time, object Value)> Changes()
         {
-            Segments.AddRange(nativeSegments);
-            return;
-        }
-        Segments.Add(new(0, 0, fixedBpm ?? bpm));
-        if (IsFixed)
-        {
-            return;
-        }
-        // 4. 只有非固定速度到达此处：按时间合并谱内变速点。
-        foreach (var n in chart.Notes.Where(n => n.Type == 3).OrderBy(n => n.Time))
-        {
-            if (!n.Extra.TryGetValue(1, out var value))
-            {
-                continue;
-            }
-            double next = Convert.ToDouble(value);
-            if (!double.IsFinite(next) || next <= 0 || next > 10000)
-            {
-                throw new InvalidDataException("Invalid BPM change.");
-            }
-            var previous = Segments[^1];
-            // 负时间的变速点改写第 0 段而不新增分段：它描述的是曲子开始前就已生效的速度。
-            if (n.Time < 0)
-            {
-                Segments[0] = new(0, 0, next);
-                continue;
-            }
-            // 用上一段的速度把时间差折算成拍：60 秒 = BPM 拍。同一时刻的后一条覆盖前一条，不产生零长度分段。
-            double beat = previous.Beat + (n.Time - previous.Time) * previous.Bpm / 60;
-            if (n.Time == previous.Time)
-            {
-                Segments[^1] = new(n.Time, beat, next);
-            }
-            else
-            {
-                Segments.Add(new(n.Time, beat, next));
-            }
+            foreach (var note in chart.Notes)
+                if (note.Type == 3 && note.Extra.TryGetValue(1, out var value))
+                    yield return (note.Time, value);
         }
     }
 
@@ -110,8 +56,8 @@ public sealed class BpmMap
     /// <returns>应用工程偏移后的歌曲秒数。</returns>
     public double Time(double beat)
     {
-        var s = Segments[Math.Max(0, SortedSearch.UpperBound(Segments, beat, static s => s.Beat) - 1)];
-        return s.Time + (beat - s.Beat) * 60 / s.Bpm + offset;
+        var s = KenomaGMK.Core.SegmentTiming.ByBeat(Segments, beat);
+        return KenomaGMK.Core.SegmentTiming.Time(s, beat, 60) + offset;
     }
 
     /// <summary>秒 → 拍，是 Time 的逆运算：先减掉 offset 再折算，两边必须成对，否则 offset 会被算两次。</summary>
@@ -120,8 +66,8 @@ public sealed class BpmMap
     public double Beat(double time)
     {
         time -= offset;
-        var s = Segments[Math.Max(0, SortedSearch.UpperBound(Segments, time, static s => s.Time) - 1)];
-        return s.Beat + (time - s.Time) * s.Bpm / 60;
+        var s = KenomaGMK.Core.SegmentTiming.ByTime(Segments, time);
+        return KenomaGMK.Core.SegmentTiming.Beat(s, time, 60);
     }
 
     /// <summary>该拍所在分段的 BPM。按拍查询不涉及 offset，因此这里不做 offset 修正。</summary>
@@ -130,7 +76,7 @@ public sealed class BpmMap
     public double BpmAtBeat(double beat)
     {
         if (double.IsNaN(beat)) return Segments[^1].Bpm;
-        var s = Segments[Math.Max(0, SortedSearch.UpperBound(Segments, beat, static s => s.Beat) - 1)];
+        var s = KenomaGMK.Core.SegmentTiming.ByBeat(Segments, beat);
         return s.Bpm;
     }
 }

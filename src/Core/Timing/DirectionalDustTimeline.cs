@@ -24,15 +24,6 @@ public sealed class DirectionalDustTimeline
     private readonly Timeline timeline;
 
     // 运动使用 60 Hz 逻辑步长，独立于渲染帧间隔。
-    private double Next()
-    {
-        seed ^= seed << 13;
-        seed ^= seed >> 17;
-        seed ^= seed << 5;
-        return seed / 4294967296.0;
-    }
-    private int Integer(int low, int high) => low + Math.Min(high - low, (int)(Next() * (high - low + 1)));
-
     /// <summary>根据时间轴事件预计算固定步长的尘埃生成状态。</summary>
     /// <param name="session">提供谱面、时间轴及已加载资源的会话。</param>
     public DirectionalDustTimeline(Session session) : this(session.Timeline, session.Chart, session.Duration)
@@ -58,16 +49,14 @@ public sealed class DirectionalDustTimeline
             int repeats = double.IsFinite(evt.To) ? (int)Math.Clamp(Math.Round(evt.To, MidpointRounding.ToEven), 0, 2500) : 0;
             for (int n = 0; n < repeats && Diamonds.Count < MaxDust; n++)
             {
-                float y = Integer(5, 75); // 每次调用 spawn_particles_directional 只取一次 irandom_range()。
+                float y = KenomaGMK.Runtime.Particles.ParticleMotion.DirectionalY(ref seed); // 每次调用 spawn_particles_directional 只取一次 irandom_range()。
                 // 原版从 0 迭代到 1/op_bgparticles 并包含终点，默认值为 1 时每次发射两个实例。
-                for (int duplicate = 0; duplicate < 2 && Diamonds.Count < MaxDust; duplicate++)
+                for (int duplicate = 0; duplicate < KenomaGMK.Runtime.Particles.ParticleMotion.Count(1, 1) && Diamonds.Count < MaxDust; duplicate++)
                 {
-                    float speed = (float)(Next() * 0.5 * 8) * (fromLeft ? 1 : -1);
-                    int frame = Integer(0, 4) % 4; // 原版 irandom(image_number) 包含上界。
-                    float x = fromLeft ? -10 : 330;
-                    var dust = new Dust(birth, finalTick + 1, x, y, speed, frame);
+                    var (x, speed, frame) = KenomaGMK.Runtime.Particles.ParticleMotion.DirectionalChild(fromLeft, ref seed);
+                    var dust = new Dust(birth, finalTick + 1, (float)x, y, (float)speed, frame);
                     for (int tick = birth; tick <= finalTick; tick++)
-                        if (PositionAt(dust, tick).X is >= 120 and <= 200)
+                        if (KenomaGMK.Runtime.Particles.ParticleMotion.InInverseMask(PositionAt(dust, tick).X))
                         {
                             dust = dust with { Death = tick };
                             break;

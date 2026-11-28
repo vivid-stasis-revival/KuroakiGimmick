@@ -4,4 +4,4 @@ namespace KuroakiGimmick.Core;
 /// <param name="PlayerName">预览剧情使用的玩家名。</param>
 /// <param name="StoryProgress">预览使用的剧情进度值。</param>
 /// <param name="SelectedTitle">已选择的称号，默认空字符串。</param>
-public sealed record NativeStoryContext(string PlayerName, int StoryProgress = 0, string SelectedTitle = "");
+public sealed record NativeStoryContext(string PlayerName, int StoryProgress = 0, string SelectedTitle = "") : KenomaGMK.Runtime.Sequence.NativeStoryContext(PlayerName, StoryProgress, SelectedTitle);

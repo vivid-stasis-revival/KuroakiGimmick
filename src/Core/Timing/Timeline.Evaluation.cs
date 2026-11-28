@@ -9,7 +9,7 @@ public sealed partial class Timeline
     /// 源文件仍保留作者输入并由构造阶段给出 warning。其它连续 mod 不在这里统一舍入。
     /// </summary>
     static double SafeModValue(string name, double value) =>
-        name is "fx_underwater" or "fx_chroma_distort" ? Math.Max(.01, value) : value;
+        KenomaGMK.Runtime.Timeline.ModDefaults.VisibleValue(name,value);
 
     /// <summary>读取基础轨道后应用声明式别名、逐帧覆盖与回调淡入；不修改时间轴状态。</summary>
     /// <param name="name">轨道名。</param>
@@ -53,31 +53,10 @@ public sealed partial class Timeline
             if (definition.CallbackFades.TryGetValue(name, out var fade) && (!fade.RequireResourcePack || Native.ResourcePackLoaded)
                 && (fade.RequireResourceRoom == null || Native.ResourceRoom == fade.RequireResourceRoom))
             {
-                if (!firstCallbacks.TryGetValue(fade.Callback, out double start) || t < start)
-                {
-                    return SafeModValue(name, fade.From);
-                }
-                // fade 的 Duration 与 t 都是秒，不是拍：这里不经过 BPM map。
-                double completion = start + fade.Duration;
-                double fadeStart = start;
-                if (fade.RestartUntilInitialCompletion && callbackTimes.TryGetValue(fade.Callback, out var times))
-                {
-                    int beforeClear = SortedSearch.LowerBound(times, completion, value => value) - 1;
-                    int beforeNow = SortedSearch.UpperBound(times, t, value => value) - 1;
-                    int index = Math.Min(beforeClear, beforeNow);
-                    if (index >= 0) fadeStart = times[index];
-                }
-                if (t < completion)
-                {
-                    return SafeModValue(name, fade.From + (fade.To - fade.From) * Easings.Eval(fade.Ease, (t - fadeStart) / fade.Duration));
-                }
-                // 隐式的房间写入会盖掉更早、已经结束的轨道，但盖不掉更晚或仍在进行中的轨道。
-                if (list == null || !list.Any(segment => segment.Time <= t && (segment.Time >= completion
-                    || segment.Time + segment.Duration > completion)))
-                {
-                    return SafeModValue(name, fade.RestartUntilInitialCompletion && fade.Duration > 0
-                        ? fade.From + (fade.To - fade.From) * Easings.Eval(fade.Ease, (completion - fadeStart) / fade.Duration) : fade.To);
-                }
+                callbackTimes.TryGetValue(fade.Callback, out var times);
+                var sample = KenomaGMK.Runtime.Events.CallbackFade.Evaluate(t, times, fade.Duration, fade.RestartUntilInitialCompletion);
+                if (!sample.Completed || list == null || !list.Any(segment => sample.YieldsTo(t, segment.Time, segment.Duration)))
+                    return SafeModValue(name, fade.From + (fade.To - fade.From) * Easings.Eval(fade.Ease, sample.Progress));
             }
         }
         return SafeModValue(name, v);
@@ -120,20 +99,7 @@ public sealed partial class Timeline
     /// <returns>在查询时刻生效的数值。</returns>
     public static double Evaluate(List<Segment> list, double t, double initial)
     {
-        int low = 0, high = list.Count;
-        while (low < high)
-        {
-            int m = (low + high) / 2;
-            if (list[m].Time <= t)
-            {
-                low = m + 1;
-            }
-            else
-            {
-                high = m;
-            }
-        }
-        return low == 0 ? initial : list[low - 1].Value(t);
+        return KenomaGMK.Runtime.Timeline.ModSegment.Sample(list,t,initial,static s=>s.Time,static s=>s.Shared);
     }
 }
 

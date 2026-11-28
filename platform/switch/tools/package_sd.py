@@ -4,6 +4,8 @@ import argparse
 import pathlib
 import shutil
 import struct
+import subprocess
+import sys
 
 p = argparse.ArgumentParser()
 p.add_argument('--managed', type=pathlib.Path, required=True)
@@ -37,7 +39,7 @@ if a.probe: shutil.copy2(a.probe, app / 'KG-Vulkan-Probe.nro')
 shutil.copytree(a.assets, app / 'Assets', ignore=shutil.ignore_patterns('.DS_Store', '._*'))
 shutil.copytree(a.shaders, app / 'Assets/SwitchShaders', dirs_exist_ok=True)
 repo = pathlib.Path(__file__).resolve().parents[3]
-shutil.copytree(repo / 'ThirdParty', app / 'ThirdParty')
+subprocess.run([sys.executable, str(repo / 'scripts/ci/stage_third_party.py'), str(app / 'ThirdParty')], check=True)
 shutil.copy2(repo / 'LICENSE', app / 'LICENSE')
 shutil.copy2(repo / 'THIRD_PARTY_NOTICES.md', app / 'THIRD_PARTY_NOTICES.md')
 for folder in ['UserData', 'Exports', 'Temp', 'Songs']: (app / folder).mkdir()

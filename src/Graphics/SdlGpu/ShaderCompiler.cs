@@ -1,3 +1,4 @@
+using Uniform = KenomaGMK.SDL3.ShaderUniform;
 using System.Text;
 using KuroakiGimmick.Native;
 using static KuroakiGimmick.Native.Sdl;
@@ -10,9 +11,6 @@ namespace KuroakiGimmick.Graphics;
 /// <summary>着色器编译缓存。缓存键包含源码、阶段和最终 SDL_GPU shader 格式，不跨后端复用字节码。</summary>
 internal static unsafe partial class ShaderCompiler
 {
-    // 每项固定占 16 字节。不要在 CPU 侧独立“压紧”布局，否则会与生成的 offset 声明不一致。
-    internal sealed record Uniform(string Name, string Type, int Offset);
-
     /// <summary>某个后端的最终产物：Code 依格式为 SPIR-V 字节码、带结尾 NUL 的 MSL 文本或 DXBC；Entry 在 Metal 上不一定是 main。</summary>
     internal sealed record Compiled(
         byte[] Code,
@@ -46,7 +44,7 @@ internal static unsafe partial class ShaderCompiler
 
     static Compiled CompileCached(string source, bool vertex, GpuShaderFormat format)
     {
-        if (format is not (GpuShaderFormat.SpirV or GpuShaderFormat.Dxbc or GpuShaderFormat.Msl))
+        if (format is not (GpuShaderFormat.Dxil or GpuShaderFormat.SpirV or GpuShaderFormat.Dxbc or GpuShaderFormat.Msl))
         {
             throw new PlatformNotSupportedException($"Unsupported Kuroaki shader format: {format}");
         }
@@ -68,6 +66,14 @@ internal static unsafe partial class ShaderCompiler
         cache[key] = packed;
         return packed;
 #else
+        if (format == GpuShaderFormat.Dxil || format == GpuShaderFormat.Msl && !TargetIosMsl)
+        {
+            var portable = Translate(source,vertex,GpuShaderFormat.SpirV);
+            var output = SharedLibrary.Prepare(portable.SpirV,vertex?0u:1u,(uint)format,string.Join(",",portable.Samplers)+"/"+portable.Uniforms.Length);
+            bool msl = format == GpuShaderFormat.Msl;
+            return cache[key]=new(output.ToArray(),msl?"main0":"main",portable.Uniforms,portable.Samplers,
+                msl?Encoding.UTF8.GetString(output.Span[..^1]):"",format);
+        }
         var translated = Translate(source, vertex, format);
         byte[] code = format switch
         {

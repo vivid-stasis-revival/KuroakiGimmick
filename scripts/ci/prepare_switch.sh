@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-printf '{"sdk":{"version":"9.0.102","rollForward":"disable"}}\n' > global.json
+printf '{"sdk":{"version":"10.0.101","rollForward":"disable"}}\n' > global.json
 dotnet publish KuroakiGimmick.csproj -c Release \
   -p:KuroakiSwitch=true -p:KuroakiExternalAssets=true \
   -p:BaseIntermediateOutputPath=dist/switch-obj/ -o dist/switch-managed

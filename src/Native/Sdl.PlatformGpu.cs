@@ -120,7 +120,7 @@ public static partial class Sdl
     public static GpuShaderFormat ShaderFormatFor(string driver) => driver.ToLowerInvariant() switch
     {
         "metal" => GpuShaderFormat.Msl,
-        "direct3d12" => GpuShaderFormat.Dxbc,
+        "direct3d12" => GpuShaderFormat.Dxil,
         "vulkan" => GpuShaderFormat.SpirV,
         _ => GpuShaderFormat.Invalid
     };

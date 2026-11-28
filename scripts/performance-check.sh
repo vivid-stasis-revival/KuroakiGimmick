@@ -18,11 +18,11 @@ case "$(uname -s)" in
   Linux) kg_native=libkg_native_core.so ;;
   *) echo 'Use the commands in tests/Performance/README.md on Windows.' >&2; exit 2 ;;
 esac
-cp "rust/kg-native-core/target/release/$kg_native" bin/Release/net8.0/
-cp "rust/kg-native-core/target/release/$kg_native" tests/Performance/bin/Release/net8.0/
-cp "rust/kg-native-core/target/release/$kg_native" tests/Regression/bin/Release/net8.0/
+cp "rust/kg-native-core/target/release/$kg_native" bin/Release/net10.0/
+cp "rust/kg-native-core/target/release/$kg_native" tests/Performance/bin/Release/net10.0/
+cp "rust/kg-native-core/target/release/$kg_native" tests/Regression/bin/Release/net10.0/
 KG_RUST_ENGINE=verify KG_RUST_BRIDGE=verify dotnet run --project tests/Regression -c Release > "$kg_results/regression.txt" 2>&1
-kg_bench="tests/Performance/bin/Release/net8.0/Performance.dll"
+kg_bench="tests/Performance/bin/Release/net10.0/Performance.dll"
 for kg_case in 'cpu 0 0' 'skin 10000 12' 'skin 100000 12' 'skin 1000000 6' 'scene 200 30' 'scene 1000000 6' 'ui 1000000 12' 'uniform 1000000 8' 'vsm 1000000 8' 'holds 10000 8' 'modulated 10000 8' 'hit 1000000 3' 'readback 0 0' 'shaders 0 0' 'timeline-pixels 0 0' 'cancel 1000 0' 'encoder-failure 1000 0'; do
   read -r kg_mode kg_count kg_samples <<< "$kg_case"
   echo "Running $kg_mode $kg_count"

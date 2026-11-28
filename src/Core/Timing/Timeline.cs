@@ -19,7 +19,10 @@ public sealed partial class Timeline
         /// <summary>在歌曲时刻对片段插值，持续时间非正时直接取终值。</summary>
         /// <param name="time">采样时刻，单位为秒。</param>
         /// <returns>该时刻的缓动值，瞬时段取终值。</returns>
-        public double Value(double time) => Duration <= 0 ? To : From + (To - From) * Easings.Eval(Ease, (time - Time) / Duration);
+        public double Value(double time) => Shared.At(time);
+
+        /// <summary>以公共轨道片段表示当前插值参数，供时间轴按歌曲秒数采样。</summary>
+        internal KenomaGMK.Runtime.Timeline.ModSegment Shared => new(Time, Duration, From, To, Ease);
     }
 
     /// <summary>一次回调触发。Time 单位秒；Index 是全局触发序号，既用于 LatestOnly 判定同一 drawing 的最后一次触发，也让稳定排序后保留声明顺序。</summary>
@@ -150,263 +153,277 @@ public sealed partial class Timeline
         if (native?.Data?.Sequence is { AutomaticTriggers.Count: > 0 } automaticSequence)
             foreach (var window in automaticSequence.StoryWindows.Where(w => automaticSequence.AutomaticTriggers.ContainsKey(w.Trigger)))
                 End = Math.Max(End, window.Destroy ?? (window.Clear is { } clear ? clear + window.ExitSeconds : window.Start));
-        // freeze 的两个回调点分别落在事件起点和终点，后者可能排在后续事件之后，所以先攒起来最后统一排序。
-        List<(double Time, double Value, ModEvent Event)> freezeLatches = [];
-        int callbackSequence = 0;
-        double loreleiColor = Native?.Data?.HasBehavior("palette-slash") == true ? NativeLorelei.Palette[0] : 16777215;
-        // 事件先按拍、再按声明顺序展开，这是整条链路的稳定顺序来源。
-        foreach (var e in c.Mods.OrderBy(x => x.Beat).ThenBy(x => x.Order))
+        if (IsCustomGimmick && Native?.Data == null)
         {
-            if (Native?.Data?.SourceNoOps.TryGetValue(e.Name, out string? sourceReason) == true)
+            var compiled = new KenomaGMK.Runtime.Timeline.CustomTimeline(
+                c.Mods.Select(e=>new KenomaGMK.Core.ModEvent(e.Beat,e.Duration,e.Ease,e.From,e.To,e.Name,e.Proxy,e.Order,e.SourceLine)),
+                Bpm,c.Proxies,Scroll,End,(name,fallback)=>SongFiles.Config(project,name,fallback),
+                d=>c.Diagnostics.Add(new(d.Source,d.Line,d.Message,d.Error)));
+            End = compiled.End;
+            foreach(var (key,segments) in compiled.Tracks)
+                Tracks[key] = segments.Select(s=>new Segment(s.Time,s.Duration,s.Data.From,s.Data.To,s.Data.Ease,c.Mods[s.SourceIndex])).ToList();
+            foreach(var e in compiled.Callbacks) Callbacks.Add(new(e.Time,e.Name,e.Value,e.Index,e.SourceOrder));
+            foreach(var e in compiled.SlashSpans) SlashSpans.Add(new(e.Start,e.End,e.TickCount,e.Index));
+            foreach(var e in compiled.Slashes) LoreleiSlashes.Add(new(e.Time,e.Count,e.Color,e.Index));
+            foreach(var e in compiled.Fireworks) CustomFireworks.Add(new(e.Launch,e.FlightEnd,e.Burst,e.X,e.Y,e.Seed));
+            foreach(var e in compiled.NoOps) SourceNoOps.Add(new(e.Name,e.Line,e.Beat,e.Reason));
+            customResolutions.AddRange(compiled.Resolutions);
+        }
+        else
+        {
+            // freeze 的两个回调点分别落在事件起点和终点，后者可能排在后续事件之后，所以先攒起来最后统一排序。
+            List<(double Time, double Value, ModEvent Event)> freezeLatches = [];
+            int callbackSequence = 0;
+            double loreleiColor = Native?.Data?.HasBehavior("palette-slash") == true ? NativeLorelei.Palette[0] : 16777215;
+            // 事件先按拍、再按声明顺序展开，这是整条链路的稳定顺序来源。
+            foreach (var e in c.Mods.OrderBy(x => x.Beat).ThenBy(x => x.Order))
             {
-                SourceNoOps.Add(new(e.Name, e.SourceLine, e.Beat, sourceReason));
-                continue;
-            }
-            if (Native?.Data?.UnavailableCallbacks.TryGetValue(e.Name, out string? unavailable) == true)
-            {
-                Native.Fail("callback/" + e.Name, unavailable);
-                continue;
-            }
-            if (CustomCompatibility.NoOpReason(e.Name, c, project) is { } reason)
-            {
-                SourceNoOps.Add(new(e.Name, e.SourceLine, e.Beat, reason));
-                continue;
-            }
-            // 拍 → 秒：起点查 BPM map，时长按事件起点所在分段的 BPM 折算。
-            // 与原版一致，跨变速点的 tween 不重新积分，整段沿用起点的 BPM。
-            double start = Bpm.Time(e.Beat), span = e.Duration * 60 / Bpm.BpmAtBeat(e.Beat);
-            if (RegisterCustom1141(e, start)) continue;
-            if (Native?.Data?.Signals.TryGetValue(e.Name, out var route) == true)
-            {
-                if (route.MinimumExclusive is { } minimum && e.To <= minimum) continue;
-                if (route.Operation == "random-write")
+                if (Native?.Data?.SourceNoOps.TryGetValue(e.Name, out string? sourceReason) == true)
                 {
-                    string target = route.Target!;
-                    if (!Tracks.TryGetValue((target, -1), out var writes)) Tracks[(target, -1)] = writes = [];
-                    double value = Math.Floor(Hash(unchecked((uint)e.Order * route.SeedMultiplier + route.SeedOffset)) * route.RandomScale);
-                    writes.Add(new(start, 0, value, value, "linear", e));
-                }
-                else Callbacks.Add(new(start, route.Signal, e.To, callbackSequence++, e.Order));
-                End = Math.Max(End, route.AbsoluteEnd ?? start + route.Lifetime);
-                continue;
-            }
-            if (c.ObjectName == "obj_custom_gimmick" && e.Name is "sg_endblip" or "sg_endblip_destroy")
-            {
-                Callbacks.Add(new(start, e.Name, e.To, callbackSequence++));
-                End = Math.Max(End, start + 1);
-                continue;
-            }
-            bool storyCallback = Native?.Data?.Sequence is { } sourceSequence &&
-                (sourceSequence.Story.Any(cue => cue.Trigger == e.Name) || sourceSequence.AudioCues.Any(cue => cue.Trigger == e.Name)
-                    || sourceSequence.MusicFades.Any(fade => fade.Trigger == e.Name) || sourceSequence.SongSeeks.Any(seek => seek.Trigger == e.Name)
-                    || sourceSequence.SceneActions.Any(action => action.Trigger == e.Name));
-            if (Native?.Data?.Interludes.Any(i => i.Trigger == e.Name) == true || storyCallback)
-            {
-                Callbacks.Add(new(start, e.Name, e.To, callbackSequence++));
-                End = Math.Max(End, start + (e.Name == "self_gravefg" ? 8 : 0));
-                if (storyCallback)
-                {
-                    var story = Native!.Data!.Sequence!;
-                    End = Math.Max(End, story.StoryWindows.Where(w => w.Trigger == e.Name)
-                        .Select(w => w.Destroy ?? (w.Clear is { } clear ? clear + w.ExitSeconds :
-                            story.Story.Where(cue => cue.Trigger == e.Name).Select(cue => cue.Time + cue.Text.Length / (100 * cue.Speed)).DefaultIfEmpty(start).Max()))
-                        .DefaultIfEmpty(start).Max());
-                }
-                continue;
-            }
-            if (Native?.Data?.CallbackCancels.ContainsKey(e.Name) == true)
-            {
-                Callbacks.Add(new(start, e.Name, e.To, callbackSequence++));
-                End = Math.Max(End, start);
-                continue;
-            }
-            if (Native?.Data?.Callbacks.TryGetValue(e.Name, out var nativeDrawings) == true)
-            {
-                if (Native.Data.CallbackConstraints.TryGetValue(e.Name, out var constraint) && !constraint.Accepts(e.To))
-                {
-                    c.Diagnostics.Add(new("native-gimmick/" + e.Name, e.SourceLine,
-                        $"Callback value must be {(constraint.Integer ? "an integer " : "")}{constraint.Minimum}..{constraint.Maximum}; event skipped.", true));
+                    SourceNoOps.Add(new(e.Name, e.SourceLine, e.Beat, sourceReason));
                     continue;
                 }
-                double lifetime = Native.Data.CallbackLifetimes.GetValueOrDefault(e.Name, nativeDrawings.Max(d => d.Lifetime));
-                End = Math.Max(End, start + lifetime);
-                Callbacks.Add(new(start, e.Name, e.To, callbackSequence++));
-                continue;
-            }
-            if (c.ObjectName == "obj_custom_gimmick" && e.Name == "df_sideline2")
-            {
-                Callbacks.Add(new(start, e.Name, e.To, callbackSequence++, e.Order));
-                End = Math.Max(End, start + .75);
-                continue;
-            }
-            if (Native?.Data?.SideCallbacks.ContainsKey(e.Name) == true)
-            {
-                // 多数原版回调忽略参数。Unraveling 显式检查 arg3，即缓动终值。
-                if (Native.Data.PositiveSideCallbacks.Contains(e.Name) && e.To <= 0) continue;
-                Callbacks.Add(new(start, e.Name, e.To, callbackSequence++));
-                End = Math.Max(End, start + 1);
-                continue;
-            }
-            if (LoreleiSides.IsCallback(e.Name) && Native?.Data?.Callbacks.ContainsKey(e.Name) != true)
-            {
-                if (c.ObjectName != "obj_custom_gimmick" && Native?.Data?.HasBehavior("grid-sides") != true)
-                    SourceNoOps.Add(new(e.Name, e.SourceLine, e.Beat, "Lorelei sides require a Custom, Distorted Fate or First Breath gimmick object."));
-                else
+                if (Native?.Data?.UnavailableCallbacks.TryGetValue(e.Name, out string? unavailable) == true)
                 {
-                    // 实例回调忽略缓动端点、时长、缓动名称和 proxy。
-                    Callbacks.Add(new(start, e.Name, e.To, callbackSequence++));
-                    End = Math.Max(End, start + LoreleiSides.Lifetime);
+                    Native.Fail("callback/" + e.Name, unavailable);
+                    continue;
                 }
-                continue;
-            }
-            if (e.Name is "fx_underwater" or "fx_chroma_distort")
-            {
-                bool lowFrom = e.From != 573613 && e.From < .01, lowTo = e.To != 573613 && e.To < .01;
-                if (lowFrom || lowTo)
-                    c.Diagnostics.Add(new("fx", e.SourceLine,
-                        $"{e.Name}: values below 0.01 black out the original game; preview and saved/exported VSM clamp them to 0.01."));
-            }
-            if (e.Name is "lr_slash" or "lr_slash_color")
-            {
-                if (AddNativeLorelei(e, start, span, ref loreleiColor)) continue;
-                if (c.ObjectName != "obj_custom_gimmick")
+                if (CustomCompatibility.NoOpReason(e.Name, c, project) is { } reason)
+                {
+                    SourceNoOps.Add(new(e.Name, e.SourceLine, e.Beat, reason));
+                    continue;
+                }
+                // 拍 → 秒：起点查 BPM map，时长按事件起点所在分段的 BPM 折算。
+                // 与原版一致，跨变速点的 tween 不重新积分，整段沿用起点的 BPM。
+                double start = Bpm.Time(e.Beat), span = e.Duration * 60 / Bpm.BpmAtBeat(e.Beat);
+                if (RegisterCustom1141(e, start)) continue;
+                if (Native?.Data?.Signals.TryGetValue(e.Name, out var route) == true)
+                {
+                    if (route.MinimumExclusive is { } minimum && e.To <= minimum) continue;
+                    if (route.Operation == "random-write")
+                    {
+                        string target = route.Target!;
+                        if (!Tracks.TryGetValue((target, -1), out var writes)) Tracks[(target, -1)] = writes = [];
+                        double value = Math.Floor(Hash(unchecked((uint)e.Order * route.SeedMultiplier + route.SeedOffset)) * route.RandomScale);
+                        writes.Add(new(start, 0, value, value, "linear", e));
+                    }
+                    else Callbacks.Add(new(start, route.Signal, e.To, callbackSequence++, e.Order));
+                    End = Math.Max(End, route.AbsoluteEnd ?? start + route.Lifetime);
+                    continue;
+                }
+                if (c.ObjectName == "obj_custom_gimmick" && e.Name is "sg_endblip" or "sg_endblip_destroy")
+                {
+                    Callbacks.Add(new(start, e.Name, e.To, callbackSequence++));
+                    End = Math.Max(End, start + 1);
+                    continue;
+                }
+                bool storyCallback = Native?.Data?.Sequence is { } sourceSequence &&
+                    (sourceSequence.Story.Any(cue => cue.Trigger == e.Name) || sourceSequence.AudioCues.Any(cue => cue.Trigger == e.Name)
+                        || sourceSequence.MusicFades.Any(fade => fade.Trigger == e.Name) || sourceSequence.SongSeeks.Any(seek => seek.Trigger == e.Name)
+                        || sourceSequence.SceneActions.Any(action => action.Trigger == e.Name));
+                if (Native?.Data?.Interludes.Any(i => i.Trigger == e.Name) == true || storyCallback)
+                {
+                    Callbacks.Add(new(start, e.Name, e.To, callbackSequence++));
+                    End = Math.Max(End, start + (e.Name == "self_gravefg" ? 8 : 0));
+                    if (storyCallback)
+                    {
+                        var story = Native!.Data!.Sequence!;
+                        End = Math.Max(End, story.StoryWindows.Where(w => w.Trigger == e.Name)
+                            .Select(w => w.Destroy ?? (w.Clear is { } clear ? clear + w.ExitSeconds :
+                                story.Story.Where(cue => cue.Trigger == e.Name).Select(cue => cue.Time + cue.Text.Length / (100 * cue.Speed)).DefaultIfEmpty(start).Max()))
+                            .DefaultIfEmpty(start).Max());
+                    }
+                    continue;
+                }
+                if (Native?.Data?.CallbackCancels.ContainsKey(e.Name) == true)
+                {
+                    Callbacks.Add(new(start, e.Name, e.To, callbackSequence++));
+                    End = Math.Max(End, start);
+                    continue;
+                }
+                if (Native?.Data?.Callbacks.TryGetValue(e.Name, out var nativeDrawings) == true)
+                {
+                    if (Native.Data.CallbackConstraints.TryGetValue(e.Name, out var constraint) && !constraint.Accepts(e.To))
+                    {
+                        c.Diagnostics.Add(new("native-gimmick/" + e.Name, e.SourceLine,
+                            $"Callback value must be {(constraint.Integer ? "an integer " : "")}{constraint.Minimum}..{constraint.Maximum}; event skipped.", true));
+                        continue;
+                    }
+                    double lifetime = Native.Data.CallbackLifetimes.GetValueOrDefault(e.Name, nativeDrawings.Max(d => d.Lifetime));
+                    End = Math.Max(End, start + lifetime);
+                    Callbacks.Add(new(start, e.Name, e.To, callbackSequence++));
+                    continue;
+                }
+                if (c.ObjectName == "obj_custom_gimmick" && e.Name == "df_sideline2")
+                {
+                    Callbacks.Add(new(start, e.Name, e.To, callbackSequence++, e.Order));
+                    End = Math.Max(End, start + .75);
+                    continue;
+                }
+                if (Native?.Data?.SideCallbacks.ContainsKey(e.Name) == true)
+                {
+                    // 多数原版回调忽略参数。Unraveling 显式检查 arg3，即缓动终值。
+                    if (Native.Data.PositiveSideCallbacks.Contains(e.Name) && e.To <= 0) continue;
+                    Callbacks.Add(new(start, e.Name, e.To, callbackSequence++));
+                    End = Math.Max(End, start + 1);
+                    continue;
+                }
+                if (LoreleiSides.IsCallback(e.Name) && Native?.Data?.Callbacks.ContainsKey(e.Name) != true)
+                {
+                    if (c.ObjectName != "obj_custom_gimmick" && Native?.Data?.HasBehavior("grid-sides") != true)
+                        SourceNoOps.Add(new(e.Name, e.SourceLine, e.Beat, "Lorelei sides require a Custom, Distorted Fate or First Breath gimmick object."));
+                    else
+                    {
+                        // 实例回调忽略缓动端点、时长、缓动名称和 proxy。
+                        Callbacks.Add(new(start, e.Name, e.To, callbackSequence++));
+                        End = Math.Max(End, start + LoreleiSides.Lifetime);
+                    }
+                    continue;
+                }
+                if (e.Name is "fx_underwater" or "fx_chroma_distort")
+                {
+                    bool lowFrom = e.From != 573613 && e.From < .01, lowTo = e.To != 573613 && e.To < .01;
+                    if (lowFrom || lowTo)
+                        c.Diagnostics.Add(new("fx", e.SourceLine,
+                            $"{e.Name}: values below 0.01 black out the original game; preview and saved/exported VSM clamp them to 0.01."));
+                }
+                if (e.Name is "lr_slash" or "lr_slash_color")
+                {
+                    if (AddNativeLorelei(e, start, span, ref loreleiColor)) continue;
+                    if (c.ObjectName != "obj_custom_gimmick")
+                    {
+                        SourceNoOps.Add(new(e.Name, e.SourceLine, e.Beat,
+                            "LR Extra Gimmicks requires obj_custom_gimmick."));
+                        continue;
+                    }
+                    if (e.Name == "lr_slash_color")
+                    {
+                        if (e.To != 573613)
+                        {
+                            loreleiColor = e.To;
+                            var colorKey = (e.Name, -1);
+                            if (!Tracks.TryGetValue(colorKey, out var colors)) Tracks[colorKey] = colors = [];
+                            colors.Add(new(start, 0, loreleiColor, loreleiColor, "linear", e));
+                        }
+                        End = Math.Max(End, start);
+                    }
+                    else
+                    {
+                        int count = e.From == 573613 ? 1 : (int)Math.Clamp(Math.Floor(e.From), 1, 64);
+                        LoreleiSlashes.Add(new(start, count, e.To == 573613 ? loreleiColor : e.To, e.Order));
+                        End = Math.Max(End, start + 1);
+                    }
+                    continue;
+                }
+                if (Native?.Data?.Sequence is { } sequence && (e.Name == sequence.Mod("slash") || e.Name == sequence.Mod("gun")))
+                {
+                    // slash 的实例数来自原版：1 + 时长毫秒数，取偶数舍入；gun 恒为 1 次。
+                    double count = e.Name == sequence.Mod("slash") ? Math.Max(0, Math.Round(1 + span * 1000, MidpointRounding.ToEven)) : 1;
+                    if (count > 4096) c.Diagnostics.Add(new("native-sequence", e.SourceLine, "Slash callback exceeds 4096 instances; skipped.", true));
+                    else
+                    {
+                        Callbacks.Add(new(start, e.Name, count, callbackSequence++));
+                        End = Math.Max(End, start + 1);
+                    }
+                    continue;
+                }
+                if (c.ObjectName == "obj_custom_gimmick" && CustomCompatibility.IsSideCallback(e.Name))
+                {
+                    Callbacks.Add(new(start, e.Name, e.To, callbackSequence++));
+                    End = Math.Max(End, start + 1);
+                    continue;
+                }
+                End = Math.Max(End, start + span);
+                // v1.12.7 的 updateMods 会跳过未注册的 ID。只有这一个经过核实的
+                // 旧拼写被归类为 no-op，其余未知 mod 仍然进诊断。
+                // 实际的着色由带后缀的那几个 mod 驱动。
+                if (c.ObjectName == "obj_custom_gimmick" && e.Name == "fx_colorise")
                 {
                     SourceNoOps.Add(new(e.Name, e.SourceLine, e.Beat,
-                        "LR Extra Gimmicks requires obj_custom_gimmick."));
+                        "Custom Gimmicks v1.12.7: unregistered ID is skipped by updateMods; the three suffixed colorise controls remain active."));
                     continue;
                 }
-                if (e.Name == "lr_slash_color")
+                // 侧边/底部粒子爆发的可见寿命固定 4 秒和 2 秒（plaudite 再加上倒计时毫秒），
+                // 这些是原版数值，时间轴尾部必须留够，否则最后一次爆发会被裁掉。
+                if (e.Name is "pburstleft" or "pburstright")
                 {
-                    if (e.To != 573613)
+                    End = Math.Max(End, start + 4);
+                }
+                else if (e.Name == "plaudite_pburst")
+                {
+                    End = Math.Max(End, start + 2 + (e.From > 0 ? Math.Max(0, e.To) / 1000 : 0));
+                }
+                // freeze 注册了 start/end 回调，于是 updateMods 走 CreateChartCallback 而不是 CreateChartTween：
+                // 它根本不插值，缓动和 proxy 也一并不看，所以这一段放在那两项校验之前，和 slash/sides 一样。
+                // 起点回调在 v1 为 0 时清零、否则把 cc.mod_freeze 写成事件起点的毫秒数；终点回调对 v2 做同样判断，
+                // 写入的同样是事件起点而不是终点。因此 from/to 只当开关用，冻结到的时刻永远是这条事件自己的起点。
+                // 573613 这个 "_" 哨兵也不解析：原版把它原样交给回调，非 0 即视为开启。
+                if (e.Name == "freeze")
+                {
+                    freezeLatches.Add((start, KenomaGMK.Runtime.Timeline.ModSegment.FreezeValue(start * 1000,e.From), e));
+                    freezeLatches.Add((start + span, KenomaGMK.Runtime.Timeline.ModSegment.FreezeValue(start * 1000,e.To), e));
+                    continue;
+                }
+                if (!Easings.IsKnown(e.Ease))
+                {
+                    c.Diagnostics.Add(new("timeline", e.Order + 1, $"Unsupported easing {e.Ease}; event not rendered.", true));
+                    continue;
+                }
+                if (e.Proxy >= c.Proxies)
+                {
+                    c.Diagnostics.Add(new("timeline", e.Order + 1, $"Proxy {e.Proxy} is outside !proxies:{c.Proxies}.", true));
+                    continue;
+                }
+                if (e.Name == "slash_anycol" && e.To > 0)
+                {
+                    if (span <= 0)
                     {
-                        loreleiColor = e.To;
-                        var colorKey = (e.Name, -1);
-                        if (!Tracks.TryGetValue(colorKey, out var colors)) Tracks[colorKey] = colors = [];
-                        colors.Add(new(start, 0, loreleiColor, loreleiColor, "linear", e));
+                        // 零时长仍是一次性 callback，保持旧谱面与既有随机种子行为。
+                        Callbacks.Add(new(start, e.Name, e.To, callbackSequence++));
+                        End = Math.Max(End, start + 1);
                     }
-                    End = Math.Max(End, start);
+                    else
+                    {
+                        // 本体不是把一条 slash 拉长，而是在区间内每个 60 Hz 逻辑 tick 生成一条新 slash。
+                        // 这里只保存区间；绘制时仅枚举最近 1 秒仍存活的实例，避免长 duration 预分配海量 Callback（#33）。
+                        double rawTicks = Math.Ceiling(span * 60);
+                        int tickCount = rawTicks >= int.MaxValue ? int.MaxValue : Math.Max(1, (int)rawTicks);
+                        SlashSpans.Add(new(start, start + span, tickCount, callbackSequence++));
+                        End = Math.Max(End, start + span + 1);
+                    }
+                    continue;
                 }
-                else
+                if (e.Name == "recolor")
                 {
-                    int count = e.From == 573613 ? 1 : (int)Math.Clamp(Math.Floor(e.From), 1, 64);
-                    LoreleiSlashes.Add(new(start, count, e.To == 573613 ? loreleiColor : e.To, e.Order));
-                    End = Math.Max(End, start + 1);
+                    var hueKey = ("curcolor", -1);
+                    if (!Tracks.TryGetValue(hueKey, out var hues))
+                    {
+                        Tracks[hueKey] = hues = [];
+                    }
+                    // 色相由事件序号确定性地导出，因此同一份谱面每次加载得到同样的配色。
+                    double hue = Math.Floor(Hash(unchecked((uint)e.Order * 17 + 9127)) * 256);
+                    hues.Add(new(start, 0, hue, hue, "linear", e));
+                    continue;
                 }
-                continue;
-            }
-            if (Native?.Data?.Sequence is { } sequence && (e.Name == sequence.Mod("slash") || e.Name == sequence.Mod("gun")))
-            {
-                // slash 的实例数来自原版：1 + 时长毫秒数，取偶数舍入；gun 恒为 1 次。
-                double count = e.Name == sequence.Mod("slash") ? Math.Max(0, Math.Round(1 + span * 1000, MidpointRounding.ToEven)) : 1;
-                if (count > 4096) c.Diagnostics.Add(new("native-sequence", e.SourceLine, "Slash callback exceeds 4096 instances; skipped.", true));
-                else
+                var key = (e.Name, e.Proxy);
+                if (!Tracks.TryGetValue(key, out var list))
                 {
-                    Callbacks.Add(new(start, e.Name, count, callbackSequence++));
-                    End = Math.Max(End, start + 1);
+                    Tracks[key] = list = [];
                 }
-                continue;
+                // 573613 是 VSM 里 "_" 的原版哨兵：取该时刻轨道上的当前值作为端点。
+                // checker_set 的起点固定按 0 算，而不是沿用已有轨道值。
+                var atStart = e.Name == "angelstar_checker_set" || Native?.Data?.HasBehavior("instruction-panel") == true &&
+                    e.Name is "sg_endblip" or "sg_endblip_destroy" ? 0 : Evaluate(list, start, Initial(e.Name, e.Proxy));
+                var segment = KenomaGMK.Runtime.Timeline.ModSegment.Resolve(e.Name,start,span,e.From,e.To,e.Ease,atStart);
+                list.Add(new(segment.Time,segment.Duration,segment.From,segment.To,segment.Ease,e));
             }
-            if (c.ObjectName == "obj_custom_gimmick" && CustomCompatibility.IsSideCallback(e.Name))
+            if (freezeLatches.Count > 0)
             {
-                Callbacks.Add(new(start, e.Name, e.To, callbackSequence++));
-                End = Math.Max(End, start + 1);
-                continue;
+                // Evaluate 是二分查找，轨道必须升序；OrderBy 稳定，同一时刻仍按声明顺序，后声明的覆盖先声明的。
+                // 每个点都是时长为 0 的瞬时写入，取值单位是毫秒，和原版的 cc.mod_freeze 一致。
+                Tracks[("freeze", -1)] = freezeLatches.OrderBy(p => p.Time)
+                    .Select(p => new Segment(p.Time, 0, p.Value, p.Value, "linear", p.Event)).ToList();
             }
-            End = Math.Max(End, start + span);
-            // v1.12.7 的 updateMods 会跳过未注册的 ID。只有这一个经过核实的
-            // 旧拼写被归类为 no-op，其余未知 mod 仍然进诊断。
-            // 实际的着色由带后缀的那几个 mod 驱动。
-            if (c.ObjectName == "obj_custom_gimmick" && e.Name == "fx_colorise")
-            {
-                SourceNoOps.Add(new(e.Name, e.SourceLine, e.Beat,
-                    "Custom Gimmicks v1.12.7: unregistered ID is skipped by updateMods; the three suffixed colorise controls remain active."));
-                continue;
-            }
-            // 侧边/底部粒子爆发的可见寿命固定 4 秒和 2 秒（plaudite 再加上倒计时毫秒），
-            // 这些是原版数值，时间轴尾部必须留够，否则最后一次爆发会被裁掉。
-            if (e.Name is "pburstleft" or "pburstright")
-            {
-                End = Math.Max(End, start + 4);
-            }
-            else if (e.Name == "plaudite_pburst")
-            {
-                End = Math.Max(End, start + 2 + (e.From > 0 ? Math.Max(0, e.To) / 1000 : 0));
-            }
-            // freeze 注册了 start/end 回调，于是 updateMods 走 CreateChartCallback 而不是 CreateChartTween：
-            // 它根本不插值，缓动和 proxy 也一并不看，所以这一段放在那两项校验之前，和 slash/sides 一样。
-            // 起点回调在 v1 为 0 时清零、否则把 cc.mod_freeze 写成事件起点的毫秒数；终点回调对 v2 做同样判断，
-            // 写入的同样是事件起点而不是终点。因此 from/to 只当开关用，冻结到的时刻永远是这条事件自己的起点。
-            // 573613 这个 "_" 哨兵也不解析：原版把它原样交给回调，非 0 即视为开启。
-            if (e.Name == "freeze")
-            {
-                freezeLatches.Add((start, e.From == 0 ? 0 : start * 1000, e));
-                freezeLatches.Add((start + span, e.To == 0 ? 0 : start * 1000, e));
-                continue;
-            }
-            if (!Easings.IsKnown(e.Ease))
-            {
-                c.Diagnostics.Add(new("timeline", e.Order + 1, $"Unsupported easing {e.Ease}; event not rendered.", true));
-                continue;
-            }
-            if (e.Proxy >= c.Proxies)
-            {
-                c.Diagnostics.Add(new("timeline", e.Order + 1, $"Proxy {e.Proxy} is outside !proxies:{c.Proxies}.", true));
-                continue;
-            }
-            if (e.Name == "slash_anycol" && e.To > 0)
-            {
-                if (span <= 0)
-                {
-                    // 零时长仍是一次性 callback，保持旧谱面与既有随机种子行为。
-                    Callbacks.Add(new(start, e.Name, e.To, callbackSequence++));
-                    End = Math.Max(End, start + 1);
-                }
-                else
-                {
-                    // 本体不是把一条 slash 拉长，而是在区间内每个 60 Hz 逻辑 tick 生成一条新 slash。
-                    // 这里只保存区间；绘制时仅枚举最近 1 秒仍存活的实例，避免长 duration 预分配海量 Callback（#33）。
-                    double rawTicks = Math.Ceiling(span * 60);
-                    int tickCount = rawTicks >= int.MaxValue ? int.MaxValue : Math.Max(1, (int)rawTicks);
-                    SlashSpans.Add(new(start, start + span, tickCount, callbackSequence++));
-                    End = Math.Max(End, start + span + 1);
-                }
-                continue;
-            }
-            if (e.Name == "recolor")
-            {
-                var hueKey = ("curcolor", -1);
-                if (!Tracks.TryGetValue(hueKey, out var hues))
-                {
-                    Tracks[hueKey] = hues = [];
-                }
-                // 色相由事件序号确定性地导出，因此同一份谱面每次加载得到同样的配色。
-                double hue = Math.Floor(Hash(unchecked((uint)e.Order * 17 + 9127)) * 256);
-                hues.Add(new(start, 0, hue, hue, "linear", e));
-                continue;
-            }
-            var key = (e.Name, e.Proxy);
-            if (!Tracks.TryGetValue(key, out var list))
-            {
-                Tracks[key] = list = [];
-            }
-            // 573613 是 VSM 里 "_" 的原版哨兵：取该时刻轨道上的当前值作为端点。
-            // checker_set 的起点固定按 0 算，而不是沿用已有轨道值。
-            var atStart = e.Name == "angelstar_checker_set" || Native?.Data?.HasBehavior("instruction-panel") == true &&
-                e.Name is "sg_endblip" or "sg_endblip_destroy" ? 0 : Evaluate(list, start, Initial(e.Name, e.Proxy));
-            var from = e.From == 573613 ? atStart : e.From;
-            var to = e.To == 573613 ? atStart : e.To;
-            // 激活/枚举型控制是瞬时写入：时长归零并直接跳到 To，不做插值。
-            // changeskin 选择的是离散皮肤下标；把 from->to 当普通 tween 会在一个事件里
-            // 依次穿过中间皮肤，和实际的整套皮肤切换语义不符。
-            bool activation = e.Name is "active_startrans" or "active_starchgcol" or "changeskin";
-            list.Add(new(start, activation ? 0 : span, activation ? to : from, to, Easings.Normalize(e.Ease), e));
-        }
-        if (freezeLatches.Count > 0)
-        {
-            // Evaluate 是二分查找，轨道必须升序；OrderBy 稳定，同一时刻仍按声明顺序，后声明的覆盖先声明的。
-            // 每个点都是时长为 0 的瞬时写入，取值单位是毫秒，和原版的 cc.mod_freeze 一致。
-            Tracks[("freeze", -1)] = freezeLatches.OrderBy(p => p.Time)
-                .Select(p => new Segment(p.Time, 0, p.Value, p.Value, "linear", p.Event)).ToList();
         }
         // drawdist 在原版里也会被 tween 进 cc.mod_drawdist，但实时绘制的 obj_note_rendering 不读它，
         // 读它的只有没有调用方的 obj_noteNormal 实例池；cc 的 Create 里甚至没初始化这个变量。
@@ -519,10 +536,7 @@ public sealed partial class Timeline
     /// <summary>该 mod 在任何事件之前的初值：全局轨道优先用对象定义的默认值，其余走基础协议表。</summary>
     double Initial(string name, int proxy)
     {
-        if (proxy == -1 && IsCustomGimmick && name is "scfw_star_col" or "scfw_burst_col") return 16777215;
-        // Base 与 Custom proxy 初始 pra 均为 0。Custom Create 尝试置 1 时 proxyCount 仍为零，cc_Create 随后执行 loadMods 才创建 proxy，各自初始化为 0。Stage4a 依赖此顺序。
-        return proxy == -1 && Native?.Data?.Defaults.TryGetValue(name, out var value) == true
-            ? value : ModCatalog.Default(name, proxy, Scroll);
+        return KenomaGMK.Runtime.Timeline.ModDefaults.Initial(name,proxy,Scroll,IsCustomGimmick,Native?.Data?.Defaults);
     }
     /// <summary>
     /// 确定性整数散列，返回 [0,1)。粒子、色相等一切“随机”都由它从序号导出，
@@ -530,13 +544,5 @@ public sealed partial class Timeline
     /// </summary>
     /// <param name="n">输入的确定性种子。</param>
     /// <returns>用于重现演出随机选择的浮点散列值。</returns>
-    public static float Hash(uint n)
-    {
-        unchecked
-        {
-            n = (n ^ n >> 16) * 0x45d9f3b;
-            n = (n ^ n >> 16) * 0x45d9f3b;
-            return (n ^ n >> 16) / 4294967296f;
-        }
-    }
+    public static float Hash(uint n) => KenomaGMK.Runtime.Particles.ParticleMotion.Hash(n);
 }

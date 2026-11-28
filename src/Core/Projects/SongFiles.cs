@@ -14,12 +14,16 @@ public static class SongFiles
     /// <summary>从文件名取难度标识；前导下划线形式取第一段，例如 _ENCORE_x 得到 ENCORE。</summary>
     /// <param name="file">谱面文件名。</param>
     /// <returns>从文件名解析出的难度键。</returns>
-    public static string Difficulty(string file)
-    {
-        string name = Path.GetFileNameWithoutExtension(file);
-        return name.StartsWith('_') ? name.TrimStart('_').Split('_')[0] : name;
-    }
+    public static string Difficulty(string file) => KenomaGMK.Core.SongResources.Difficulty(file);
 
+    internal static KenomaGMK.Core.SongResources Resources(ViewerProject p) =>
+        new(p.Chart, p.Gimmick, p.Images, p.Jacket)
+        {
+            ImagePathsRelativeToVsp = p.ImagePathsRelativeToVsp,
+            TextFiles = p.TextFiles,
+            WindowMotion = p.WindowMotion,
+            ConfigOverride = p.CgmkConfigOverride
+        };
     /// <summary>歌曲目录：取谱面、VSM、VSP、jacket 中第一个已知路径的所在目录，同目录关联都以它为基准。</summary>
     /// <param name="p">当前工程的路径与呈现配置。</param>
     /// <returns>工程对应的歌曲根目录，无可用路径时为 null。</returns>
@@ -28,21 +32,8 @@ public static class SongFiles
     /// <param name="dir">候选文件的父目录。</param>
     /// <param name="names">按优先级排列的文件名。</param>
     /// <returns>首个存在的文件路径，无匹配时为 null。</returns>
-    public static string? Existing(string dir, params string[] names)
-    {
-        var exact = names.Select(n => Path.Combine(dir, n)).FirstOrDefault(File.Exists);
-        if (exact != null)
-        {
-            return exact;
-        }
-        if (!Directory.Exists(dir))
-        {
-            return null;
-        }
-        var files = Directory.EnumerateFiles(dir).Order(StringComparer.Ordinal).ToArray();
-        return names.Select(n => files.FirstOrDefault(f => Path.GetFileName(f).Equals(n,
-            StringComparison.OrdinalIgnoreCase))).FirstOrDefault(f => f != null);
-    }
+    public static string? Existing(string dir, params string[] names) =>
+        KenomaGMK.Core.SongResources.Existing(dir, names);
 
     /// <summary>
     /// 把谱面/VSM/VSP 路径、歌曲信息文件或歌曲目录展开成工程；目录形式按固定难度候选顺序挑选，不依赖文件系统枚举顺序。
@@ -76,9 +67,10 @@ public static class SongFiles
         {
             Title = new DirectoryInfo(dir).Name + " / " + difficulty
         };
-        p.Chart = ext is ".vsb" or ".vsc" ? path : Existing(dir, difficulty + ".vsb", difficulty + ".vsc");
-        p.Gimmick = ext == ".vsm" ? path : Existing(dir, difficulty + ".vsm", "GLOBAL.vsm");
-        p.Images = ext == ".vsp" ? path : null;
+        var resources = KenomaGMK.Core.SongResources.FromFile(path);
+        p.Chart = resources.Chart;
+        p.Gimmick = resources.Gimmick;
+        p.Images = resources.Images;
         p.Notes = true;
         // 即使 VSM 还没有对应的音符，轨道本身也应当可以查看。
         // BACKSTAGE 的音频与封面由 enc_data 明确指定，必须先于同目录候选顺序生效：
@@ -100,6 +92,8 @@ public static class SongFiles
                 p.Title = name + " / " + view.DisplayDifficulty;
             }
         }
+        // Custom Songs v3.4.1 在显式曲绘缺失时依次查找这四个文件。
+        p.Jacket ??= Existing(dir, "jacket.gif", "jacket.jpeg", "jacket.jpg", "jacket.png");
         p.Audio ??= Existing(dir, "music.ogg", "song.ogg", "song.wav", "music.wav", "song.mp3", "music.mp3", "song.flac", "music.flac");
         // 只有在命名类别下存在唯一候选时才接受导出的游戏音乐。
         // 绝不能因为某个 .ogg 恰好排在第一个，就把人声/前奏文件当成歌曲音频。
@@ -183,29 +177,13 @@ public static class SongFiles
         return matches.Length == 1 ? matches[0] : null;
     }
 
-    // 未保存的配置与显式附加配置优先于歌曲目录发现结果；独立窗口文档只覆盖自身的键。
-    static JsonNode? ConfigValue(ViewerProject p, string name)
-    {
-        var config = p.CgmkConfigOverride;
-        if (config == null && p.WindowMotion != null)
-            config = JsonNode.Parse(File.ReadAllText(p.WindowMotion)) as JsonObject
-                ?? throw new InvalidDataException("Expected a cgmk config object.");
-        if (config != null && (config.ContainsKey(name) || config["format"]?.ToString() != "ExtCustomGimmick.WindowMovement"))
-            return config[name];
-        string? root = Root(p);
-        if (root == null) return null;
-        string? path = Existing(root, Difficulty(p.Chart ?? p.Gimmick ?? p.Images ?? p.Jacket!) + "_cgmk_config.json", "cgmk_config.json");
-        return path == null ? null : (JsonNode.Parse(File.ReadAllText(path)) as JsonObject
-            ?? throw new InvalidDataException("Expected a cgmk config object."))[name];
-    }
-
     /// <summary>按编辑快照、显式配置、难度/共用配置的优先级取布尔值；缺失或类型错误时使用默认值。</summary>
     /// <param name="p">当前工程的路径与呈现配置。</param>
     /// <param name="name">配置项键。</param>
     /// <param name="fallback">缺少该配置项时使用的回退值。</param>
     /// <returns>解析的布尔值或回退值。</returns>
     public static bool Config(ViewerProject p, string name, bool fallback = true) =>
-        ConfigValue(p, name) is JsonValue value && value.TryGetValue<bool>(out bool result) ? result : fallback;
+        Resources(p).Config(name, fallback);
 
     /// <summary>同上，取字符串项。</summary>
     /// <param name="p">当前工程的路径与呈现配置。</param>
@@ -213,6 +191,6 @@ public static class SongFiles
     /// <param name="fallback">缺少该配置项时使用的回退值。</param>
     /// <returns>读取的字符串或回退文本。</returns>
     public static string ConfigString(ViewerProject p, string name, string fallback) =>
-        ConfigValue(p, name) is JsonValue value && value.TryGetValue<string>(out string? result) ? result : fallback;
+        Resources(p).ConfigString(name, fallback);
 }
 

@@ -72,16 +72,22 @@ kg_aot_publish() {
     fi
     echo "NativeAOT publish ${rid} / Release"
     echo "日志：${log}"
+    local kenoma_native=false
+    case "${rid}" in
+        osx-*) kenoma_native=true ;;
+    esac
     "${KG_AOT_DOTNET}" publish "${project_arg}" -c Release -r "${rid}" \
+        "-p:KenomaBuildNative=${kenoma_native}" \
         --self-contained true --nologo -o "${output_arg}" \
         -p:PublishAot=true -p:PublishSingleFile=false \
         -p:DebugType=None -p:DebugSymbols=false \
-        "-p:NuGetLockFilePath=${lock_arg}" 2>&1 | tee "${log}"
+        "-p:NuGetLockFilePath=${lock_arg}" -m:1 --disable-build-servers 2>&1 | tee "${log}"
     kg_rust_publish "${rid}" "${binary}"
     [ ! -e "${binary}/KuroakiGimmick.deps.json" ] && [ ! -e "${binary}/KuroakiGimmick.runtimeconfig.json" ] \
         || { echo '发布结果包含 .NET 运行时配置文件，NativeAOT 未生效。' >&2; return 1; }
     case "${rid}" in
         osx-*)
+            [ -s "${binary}/libkenoma_native.dylib" ] || { echo '发布结果缺少 libkenoma_native.dylib。' >&2; return 1; }
             [ -s "${binary}/libkg_native_core.dylib" ] || { echo "发布结果缺少 Rust 原生库：libkg_native_core.dylib" >&2; return 1; }
             [ -x "${binary}/KuroakiGimmick" ] || { echo '发布结果缺少 macOS 原生可执行文件。' >&2; return 1; }
             for library in libSDL3.dylib libshaderc_shared.dylib libspirv-cross.dylib; do
@@ -129,7 +135,7 @@ PLIST
         [ -f "${package}/${asset}" ] || { echo "发布结果缺少资源：${asset}" >&2; return 1; }
     done
     for item in LICENSE README.md CHANGELOG.md THIRD_PARTY_NOTICES.md; do cp "${KG_AOT_ROOT}/${item}" "${package}/${item}"; done
-    cp -R "${KG_AOT_ROOT}/ThirdParty" "${package}/ThirdParty"
+    python3 "${KG_AOT_ROOT}/scripts/ci/stage_third_party.py" "${package}/ThirdParty"
     if [ -n "${KUROAKI_FFMPEG:-}" ]; then
         [ -f "${KUROAKI_FFMPEG}" ] || { echo 'KUROAKI_FFMPEG 文件不存在。' >&2; return 1; }
         case "${rid}" in

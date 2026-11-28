@@ -14,18 +14,18 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework Condition="'$(KuroakiSwitch)' != 'true' and '$(KuroakiShaderBaker)' != 'true'">net8.0</TargetFramework>
-    <TargetFramework Condition="'$(KuroakiSwitch)' == 'true' or '$(KuroakiShaderBaker)' == 'true'">net9.0</TargetFramework>
+    <TargetFramework Condition="'$(KuroakiSwitch)' != 'true' and '$(KuroakiShaderBaker)' != 'true'">net10.0</TargetFramework>
+    <TargetFramework Condition="'$(KuroakiSwitch)' == 'true' or '$(KuroakiShaderBaker)' == 'true'">net10.0</TargetFramework>
 
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
     <PackageLicenseExpression>WTFPL</PackageLicenseExpression>
-    <Version>0.1.5</Version>
-    <BuildNumber>18.5</BuildNumber>
-    <BuildSerial>1850</BuildSerial>
-    <AssemblyVersion>0.1.5.0</AssemblyVersion>
+    <Version>0.2.0</Version>
+    <BuildNumber>27.0</BuildNumber>
+    <BuildSerial>2700</BuildSerial>
+    <AssemblyVersion>0.2.0.0</AssemblyVersion>
     <FileVersion>$(Version).$(BuildSerial)</FileVersion>
     <InformationalVersion Condition="'$(InformationalVersion)' == ''">v$(Version) / $(BuildNumber)</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
@@ -226,6 +226,11 @@
 
   <ItemGroup>
     <Compile Include="src/**/*.cs" />
+    <InternalsVisibleTo Include="Regression" />
+    <ProjectReference Include="ThirdParty/KenomaGMK/src/KenomaGMK.Core/KenomaGMK.Core.csproj" />
+    <Compile Remove="src/Core/Timing/MpfScriptLanguage.cs;src/Core/Diagnostics/MpfLanguageChecks.cs" />
+    <ProjectReference Include="ThirdParty/KenomaGMK/src/KenomaGMK.Runtime/KenomaGMK.Runtime.csproj" />
+    <Using Include="KenomaGMK.Runtime.Mpf.MpfScriptLanguage" Alias="MpfScriptLanguage" />
     <EmbeddedResource Include="Assets/tips.json" LogicalName="KuroakiGimmick.Tips.json" />
 
     <EmbeddedResource Include="src/UI/Localization/*.json" LogicalName="KuroakiGimmick.Localization.%(Filename)%(Extension)" />
@@ -276,6 +281,7 @@
     <PackageReference Include="StbImageSharp" Version="2.30.16" />
     <PackageReference Include="StbImageWriteSharp" Version="1.16.7" />
 
+    <ProjectReference Include="ThirdParty/KenomaGMK/src/KenomaGMK.SDL3/KenomaGMK.SDL3.csproj" />
     <PackageReference Include="NVorbis" Version="0.10.5" />
     <PackageReference Include="StbTrueTypeSharp" Version="1.26.13" />
   </ItemGroup>
@@ -286,8 +292,15 @@
        ============================================================ -->
 
   <ItemGroup>
-    <None Include="Assets/**/*;Samples/**/*;Integrations/**/*;examples/**/*"
-          Exclude="Assets/NativeSource/**/*;Assets/Gimmicks/*/reference/**/*;Assets/Gimmicks/*/coverage.json;Assets/Gimmicks/*/SOURCE_SHA256.json"
+    <None Include="Assets/**/*;Integrations/**/*"
+          Exclude="Assets/KenomaShaders/**/*;Assets/NativeSource/**/*;Assets/Gimmicks/*/reference/**/*;Assets/Gimmicks/*/coverage.json;Assets/Gimmicks/*/SOURCE_SHA256.json"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest"
+          ExcludeFromSingleFile="true" />
+
+    <None Include="Assets/KenomaShaders/**/*.ksp" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
+    <None Include="Samples/**/*;examples/**/*"
+          Condition="!$(RuntimeIdentifier.StartsWith('osx-'))"
           CopyToOutputDirectory="PreserveNewest"
           CopyToPublishDirectory="PreserveNewest"
           ExcludeFromSingleFile="true" />
@@ -326,4 +339,24 @@
 
   </Target>
 
+  <ItemGroup>
+    <ProjectReference Include="ThirdParty/KenomaGMK/src/KenomaGMK.Graphics/KenomaGMK.Graphics.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="ThirdParty/KenomaGMK/src/KenomaGMK.Native/KenomaGMK.Native.csproj" />
+  </ItemGroup>
+  <!-- 发布时烘焙当前源码。baker 使用构建机上的 SDK，输出只有阶段字节码与参数布局。 -->
+  <Target Name="BakeKenomaPublishShaders" AfterTargets="ComputeFilesToPublish"
+          Condition="'$(KuroakiExternalAssets)'!='true' and '$(KuroakiSwitch)'!='true' and '$(KuroakiShaderBaker)'!='true'">
+    <PropertyGroup>
+      <KenomaBakeOutput>$([System.IO.Path]::GetFullPath('$(IntermediateOutputPath)KenomaPublishShaders', '$(MSBuildProjectDirectory)'))</KenomaBakeOutput>
+    </PropertyGroup>
+    <RemoveDir Directories="$(KenomaBakeOutput)" />
+    <Exec WorkingDirectory="$(MSBuildProjectDirectory)" EnvironmentVariables="DOTNET_ROLL_FORWARD=Major"
+          Command="dotnet run --project &quot;$(MSBuildProjectFullPath)&quot; -c Release -p:KuroakiShaderBaker=true -p:KuroakiExternalAssets=true -p:NuGetAudit=false -p:IntermediateOutputPath=obj/kenoma-baker/$(Configuration)/$(TargetFramework)/ --no-restore -- --bake-mobile-shaders portable &quot;$(KenomaBakeOutput)&quot; &quot;$(TargetDir)Assets&quot;" />
+    <ItemGroup>
+      <KenomaBakedStage Include="$(KenomaBakeOutput)/*.ksp" />
+      <ResolvedFileToPublish Include="@(KenomaBakedStage)" RelativePath="Assets/KenomaShaders/%(KenomaBakedStage.Filename)%(KenomaBakedStage.Extension)" CopyToPublishDirectory="Always" ExcludeFromSingleFile="true" />
+    </ItemGroup>
+  </Target>
 </Project>

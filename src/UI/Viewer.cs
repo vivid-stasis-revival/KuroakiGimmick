@@ -103,6 +103,24 @@ public sealed partial class Viewer : IDisposable
         fonts.SetInterfaceLanguage(L.Language);
         logo = Texture.Load(h.Gpu, Path.Combine(Paths.Assets, "Brand", "kuroaki.png"), linear: true);
         Renderer = new(Canvas);
+        if (Canvas.NoteInstances != null && Environment.GetEnvironmentVariable("KG_TIMELINE_INSTANCING") != "off")
+        {
+            try
+            {
+                timelineNotePainter = new(Canvas);
+            }
+            catch (Exception ex)
+            {
+                timelineNotePainterFailed = true;
+                Console.Error.WriteLine("Timeline instances unavailable: " + ex.Message);
+            }
+        }
+        host.Gpu.MarkShaderStartupComplete();
+        if (Environment.GetEnvironmentVariable("KENOMA_SHADER_DIAGNOSTICS") == "1")
+        {
+            Console.WriteLine("[KenomaGMK] shader startup snapshot");
+            host.Gpu.ReportShaderDiagnostics();
+        }
         Current = session;
         UseSession(session, silent);
         startup = showStartup && session.IsEmpty;
@@ -623,5 +641,10 @@ public sealed partial class Viewer : IDisposable
         fonts.Dispose();
         logo.Dispose();
         Canvas.Dispose();
+        if (Environment.GetEnvironmentVariable("KENOMA_SHADER_DIAGNOSTICS") == "1")
+        {
+            Console.WriteLine("[KenomaGMK] shader exit snapshot");
+            host.Gpu.ReportShaderDiagnostics();
+        }
     }
 }

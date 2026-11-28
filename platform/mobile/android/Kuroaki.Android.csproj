@@ -8,8 +8,8 @@
     <DefineConstants>$(DefineConstants);KG_ANDROID</DefineConstants>
     <ApplicationId>io.github.kuroakigimmick.mobile</ApplicationId>
     <ApplicationTitle>Kuroaki/Gimmick</ApplicationTitle>
-    <ApplicationVersion>1850</ApplicationVersion>
-    <ApplicationDisplayVersion>0.1.5</ApplicationDisplayVersion>
+    <ApplicationVersion>2700</ApplicationVersion>
+    <ApplicationDisplayVersion>0.2.0</ApplicationDisplayVersion>
     <AndroidPackageFormats>apk</AndroidPackageFormats>
     <AndroidUseAssemblyStore>true</AndroidUseAssemblyStore>
     <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>

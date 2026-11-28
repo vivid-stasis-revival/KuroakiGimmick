@@ -110,6 +110,7 @@ jobs:
             shaderc: shaderc_shared.dll
             spirv_cross: spirv-cross.dll
             rust_core: kg_native_core.dll
+            kenoma_native: kenoma_native.dll
 
           - runner: macos-15
             rid: osx-arm64
@@ -118,6 +119,7 @@ jobs:
             shaderc: libshaderc_shared.dylib
             spirv_cross: libspirv-cross.dylib
             rust_core: libkg_native_core.dylib
+            kenoma_native: libkenoma_native.dylib
 
           - runner: ubuntu-24.04
             rid: linux-x64
@@ -126,9 +128,12 @@ jobs:
             shaderc: libshaderc_shared.so
             spirv_cross: libspirv-cross.so
             rust_core: libkg_native_core.so
+            kenoma_native: libkenoma_native.so
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - name: Install Linux native build dependencies
         if: runner.os == 'Linux'
@@ -141,7 +146,7 @@ jobs:
       - uses: actions/setup-dotnet@v6
         id: dotnet
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
 
       - name: Select the installed SDK
         shell: bash
@@ -159,6 +164,7 @@ jobs:
         shell: bash
         env:
           BUILD_LABEL: ${{ needs.detect.outputs.build_label }}
+          MSBUILDDISABLENODEREUSE: 1
         run: |
           set -euo pipefail
 
@@ -169,7 +175,9 @@ jobs:
             -p:KuroakiExternalAssets=true \
             -p:PublishAot=true \
             -p:PublishSingleFile=false \
+            -p:KenomaBuildNative=true \
             "-p:InformationalVersion=${BUILD_LABEL}" \
+            -m:1 --disable-build-servers \
             -o 'artifacts/${{ matrix.rid }}'
 
       - name: Build and stage matching Rust Optimization Engine
@@ -190,7 +198,8 @@ jobs:
           output='artifacts/${{ matrix.rid }}'
           cp LICENSE README.md CHANGELOG.md THIRD_PARTY_NOTICES.md "$output/"
           cp docs/EXTERNAL_ASSETS.md "$output/INSTALL-ASSETS.md"
-          cp -R ThirdParty "$output/"
+          python scripts/ci/stage_third_party.py "$output/ThirdParty"
+          test ! -d "$output/ThirdParty/KenomaGMK"
           test ! -d "$output/docs"
           test ! -d "$output/tests"
 
@@ -206,6 +215,7 @@ jobs:
           test -f 'artifacts/${{ matrix.rid }}/${{ matrix.shaderc }}'
           test -f 'artifacts/${{ matrix.rid }}/${{ matrix.spirv_cross }}'
           test -s 'artifacts/${{ matrix.rid }}/${{ matrix.rust_core }}'
+          test -s 'artifacts/${{ matrix.rid }}/${{ matrix.kenoma_native }}'
           case '${{ matrix.rid }}' in
             win-*) test -s 'artifacts/${{ matrix.rid }}/ffmpeg.exe' ;;
             *) test -x 'artifacts/${{ matrix.rid }}/ffmpeg' ;;
@@ -309,10 +319,11 @@ jobs:
             runner: macos-15
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: |
-            9.0.x
             10.0.101
       - name: Select pinned mobile SDK
         shell: bash
@@ -385,51 +396,10 @@ jobs:
           retention-days: 14
           compression-level: 0
 
-  switch:
-    name: Switch NRO
-    needs: detect
-    if: needs.detect.outputs.should_build == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: '9.0.102'
-      - name: Publish current Switch managed source without private assets
-        run: bash scripts/ci/prepare_switch.sh
-      - name: Check out pinned NroForge toolchain and license notices
-        uses: actions/checkout@v7
-        with:
-          repository: BennettNotFound/NroForge
-          ref: e41f2e68b212737da81ddc97fe5c7b881bb125e8
-          path: dist/nroforge-source
-          persist-credentials: false
-      - name: Build Switch NRO with NroForge
-        uses: ./dist/nroforge-source
-        with:
-          managed-directory: dist/switch-managed
-          profile: dist/nroforge-profile.json
-          link-assemblies: 'true'
-          output-directory: dist/switch-nro
-          jobs: '2'
-          # Deliberately omit assets-directory: users install their private pack.
-      - name: Package Switch SD layout and notices
-        run: bash scripts/ci/package_switch.sh
-      - uses: actions/upload-artifact@v7
-        with:
-          name: nativeaot-switch
-          path: artifacts/KuroakiGimmick-switch.zip
-          if-no-files-found: error
-          retention-days: 14
-          compression-level: 0
-
   release:
     name: Publish GitHub release
-    needs: [detect, build, mobile, switch]
-    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && needs.detect.outputs.should_build == 'true' && needs.build.result == 'success' && needs.mobile.result == 'success' && needs.switch.result == 'success'
+    needs: [detect, build, mobile]
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && needs.detect.outputs.should_build == 'true' && needs.build.result == 'success' && needs.mobile.result == 'success'
     runs-on: ubuntu-latest
 
     permissions:
@@ -456,14 +426,13 @@ jobs:
           test -f release-assets/KuroakiGimmick-linux-x64.zip
           test -f release-assets/KuroakiGimmick-android.zip
           test -f release-assets/KuroakiGimmick-ios.zip
-          test -f release-assets/KuroakiGimmick-switch.zip
 
           mapfile -t assets < <(
             find release-assets -maxdepth 1 -type f -name 'KuroakiGimmick-*.zip' -print | sort
           )
 
-          if (( ${#assets[@]} != 6 )); then
-            echo "Expected exactly 6 release archives, found ${#assets[@]}." >&2
+          if (( ${#assets[@]} != 5 )); then
+            echo "Expected exactly 5 release archives, found ${#assets[@]}." >&2
             printf 'Found: %s\n' "${assets[@]:-<none>}" >&2
             exit 1
           fi
@@ -485,8 +454,8 @@ jobs:
             find release-assets -maxdepth 1 -type f -name 'KuroakiGimmick-*.zip' -print | sort
           )
 
-          if (( ${#assets[@]} != 6 )); then
-            echo "Expected exactly 6 release archives, found ${#assets[@]}." >&2
+          if (( ${#assets[@]} != 5 )); then
+            echo "Expected exactly 5 release archives, found ${#assets[@]}." >&2
             printf 'Found: %s\n' "${assets[@]:-<none>}" >&2
             exit 1
           fi

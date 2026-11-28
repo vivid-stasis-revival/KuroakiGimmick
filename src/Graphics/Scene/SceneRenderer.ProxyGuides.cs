@@ -6,7 +6,7 @@ namespace KuroakiGimmick.Graphics;
 
 public sealed partial class SceneRenderer
 {
-    Shader? proxyGuideShader;
+    Shader proxyGuideShader;
     Target? proxyInspection;
     int? inspectionProxy;
     /// <summary>检查视图的独立纹理，尚未创建时为 null。</summary>
@@ -79,8 +79,6 @@ public sealed partial class SceneRenderer
     public void DrawProxyGuides(ProxyGeometry geometry, ProxyMask mask, Rect viewport, Color visible, Color covered, Rect? region = null)
     {
         if (!geometry.Renderable) return;
-        proxyGuideShader ??= new(canvas.Gpu, ProxyVertexSource(true), ProxyGuideFragmentSource);
-        canvas.Flush();
         geometry.ApplyProjection(proxyGuideShader);
         mask.Apply(proxyGuideShader);
         proxyGuideShader.Vec4("guideViewport", new(viewport.X, viewport.Y, viewport.W / 320, viewport.H / 180));

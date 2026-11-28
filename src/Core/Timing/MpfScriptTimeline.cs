@@ -1,57 +1,45 @@
 // 在有界离线环境执行 MPF 生命周期，将输出采样为可重放的轨道。
 
+using KenomaGMK.Runtime.Mpf;
 using System.Globalization;
 
 namespace KuroakiGimmick.Core;
 
 /// <summary>在固定 60 Hz 时钟上有界执行 Custom Gimmicks 1.14.2 MPF 并保存只读轨道。跳转、快照、并行导出与 Rust 基础轨道求值只读取采样结果。计分与输入使用显式离线基准，脚本间共享判定更改。</summary>
-internal sealed class MpfScriptTimeline
+internal sealed class MpfScriptTimeline : IMpfHost
 {
     sealed record Write(double Time, double Value, double? TweenRegistered = null);
-    sealed record DeferredSet(double Beat, string Name, int Proxy, double Value, int Order);
-    sealed record DeferredTween(double Start, double End, string Ease, string Name, int Proxy, double From, double To, double Registered, int Order);
-
     sealed class Script(string name, string path, MpfScriptLanguage language)
     {
         internal string Name = name;
         internal string Path = path;
         internal MpfScriptLanguage Language = language;
         internal MpfScriptLanguage.Context Context = new();
-        internal bool Initialized;
-        internal bool Dead;
         internal int DebugMessages;
         internal bool OfflineStateNotice;
     }
-    sealed class ActiveRange(FrameEvent range, Script script)
-    {
-        internal FrameEvent Range = range;
-        internal Script Script = script;
-        internal bool Active;
-    }
-
     Timeline timeline;
     readonly Chart chart;
     readonly MpfPreviewGameState game;
     bool inputNotice;
     readonly Dictionary<string, Script> scripts = new(StringComparer.Ordinal);
     readonly Dictionary<(string Name, int Proxy), List<Write>> writes = [];
-    readonly PriorityQueue<DeferredSet, (double Beat, int Order)> pendingSets = new();
-    readonly PriorityQueue<DeferredTween, (double Time, int Order)> pendingTweens = new();
-    readonly SortedDictionary<int, DeferredTween> activeTweens = [];
+    readonly MpfModCommands commands;
+    readonly MpfSchedule schedule;
     internal double End { get; private set; }
     bool durationNotice;
     double currentTime, currentBeat;
-    string phase = "main";
-    int writeCount, scheduledCount, currentTick;
+    int writeCount, currentTick;
 
     MpfScriptTimeline(Timeline timeline, Chart chart)
     {
         this.timeline = timeline;
         this.chart = chart;
+        schedule = new(MpfWriteOrder.Registration, 1e-8, true, Easings.Eval, WriteMod);
+        commands = new(timeline.Bpm,chart.Proxies,schedule,(name,proxy,value)=>WriteMod(name,proxy,value),ValueAt,true,ExtendEnd);
         game = new(new ScoreState(chart, timeline.Bpm).NoteValue);
     }
 
-    Random random = new(0);
     bool randomNotice;
     void WarnRandom()
     {
@@ -63,14 +51,6 @@ internal sealed class MpfScriptTimeline
         ? d : throw new InvalidDataException("TypeError: numeric argument required.");
     static string Name(object? value) => value is string s && s.Length is > 0 and <= 128
         ? s : throw new InvalidDataException("TypeError: nonempty string argument required.");
-    int Proxy(object?[] args, int index)
-    {
-        if (index >= args.Length) return -1;
-        double raw = Num(args[index]);
-        if (Math.Truncate(raw) != raw || raw is < -1 or > 63 || raw >= chart.Proxies)
-            throw new InvalidDataException("IndexError: proxy must be -1 or within the declared proxy count.");
-        return (int)raw;
-    }
     static void Count(string name, object?[] args, int min, int max)
     {
         if (args.Length < min || args.Length > max)
@@ -108,24 +88,6 @@ internal sealed class MpfScriptTimeline
         if (track.Count > 0 && track[^1].Time == currentTime) track[^1] = new(currentTime, value, tweenRegistered);
         else track.Add(new(currentTime, value, tweenRegistered));
     }
-    void ScheduleSet(string name, int proxy, double beat, double value)
-    {
-        if (!double.IsFinite(beat) || !double.IsFinite(value)) throw new InvalidDataException("ValueError: invalid scheduled MPF value.");
-        if (++scheduledCount > 100_000) throw new InvalidDataException("MaxLoopReached: too many scheduled MPF actions.");
-        pendingSets.Enqueue(new(beat, name, proxy, value, scheduledCount), (beat, scheduledCount));
-        ExtendEnd(timeline.Bpm.Time(beat));
-    }
-    void ScheduleTween(string name, int proxy, double startBeat, double durationBeats, string ease, double from, double to)
-    {
-        if (!double.IsFinite(startBeat) || !double.IsFinite(durationBeats) || !double.IsFinite(from) || !double.IsFinite(to))
-            throw new InvalidDataException("ValueError: invalid MPF tween.");
-        if (!Easings.IsKnown(ease)) throw new InvalidDataException("NameError: unknown easing '" + ease + "'.");
-        if (++scheduledCount > 100_000) throw new InvalidDataException("MaxLoopReached: too many MPF tweens.");
-        double start = timeline.Bpm.Time(startBeat);
-        double end = start + Math.Max(0, durationBeats) * 60 / timeline.Bpm.BpmAtBeat(startBeat);
-        pendingTweens.Enqueue(new(start, end, ease, name, proxy, from, to, currentTime, scheduledCount), (start, scheduledCount));
-        ExtendEnd(Math.Max(start, end));
-    }
     void ExtendEnd(double time)
     {
         if (!double.IsFinite(time) || time > 3600)
@@ -134,29 +96,6 @@ internal sealed class MpfScriptTimeline
             durationNotice = true;
         }
         End = Math.Max(End, Math.Min(time, 3600));
-    }
-    void ApplySchedules()
-    {
-        var due = new List<DeferredSet>();
-        while (pendingSets.TryPeek(out var set, out var priority) && priority.Beat <= currentBeat + 1e-8)
-        {
-            pendingSets.Dequeue();
-            due.Add(set);
-        }
-        foreach (var set in due.OrderBy(set => set.Order)) WriteMod(set.Name, set.Proxy, set.Value);
-        while (pendingTweens.TryPeek(out var tween, out var priority) && priority.Time <= currentTime + 1e-8)
-        {
-            pendingTweens.Dequeue();
-            activeTweens.Add(tween.Order, tween);
-        }
-        List<int>? completed = null;
-        foreach (var tween in activeTweens.Values)
-        {
-            double progress = tween.End <= tween.Start ? 1 : Math.Clamp((currentTime - tween.Start) / (tween.End - tween.Start), 0, 1);
-            WriteMod(tween.Name, tween.Proxy, tween.From + (tween.To - tween.From) * Easings.Eval(tween.Ease, progress), tween.Registered);
-            if (progress >= 1) (completed ??= []).Add(tween.Order);
-        }
-        if (completed != null) foreach (int order in completed) activeTweens.Remove(order);
     }
     void WarnOfflineState(Script script)
     {
@@ -169,180 +108,10 @@ internal sealed class MpfScriptTimeline
 
     object? Invoke(Script script, string function, object?[] a)
     {
-        static List<object?> ArrayArg(object?[] a, int i) =>
-            a[i] as List<object?> ?? throw new InvalidDataException("TypeError: array argument required.");
-        static Dictionary<string, object?> StructArg(object? value) =>
-            value as Dictionary<string, object?> ?? throw new InvalidDataException("TypeError: struct argument required.");
-        static string FieldName(object? value) =>
-            value as string ?? throw new InvalidDataException("TypeError: struct field name must be a string.");
         static string Format(object? arg) =>
             arg is double number ? number.ToString("G", CultureInfo.InvariantCulture) : arg?.ToString() ?? "undefined";
         switch (function)
         {
-            case "sin":
-                Count(function, a, 1, 1);
-                return Math.Sin(Num(a[0]));
-            case "cos":
-                Count(function, a, 1, 1);
-                return Math.Cos(Num(a[0]));
-            case "tan":
-                Count(function, a, 1, 1);
-                return Math.Tan(Num(a[0]));
-            case "abs":
-                Count(function, a, 1, 1);
-                return Math.Abs(Num(a[0]));
-            case "floor":
-                Count(function, a, 1, 1);
-                return Math.Floor(Num(a[0]));
-            case "ceil":
-                Count(function, a, 1, 1);
-                return Math.Ceiling(Num(a[0]));
-            case "min":
-                Count(function, a, 2, 2);
-                return Math.Min(Num(a[0]), Num(a[1]));
-            case "max":
-                Count(function, a, 2, 2);
-                return Math.Max(Num(a[0]), Num(a[1]));
-            case "clamp":
-                Count(function, a, 3, 3);
-                return Math.Clamp(Num(a[0]), Num(a[1]), Num(a[2]));
-            case "to_str":
-                Count(function, a, 1, 1);
-                return Format(a[0]);
-            case "str_cat":
-                {
-                    Count(function, a, 2, 2);
-                    string left = Format(a[0]), right = Format(a[1]);
-                    script.Context.Allocate(checked(left.Length + right.Length));
-                    return left + right;
-                }
-            case "array_create":
-                {
-                    Count(function, a, 1, 1);
-                    double count = Num(a[0]);
-                    if (count < 0 || count > 100_000 || Math.Truncate(count) != count) throw new InvalidDataException("IndexError: array size is out of range.");
-                    script.Context.Allocate((int)count);
-                    return Enumerable.Repeat<object?>(0d, (int)count).ToList();
-                }
-            case "array_length":
-                Count(function, a, 1, 1);
-                return (double)ArrayArg(a, 0).Count;
-            case "array_contains":
-                Count(function, a, 2, 2);
-                return ArrayArg(a, 0).Contains(a[1]) ? 1d : 0d;
-            case "array_push":
-                {
-                    Count(function, a, 2, 2);
-                    var array = ArrayArg(a, 0);
-                    if (array.Count >= 100_000) throw new InvalidDataException("IndexError: array exceeds 100000 elements.");
-                    script.Context.Allocate(1);
-                    array.Add(a[1]);
-                    return null; // 1.14.2 原地修改数组并返回 undefined。
-                }
-            case "array_insert":
-                {
-                    Count(function, a, 3, 3);
-                    var array = ArrayArg(a, 0);
-                    double raw = Num(a[2]);
-                    if (raw < 0 || raw > array.Count || Math.Truncate(raw) != raw || array.Count >= 100_000)
-                        throw new InvalidDataException("IndexError: cannot insert into array.");
-                    script.Context.Allocate(1);
-                    array.Insert((int)raw, a[1]);
-                    return array;
-                }
-            case "array_pop":
-                {
-                    Count(function, a, 1, 1);
-                    var array = ArrayArg(a, 0);
-                    if (array.Count == 0) throw new InvalidDataException("IndexError: array is empty.");
-                    object? result = array[^1];
-                    array.RemoveAt(array.Count - 1);
-                    return result;
-                }
-            case "array_sort":
-                {
-                    Count(function, a, 2, 2);
-                    var array = ArrayArg(a, 0);
-                    bool ascending = Num(a[1]) > 0;
-                    array.Sort((x, y) => x is double n1 && y is double n2
-                        ? n1.CompareTo(n2) * (ascending ? 1 : -1)
-                        : string.Compare(Format(x), Format(y), StringComparison.Ordinal) * (ascending ? 1 : -1));
-                    return array;
-                }
-            case "struct_create":
-                Count(function, a, 0, 0);
-                script.Context.Allocate(1);
-                return new Dictionary<string, object?>(StringComparer.Ordinal);
-            case "struct_get":
-                Count(function, a, 2, 2);
-                return StructArg(a[0]).GetValueOrDefault(FieldName(a[1]));
-            case "struct_exists":
-                Count(function, a, 2, 2);
-                return StructArg(a[0]).ContainsKey(FieldName(a[1])) ? 1d : 0d;
-            case "struct_set":
-                {
-                    Count(function, a, 3, 3);
-                    var fields = StructArg(a[0]);
-                    string key = FieldName(a[1]);
-                    if (!fields.ContainsKey(key)) script.Context.Allocate(checked(key.Length + 1));
-                    fields[key] = a[2];
-                    return null;
-                }
-            case "struct_get_names":
-                {
-                    Count(function, a, 1, 1);
-                    var fields = StructArg(a[0]);
-                    script.Context.Allocate(fields.Count);
-                    return fields.Keys.Cast<object?>().ToList();
-                }
-            case "random":
-                Count(function, a, 1, 1);
-                WarnRandom();
-                return random.NextDouble() * Num(a[0]);
-            case "irandom":
-                {
-                    Count(function, a, 1, 1);
-                    double upper = Num(a[0]);
-                    if (upper < 0 || upper > int.MaxValue - 1 || Math.Truncate(upper) != upper)
-                        throw new InvalidDataException("ValueError: invalid irandom upper bound.");
-                    WarnRandom();
-                    return (double)random.Next((int)upper + 1);
-                }
-            case "random_set_seed":
-                Count(function, a, 1, 1);
-                random = new(unchecked((int)Num(a[0])));
-                return 0d;
-            case "ease":
-                Count(function, a, 4, 4);
-                if (!Easings.IsKnown(Name(a[0]))) throw new InvalidDataException("NameError: unknown easing.");
-                return Num(a[1]) + (Num(a[2]) - Num(a[1])) * Easings.Eval(Name(a[0]), Num(a[3]));
-            case "register_mod":
-                {
-                    Count(function, a, 2, 2);
-                    if (phase != "init") throw new InvalidDataException("PermissionError: register_mod is Init only.");
-                    string mod = Name(a[0]);
-                    WriteMod(mod, -1, Num(a[1]));
-                    return 0d;
-                }
-            case "set_mod_val":
-                Count(function, a, 2, 3);
-                WriteMod(Name(a[0]), Proxy(a, 2), Num(a[1]));
-                return 0d;
-            case "get_mod_val":
-                Count(function, a, 1, 2);
-                return ValueAt(Name(a[0]), Proxy(a, 1), currentTime);
-            case "set_mod_val_at":
-                Count(function, a, 3, 4);
-                ScheduleSet(Name(a[0]), Proxy(a, 3), Num(a[1]), Num(a[2]));
-                return 0d;
-            case "tween_mod_val":
-                Count(function, a, 5, 6);
-                ScheduleTween(Name(a[0]), Proxy(a, 5), currentBeat, Num(a[1]), Name(a[2]), Num(a[3]), Num(a[4]));
-                return 0d;
-            case "tween_mod_val_at":
-                Count(function, a, 6, 7);
-                ScheduleTween(Name(a[0]), Proxy(a, 6), Num(a[1]), Num(a[2]), Name(a[3]), Num(a[4]), Num(a[5]));
-                return 0d;
             case "write_log":
             case "short_msg":
                 Count(function, a, 1, 1);
@@ -438,9 +207,6 @@ internal sealed class MpfScriptTimeline
                         _ => throw new NotSupportedException("MPF offline preview has no cc variable '" + variable + "'.")
                     };
                 }
-            case "call_callback_mod":
-            case "call_callback_mod_at":
-                throw new NotSupportedException(function + " requires original-game live state/callbacks; this MPF preview does not simulate it.");
             default: throw new InvalidDataException("NameError: unknown MPF function '" + function + "'.");
         }
     }
@@ -475,21 +241,35 @@ internal sealed class MpfScriptTimeline
         return game.Timings.Select(x => (object?)x).ToList();
     }
 
-    void Execute(Script script, string section)
+    double IMpfHost.BeatAt(double seconds) => timeline.Bpm.Beat(seconds);
+
+    void IMpfHost.ResetSimulation()
     {
-        if (script.Dead) return;
-        phase = section;
-        try
-        {
-            script.Context.AdvanceTick(currentTick);
-            script.Language.Run(script.Context, section);
-        }
-        catch (Exception ex) when (ex is InvalidDataException or DivideByZeroException or NotSupportedException or ArgumentException or OverflowException)
-        {
-            chart.Diagnostics.Add(new(script.Path, 0, "MPF " + script.Name + " / " + section + ": " + ex.Message, true));
-            script.Dead = true;
-        }
+        // 本宿主仅在加载时创建一次驱动程序；拖动预览时直接读取采样后的轨道。
+        if (currentTick >= 0 && writeCount != 0)
+            throw new InvalidOperationException("Build a new MPF timeline to resample.");
+        schedule.Reset();
+        currentTick = -1;
     }
+    object? IMpfHost.Invoke(string name, MpfFrame frame, MpfScriptLanguage.Context context, string function, object?[] arguments)
+    {
+        currentTick = frame.Tick;
+        currentTime = frame.Seconds;
+        currentBeat = frame.Beat;
+        if(commands.TryInvoke(function,arguments,frame,out double value))return value;
+        var script = scripts[name];
+        script.Context = context;
+        return Invoke(script, function, arguments);
+    }
+    void IMpfHost.EndTick(MpfFrame frame)
+    {
+        currentTick = frame.Tick;
+        currentTime = frame.Seconds;
+        currentBeat = frame.Beat;
+        schedule.Advance(currentTime,currentBeat);
+    }
+    void IMpfHost.ReportError(string name, MpfFrame frame, Exception error) =>
+        chart.Diagnostics.Add(new(scripts[name].Path, 0, "MPF " + name + " / " + frame.Phase + ": " + error.Message, true));
 
     internal bool HasProxyWrites => writes.Keys.Any(key => key.Proxy >= 0);
 
@@ -518,7 +298,7 @@ internal sealed class MpfScriptTimeline
         if (!chart.PerFrame.Any(frame => files.ContainsKey(frame.Function))) return null;
         var runtime = new MpfScriptTimeline(timeline, chart);
         // 2. 解析匹配程序并建立每段 Init、Main、Finish 的生效区间。
-        var ranges = new List<ActiveRange>();
+        var ranges = new List<MpfRange>();
         foreach (var source in chart.PerFrame)
         {
             // CGMK 1.14.1 在每个对象上安装外部闭包，同时保留原版名称。
@@ -533,8 +313,6 @@ internal sealed class MpfScriptTimeline
                     if (info.Length > 1024 * 1024) throw new InvalidDataException("MPF script exceeds 1 MiB preview safety limit.");
                     var lang = MpfScriptLanguage.Parse(File.ReadAllText(file));
                     script = new(source.Function, file, lang);
-                    script.Context.Reset();
-                    script.Context.Function = (name, args) => runtime.Invoke(script, name, args);
                     runtime.scripts.Add(source.Function, script);
                     if (lang.RiskLevel is "HIGH_RISK" or "CRITICAL_RISK")
                         chart.Diagnostics.Add(new(file, 0, "MPF declares " + lang.RiskLevel
@@ -546,57 +324,19 @@ internal sealed class MpfScriptTimeline
                     continue;
                 }
             }
-            ranges.Add(new(source, script));
+            ranges.Add(new(source.Function, source.StartBeat, source.EndBeat));
         }
         if (ranges.Count == 0) return null;
-        double last = ranges.Max(x => timeline.Bpm.Time(x.Range.EndBeat));
+        double last = ranges.Max(x => timeline.Bpm.Time(x.EndBeat));
         runtime.ExtendEnd(Math.Max(timeline.End, last + .1));
         try
         {
             // 3. 按歌曲逻辑时钟推进各区间并记录写入，供之后的随机访问使用。
+            var programs = runtime.scripts.ToDictionary(p => p.Key, p => p.Value.Language, StringComparer.Ordinal);
+            var playback = new MpfPlayback(programs, ranges, runtime, false, runtime.WarnRandom);
+            // 脚本可能延长 End，每次求值后再次检查采样终点。
             for (int tick = 0; tick <= Math.Ceiling(runtime.End * 60); tick++)
-            {
-                runtime.currentTick = tick;
-                runtime.currentTime = tick / 60.0;
-                runtime.currentBeat = timeline.Bpm.Beat(runtime.currentTime);
-                foreach (var range in ranges)
-                {
-                    Script script = range.Script;
-                    bool inside = runtime.currentBeat > range.Range.StartBeat && runtime.currentBeat < range.Range.EndBeat;
-                    if (inside && !range.Active)
-                    {
-                        range.Active = true;
-                        // mpfRunEntry 在进入新区间时清除错误标志。预览的累计资源预算跨区间保留。
-                        script.Dead = false;
-                        if (script.Language.RefreshOnEachRun)
-                        {
-                            script.Context.Reset();
-                            script.Initialized = false;
-                        }
-                    }
-                    if (inside)
-                    {
-                        script.Context.Variables["beat"] = runtime.currentBeat;
-                        script.Context.Variables["beatStart"] = range.Range.StartBeat;
-                        script.Context.Variables["beatEnd"] = range.Range.EndBeat;
-                        if (!script.Initialized)
-                        {
-                            script.Initialized = true;
-                            runtime.Execute(script, "init");
-                        }
-                        runtime.Execute(script, "main");
-                    }
-                    else if (range.Active)
-                    {
-                        range.Active = false;
-                        script.Context.Variables["beat"] = runtime.currentBeat;
-                        script.Context.Variables["beatStart"] = range.Range.StartBeat;
-                        script.Context.Variables["beatEnd"] = range.Range.EndBeat;
-                        runtime.Execute(script, "finish");
-                    }
-                }
-                runtime.ApplySchedules();
-            }
+                playback.Update(tick / 60d);
         }
         catch (Exception e) when (e is InvalidDataException or DivideByZeroException or OverflowException)
         {

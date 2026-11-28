@@ -14,7 +14,8 @@ public sealed unsafe class Shader : IDisposable
     readonly GpuDevice gpu;
     readonly ShaderCompiler.Compiled vertex, fragment;
     readonly nint vertexHandle, fragmentHandle;
-    readonly Dictionary<(uint, BlendFactor, BlendFactor), nint> pipelines = [];
+    readonly bool ownVertex,ownFragment;
+    readonly KenomaGMK.SDL3.SpritePipelineCache pipelines;
     // 两个 uniform 暂存数组会被每次 Draw 复用并覆盖；
     // GpuDevice 入队时必须复制字节快照，不能保留这里的引用。
     internal byte[] VertexUniforms { get; }
@@ -28,33 +29,38 @@ public sealed unsafe class Shader : IDisposable
     /// <param name="vertex">顶点 shader 源码。</param>
     /// <param name="fragment">片元 shader 源码。</param>
     /// <param name="instanced">是否使用实例化顶点布局。</param>
-    public Shader(GpuDevice gpu, string vertex, string fragment, bool instanced = false)
+    public Shader(GpuDevice gpu, string vertex, string fragment, bool instanced = false, bool builtIn = true)
     {
         this.gpu = gpu;
         Instanced = instanced;
-        this.vertex = ShaderCompiler.Compile(vertex, true, gpu.ShaderFormat);
-        this.fragment = ShaderCompiler.Compile(fragment, false, gpu.ShaderFormat);
-        VertexUniforms = new byte[this.vertex.Uniforms.Length * 16];
-        FragmentUniforms = new byte[this.fragment.Uniforms.Length * 16];
-        SamplerUnits = new int[this.fragment.Samplers.Length];
-        vertexHandle = Create(this.vertex, true);
+        (this.vertex,vertexHandle,ownVertex) = gpu.Stage(vertex,true,builtIn);
         try
         {
-            fragmentHandle = Create(this.fragment, false);
+            (this.fragment,fragmentHandle,ownFragment) = gpu.Stage(fragment,false,builtIn);
+            VertexUniforms = new byte[this.vertex.Uniforms.Length * 16];
+            FragmentUniforms = new byte[this.fragment.Uniforms.Length * 16];
+            SamplerUnits = new int[this.fragment.Samplers.Length];
+            pipelines = new(gpu.Handle, vertexHandle, fragmentHandle, Instanced, depthClip: false,
+                ShaderCompiler.SharedLibrary, builtIn: builtIn, startupComplete: () => gpu.ShaderStartupComplete);
+            if (ShaderCompiler.SharedLibrary.Options.Mode == KenomaGMK.SDL3.ShaderCompilationMode.Startup &&
+                ShaderCompiler.SharedLibrary.Options.PrewarmPipelines)
+                Pipeline(GpuDevice.Rgba8,BlendFactor.SourceAlpha,BlendFactor.InverseSourceAlpha);
         }
         catch
         {
-            SDL_ReleaseGPUShader(gpu.Handle, vertexHandle);
+            pipelines?.Dispose();
+            if (ownFragment && fragmentHandle != 0) SDL_ReleaseGPUShader(gpu.Handle,fragmentHandle);
+            if (ownVertex) SDL_ReleaseGPUShader(gpu.Handle,vertexHandle);
             throw;
         }
     }
-    nint Create(ShaderCompiler.Compiled compiled, bool vertex)
+    internal static nint Create(GpuDevice gpu, ShaderCompiler.Compiled compiled, bool vertex, bool builtIn = true)
     {
         byte[] entry = Encoding.UTF8.GetBytes(compiled.Entry + "\0");
         // SAFETY: 创建描述按字节数组的实际长度传递 shader，入口名以 UTF-8 空字符结尾，两者在调用期间保持固定。
         fixed (byte* code = compiled.Code, e = entry)
         {
-            return GpuDevice.Check(SDL_CreateGPUShader(gpu.Handle, new GPUShaderCreateInfo
+            var shader = GpuDevice.Check(SDL_CreateGPUShader(gpu.Handle, new GPUShaderCreateInfo
             {
                 code = (nint)code,
                 code_size = (nuint)compiled.Code.Length,
@@ -64,84 +70,28 @@ public sealed unsafe class Shader : IDisposable
                 num_samplers = (uint)compiled.Samplers.Length,
                 num_uniform_buffers = compiled.Uniforms.Length > 0 ? 1u : 0u
             }), "Create GPU shader");
+            ShaderCompiler.SharedLibrary.RecordGpuShaderCreation(
+                ShaderCompiler.SharedLibrary.Options.Mode == KenomaGMK.SDL3.ShaderCompilationMode.OnDemand,
+                builtIn, unexpected: gpu.ShaderStartupComplete);
+            return shader;
         }
     }
     /// <summary>每顶点固定 32 字节，position/UV/color 偏移为 0/8/16；与 Canvas 顶点布局一致。</summary>
     internal nint Pipeline(uint format, BlendFactor source, BlendFactor destination)
     {
-        var key = (format, source, destination);
-        if (pipelines.TryGetValue(key, out var result))
-        {
-            return result;
-        }
-        GPUVertexBufferDescription buffer = new()
-        {
-            pitch = Instanced ? 64u : 32u,
-            input_rate = Instanced ? 1u : 0u
-        };
-        // SAFETY: 栈上预留四个属性槽；普通和实例化管线按各自初始化的数量传给 SDL。
-        GPUVertexAttribute* attributes = stackalloc GPUVertexAttribute[4];
-        attributes[0] = new()
-        {
-            location = 0,
-            format = 10,
-            offset = 0
-        };
-        attributes[1] = new()
-        {
-            location = 1,
-            format = 10,
-            offset = 8
-        };
-        attributes[2] = new()
-        {
-            location = 2,
-            format = 12,
-            offset = 16
-        };
-        if (Instanced)
-        {
-            for (uint i = 0; i < 4; i++) attributes[i] = new() { location = i, format = 12, offset = i * 16 };
-        }
-        GPUColorTargetDescription color = new()
-        {
-            format = format,
-            blend_state = new()
-            {
-                enable_blend = 1,
-                src_color_blendfactor = (uint)source,
-                dst_color_blendfactor = (uint)destination,
-                color_blend_op = 1,
-                // alpha 通道固定用 One / InverseSourceAlpha，与调用方传入的颜色因子无关。
-                // 配合绘制到透明目标，这让存下来的 RGB 变成预乘 alpha，而 alpha 自身保持非预乘；
-                // 整个项目的预乘 alpha 约定就建立在这两行上，不要让它们跟着颜色因子一起变。
-                src_alpha_blendfactor = (uint)BlendFactor.One,
-                dst_alpha_blendfactor = (uint)BlendFactor.InverseSourceAlpha,
-                alpha_blend_op = 1
-            }
-        };
-        var info = new GPUGraphicsPipelineCreateInfo
-        {
-            vertex_shader = vertexHandle,
-            fragment_shader = fragmentHandle,
-            vertex_input_state = new()
-            {
-                vertex_buffer_descriptions = (nint)(&buffer),
-                num_vertex_buffers = 1,
-                vertex_attributes = (nint)attributes,
-                num_vertex_attributes = Instanced ? 4u : 3u
-            },
-            target_info = new()
-            {
-                color_target_descriptions = (nint)(&color),
-                num_color_targets = 1
-            }
-        };
-        result = GpuDevice.Check(SDL_CreateGPUGraphicsPipeline(gpu.Handle, info), "Create GPU graphics pipeline");
-        pipelines[key] = result;
-        return result;
+        return pipelines.Prepare(new(format, Instanced ? 64u : 32u,
+            (KenomaGMK.Graphics.BlendFactor)source, (KenomaGMK.Graphics.BlendFactor)destination));
     }
-    /// <summary>按编译时分配的 16 字节槽位写入。int/bool 存整数位，浮点存 IEEE 754 位。</summary>
+    internal void Prewarm(uint format, params (BlendFactor Source, BlendFactor Destination)[] descriptions)
+    {
+        if (ShaderCompiler.SharedLibrary.Options.Mode != KenomaGMK.SDL3.ShaderCompilationMode.Startup ||
+            !ShaderCompiler.SharedLibrary.Options.PrewarmPipelines) return;
+        foreach (var (source, destination) in descriptions) Pipeline(format, source, destination);
+    }
+
+    internal void Prewarm(params (BlendFactor Source, BlendFactor Destination)[] descriptions) =>
+        Prewarm(GpuDevice.Rgba8, descriptions);
+
     static void WriteStage(ShaderCompiler.Compiled stage, byte[] bytes, string name, ReadOnlySpan<float> values)
     {
         var uniform = Array.Find(stage.Uniforms, u => u.Name == name);
@@ -205,27 +155,12 @@ public sealed unsafe class Shader : IDisposable
         }
         gpu.Submit();
         disposed = true;
-        foreach (var pipeline in pipelines.Values)
-        {
-            SDL_ReleaseGPUGraphicsPipeline(gpu.Handle, pipeline);
-        }
-        SDL_ReleaseGPUShader(gpu.Handle, vertexHandle);
-        SDL_ReleaseGPUShader(gpu.Handle, fragmentHandle);
+        pipelines.Dispose();
+        if (ownVertex) SDL_ReleaseGPUShader(gpu.Handle, vertexHandle);
+        if (ownFragment) SDL_ReleaseGPUShader(gpu.Handle, fragmentHandle);
     }
     /// <summary>仅转换 GameMaker GLSL 接口及已存在的零除防护，不重写原滤镜公式。</summary>
     /// <param name="source">来源 GML shader 文本。</param>
     /// <returns>适配渲染后端的 shader 源码。</returns>
-    public static string AdaptGml(string source)
-    {
-        // GameMaker ES shader 可将 sample 用作局部变量，桌面 GLSL 将其保留作插值限定符，改名时须保留表达式语义。
-        if (Regex.IsMatch(source, @"\bvec[234]\s+sample\b")) source = Regex.Replace(source, @"\bsample\b", "kg_sample");
-        source = Regex.Replace(source, @"(?m)^\s*#version[^\r\n]*", "");
-        source = Regex.Replace(source, @"precision\s+\w+\s+\w+\s*;", "");
-        source = source.Replace("#define LOWPREC lowp", "#define LOWPREC").Replace("varying ", "in ").Replace("texture2D(",
-            "texture(").Replace("gl_FragColor", "fragColor");
-        // 看着像魔改，实际必须保留：把这个除数取绝对值并夹到 1e-6 以上，
-        // 否则 distort 滤镜会在其中一个后端产生 NaN（另一个后端不会）。
-        source = source.Replace("((g_Distort1Amount + g_Distort2Amount) * 0.5)", "max(abs((g_Distort1Amount + g_Distort2Amount) * 0.5), 0.000001)");
-        return "#version 450\nout vec4 fragColor;\n" + source;
-    }
+    public static string AdaptGml(string source) => KenomaGMK.SDL3.GameMakerShader.AdaptGml(source);
 }

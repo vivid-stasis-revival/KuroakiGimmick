@@ -98,11 +98,24 @@ public sealed partial class Canvas : IDisposable
         Gpu = gpu;
         Basic = new(gpu, VertexSource,
             BasicFragmentSource);
+        // 场景、离屏导出与 UI 都绘制在 RGBA8；最终呈现落在交换链。两种格式都要覆盖真实使用的混合组合。
+        foreach (var format in PipelineFormats(gpu))
+        {
+            Basic.Prewarm(format,
+                (BlendFactor.SourceAlpha, BlendFactor.InverseSourceAlpha),
+                (BlendFactor.InverseDestinationColor, BlendFactor.InverseSourceColor),
+                (BlendFactor.InverseDestinationColor, BlendFactor.Zero),
+                (BlendFactor.DestinationColor, BlendFactor.Zero),
+                (BlendFactor.SourceAlpha, BlendFactor.Zero),
+                (BlendFactor.One, BlendFactor.Zero));
+        }
         if (Environment.GetEnvironmentVariable("KG_NOTE_INSTANCING") != "off")
         {
             try
             {
                 NoteInstances = new(gpu, NoteInstanceVertexSource, NoteInstanceFragmentSource, instanced: true);
+                NoteInstances.Prewarm(GpuDevice.Rgba8,
+                    (BlendFactor.SourceAlpha, BlendFactor.InverseSourceAlpha));
             }
             catch (Exception ex)
             {
@@ -110,6 +123,13 @@ public sealed partial class Canvas : IDisposable
             }
         }
         White = new(gpu, 1, 1, [255, 255, 255, 255]);
+    }
+
+    // 交换链格式可能与离屏目标相同；相同格式只预热一次，避免重复描述。
+    static IEnumerable<uint> PipelineFormats(GpuDevice gpu)
+    {
+        yield return GpuDevice.Rgba8;
+        if (gpu.SwapchainFormat != GpuDevice.Rgba8) yield return gpu.SwapchainFormat;
     }
 
     /// <summary>切换渲染目标，清空裁剪与 shader 选择；像素尺寸和逻辑尺寸分别传入。</summary>

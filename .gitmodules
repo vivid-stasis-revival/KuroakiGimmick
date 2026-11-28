@@ -1,0 +1,3 @@
+[submodule "ThirdParty/KenomaGMK"]
+	path = ThirdParty/KenomaGMK
+	url = ../KenomaGMK

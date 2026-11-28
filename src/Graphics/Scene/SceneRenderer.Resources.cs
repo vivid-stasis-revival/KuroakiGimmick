@@ -45,7 +45,7 @@ public sealed partial class SceneRenderer
             {
                 try
                 {
-                    jacketTexture = Texture.Load(canvas.Gpu, path, linear: !jackets.CustomLayout);
+                    jacketTexture = new JacketTexture(canvas.Gpu, path, linear: !jackets.CustomLayout);
                 }
                 catch (Exception ex)
                 {
@@ -65,8 +65,8 @@ public sealed partial class SceneRenderer
             16777215)) : Color.White;
         int frames = path == jackets.DefaultPath && jackets.Animated ? Math.Max(1, jackets.AnimatedFrames) : 1;
         int frame = frames <= 1 ? 0 : (int)Math.Floor(Math.Max(0, time) * 60) % frames;
-        canvas.Quad(jacketTexture, jackets.CustomLayout ? new(0, 0, 320, 180) : new(-50, -50, 420, 268), tint,
-            new(frame / (float)frames, 0, 1f / frames, 1));
+        jacketTexture.Draw(canvas, jackets.CustomLayout ? new(0, 0, 320, 180) : new(-50, -50, 420, 268), tint,
+            frame, frames);
         canvas.Blend(BlendFactor.SourceAlpha, BlendFactor.InverseSourceAlpha);
     }
 
@@ -121,9 +121,10 @@ public sealed partial class SceneRenderer
     void DrawImages(Session session, double time, double minPriority, double maxPriority, Target? target = null)
     {
         canvas.Begin(target ?? scene, RenderWidth, RenderHeight, 320, 180);
+        var range = new KenomaGMK.Graphics.Scene.LayerRange(minPriority, maxPriority);
         foreach (var (item, pose) in session.Images.At(session.Timeline, time))
         {
-            if (item.LayerPriority < minPriority || item.LayerPriority >= maxPriority)
+            if (!range.Includes(item.LayerPriority))
             {
                 continue;
             }
@@ -132,10 +133,9 @@ public sealed partial class SceneRenderer
             {
                 continue;
             }
-            var m = pose.Matrix;
-            canvas.Polygon(texture, Vector2.Transform(new(-.5f, -.5f), m), Vector2.Transform(new(.5f, -.5f), m), Vector2.Transform(new(-.5f,
-                .5f), m), Vector2.Transform(new(.5f, .5f), m), Color.Hex(pose.Rgb).Alpha(pose.Alpha), new(pose.Frame / (float)item.Frames, 0,
-                1f / item.Frames, 1));
+            var quad = KenomaGMK.Graphics.Scene.ImageQuad.Transform(pose.Matrix);
+            canvas.Polygon(texture, quad.TopLeft, quad.TopRight, quad.BottomLeft, quad.BottomRight,
+                Color.Hex(pose.Rgb).Alpha(pose.Alpha), new(pose.Frame / (float)item.Frames, 0, 1f / item.Frames, 1));
         }
     }
 }

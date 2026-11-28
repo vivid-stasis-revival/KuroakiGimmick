@@ -14,7 +14,7 @@ audio playback, video encoding, and GPU command submission. See the focused guid
 
 ## Build and verify
 
-Install a .NET SDK able to build `net8.0`, Rust stable (`rustup`, `cargo`, `rustc`),
+Install a .NET SDK able to build `net10.0`, Rust stable (`rustup`, `cargo`, `rustc`),
 and the platform prerequisites for the existing SDL3 renderer.
 
 ```sh

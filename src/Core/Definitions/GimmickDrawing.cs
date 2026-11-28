@@ -82,16 +82,7 @@ public sealed class GimmickDrawing
             "angle" => Angle,
             _ => Alpha
         };
-        foreach (var tween in Tweens)
-        {
-            if (tween.Property != property || age < tween.Delay)
-            {
-                continue;
-            }
-            value = tween.Duration <= 0 ? tween.To : tween.From + (tween.To - tween.From) * Easings.Eval(tween.Ease,
-                (age - tween.Delay) / tween.Duration);
-        }
-        return value;
+        return KenomaGMK.Runtime.Definitions.DrawingTween.Value(Tweens, property, age, value, Easings.Eval);
     }
 
     /// <summary>优先计算属性的时间轴绑定，未绑定时按回调年龄计算基础值与缓动。</summary>

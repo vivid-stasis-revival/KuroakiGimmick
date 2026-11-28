@@ -48,7 +48,7 @@ public sealed partial class NoteSkin
     }
     readonly SkinFrame?[] greenleftFrames = new SkinFrame?[4];
     readonly List<Target> greenleftTargets = [];
-    Shader? greenleftStraight;
+    Shader greenleftStraight;
     bool greenleftActive;
     double greenleftAmount = -1;
     void ClearGreenleft()
@@ -78,7 +78,6 @@ public sealed partial class NoteSkin
         string[] kinds = ["chip", "hold", "bumper", "bumper_timing"];
         var normal = kinds.Select(k => GreenleftSource("sp_note_" + k + "_normal")).ToArray();
         var overlay = kinds.Select(k => GreenleftSource("sp_note_" + k + "_allison")).ToArray();
-        greenleftStraight ??= new(canvas.Gpu, Canvas.VertexSource, GreenleftStraightSource);
         for (int i = 0; i < 4; i++)
         {
             if (normal[i] is not { } n || overlay[i] is not { } a)

@@ -168,9 +168,10 @@ public sealed class SceneFont : IDisposable
                 y = (float)(M("textY") + (legacy ? 0 : values?.Invoke("textY" + suffix + "b") ?? tl.Get("textY" + suffix + "b", time)));
             var rows = Wrap(text, legacy ? -1 : M("textmaxwidth") * 10);
             // sep 是原版 draw_text_ext 的基线间距；小于 0（原版写 -1）表示取字体高度。
-            float step = legacy || M("textsep") < 0 ? fontHeight : (float)M("textsep"), height = fontHeight + (rows.Count - 1) * step;
             int alignH = legacy ? 1 : Mod3(M("textalignh")), alignV = legacy ? 0 : Mod3(M("textalignv"));
-            float top = alignV == 1 ? -height / 2 : alignV == 2 ? -height : 0;
+            var layout = KenomaGMK.Graphics.Scene.CustomTextLayout.Create(x, y, (float)scale, (float)M("textrot"),
+                fontHeight, legacy ? -1 : M("textsep"), rows.Count, alignV);
+            float top = layout.Top, height = layout.Height, step = layout.Step;
             uint rgb = (uint)Math.Clamp(M(legacy ? "textcolhex" : "textcolrgb"), 0, 16777215);
             // CGMK 1.14.2 使用 col_convert(cc.mod_textcolhex)，两种字幕格式均接收作者输入的 RGB；col_convertion 已于 CGMK 1.12.8 移除。
             var color = Color.Hex(rgb).Alpha(alpha);
@@ -182,7 +183,7 @@ public sealed class SceneFont : IDisposable
                 canvas.DebugNextVertex = true;
             }
 #endif
-            var matrix = Matrix3x2.CreateScale((float)scale) * Matrix3x2.CreateRotation(-(float)M("textrot") * MathF.PI / 180) * Matrix3x2.CreateTranslation(x, y);
+            var matrix = layout.Matrix;
             matrix *= projection ?? Matrix3x2.Identity;
             float blockWidth = Math.Max(4, rows.Max(Width)), blockLeft = alignH == 1 ? -blockWidth / 2 : alignH == 2 ? -blockWidth : 0;
             bounds?.Invoke(track.Id, new[] { new Vector2(blockLeft, top), new Vector2(blockLeft + blockWidth, top),

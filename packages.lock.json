@@ -1,16 +1,12 @@
 {
   "version": 1,
   "dependencies": {
-    "net8.0": {
+    "net10.0": {
       "NVorbis": {
         "type": "Direct",
         "requested": "[0.10.5, )",
         "resolved": "0.10.5",
-        "contentHash": "o+IptCG4Avze39HrGeztC+xIp6fOOwGVAwkoa1J++4Ji1WmZ+KIKlFl5wsgxsXqBkmdpfs/vFSUproiLKYa2bw==",
-        "dependencies": {
-          "System.Memory": "4.5.3",
-          "System.ValueTuple": "4.5.0"
-        }
+        "contentHash": "o+IptCG4Avze39HrGeztC+xIp6fOOwGVAwkoa1J++4Ji1WmZ+KIKlFl5wsgxsXqBkmdpfs/vFSUproiLKYa2bw=="
       },
       "SDL3-CS.Linux": {
         "type": "Direct",
@@ -60,15 +56,29 @@
         "resolved": "1.26.13",
         "contentHash": "vfl9hIROP2CeDSqPTVxfXrH/ZaFN6o6h0EsoG9aSzErrXUTwp8bZ4NpycVMSKtdmPGBI4eyvTIg1yzGs1jthMw=="
       },
-      "System.Memory": {
-        "type": "Transitive",
-        "resolved": "4.5.3",
-        "contentHash": "3oDzvc/zzetpTKWMShs1AADwZjQ/36HnsufHRPcOjyRAAMLDlu2iD33MBI2opxnezcVUtXyqDXXjoFMOU9c7SA=="
+      "kenomagmk.core": {
+        "type": "Project"
       },
-      "System.ValueTuple": {
-        "type": "Transitive",
-        "resolved": "4.5.0",
-        "contentHash": "okurQJO6NRE/apDIP23ajJ0hpiNmJ+f0BwOlB/cSqTLQlw5upkf+5+96+iG2Jw40G1fCVCyPz/FhIABUjMR+RQ=="
+      "kenomagmk.graphics": {
+        "type": "Project"
+      },
+      "kenomagmk.native": {
+        "type": "Project",
+        "dependencies": {
+          "KenomaGMK.Core": "[1.0.0, )"
+        }
+      },
+      "kenomagmk.runtime": {
+        "type": "Project",
+        "dependencies": {
+          "KenomaGMK.Core": "[1.0.0, )"
+        }
+      },
+      "kenomagmk.sdl3": {
+        "type": "Project",
+        "dependencies": {
+          "KenomaGMK.Graphics": "[1.0.0, )"
+        }
       }
     }
   }

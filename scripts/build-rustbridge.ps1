@@ -4,11 +4,12 @@ cargo test --manifest-path rust/kg-native-core/Cargo.toml
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 cargo build --release --manifest-path rust/kg-native-core/Cargo.toml
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-dotnet build -c Release -p:PublishAot=false
+dotnet build -c Release -p:PublishAot=false -p:KenomaBuildNative=true -m:1
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-$out = 'bin/Release/net8.0'
+$out = 'bin/Release/net10.0'
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 Copy-Item rust/kg-native-core/target/release/kg_native_core.dll "$out/kg_native_core.dll" -Force
+Get-ChildItem ThirdParty/KenomaGMK/rust/kenoma-native/target/*/release/libkenoma_native.* -ErrorAction SilentlyContinue | Copy-Item -Destination $out -Force
 $env:KG_RUST_BRIDGE = 'verify'
 dotnet run -c Release --no-build -- --rust-bridge-test
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

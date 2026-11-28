@@ -33,7 +33,7 @@ public sealed class NativeInterludeStep
 }
 
 /// <summary>插段触发的立绘、背景、音频或播放控制命令。</summary>
-public sealed class NativeInterludeAction
+public sealed class NativeInterludeAction : KenomaGMK.Runtime.Sequence.IPortraitAction
 {
     /// <summary>选择背景、立绘、着色或播放控制操作的动作键。</summary>
     public string Kind { get; set; } = "";

@@ -1,4 +1,4 @@
-# Rust Timeline Runtime · crate 0.3.0-alpha.0 / application v0.1.5
+# Rust Timeline Runtime · crate 0.3.0-alpha.0 / application v0.2.0
 
 This is a **real incremental Rust frame evaluator**, not the complete timeline rewrite.
 
