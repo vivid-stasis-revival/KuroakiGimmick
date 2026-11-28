@@ -23,6 +23,11 @@ public sealed partial class Timeline
                 {
                     float vx = Hash(seed + 2 + i * 2) * .5f * power;
                     double death = time + 4;
+                    // o_pt_diamonddust_songgameplay.Create:
+                    // image_blend = make_colour_hsv(irandom(255), 255 * mod_rainbow, 255).
+                    // Unlike plaudite_pburst's base o_pt_diamonddust, side bursts read rainbow.
+                    float hue = MathF.Floor(Hash(seed + 4 + i * 2) * 256) / 255f;
+                    float saturation = (float)Math.Clamp(Get("rainbow", time), 0, 1);
                     var born = ParticleOffset(time);
                     // 4 秒寿命 = 240 个 tick；出界判定留 50 像素余量，记录第一次越界的时刻作为死亡时间。
                     for (int frame = 1; frame <= 240; frame++)
@@ -36,7 +41,7 @@ public sealed partial class Timeline
                             break;
                         }
                     }
-                    Particles.Add(new(time, x, y, vx, 0, (int)Math.Min(3, Hash(seed + 3 + i * 2) * 4), 0, 0, death, true, 4, true));
+                    Particles.Add(new(time, x, y, vx, 0, (int)Math.Min(3, Hash(seed + 3 + i * 2) * 4), hue, saturation, death, true, 4, true));
                 }
             }
         });
